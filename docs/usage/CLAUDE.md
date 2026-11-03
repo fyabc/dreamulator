@@ -17,6 +17,7 @@
 - `civmap-guide.md` — 文明地图使用指南（真实地球底图、架空国家涂色、时间快照）
 - `video-samples.md` — 样片复现手册（静帧、云流、自转、掩食、板块运动五条链的一条命令重跑配方）
 - `frontend-3d-viewer.md` — 3D 恒星系可视化器操作（架构说明在 [design/frontend-3d-viewer.md](../design/frontend-3d-viewer.md)）
+- `sky-viewer.md` — 天球视图操作（星空观察者视角：沉浸环视 + 全天概览圆盘、时间滑块、相位与升落；架构说明在 [design/proposals/sky-ephemeris.md](../design/proposals/sky-ephemeris.md)）
 
 ## 相关设计文档
 

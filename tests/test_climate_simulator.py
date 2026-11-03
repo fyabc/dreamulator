@@ -1061,6 +1061,10 @@ def test_wet_trough_pickup_weight_runs_without_debug() -> None:
     assert max(p) > 0.0
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the worker-pool override path needs os.fork (POSIX); Windows always serial",
+)
 def test_monthly_solve_workers_respects_host_and_env(monkeypatch) -> None:
     """单线程宿主（Pyodide）与显式 1 都必须退回串行路径。"""
     from dreamulator.map import climate_simulator as cs

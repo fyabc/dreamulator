@@ -570,6 +570,7 @@ class SkyEphemerisParams(BaseModel):
     lon_deg: float = 0.0
     at_days: float = 0.0
     targets: list[str] | None = None  # None → every entity except the observer
+    include_events: bool = True  # False → skip rise/set (slider fast path)
 
 
 class TargetPosition(BaseModel):
@@ -593,7 +594,8 @@ class TargetPosition(BaseModel):
     elongation_star_deg: float | None = None  # None for the star itself
     elongation_parent_deg: float | None = None
     altitude_rate_deg_per_hr: float
-    rise_state: str  # rises_sets | never_sets | never_rises
+    # rises_sets | never_sets | never_rises; None when events not requested.
+    rise_state: str | None = None
     next_rise_days: float | None = None  # offsets from at_days, > 0
     next_set_days: float | None = None
 
@@ -643,12 +645,12 @@ def _rise_set(
     at_days: float,
     lat_deg: float,
     lon_deg: float,
-) -> tuple[str, float | None, float | None, float]:
-    """Classify rise/set and return (state, next_rise, next_set, alt rate).
+) -> tuple[str, float | None, float | None]:
+    """Classify rise/set and return (state, next_rise, next_set).
 
     The sampling window is ``min(observer year, max(solar-day term, sibling
-    synodic term))`` — see the module docstring.  Altitude rate is a central
-    difference at the sampling step.
+    synodic term))`` — see the module docstring.  The altitude rate lives in
+    ``sky_ephemeris`` (shared-frames central difference over all targets).
     """
     observer = entities[observer_id]
     target = entities[target_id]
@@ -725,8 +727,7 @@ def _rise_set(
                     rise = crossing - at_days
                 if rise is not None and setting is not None:
                     break
-    rate = (altitude(at_days + step) - altitude(at_days - step)) * 0.5 / (step / 24.0)
-    return state, rise, setting, rate
+    return state, rise, setting
 
 
 @query(
@@ -749,6 +750,7 @@ def sky_ephemeris(
     lon_deg: float = 0.0,
     at_days: float = 0.0,
     targets: list[str] | None = None,
+    include_events: bool = True,
 ) -> SkyEphemerisResult:
     """Everything the sky above one point of one body shows at one moment.
 
@@ -761,6 +763,10 @@ def sky_ephemeris(
         at_days: days since the catalog epoch.
         targets: stable ids to report; ``None`` for every entity except the
             observer, in catalog order.
+        include_events: keep the rise/set search (the O(period) part, ~50 ms
+            per target).  ``False`` is the slider fast path — positions,
+            photometry and altitude rate stay, rise_state and the next
+            rise/set offsets become ``None``.
 
     Returns:
         The per-target sky table with the observer's context.
@@ -773,6 +779,22 @@ def sky_ephemeris(
     lat_deg, lon_deg = _normalize_latlon(lat_deg, lon_deg)
     frame = observer_frame_km(entities, observer_id, at_days, lat_deg, lon_deg)
     observer_entity = entities[observer_id]
+
+    # Altitude rate: one central difference shared by every target — two
+    # observer frames at ±h and one body state per target per side.  The step
+    # matches the rise/set sampling density; like the per-target difference it
+    # replaced, it is an O(h²) approximation of the same derivative.
+    rate_step: float | None = None
+    for key in ("solar_day_days", "rotation_period_days"):
+        if key in observer_entity:
+            rate_step = float(observer_entity[key]) / _RISE_SET_SAMPLES
+            break
+    frames_pm: tuple[ObserverFrame, ObserverFrame] | None = None
+    if rate_step is not None and rate_step > 0.0:
+        frames_pm = (
+            observer_frame_km(entities, observer_id, at_days - rate_step, lat_deg, lon_deg),
+            observer_frame_km(entities, observer_id, at_days + rate_step, lat_deg, lon_deg),
+        )
 
     # The observer body's equatorial frame (RA 0 = its own equinox direction).
     axis, _spin = _spin_axis(entities, observer_entity)
@@ -863,9 +885,29 @@ def sky_ephemeris(
             )
             elongation_parent = _angle_between_deg(parent_direction, delta)
 
-        state, next_rise, next_set, rate = _rise_set(
-            entities, observer_id, target_id, at_days, lat_deg, lon_deg
-        )
+        state: str | None
+        next_rise: float | None
+        next_set: float | None
+        if include_events:
+            state, next_rise, next_set = _rise_set(
+                entities, observer_id, target_id, at_days, lat_deg, lon_deg
+            )
+        else:
+            state = next_rise = next_set = None
+        if frames_pm is not None and rate_step is not None:
+            altitude_pm = (
+                _target_altitude_deg(entities, frames_pm[0], target_id, at_days - rate_step),
+                _target_altitude_deg(entities, frames_pm[1], target_id, at_days + rate_step),
+            )
+            # Central difference over ±rate_step DAYS: °/day = Δ/(2·step),
+            # and °/h = °/day / 24 — i.e. Δ/(48·step).  (An earlier ×12/step
+            # multiplied by 24 instead of dividing: a 576× overstatement.)
+            rate = (altitude_pm[1] - altitude_pm[0]) / (48.0 * rate_step)
+        else:
+            # No rotation field at all (a star-locked observer): the horizon
+            # does not turn, and the target's own motion sets the rate; the
+            # single-instant query reports 0 rather than a second evaluation.
+            rate = 0.0
         rows.append(
             TargetPosition(
                 body_id=target_id,

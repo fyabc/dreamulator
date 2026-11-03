@@ -1,0 +1,128 @@
+{
+  "title": {
+    "sky": "Sky View"
+  },
+  "staticModeHint": "The sky view needs the backend engine (a parameterized query over time × location × observer) and is unavailable in static mode. Run `dreamulator serve` locally and open it from there.",
+  "mode": {
+    "pan": "Look",
+    "disc": "All-sky"
+  },
+  "modeHint": {
+    "pan": "Immersive view: drag to look around, wheel/pinch to zoom the field",
+    "disc": "All-sky overview disc: the whole hemisphere and rise/set structure at a glance"
+  },
+  "pan": {
+    "fov": "FOV",
+    "hint": "Drag to look · wheel/pinch to zoom · click a body"
+  },
+  "observer": {
+    "label": "Observer",
+    "lat": "Latitude",
+    "lon": "Longitude",
+    "spinSource": "Spin-axis source",
+    "solarDay": "Solar day"
+  },
+  "time": {
+    "epochDays": "since epoch",
+    "solarDays": "solar days",
+    "play": "Play",
+    "pause": "Pause",
+    "speed": "Speed",
+    "speedUnit": "h/s",
+    "day": "d",
+    "inputHint": "Type any number of days (Enter to apply)",
+    "sliderRange": "Slider 0–{{days}} d",
+    "earthDays": "Earth days",
+    "solarDaysShort": "solar days",
+    "earthDaysShort": "Earth days",
+    "unitSolar": "solar",
+    "unitEarth": "Earth",
+    "unitHint": "Switch the clock unit (solar = the observer’s local day)",
+    "speedUnitSolar": "solar d/s",
+    "speedUnitEarth": "Earth d/s",
+    "epochHint": "Instant = epoch + N days; the unit button on the right names the dial and input unit",
+    "speedHint": "Time-flow speed (log scale; solar days/s = the dial’s own unit)"
+  },
+  "chart": {
+    "cardinal": {
+      "N": "N",
+      "NE": "NE",
+      "E": "E",
+      "SE": "SE",
+      "S": "S",
+      "SW": "SW",
+      "W": "W",
+      "NW": "NW"
+    },
+    "altitude": "Altitude",
+    "azimuth": "Azimuth",
+    "zenith": "Zenith",
+    "belowHorizon": "Below horizon",
+    "noRiseInfo": "Release the slider to load rise/set"
+  },
+  "rise": {
+    "rises_sets": "rises & sets",
+    "never_sets": "never sets",
+    "never_rises": "never rises",
+    "nextRise": "Next rise",
+    "nextSet": "Next set",
+    "tableTitle": "Rise/set almanac",
+    "state": "State"
+  },
+  "inspector": {
+    "title": "Body details",
+    "none": "Click a body in the chart to inspect it",
+    "phaseAngle": "Phase angle",
+    "illuminated": "Disk illuminated",
+    "phaseFunction": "Phase function Φ(α)",
+    "magnitude": "Apparent magnitude",
+    "illuminance": "Illuminance",
+    "distance": "Distance",
+    "angularDiameter": "Angular diameter",
+    "altitudeRate": "Altitude rate",
+    "elongationStar": "Star elongation",
+    "elongationParent": "Parent elongation",
+    "ra": "RA",
+    "dec": "Dec",
+    "eclipticLon": "Ecliptic lon",
+    "eclipticLat": "Ecliptic lat"
+  },
+  "legend": {
+    "title": "Legend",
+    "size": "Disc size = angular diameter",
+    "starColor": "Star colour = temperature",
+    "phase": "Crescent = phase (lit limb toward the star)",
+    "dim": "Dimmed = below naked eye (mag ≥ 6)"
+  },
+  "status": {
+    "loading": "Computing the sky…",
+    "error": "Failed to load sky data"
+  },
+  "dialog": {
+    "observer": {
+      "title": "Observation"
+    },
+    "display": {
+      "title": "Display",
+      "grids": "Coordinate grids",
+      "panels": "Info panels",
+      "background": "Background sky (neighbour stars / deep sky / galactic band)"
+    }
+  },
+  "grids": {
+    "altAz": "Horizon grid",
+    "equatorial": "Equatorial grid (+ celestial equator)",
+    "ecliptic": "Ecliptic line"
+  },
+  "panels": {
+    "below": "Below-horizon list",
+    "almanac": "Rise/set almanac"
+  },
+  "ui": {
+    "back": "Back to the world page",
+    "help": "Help (new window)"
+  },
+  "info": {
+    "close": "Clear selection"
+  }
+}
