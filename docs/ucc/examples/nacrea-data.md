@@ -4,23 +4,23 @@
 > `uv run python scripts/climate/ucc_examples_nacrea.py`
 > （气候正典读 `gcm-t42-712` 分支的 map 目录，见 `scripts/climate/ucc_pipeline.py`）
 > 数据 = `climate_yearly.msgpack`（`data_source: model`，
-> 来源：gcm pack import (gcm-t42-712); terrain-exposure-increment-v1; fields sha256 2a9933c9f0000a7881964fab5ab4d31faec2eec4b2a47182ea47970158957f45，profile ucc-v2）+ `climate_monthly.msgpack`
+> 来源：gcm pack import (gcm-t42-712); terrain-exposure-increment-v1; fields sha256 2ca8b78f18bad0c9790a8ed8225523cedc657984444599ea80002f3e9ad4db27，profile ucc-v2）+ `climate_monthly.msgpack`
 > + 网格文件。世界级声明：`climate_state: temperate`，递减率
 > 6.5 K/km。
 > 夹具目的与维护说明见手写文档
 > `docs/ucc/examples/nacrea.md`；描述量与分类语义见
 > `docs/ucc/specification.md`；Earth 侧对照例见
 > `docs/ucc/examples/earth.md`。
-> 生成日期：2026-11-04。
+> 生成日期：2026-11-05。
 > **状态简写**（表格中替代完整状态名）：`OOD` = out_of_domain（需求模型超出有效域
 > ——全年无液态水，AI/deficit 不报数）；`MI` = missing_input、`NA` = not_applicable、
 > `NPD` = no_positive_demand（语义见知识文档 §3）。
 
 ## 1. 全局分布（200000 cells；陆地 56360，海洋 143640）
 
-**热量带**：陆地+海洋合计 — polar 52061、cold 1343、temperate 36695、tropical 109901。
+**热量带**：陆地+海洋合计 — polar 52052、cold 1346、temperate 36697、tropical 109905。
 
-**陆地供需档（valid）**：arid 5971、semi_arid 6076、transitional 9664、humid 25151；陆地供需 n/a 9498（其中 out_of_domain 9498）。
+**陆地供需档（valid）**：arid 5972、semi_arid 6079、transitional 9661、humid 25152；陆地供需 n/a 9496（其中 out_of_domain 9496）。
 
 **陆地主类组合**：
 
@@ -28,31 +28,31 @@
 |----|-------|--------|
 | Ea（polar/arid） | 58 | 0.1% |
 | Ep（polar/semi_arid） | 225 | 0.4% |
-| Et（polar/transitional） | 580 | 1.0% |
-| Eu（polar/humid） | 4049 | 7.2% |
+| Et（polar/transitional） | 575 | 1.0% |
+| Eu（polar/humid） | 4046 | 7.2% |
 | Da（cold/arid） | 3 | 0.0% |
 | Dp（cold/semi_arid） | 42 | 0.1% |
-| Dt（cold/transitional） | 440 | 0.8% |
+| Dt（cold/transitional） | 443 | 0.8% |
 | Du（cold/humid） | 743 | 1.3% |
-| Ca（temperate/arid） | 2675 | 4.7% |
-| Cp（temperate/semi_arid） | 2756 | 4.9% |
-| Ct（temperate/transitional） | 2472 | 4.4% |
-| Cu（temperate/humid） | 3980 | 7.1% |
+| Ca（temperate/arid） | 2676 | 4.7% |
+| Cp（temperate/semi_arid） | 2759 | 4.9% |
+| Ct（temperate/transitional） | 2469 | 4.4% |
+| Cu（temperate/humid） | 3983 | 7.1% |
 | Aa（tropical/arid） | 3235 | 5.7% |
 | Ap（tropical/semi_arid） | 3053 | 5.4% |
-| At（tropical/transitional） | 6172 | 11.0% |
-| Au（tropical/humid） | 16379 | 29.1% |
-| En（polar/供需不适用） | 9498 | 16.9% |
+| At（tropical/transitional） | 6174 | 11.0% |
+| Au（tropical/humid） | 16380 | 29.1% |
+| En（polar/供需不适用） | 9496 | 16.8% |
 | Dn（cold/供需不适用） | 0 | 0.0% |
 | Cn（temperate/供需不适用） | 0 | 0.0% |
 | An（tropical/供需不适用） | 0 | 0.0% |
 
-**海洋热量带**：tropical 81062、polar 37651、temperate 24812、cold 115。
+**海洋热量带**：tropical 81063、polar 37652、temperate 24810、cold 115。
 
 **修饰语**：continental 15.19%（构造性为零，见 E2）；water_stress
 22.1% 陆地；highland（-H，海拔抬出来的带）12.9% 陆地。
 
-**AI 状态（陆地）**：valid 46862、out_of_domain 9498。
+**AI 状态（陆地）**：valid 46864、out_of_domain 9496。
 
 **描述量分位数（陆地）**：
 
@@ -71,12 +71,12 @@ t_mean 全域 -49.8 .. 30.7 °C；t_range 全域 0 ..
 
 | 预期 | 实际 | 判定 |
 |------|------|------|
-| E1 主类集中 tropical/temperate × transitional/humid（计划按 v0 预期；v1 干旱带 0.2 细分后 semi_arid/arid 单列） | top5 组合占陆地 71%：Au 16379、En 9498、At 6172、Eu 4049、Cu 3980 | △（实际见分布表，计划预期按 v1 修正） |
+| E1 主类集中 tropical/temperate × transitional/humid（计划按 v0 预期；v1 干旱带 0.2 细分后 semi_arid/arid 单列） | top5 组合占陆地 71%：Au 16380、En 9496、At 6174、Eu 4046、Cu 3983 | △（实际见分布表，计划预期按 v1 修正） |
 | E2 continental ≈ 0（t_range 全域 0–5.4 °C，构造性低于 25 °C 阈值） | continental 份额 15.19%，max t_range 69.78 °C | ✗ |
 | E3 water_stress 标记季节干旱区（deficit ≥ 0.5） | 陆地份额 22.1%；极值点见 §4 | ✓ |
 | E4 海洋 cell 供需轴全部 n/a（o 槽位） | 海洋 255 份额 100% | ✓ |
-| E5 部分有效路径：冰冻区走 out_of_domain（冰冻陆地应得 Pn 而非伪湿润；陆地 n/a 应全部由 out_of_domain 解释） | out_of_domain：全网格 28512，其中陆地 9498（陆地供需 n/a 共 9498） | ✓ |
-| E6 cold 带（t_min<−3 且 t_max≥10）出现与否取决于季节振幅：Nacrea 弱季节（9° 倾角 + 短年）预期 cold 极少或为零——「无 D 类」的 UCC 对应物 | cold cell 全网格 1343 | ✓（记录值） |
+| E5 部分有效路径：冰冻区走 out_of_domain（冰冻陆地应得 Pn 而非伪湿润；陆地 n/a 应全部由 out_of_domain 解释） | out_of_domain：全网格 28512，其中陆地 9496（陆地供需 n/a 共 9496） | ✓ |
+| E6 cold 带（t_min<−3 且 t_max≥10）出现与否取决于季节振幅：Nacrea 弱季节（9° 倾角 + 短年）预期 cold 极少或为零——「无 D 类」的 UCC 对应物 | cold cell 全网格 1346 | ✓（记录值） |
 
 ## 3. 代表地点（命名地理锚点，geography.yaml）
 
@@ -141,9 +141,9 @@ t_mean 全域 -49.8 .. 30.7 °C；t_range 全域 0 ..
 ### 6. 世界岛·北部
 
 - cell #53186 · 陆地 · 高程 551 m
-- 月箱均 T（°C）：21.7 23.9 25.7 26.5 26.2 25.3 23.9 22.2 20.6 19.8 19.2 19.8
+- 月箱均 T（°C）：21.6 23.9 25.7 26.4 26.1 25.3 23.9 22.2 20.6 19.8 19.2 19.8
 - 月箱降水（mm/箱）：3 5 9 39 81 95 75 42 20 19 13 3
-- 描述量：t_mean 22.9 · t_min 19.2 · t_max 26.5 · t_range 7.2 · 低于0°C份额 0.00 · P 405 mm/参考年 · AI 0.33 · deficit 0.67 · C_TV 0.40
+- 描述量：t_mean 22.9 · t_min 19.2 · t_max 26.4 · t_range 7.2 · 低于0°C份额 0.00 · P 405 mm/参考年 · AI 0.33 · deficit 0.67 · C_TV 0.40
 - **分类（ucc-v2）**：tropical / semi_arid · 简码 **Ap-Sgm** · 修饰语：water_stress
 
 ### 7. 大裂谷海·中段
@@ -207,7 +207,7 @@ t_mean 全域 -49.8 .. 30.7 °C；t_range 全域 0 ..
 | 量 | cell | 纬, 经 | 高程 m | 描述量 | 类码 |
 |----|------|--------|--------|--------|------|
 | 最干（AI 最低陆地） | #64568 | 20.8, 78.7 | 60 | T均 27.3 · P 3 · AI 0.00 | **Aa-Sgm** |
-| 最湿（AI 最高陆地） | #24608 | 48.9, -151.1 | 1737 | T均 -2.3 · P 2115 · AI 8.46 | **Eu-H** |
+| 最湿（AI 最高陆地） | #24608 | 48.9, -151.1 | 1737 | T均 -2.3 · P 2115 · AI 8.45 | **Eu-H** |
 | 最冷（t_mean 最低） | #193648 | -69.4, 16.1 | 4702 | T均 -49.8 · P 704 · AI OOD | **En-Sl** |
 | 最热（t_mean 最高） | #130879 | -18.2, -118.6 | -52 | T均 30.7 · P 230 · AI 0.12 | **Ao-Sm** |
 | 水压力最强（deficit 最高陆地） | #64568 | 20.8, 78.7 | 60 | T均 27.3 · P 3 · AI 0.00 | **Aa-Sgm** |

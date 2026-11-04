@@ -244,6 +244,7 @@ def compute_field_set(
     from dreamulator.gcm.diagnostics import (
         equinox_day_from_declination,
         orbital_phase_of_records,
+        surface_height_m,
     )
 
     ds = netCDF4.Dataset(str(nc_path))
@@ -298,7 +299,7 @@ def compute_field_set(
         }
     zsurf = None
     if "sg" in ds.variables:  # surface geopotential (m²/s²) → GCM surface height (m)
-        zsurf = np.asarray(ds["sg"][0], dtype=float)[order, :] / gravity_m_s2
+        zsurf = surface_height_m(ds, gravity_m_s2)[order, :]
 
     cells = mesh.cells
     lat = np.array([c.lat for c in cells], dtype=float)

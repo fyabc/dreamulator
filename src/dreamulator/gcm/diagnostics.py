@@ -39,6 +39,27 @@ def _tail(a: np.ndarray, n: int, axis: int = 0) -> np.ndarray:
     return a[-n:]
 
 
+def surface_height_m(ds: Any, gravity_m_s2: float) -> np.ndarray:
+    """GCM surface height (m) from an output's ``sg`` geopotential, in file row order.
+
+    The model's orography is fixed, but the first record of a run continued from
+    a restart does not carry it: on nacrea the first monthly record of a warm
+    start differs from the true orography by up to 105 m while every later record
+    matches it to the bit (a cold start's first record is already correct). So the
+    last record is read, after checking that all records past the first agree, and
+    a warm start's first record is never used.
+    """
+    sg = ds["sg"]
+    last = np.asarray(sg[-1], dtype=float)
+    if sg.shape[0] > 2:
+        second = np.asarray(sg[1], dtype=float)
+        if not np.array_equal(second, last):
+            raise ValueError(
+                "GCM orography changes after the first record; it is expected to be fixed"
+            )
+    return last / gravity_m_s2
+
+
 def mass_streamfunction(
     va: np.ndarray,
     ps: np.ndarray,

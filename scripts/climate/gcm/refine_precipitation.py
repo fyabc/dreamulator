@@ -28,6 +28,7 @@ if str(SRC) not in sys.path:
 from dreamulator.gcm.diagnostics import (  # noqa: E402
     equinox_day_from_declination,
     orbital_phase_of_records,
+    surface_height_m,
 )
 from dreamulator.gcm.mapping import map_world  # noqa: E402
 from dreamulator.gcm.native_partition import NativePrecipitationField  # noqa: E402
@@ -89,7 +90,7 @@ def weather_directions(
             np.add.at(rain, (months[start:stop, None], bins, parent), prl)
         total = rain.sum(axis=1, keepdims=True)
         weights = np.divide(rain, total, out=np.zeros_like(rain), where=total > 0)
-        height = np.maximum(np.asarray(ds["sg"][0], float)[order] / gravity_m_s2, 0)
+        height = np.maximum(surface_height_m(ds, gravity_m_s2)[order], 0)
     return {
         "latitude": lat,
         "longitude": lon,

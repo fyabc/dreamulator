@@ -188,7 +188,7 @@ def build_pack(
     """
     import netCDF4
 
-    from dreamulator.gcm.diagnostics import equinox_day_from_declination
+    from dreamulator.gcm.diagnostics import equinox_day_from_declination, surface_height_m
 
     out = Path(out_dir)
     (out / "fields").mkdir(parents=True, exist_ok=True)
@@ -205,7 +205,7 @@ def build_pack(
     nlat, nlon = lat.size, lon.size
     k = {name: nearest_level(sigma, s) for name, s in WIND_SIGMAS.items()}
     k300, k500 = nearest_level(sigma_half, 0.30), nearest_level(sigma_half, 0.50)
-    zsurf = np.asarray(ds["sg"][0], dtype=float)[order, :] / gravity_m_s2
+    zsurf = surface_height_m(ds, gravity_m_s2)[order, :]
     lsm = np.asarray(ds["lsm"][0], dtype=float)[order, :]
 
     optional = {k: v for k, v in OPTIONAL_FIELDS.items() if v[0] in ds.variables}

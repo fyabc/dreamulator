@@ -174,9 +174,9 @@
     "created_utc": "2026-11-03T23:40:23Z"
   },
   "pco2_ppm": 711.5,
-  "code_commit": "v1.1.0-221-gc11f0c55226a-dirty",
+  "code_commit": "v1.1.0-223-ga00b124896ba-dirty",
   "file": "gcm_fields.msgpack.gz",
-  "sha256": "2a9933c9f0000a7881964fab5ab4d31faec2eec4b2a47182ea47970158957f45",
+  "sha256": "2ca8b78f18bad0c9790a8ed8225523cedc657984444599ea80002f3e9ad4db27",
   "num_cells": 200000,
   "mesh_fingerprint": "1ce399d135dfdd84d2d09ff1e6f284e780b27f6608660dc16fe72a0dcc4f246e",
   "format_version": 2

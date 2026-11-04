@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from dreamulator.gcm.diagnostics import equinox_day_from_declination, orbital_phase_of_records
 
@@ -62,3 +63,21 @@ def test_equinox_day_recovers_declination_phase() -> None:
         days * spd, zdec, orbital_year_days=year, steps_per_model_day=spd
     )
     assert abs(got - equinox) < 1e-6
+
+
+def test_surface_height_skips_a_warm_starts_first_record() -> None:
+    """A run continued from a restart writes a wrong orography in its first record.
+
+    Every later record carries the fixed model orography, so the reader takes the
+    last one and refuses an orography that keeps changing.
+    """
+    from dreamulator.gcm.diagnostics import surface_height_m
+
+    true = np.arange(6.0).reshape(2, 3) * 100.0
+    first = true + 50.0
+    ds = {"sg": np.stack([first, true, true, true]) * 9.8}
+    np.testing.assert_allclose(surface_height_m(ds, 9.8), true)
+
+    drifting = {"sg": np.stack([first, true, true + 1.0]) * 9.8}
+    with pytest.raises(ValueError):
+        surface_height_m(drifting, 9.8)
