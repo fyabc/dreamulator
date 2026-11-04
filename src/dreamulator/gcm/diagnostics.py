@@ -94,16 +94,24 @@ def orbital_phase_of_records(
     ExoPlaSim's model calendar can drift against the true orbital year:
     ``configure()`` derives ``N_DAYS_PER_YEAR`` from the rotation period
     (nacrea: 120 model days) while insolation follows ``SIDEREAL_YEAR``
-    (nacrea: 99.8 days) — each model year spans ~1.2 orbital years, so the
-    record index aliases through the seasons and a "month k" climatology
-    mixes seasons.  Seasonal analysis (e.g. the C5 ITCZ-migration criterion)
-    must bin records by orbital phase instead.
+    (nacrea: 99.8 Earth days).  A model day is a sidereal rotation, about
+    3.09 Earth days on nacrea, so each model year spans about 370 Earth days,
+    roughly 3.7 orbital years; the record index therefore aliases through the
+    seasons and a "month k" climatology mixes seasons.  Seasonal analysis
+    (e.g. the C5 ITCZ-migration criterion) must bin records by orbital phase
+    instead.
+
+    The phase is computed in Earth days, which is why ``steps_per_model_day``
+    is the number of steps per 24 hours (``1440 / MPSTEP``), not per model day,
+    despite its name.
 
     Args:
         time_axis: the NetCDF ``time`` variable (units: timesteps).
         orbital_year_days: true sidereal/orbital year in days.
-        steps_per_model_day: integration steps per model day (MPSTEP=45 min
-            gives 32; check the run's ``Timesteps / day`` diag line).
+        steps_per_model_day: integration steps per 24 hours, ``1440 / MPSTEP``
+            (45 min gives 32). Do not take the run's ``Timesteps / day`` diag
+            line: that counts steps per sidereal model day (about 100 on
+            nacrea at 45 min) and would scale every phase wrongly.
         perihelion_day: day-of-year of perihelion passage (phase origin;
             0 keeps the raw orbital angle).
     """
