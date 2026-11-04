@@ -2,7 +2,7 @@
 
 The cloud alpha is advected (semi-Lagrangian + BFECC) while the camera and
 star stay fixed, so the terminator does not move.  With ``--weather-pack``
-the advection follows the model's own 6-hourly winds: the low/mid cloud shell
+the advection follows the model's own pack winds: the low/mid cloud shell
 rides the mid-level flow (``u_mid``/``v_mid``, sigma ≈ 0.57), the cirrus
 shell the high-level flow (``u_high``/``v_high``, sigma ≈ 0.32), both
 linearly interpolated between pack frames at the clip's time step and

@@ -38,6 +38,7 @@ def _write_pack(
     *,
     subsolar_lon: float = 350.0,
     subsolar_lons: list[float] | None = None,
+    interval_h: float = 6.0,
 ) -> Path:
     """Write a minimal valid pack: meta.json + fields/*.npy + tracks.json."""
     pack = root / "pack"
@@ -60,11 +61,11 @@ def _write_pack(
             "lon_deg": [round(float(v), 5) for v in lon],
         },
         "time": {
-            "hours_since_start": [6.0 * t for t in range(FRAMES)],
+            "hours_since_start": [interval_h * t for t in range(FRAMES)],
             "subsolar_lat_deg": [10.0] * FRAMES,
             "subsolar_lon_deg": subsolar_lons,
         },
-        "calendar": {"frame_interval_h": 6.0},
+        "calendar": {"frame_interval_h": interval_h},
     }
     (pack / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
     return pack
@@ -89,6 +90,18 @@ def test_time_mean_and_edge_window(tmp_path: Path) -> None:
     np.testing.assert_allclose(wf0.cover, (0.10 + 0.15) / 2, atol=1e-6)
     assert wf0.meta["time_window_frames"] == 2
     assert wf0.meta["time_window_span_h"] == 6.0
+
+
+def test_time_window_is_set_in_hours(tmp_path: Path) -> None:
+    """A 4-hour pack averages five frames, keeping the window near 18 hours."""
+    total = np.stack(
+        [np.full((NLAT, NLON), 0.10 + 0.05 * t, dtype=np.float32) for t in range(FRAMES)]
+    )
+    pack = _write_pack(tmp_path, {"cloud_total": total}, interval_h=4.0)
+    wf = load_weather_frame(pack, 2, 64, 32)
+    np.testing.assert_allclose(wf.cover, 0.20, atol=1e-6)
+    assert wf.meta["time_window_frames"] == 5
+    assert wf.meta["time_window_span_h"] == 16.0
 
 
 def test_gaussian_smoothing_spreads_a_spike(tmp_path: Path) -> None:

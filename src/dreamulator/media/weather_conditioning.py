@@ -2,21 +2,23 @@
 orbital weather-globe chain.
 
 The weather pack (:mod:`dreamulator.gcm.weather_pack`) stores instantaneous
-6-hourly T42 fields.  This module turns one frame into the conditioning the
-media chain consumes: the large-scale cover (total cloud), the two-shell
-vertical split (the visible cloud top classifies deck versus cirrus), the
-sub-solar point and the advecting winds — the mid-level flow (sigma ≈ 0.57)
-that transports the low/mid cloud shell and the high-level flow (sigma ≈
-0.32) that carries the cirrus shell (the L4 advection input).
+T42 fields every few hours (every 4 h for the nacrea canon).  This module turns
+one frame into the conditioning the media chain consumes: the large-scale
+cover (total cloud), the two-shell vertical split (the visible cloud top
+classifies deck versus cirrus), the sub-solar point and the advecting winds —
+the mid-level flow (sigma ≈ 0.57) that transports the low/mid cloud shell and
+the high-level flow (sigma ≈ 0.32) that carries the cirrus shell (the L4
+advection input).
 
 Smoothing recipe (agreed with the GCM side, 2026-10-23): the raw
 instantaneous cloud fields are nearly binary — at frame 400, 68% of grid
 points sit below 0.05 or above 0.95 — so before driving the texture they are
 
-1. averaged over the ``time_window`` frames centred on the target (default
-   3 frames = 18 h; the 6-hour lag-1 correlation is 0.66 and lag-2 is 0.46,
-   so a 3-frame mean keeps weather-scale structure while 5 frames start
-   erasing it), then
+1. averaged over the frames within ``time_window_h / 2`` hours of the target
+   (default 18 h, which on a 6-hour pack is 3 frames and on a 4-hour pack 5;
+   the window is set in hours so a denser pack does not shorten it.  On the
+   6-hour pack the lag-1 correlation is 0.66 and lag-2 is 0.46, so an 18-hour
+   mean keeps weather-scale structure while 30 hours start erasing it), then
 2. Gaussian-smoothed on the native grid with sigma in grid units (default
    1.0 ≈ 310 km at the equator; the two-end fraction drops 68% → 23% with
    the spatial step alone → 16% with both, correlation with the raw field
@@ -32,7 +34,7 @@ rendering-side conditioning only; pack files are read, never written.
 
 Fractional frames: a float ``frame`` blends the two bracketing integer frames
 after each is fully processed (window mean, spatial smoothing, vertical
-split), so callers stepping finer than the pack's 6-hour interval — the L4
+split), so callers stepping finer than the pack's frame interval — the L4
 video, for example — get a continuous field.  Sub-solar longitude blends the
 short way around, keeping the day cycle continuous across the 0°/360° seam.
 
@@ -57,8 +59,9 @@ from dreamulator.media.cloud_render import shell_weights_from_shares
 if TYPE_CHECKING:
     from pathlib import Path
 
-#: Frames in the centred time mean (3 × 6 h = 18 h window).
-PACK_TIME_WINDOW = 3
+#: Hours spanned by the centred time mean; a frame enters when it lies within
+#: half of this from the target (3 frames on a 6-hour pack, 5 on a 4-hour pack).
+PACK_TIME_WINDOW_H = 18.0
 #: Gaussian smoothing sigma in native grid units (1 T42 grid step ≈ 310 km at the equator).
 PACK_SPACE_SIGMA = 1.0
 
@@ -148,12 +151,14 @@ def _integer_frame(
     width: int,
     height: int,
     *,
-    time_window: int,
+    time_window_h: float,
     space_sigma: float,
 ) -> WeatherFrame:
     """Process one integer pack frame: window mean, smoothing, resample."""
     n = int(pack.meta["frames"])
-    half = max(time_window, 1) // 2
+    interval_h = float((pack.meta.get("calendar") or {}).get("frame_interval_h") or 6.0)
+    # The small tolerance keeps a frame exactly at the window edge inside it.
+    half = int(math.floor(0.5 * time_window_h / interval_h + 1e-9))
     idx = [t for t in range(frame - half, frame + half + 1) if 0 <= t < n]
 
     def smoothed(name: str) -> np.ndarray:
@@ -295,7 +300,7 @@ def frame_from_pack(
     width: int,
     height: int,
     *,
-    time_window: int = PACK_TIME_WINDOW,
+    time_window_h: float = PACK_TIME_WINDOW_H,
     space_sigma: float = PACK_SPACE_SIGMA,
 ) -> WeatherFrame:
     """Load one frame from an already-open pack (see the module docstring).
@@ -311,11 +316,13 @@ def frame_from_pack(
         raise ValueError(f"frame {frame} is outside the pack's 0…{n - 1}")
     base = int(math.floor(frame))
     frac = float(frame) - base
-    a = _integer_frame(pack, base, width, height, time_window=time_window, space_sigma=space_sigma)
+    a = _integer_frame(
+        pack, base, width, height, time_window_h=time_window_h, space_sigma=space_sigma
+    )
     if frac == 0.0:
         return a
     b = _integer_frame(
-        pack, base + 1, width, height, time_window=time_window, space_sigma=space_sigma
+        pack, base + 1, width, height, time_window_h=time_window_h, space_sigma=space_sigma
     )
     return blend_weather_frames(a, b, frac)
 
@@ -326,7 +333,7 @@ def load_weather_frame(
     width: int,
     height: int,
     *,
-    time_window: int = PACK_TIME_WINDOW,
+    time_window_h: float = PACK_TIME_WINDOW_H,
     space_sigma: float = PACK_SPACE_SIGMA,
 ) -> WeatherFrame:
     """Load, smooth and rasterise one pack frame (see the module docstring)."""
@@ -335,14 +342,14 @@ def load_weather_frame(
         frame,
         width,
         height,
-        time_window=time_window,
+        time_window_h=time_window_h,
         space_sigma=space_sigma,
     )
 
 
 __all__ = [
     "PACK_SPACE_SIGMA",
-    "PACK_TIME_WINDOW",
+    "PACK_TIME_WINDOW_H",
     "SHELL_SPLIT_HIGH_KM",
     "SHELL_SPLIT_LOW_KM",
     "WeatherFrame",

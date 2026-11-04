@@ -487,27 +487,30 @@ python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet 
 气象图层包（格式与方法见 `docs/design/pipelines/gcm-weather-pack.md`）：
 
 ```bash
-# 1. 续算 1 个模式年，每 2 步一帧瞬时快照，并打开风暴气候诊断
+# 1. 从正典续算 1 个模式年，20 分钟步长、每 4 步一帧瞬时快照，并打开风暴气候诊断
 python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea \
     --resolution T42 --ncpus 16 --years 1 --greenhouse-mode pco2 --pco2-bar 0.000721434 \
-    --landmap <gcm-workdir>/surf/r22/nacrea_N064_surf_0172.sra \
-    --topomap <gcm-workdir>/surf/r22/nacrea_N064_surf_0129.sra \
-    --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp", "snapshots": 2, "stormclim": true}' \
+    --landmap <gcm-workdir>/surf/refresh-20261028-v2/nacrea_N064_surf_0172.sra \
+    --topomap <gcm-workdir>/surf/refresh-20261028-v2/nacrea_N064_surf_0129.sra \
+    --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp", "timestep": 20, "snapshots": 4, "stormclim": true}' \
     --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' \
-    --restart <gcm-workdir>/runs/t42r/cold_712/MOST_REST.00000 \
-    --workdir <gcm-workdir>/runs/t42r/hf_712
+    --restart <gcm-workdir>/runs/t42-dt20-20261104/cold_712/MOST_REST.00000 \
+    --workdir <gcm-workdir>/runs/t42-dt20-20261104/hf_712_storm
 
-# 2. 打包，每 6 小时一帧
-python scripts/climate/gcm/build_weather_pack.py <gcm-workdir>/runs/t42r/hf_712 \
-    --out exports/weather/nacrea-gcm-t42-712 --interval-h 6
+# 2. 打包，每 4 小时一帧（快照间隔 80 分钟的 3 倍）
+python scripts/climate/gcm/build_weather_pack.py <gcm-workdir>/runs/t42-dt20-20261104/hf_712_storm \
+    --out exports/weather/nacrea-gcm-t42-712 --interval-h 4
 ```
 
 口径要点：
 
-- **步长是真实时间。** `MPSTEP = 45` 是 45 分钟，模式日是恒星自转周期，nacrea 一个模式日约 101 步。
-  `snapshots` 的单位是步，`"snapshots": 2` 就是 1.5 小时一帧，一个模式年约 5940 帧。
+- **步长是真实时间。** `MPSTEP = 20` 是 20 分钟，模式日是恒星自转周期，nacrea 一个模式日约 225 步。
+  `snapshots` 的单位是步，`"snapshots": 4` 就是 80 分钟一帧，一个模式年 6750 帧。打包脚本把
+  `--interval-h` 取整到整数个快照，所以要得到确切的帧距，须取快照间隔的整数倍。
+- **风暴诊断要显式打开。** 不加 `"stormclim": true` 时包里的生成潜势与潜在强度全为零，媒体链的参数化
+  热带气旋无处生成。
 - **快照很大。** 原始快照约 32 GB，后处理后的 NetCDF 每帧约 6 MB；后处理把全部帧读进内存，需要约
-  100 GB 内存。打包只取需要的变量并抽帧，6 小时一帧的包约 1 GB。
+  100 GB 内存。打包只取需要的变量并抽帧，4 小时一帧的包约 1.5 GB。
 - **快照里的 `zg` 不可用。** pyburn 写出的数值不是位势高度，打包时高度由温度按测高公式积分得到。
 - **`psl` 的单位是 Pa**，虽然元数据写的是 hPa（与月平均输出相同）。
 - **太阳日按模式日历走。** PlaSim 让太阳按 `N_DAYS_PER_YEAR` 个模式日的一年移动，nacrea 的太阳日因此是

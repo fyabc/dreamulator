@@ -564,13 +564,13 @@ dreamulator export globe nacrea --branch gcm-t42-712 \
 | `--cyclone-seed` | 31 | 合成集种子；带包时为热带正典抽样种子 |
 | `--stationary-lows` | 关 | 仅 QA：同时画出包内准静止低压（默认不画，多为陆上热低压） |
 | `--weather-pack` | 无 | 气象图层包目录（`meta.json` + `fields/`，放在 `exports/weather/` 下，不进 git）：条件场切换为该包的逐帧云量 |
-| `--frame` | 0 | 图层包帧号（配合 `--weather-pack`；6 小时一帧） |
+| `--frame` | 0 | 图层包帧号（配合 `--weather-pack`；帧间隔见包的 `meta.json`，nacrea 正典包 4 小时一帧） |
 | `--atmosphere/--no-atmosphere` | 开 | L5 物理大气壳；关闭退回旧版边缘光晕预览 |
 | `--data-dir` | 环境默认 | 覆盖世界数据目录 |
 
 `--weather-pack` 的条件场处理（与 GCM 侧约定的口径，参数记入 `meta.json` 的
-`weather_pack` 块）：瞬时云量接近非 0 即 1，先取以当前帧为中心的 3 帧等权平均
-（18 小时窗口；序列两端收缩为 2 帧），再在原始 T42 网格上做标准差 1 个格距
+`weather_pack` 块）：瞬时云量接近非 0 即 1，先取以当前帧为中心、18 小时窗口内各帧的等权平均
+（4 小时一帧时为 5 帧；序列两端收缩为可用的帧），再在原始 T42 网格上做标准差 1 个格距
 （赤道约 310 km）的高斯平滑（经度环绕、纬度边缘延拓）。低/中云与高云的比例经
 同一处理后驱动两层云壳的厚度分配。
 
@@ -680,7 +680,7 @@ uv run --with imageio-ffmpeg python scripts/media/cloud_flow_video.py <globe_dir
 | `--no-vortex` | 关 | 只用环境风，不叠加风暴 Holland 涡旋 |
 | `--crf` / `--no-ocean` / `--poster` | 18 / 关 / 无 | 同旋转视频 |
 
-风场暂用年均值占位，等 L1 的 6 小时风场到达后替换；只输运现有纹理，不做凝结/蒸发。平流默认用 Catmull–Rom 三次采样压低插值扩散，代价约为双线性的 3 倍；更长时段仍需要 L1 帧间插值或更强的低扩散格式。
+不带 `--weather-pack` 时风场用年均值；只输运现有纹理，不做凝结/蒸发。平流默认用 Catmull–Rom 三次采样压低插值扩散，代价约为双线性的 3 倍；更长时段仍需要 L1 帧间插值或更强的低扩散格式。
 
 #### 5. 卫星食影子
 
