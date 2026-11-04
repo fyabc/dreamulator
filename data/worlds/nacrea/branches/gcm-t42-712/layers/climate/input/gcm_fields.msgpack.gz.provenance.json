@@ -1,5 +1,5 @@
 {
-  "source_nc": "<gcm-workdir>/runs/t42-refresh-20261028-v2/cold_712/MOST.00000.nc",
+  "source_nc": "<gcm-workdir>/runs/t42-dt20-20261104/cold_712/MOST.00000.nc",
   "tail_years": 5.0,
   "grid": [
     64,
@@ -9,26 +9,25 @@
   "lapse_k_per_m": 0.0065,
   "precipitation_basis": "mm per Earth year (365.25/12 days per month)",
   "precipitation_source": {
-    "source_run_id": "t42-refresh-20261028-v2/cold_712",
-    "source_nc_sha256": "8ec3e7090b19613612635c118c3b369347d8f702830fd613263351141bb63a85",
-    "source_manifest_sha256": "73e0d66a681d0506c72f3354c4080e3af5c6c9f55dc5cfa0f45b2e45129fe741",
+    "source_run_id": "t42-dt20-20261104/cold_712",
+    "source_nc_sha256": "eb116840084a989313a36bc2264c9a27de43fb5630104e8b7618e82aee61199a",
+    "source_manifest_sha256": "2b81530271a701139eab0dd91e8aee13d08c4ea16e75c85a72716a3cb66b696d",
     "tail_records": 60,
     "phase_counts": [
-      3,
-      7,
-      6,
-      3,
+      5,
+      5,
+      4,
       6,
       4,
-      7,
-      3,
+      4,
+      6,
+      6,
+      4,
       5,
       6,
-      5,
       5
     ],
-    "source_component_sum_max_error_mm": 2.958593370294693e-05,
-    "weather_response": "rain-weighted terrain-exposure increment on prl",
+    "source_component_sum_max_error_mm": 2.072961797239259e-05,
     "format": "native-precipitation-v1",
     "components": [
       "prl",
@@ -50,28 +49,29 @@
       "wind_weighting": "native large-scale precipitation at each weather state",
       "refined_component": "prl",
       "convective_component": "retained long-term spatial prior and native quota",
-      "baseline_sha256": "082cfd60e0ecf531f3ab9d1c709685da03f386f7c6be7f114df6f91e4cf9409b",
-      "weather_sha256": "febf9636a0e062f1cc3ec8f1fbd127cec94e712faf3d33d74c9ae439b5e7c3cd",
-      "source_mesh_sha256": "d885fed6e3ebc258c16bb8fc22d5386912ce417c9f2eef9396a74d50d18cdb1f",
-      "weather_frames": 5940,
+      "baseline_sha256": "c8c39b4861ab993fbc6b0fd831ea31680359d424f0ae77a93817e571823dae36",
+      "weather_sha256": "78632c23a0bbfa742778c2fe9707a6f0d9430c8b45d26170e425ce932fea7100",
+      "source_mesh_sha256": "421a4c7f4058165b6baebd23149d9b082228a3fcb0b3d09b97c8505a52fce676",
+      "weather_frames": 6750,
       "phase_counts": [
-        454,
-        399,
-        399,
-        429,
-        533,
-        533,
-        533,
-        532,
-        532,
-        532,
-        532,
-        532
+        519,
+        449,
+        449,
+        542,
+        599,
+        599,
+        599,
+        599,
+        599,
+        599,
+        599,
+        598
       ],
-      "step_minutes": 45.0,
+      "step_minutes": 20.0,
       "fine_terrain_sampling": "nearest geological CVT elevation, sea level on ocean",
       "native_terrain_sampling": "bilinear GCM surface geopotential divided by gravity"
     },
+    "weather_response": "rain-weighted terrain-exposure increment on prl",
     "target_coverage": {
       "format": "cvt-precipitation-area-v1",
       "coordinate_sha256": "33b8828f25a4d62d28c4a1987d79bd92bb80d63358215d88fefefafe344ae16a",
@@ -96,10 +96,87 @@
   "slp_smoothing": "Hoskins spectral filter, 0.1 at n = 21",
   "sea_level_m": 0.0,
   "cloud_levels": "ISCCP pressure levels (440/680 hPa), random overlap within a level; total = model clt",
+  "run_manifest": {
+    "configure_kwargs": {
+      "radius": 1.07,
+      "gravity": 10.278609485544589,
+      "rotationperiod": 3.1336,
+      "obliquity": 19.9,
+      "eccentricity": 0.06786252,
+      "flux": 1254.8535066078023,
+      "year": 99.81959208267338,
+      "pressure": 1.013971434,
+      "fixedorbit": true,
+      "twobandalbedo": true,
+      "physicsfilter": "gp|exp|sp",
+      "timestep": 20,
+      "restartfile": "<gcm-workdir>/runs/t42-refresh-20261028-v2/cold_712/MOST_REST.00000",
+      "startemp": 4365.0,
+      "lonvernaleq": 262.67774399999996,
+      "pN2": 0.7903907328029999,
+      "pO2": 0.21283260399659998,
+      "pAr": 0.01013971434,
+      "pCO2": 0.000721434
+    },
+    "input_paths": {
+      "planets": "data/worlds/nacrea/layers/geological/input/planets.yaml",
+      "stellar": "data/worlds/nacrea/layers/astronomy/input/stellar.yaml",
+      "restart_seed": "<gcm-workdir>/runs/t42-refresh-20261028-v2/cold_712/MOST_REST.00000",
+      "landmap": "<gcm-workdir>/surf/refresh-20261028-v2/nacrea_N064_surf_0172.sra",
+      "topomap": "<gcm-workdir>/surf/refresh-20261028-v2/nacrea_N064_surf_0129.sra"
+    },
+    "input_hashes": {
+      "planets": "2f28bc834ba5fbb6baa727fe08706fdbe8f727c6b59f592ec09f1d4c0a638178",
+      "stellar": "54fa02f557227289e480ac1ed85ff7978059a842db9c0979026abe35a9885ba9",
+      "restart_seed": "27ecf09f2af6237155e644501e73165ddedf4cfbaf46393c1353750df2b68f60",
+      "landmap": "54bb2f688de88e5aeeb26e2bcb0902b39f8646b0d355f878ee40b834322b9b2e",
+      "topomap": "aeabe630e3e6250b0f3a98fd921c58ba75b594cc62b1ff9e8ae176d011f07dc9"
+    },
+    "model_options": {
+      "years": 30,
+      "resolution": "T42",
+      "layers": 10,
+      "ncpus": 16,
+      "aquaplanet": false,
+      "topography": true,
+      "namelist_overrides": {
+        "NHDIFF@oceanmod_namelist": "1",
+        "HDIFFK@oceanmod_namelist": "1.0E4"
+      },
+      "fortran_patches": {
+        "patch_id": "0fa3031de602",
+        "exoplasim": "3.4.2",
+        "patches": [
+          "routing-cfl",
+          "restart-river",
+          "restart-wetness",
+          "restart-leapfrog-1",
+          "restart-leapfrog-2",
+          "output-humidity"
+        ],
+        "patched_source_sha256": {
+          "glaciermod.f90": "910bfc4f09f65b4c0ebcd4cc01a1b8bffb6b06bd0be030eb84022383c3f538be",
+          "landmod.f90": "82659d0f5c257a7d818691c3f4d28c782bbb91958f14fc9d3aa59ce80e088f1c",
+          "plasim.f90": "2f5b87527b6554c721ae775e029ad0ec25f345c72705fb7d7cce465d6ead1b09"
+        },
+        "executable_sha256": "4cf71acf088b69703c4831b88acdce705705be7969d52d507f8cd488938a9cd7"
+      },
+      "seed": 1,
+      "wall_seconds": 16247.7
+    },
+    "command": "python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --layers 10 --years 30 --greenhouse-mode pco2 --pco2-bar 0.000721434 --landmap <gcm-workdir>/surf/refresh-20261028-v2/nacrea_N064_surf_0172.sra --topomap <gcm-workdir>/surf/refresh-20261028-v2/nacrea_N064_surf_0129.sra --restart <gcm-workdir>/runs/t42-refresh-20261028-v2/cold_712/MOST_REST.00000 --configure '{\"twobandalbedo\": true, \"physicsfilter\": \"gp|exp|sp\", \"timestep\": 20}' --namelist '{\"NHDIFF@oceanmod_namelist\": \"1\", \"HDIFFK@oceanmod_namelist\": \"1.0E4\"}' --no-plot --workdir <gcm-workdir>/runs/t42-dt20-20261104/cold_712",
+    "code_version": "v1.1.0-220-g7f27433c2d5e-dirty",
+    "versions": {
+      "python": "3.12.3",
+      "exoplasim": "3.4.2",
+      "platform": "Linux-5.10.134-19.103.al8.x86_64-x86_64-with-glibc2.39"
+    },
+    "created_utc": "2026-11-03T23:40:23Z"
+  },
   "pco2_ppm": 711.5,
-  "code_commit": "v1.1.0-102-g60b706dd87a9-dirty",
+  "code_commit": "v1.1.0-221-gc11f0c55226a-dirty",
   "file": "gcm_fields.msgpack.gz",
-  "sha256": "a77fcb4ef8cbe4d5fb9b24ca9672c7e6aa96ad0edfd03a0feb2fb8d84aced319",
+  "sha256": "2a9933c9f0000a7881964fab5ab4d31faec2eec4b2a47182ea47970158957f45",
   "num_cells": 200000,
   "mesh_fingerprint": "1ce399d135dfdd84d2d09ff1e6f284e780b27f6608660dc16fe72a0dcc4f246e",
   "format_version": 2
