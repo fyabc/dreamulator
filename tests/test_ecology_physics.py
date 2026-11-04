@@ -81,24 +81,24 @@ def test_miami_npp_returns_none_for_missing_inputs() -> None:
 
 
 def test_miami_npp_earth_tropical_rainforest() -> None:
-    """25 °C, 3000 mm/yr → high NPP."""
+    """25 °C, 3000 mm/yr → high NPP, in carbon (dry matter × 0.475)."""
     npp = miami_npp(25.0, 3000.0)
     assert npp is not None
-    assert 1800.0 <= npp <= 2800.0  # typical tropical rainforest
+    assert 900.0 <= npp <= 1300.0  # tropical rainforest, gC/m²/yr
 
 
 def test_miami_npp_desert() -> None:
     """30 °C, 100 mm/yr → low NPP."""
     npp = miami_npp(30.0, 100.0)
     assert npp is not None
-    assert npp < 300.0
+    assert npp < 150.0
 
 
 def test_miami_npp_tundra() -> None:
     """-5 °C, 200 mm/yr → temperature-limited, moderate NPP despite low precip."""
     npp = miami_npp(-5.0, 200.0)
     assert npp is not None
-    assert npp < 400.0  # temp-limited, not precip-limited at -5°C
+    assert npp < 200.0  # temp-limited, not precip-limited at -5°C
 
 
 def test_miami_npp_temperature_limited() -> None:
@@ -113,8 +113,8 @@ def test_miami_npp_precip_limited() -> None:
     """Hot + dry → precip-limited (30°C, 200mm)."""
     npp = miami_npp(30.0, 200.0)
     assert npp is not None
-    # Miami precip: 3000*(1-exp(-0.000664*200)) ≈ 373 gC/m²/yr
-    assert 200.0 <= npp <= 400.0
+    # Miami precip: 3000*(1-exp(-0.000664*200)) ≈ 373 g dry matter ≈ 177 gC/m²/yr
+    assert 150.0 <= npp <= 200.0
 
 
 def test_miami_npp_par_ratio() -> None:
@@ -271,3 +271,16 @@ def test_classify_soil_fertility_gradient() -> None:
     _, rainforest_fertility = classify_soil(28.0, 3000.0, 200.0)
     assert grassland_fertility == "high"
     assert rainforest_fertility == "low"
+
+
+def test_miami_npp_is_carbon_not_dry_matter() -> None:
+    """Lieth's formula gives dry matter; the function returns its carbon share.
+
+    The ceiling of the formula is 3000 g dry matter, so no carbon value may exceed
+    3000 × MIAMI_DRY_MATTER_TO_CARBON.
+    """
+    from dreamulator.engine.ecology_physics import MIAMI_DRY_MATTER_TO_CARBON
+
+    npp = miami_npp(60.0, 1.0e6)
+    assert npp is not None
+    assert abs(npp / (3000.0 * MIAMI_DRY_MATTER_TO_CARBON) - 1.0) < 0.01

@@ -129,6 +129,13 @@ def classify_whittaker_biome(
 #: For stars with very different luminosities, multiply by PAR_ratio = (S / S_earth).
 #: This is applied at the engine level, not in the pure function.
 
+#: Carbon fraction of plant dry matter.  Lieth's (1975) productivity models,
+#: Miami included, return grams of dry organic matter (their 3000 g/m²/yr ceiling
+#: is dry matter), so a carbon flux needs this factor.  0.475 is the value Sun
+#: et al. (2021, PLOS ONE 16, e0252149) apply to Lieth-family models; the common
+#: range is 0.45 to 0.5.  Epistemic class: observational conversion constant.
+MIAMI_DRY_MATTER_TO_CARBON: float = 0.475
+
 
 def miami_npp(
     temperature_c: float | None,
@@ -139,13 +146,15 @@ def miami_npp(
     """Estimate Net Primary Productivity from temperature and precipitation.
 
     Uses the Miami model (Lieth 1975), which computes two independent limits —
-    one from temperature, one from precipitation — and takes the minimum.
+    one from temperature, one from precipitation — and takes the minimum.  The
+    formula gives dry matter; the result is converted to carbon with
+    :data:`MIAMI_DRY_MATTER_TO_CARBON`, so the ceiling is about 1425 gC/m²/yr.
 
     .. math::
 
         NPP_T &= \\frac{3000}{1 + e^{1.315 - 0.119 T}}
         NPP_P &= 3000 (1 - e^{-0.000664 P})
-        NPP   &= \\min(NPP_T, NPP_P)
+        NPP   &= 0.475 \\min(NPP_T, NPP_P)
 
     Parameters
     ----------
@@ -166,7 +175,7 @@ def miami_npp(
 
     npp_t = 3000.0 / (1.0 + math.exp(1.315 - 0.119 * temperature_c))
     npp_p = 3000.0 * (1.0 - math.exp(-0.000664 * precipitation_mm))
-    return min(npp_t, npp_p) * par_ratio
+    return min(npp_t, npp_p) * MIAMI_DRY_MATTER_TO_CARBON * par_ratio
 
 
 # ---------------------------------------------------------------------------

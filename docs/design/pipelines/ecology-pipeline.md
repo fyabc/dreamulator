@@ -51,7 +51,7 @@ EcologyEngine 声明 `requires = ["climate", "geological"]`：地质层提供 CV
 3. **陆地格**：`classify_whittaker_biome` 按年均温选热带（>18 °C）/温带
    （5–18 °C）/寒带（≤5 °C）热量带，带内按年降水量查表定群系；年均温 ≤−10 °C
    时无论降水多少均为冰原。Miami 模型（Lieth 1975）取温度限制与降水限制的
-  较小者估算 NPP（gC/m²/yr），再乘 `par_ratio`。
+  较小者，得到干物质产量，再乘干物质碳分数 `MIAMI_DRY_MATTER_TO_CARBON`（0.475）折成 NPP（gC/m²/yr），最后乘 `par_ratio`。
 
 下游消费不变式：`water_class=land` 且非湖的格子必须得到陆地群系与非空的
 NPP/土壤值（测试 `tests/test_engine/test_inland_water_semantics.py` 钉死）。

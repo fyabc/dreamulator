@@ -195,7 +195,7 @@ def test_npp_latitude_gradient(nacrea_cells):
 
 
 def test_npp_range_plausible(nacrea_cells):
-    """Global NPP should be within 0-3000 gC/m^2/yr (Miami model bounds)."""
+    """Global NPP should be within 0-1425 gC/m^2/yr (Miami bound: 3000 g dry matter x 0.475)."""
     land_cells = [
         c
         for c in nacrea_cells
@@ -203,7 +203,7 @@ def test_npp_range_plausible(nacrea_cells):
     ]
     for c in land_cells:
         npp = c["npp_gc_m2_yr"]
-        assert 0 <= npp <= 3000, (
+        assert 0 <= npp <= 1425, (
             f"NPP out of range at lat={c['lat']}, lon={c['lon']}: "
             f"npp={npp}, T={c.get('temperature_C')}, P={c.get('precipitation_mm')}"
         )

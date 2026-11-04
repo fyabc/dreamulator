@@ -315,15 +315,15 @@ function buildCellPalettes(
   const pressure = new Map<number, [number, number, number]>()
   const slp = new Map<number, [number, number, number]>()
 
-  // NPP range for normalisation.  Dynamic rather than the fixed Miami 3000 gC
-  // ceiling — a red dwarf's PAR suppresses NPP far below 3000 (nacrea land NPP
-  // peaks ~1200 gC), and a fixed ceiling washes the whole heatmap out.
+  // NPP range for normalisation.  Dynamic rather than the fixed Miami ceiling of
+  // 1425 gC (3000 g dry matter × 0.475): a dim star's PAR suppresses NPP far below
+  // it, and a fixed ceiling washes the whole heatmap out.
   let nppMax = 0
   for (const cell of cvtMesh.cells) {
     const v = cell.npp_gc_m2_yr
     if (v != null && v > nppMax) nppMax = v
   }
-  const NPP_MAX = nppMax > 0 ? nppMax : 3000
+  const NPP_MAX = nppMax > 0 ? nppMax : 1425
 
   // Build adaptive hypsometric LUT (NOAA ETOPO1 ocean + ESRI Natural Earth land).
   const terrainLut = generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel)
