@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.2.0] — 2026-11-06
 
 ### Added
 
@@ -112,6 +112,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   720p 整片约 20 分钟。
 
 ### Fixed
+
+- **发布打包不再漏掉带日期的备份文件（2026-11-06）**：`publish_world_data.py` 的 `_is_scratch`
+  此前只排除后缀恰为 `.bak` 的文件，`plates.json.bak-2026-10-16` 这类带日期的备份会混进发布包。
+  现在 `.bak` 与 `.bak-<后缀>` 一律视为草稿排除。
 
 - **参数化热带气旋按包的当地年数生成（2026-11-05）**：`TropicalCycloneSource` 用首尾帧的轨道相位之差估计
   包覆盖的当地年数，而相位每过一个当地年就从 1 回绕到 0，差值为负，于是整包只按一个当地年抽取。一个模式年

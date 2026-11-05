@@ -1,13 +1,12 @@
 # 开发路线图
 
-> 最后更新：2026-10-23（地质层重写批次并入 main：造山带格子平均高程、历史契约、亚格子岛屿目录、nacrea 地形
-> 重新生成；nacrea 的 GCM 运行在新地形上全部重跑，气候正典改以 `gcm-t42-712` 分支为准（design-notes 0013），
-> 分支新增 GCM 云量字段。全球画布链 S2 外存水文与 S3 区域裁窗见 [canvas-chain.md](pipelines/canvas-chain.md)。
-> v1.1.0 发版内容：程序化云纹理 `export clouds`、区域包查看页 `/packs`、
-> 2D 地图收敛为等距圆柱单投影、nacrea 轨道集合收尾与两档正典（洛夫数 k₂=0.20/h₂=0.40、
-> Q≈445、τ_e 9.2 Myr）、earth 板块运动 PB2002 欧拉极修正；地质时间轴研究线 G1–G3 入库
-> （proposals/geological-timeline.md + `paleo_*` 模块，未接入 CLI/API/前端）。
-> v1.0.x 及更早版本详情见 CHANGELOG）
+> 最后更新：2026-11-06（v1.2.0 合版发布：nacrea 气候正典刷新为 20 分钟积分步长的 GCM——网格地表口径
+> 全球均温 13.5 °C、陆地年降水约 1040 mm，Köppen A/B/C/D/E 群占陆地 40.0/21.1/11.0/2.2/25.7%；
+> 画布覆冰按新气候重算（v7，冰缘塑性锥度），天气包换代（4 h × 2250 帧），热带气旋正典改为每个当地年
+> 约 7 个，Miami NPP 折碳修复；服务器批 47 提交合入。全球画布链 S2 外存水文与 S3 区域裁窗见
+> [canvas-chain.md](pipelines/canvas-chain.md)。v1.1.0 发版内容：程序化云纹理 `export clouds`、
+> 区域包查看页 `/packs`、2D 地图收敛为等距圆柱单投影、nacrea 轨道集合收尾与两档正典、
+> earth 板块运动 PB2002 欧拉极修正。详情见 CHANGELOG）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
 > 生态层设计见 [ecology-layer.md](proposals/ecology-layer.md)；洋流系统见 [ocean_currents.md](../knowledge/climatology/ocean_currents.md)（物理）与 [climate-pipeline.md §6](pipelines/climate-pipeline.md)（实现）；
@@ -15,7 +14,7 @@
 
 ---
 
-## 一、当前状态快照（v1.1.0）
+## 一、当前状态快照（v1.2.0）
 
 | 维度 | 状态 |
 |------|------|
@@ -23,9 +22,9 @@
 | 性能 | nacrea（200k）全量 ~13 min（地质 ~230 s + 气候 ~510 s（GW6-on）+ 生态 5 s）；1M 节点 41 min；`build_profile.json` 仪表 + pytest-benchmark CI |
 | 确定性 | 种子化 RNG + crc32 校验和，跨进程可复现 |
 | 气候精度 | Köppen 分布匹配 **68.9%**（vs Beck 2018，GW6-on validate 口径）；逐格空间一致率 28.0%；T 纬向 RMSE 2.08 °C。三条主病均在输送场（P 逐格 R² −0.78 / 风 R² −0.43 / 洋流 6% of SODA——水汽路由/定常结构/风应力旋度），机制轮挂起、输送场全局重标定轮为下一候选 |
-| 样板世界 | nacrea：200k 节点（~51 km/cell）、~72% 海洋、均温 14.4 °C（温室 62 K）；季节振幅 √P 两臂后陆地 p50 4.0 K |
+| 样板世界 | nacrea：200k 节点（~51 km/cell）、~72% 海洋；气候正典 = 分支 `gcm-t42-712`（20 分钟步长 GCM，712 ppm CO₂）：全球均温 13.5 °C、陆地 11.2 °C、陆地年降水约 1040 mm（design-notes 0013） |
 | 网格规模 | 主力分辨率 **200k**；盘上 msgpack.gz + 几何/气候分离存储双文件（−41%），worker 零拷贝 + ETag/304 |
-| 未发布（main） | 地质层重写批次、nacrea 地形重新生成、GCM 全量重跑与气候正典切换、GCM 云量字段已并入；全球画布链 S2/S3 已并入（`887cdc1`）；待 publish_world_data 发布新数据 |
+| 未发布（main） | 无——v1.2.0 已含 20 分钟步长气候正典、画布覆冰 v7、新天气包与热带气旋修复，数据随 `worlds-data` release 发布 |
 
 ---
 
