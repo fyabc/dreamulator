@@ -74,11 +74,8 @@ Köppen 实现跑在真实观测月度序列上，与 Beck et al. (2018) 的 Kö
 | p_total | $\sum_i P_i \Delta t_i$ | mm/参考年 | 参考年总量，非本地年（见 §2） |
 | AI | $P_{total} / E_{ref,total}$ | — | 同期同窗的参考供需比，不是土壤湿度 |
 | deficit | $\sum_i \max(E_{ref,i} - P_i,\ 0)\,\Delta t_i \;/\; \sum_i E_{ref,i}\,\Delta t_i$ | — | 同期亏缺份额：只算当月缺口，忽略储水和横向输水，不命名为实际干旱强度 |
-| concentration | $C_{TV} = \tfrac{1}{2}\sum_i \lvert q_i - w_i \rvert$, $q_i = P_i \Delta t_i / P_{total}$ | — | 测水在时间上的分布与均匀率的差别；集中不等于单峰，也不等于降水丰富；无降水时无定义 |
-vert$，$q_i = P_i \Delta t_i / P_{total}$ | — | 降水在时间上的分布与均匀率的差别；集中不等于单峰，也不等于降水丰富；无降水时无定义 |
-| p_harmonic1 / p_harmonic2 | $\lvert \sum_j q_j e^{i\phi_j} 
-vert$、$\lvert \sum_j q_j e^{2 i\phi_j} 
-vert$，$\phi_j$ = 分箱中心相位 | — | 降水质量的一/二次圆谐幅度：R1 高 = 单一雨季，R2 > R1 = 对分双雨季（$C_{TV}$ 分不开的形状信息）；δ 尖峰所有谐波 = 1，判据必须带容差；无降水时无定义 |
+| concentration | $C_{TV} = \tfrac{1}{2}\sum_i \lvert q_i - w_i \rvert$，其中 $q_i = P_i \Delta t_i / P_{total}$ 为降水质量份额 | — | 测水在时间上的分布与均匀率的差别；集中不等于单峰，也不等于降水丰富；无降水时无定义 |
+| p_harmonic1 / p_harmonic2 | $\lvert \sum_j q_j e^{i\phi_j} \rvert$ 与 $\lvert \sum_j q_j e^{2 i\phi_j} \rvert$，其中 $\phi_j$ = 分箱中心相位 | — | 降水质量的一/二次圆谐幅度：R1 高 = 单一雨季，R2 > R1 = 对分双雨季（$C_{TV}$ 分不开的形状信息）；δ 尖峰所有谐波 = 1，判据必须带容差；无降水时无定义 |
 | p_phase | 降水质量与需求质量的符号化圆相位差（周期分数，$(-0.5, 0.5]$） | 周期分数 | 0 = 雨峰与需求峰同季（雨热同季），±0.5 = 反季（地中海型）；**温带仪器**——任一轴无主导季节（一阶谐波 < 0.25）则 not_applicable，热带季风的雨季由环流而非局地热季定义；缺需求序列 missing_input；域门（含热侧）继承 out_of_domain |
 
 **部分有效**是契约的一部分：任何字段缺失时，其余有效字段照常输出，缺失字段
