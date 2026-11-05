@@ -10,7 +10,9 @@
   叙事手法目录：FUI、匹配剪辑、天体运动转场、声桥、尺度穿行、档案质感等。
 - [`blender_sky_rendering.md`](blender_sky_rendering.md) — Blender 5.x headless
   天空与天体渲染：世界着色器方向约定、相机基向量、等距圆柱程序化纹理、
-  大地形网格、合成器 API、运动模糊与帧序列编码。
+  大地形网格、合成器 API、运动模糊与帧序列编码；§11 深空场景生态
+  （星场/星云/碎石/星系 addon 与真星表扩展、视图变换对自发光天体的影响、
+  衍射芒与 bloom 的 headless 可行做法、agent skill 与连接器纪律）。
 - [`blender_scripting_basics.md`](blender_scripting_basics.md) — Blender 脚本
   入门：`-b -P` 调用、最小脚本、`bpy.data/context/ops` 三个入口、常用对象、
   后台运行的坑与中文学习资料。
