@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793742381935,
+  "lastUpdate": 1793906521197,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1770,6 +1770,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.0007972033181317965",
             "extra": "mean: 6.6535153999979 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "895da52b5130aa9e3ad136b2b2b9a1a38739679a",
+          "message": "chore(release): v1.2.0 发布准备——版本号同步与 CHANGELOG 归档\n\n版本 1.1.0 → 1.2.0（pyproject.toml + uv.lock + frontend package.json\n与 package-lock.json 四处同步，运行时经 importlib.metadata 已读到新版）。\nCHANGELOG [Unreleased] 归档为 [1.2.0] — 2026-11-06：20 分钟步长气候正典\n（全球均温 13.5 °C、陆地年降水约 1040 mm）、画布覆冰 v7 重算、天气包\n换代（4 h × 2250 帧）、热带气旋每个当地年约 7 个与按包当地年数生成修复、\nMiami NPP 折碳，另补记本次发布打包的 .bak 排除修复。roadmap 头部与\n当前状态快照刷新到 v1.2.0（样板世界行改引 GCM 正典口径）。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-06T03:15:01+08:00",
+          "tree_id": "00aa0b318c4e3de9da515e117976d93ff08b0bf8",
+          "url": "https://github.com/fyabc/dreamulator/commit/895da52b5130aa9e3ad136b2b2b9a1a38739679a"
+        },
+        "date": 1793906520341,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.27632133168190165,
+            "unit": "iter/sec",
+            "range": "stddev: 0.10561954695779266",
+            "extra": "mean: 3.6189750314000007 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.112176442303823,
+            "unit": "iter/sec",
+            "range": "stddev: 0.01908521083245084",
+            "extra": "mean: 321.31854300000384 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.5440892401311757,
+            "unit": "iter/sec",
+            "range": "stddev: 1.0328017740419513",
+            "extra": "mean: 647.6309619999986 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 625.593610137107,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00021495145129345067",
+            "extra": "mean: 1.5984817999992629 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 164.28974454791032,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000033063463653911236",
+            "extra": "mean: 6.086807199997679 msec\nrounds: 5"
           }
         ]
       }
