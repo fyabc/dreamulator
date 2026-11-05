@@ -16,15 +16,20 @@ ExoPlaSim 运行：每个运行的配置、PlaSim 实际使用的轨道、结果
 ```bash
 # 在 GCM 存档根目录下运行（venv、运行目录与 tools/ 都在存档中）：
 GCM_ARCHIVE=$PWD <venv>/bin/python <repo>/scripts/climate/gcm/gcm_runs_appendix.py \
+    runs/t42-dt20-co2-sweep-20261105/cold_* \
     runs/t42r/cold_* runs/t42r/warm_* runs/t42r/melt_2000 runs/t42r/abl_* runs/t42r/obl_* \
     runs/t42r/sl_* runs/t42o/earth_pi \
     --preamble tools/appendix_preamble.md --out <repo>/data/worlds/nacrea/design-notes/0012-appendix-gcm-runs.md
 ```
 
-**运行分组。** `runs/t42r/` 是 2026-10-22 重新生成的地形上的全部 nacrea 运行，2026-10-23 一次跑完，口径一致：
+**运行分组。** `runs/t42-dt20-co2-sweep-20261105/` 是 20 分钟步长的十档 CO₂ 扫描，2026-11-05 跑完：
 
-- `cold_*` 是 10 档 CO₂ 的冷臂，从 ExoPlaSim 默认初态积分 30 个模式年。0012 §3 的扫描表、§7 的范围表
-  与 0016 §2 的海平面表都取自这一组，固定气候分支 `gcm-t42-712` 取自其中的 712 ppm。
+- 九档从正典 `runs/t42-dt20-20261104/cold_712` 的平衡态重启，各积分 30 个模式年；其中的 `cold_712` 指向正典本身，
+  即固定气候分支 `gcm-t42-712` 的来源。0012 §3 的扫描表、§7 的范围表与 0016 §2 的海平面表都取自这一组。
+
+`runs/t42r/` 是 2026-10-22 重新生成的地形上的 45 分钟步长 nacrea 运行，2026-10-23 一次跑完，口径一致：
+
+- `cold_*` 是 10 档 CO₂ 的冷臂，从 ExoPlaSim 默认初态积分 30 个模式年，0012 §3 的「比 45 分钟步长」一列以它为准。
 - `warm_*` 是 140、356、712 ppm 的暖臂，种子为 `melt_2000`（2000 ppm 积分 10 年，只作种子，不作平衡
   结果），用于判断是否存在多个平衡态。
 - `abl_obliq_only` 换成地球公元 1 年的偏心率与近日点相位、保留 nacrea 的季节倾角；`abl_earth_orbit`
@@ -52,6 +57,16 @@ GCM_ARCHIVE=$PWD <venv>/bin/python <repo>/scripts/climate/gcm/gcm_runs_appendix.
 
 | 运行目录 | pCO₂ | 模式年 | 起步 | 偏心率 | 倾角 | MVELP（季节相位） | 全球 2 m 气温 | 趋势 | 海冰 | 代码版本 |
 |---|---:|---:|---|---:|---:|---|---:|---:|---:|---|
+| `runs/t42-dt20-co2-sweep-20261105/cold_1000` | 999.0 ppm | 30 | 暖启动，种子 `runs/t42-dt20-20261104/cold_712/MOST_REST.00000` | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 14.78 °C | +0.04 K | 10.5 % | v1.1.0-227-g00394aeb3778-dirty |
+| `runs/t42-dt20-co2-sweep-20261105/cold_140` | 140.0 ppm | 30 | 暖启动，种子 `runs/t42-dt20-20261104/cold_712/MOST_REST.00000` | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 4.95 °C | -0.04 K | 18.8 % | v1.1.0-227-g00394aeb3778 |
+| `runs/t42-dt20-co2-sweep-20261105/cold_1400` | 1398.0 ppm | 30 | 暖启动，种子 `runs/t42-dt20-20261104/cold_712/MOST_REST.00000` | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 16.23 °C | +0.01 K | 9.2 % | v1.1.0-227-g00394aeb3778 |
+| `runs/t42-dt20-co2-sweep-20261105/cold_2000` | 1996.0 ppm | 30 | 暖启动，种子 `runs/t42-dt20-20261104/cold_712/MOST_REST.00000` | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 17.64 °C | +0.04 K | 8.1 % | v1.1.0-227-g00394aeb3778 |
+| `runs/t42-dt20-co2-sweep-20261105/cold_280` | 279.9 ppm | 30 | 暖启动，种子 `runs/t42-dt20-20261104/cold_712/MOST_REST.00000` | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 8.72 °C | -0.08 K | 16.1 % | v1.1.0-227-g00394aeb3778 |
+| `runs/t42-dt20-co2-sweep-20261105/cold_3000` | 2991.0 ppm | 30 | 暖启动，种子 `runs/t42-dt20-20261104/cold_712/MOST_REST.00000` | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 19.63 °C | +0.08 K | 6.3 % | v1.1.0-227-g00394aeb3778 |
+| `runs/t42-dt20-co2-sweep-20261105/cold_356` | 355.9 ppm | 30 | 暖启动，种子 `runs/t42-dt20-20261104/cold_712/MOST_REST.00000` | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 10.02 °C | +0.08 K | 15.0 % | v1.1.0-227-g00394aeb3778 |
+| `runs/t42-dt20-co2-sweep-20261105/cold_560` | 559.7 ppm | 30 | 暖启动，种子 `runs/t42-dt20-20261104/cold_712/MOST_REST.00000` | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 12.27 °C | +0.04 K | 12.8 % | v1.1.0-227-g00394aeb3778 |
+| `runs/t42-dt20-co2-sweep-20261105/cold_6000` | 5964.2 ppm | 30 | 暖启动，种子 `runs/t42-dt20-20261104/cold_712/MOST_REST.00000` | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 22.39 °C | +0.07 K | 4.0 % | v1.1.0-227-g00394aeb3778 |
+| `runs/t42-dt20-20261104/cold_712` | 711.5 ppm | 30 | 暖启动，种子 `runs/t42-refresh-20261028-v2/cold_712/MOST_REST.00000` | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 13.37 °C | -0.05 K | 11.7 % | v1.1.0-220-g7f27433c2d5e-dirty |
 | `runs/t42r/cold_1000` | 999.0 ppm | 30 | 冷启动 | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 13.93 °C | +0.02 K | 11.3 % | v1.1.0-46-g1fb27ca5f12d |
 | `runs/t42r/cold_140` | 140.0 ppm | 30 | 冷启动 | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 3.78 °C | -0.04 K | 20.4 % | v1.1.0-30-g4ba8d808d2d5 |
 | `runs/t42r/cold_1400` | 1398.0 ppm | 30 | 冷启动 | 0.067863 | 19.900° | 262.678°（φ = 82.7°） | 15.44 °C | +0.03 K | 10.1 % | v1.1.0-32-g1a424cf6789d |
@@ -78,16 +93,78 @@ GCM_ARCHIVE=$PWD <venv>/bin/python <repo>/scripts/climate/gcm/gcm_runs_appendix.
 
 ## 地表文件哈希
 
+- landmap：`54bb2f688de88e5aeeb26e2bcb0902b39f8646b0d355f878ee40b834322b9b2e`
 - landmap：`2de3e242452bd5451b1179ff1635288550a7e5d17807021bdb31d57888bcf0c2`
 - landmap：`8214d58572f3ccc947d7aca6904b5118e91e0af2aaf25df851a45aad3e3da5fe`
 - landmap：`8ce40cf733ddc5f0bc0177768ea06f944014993386ea3abf39c6b3af1fd281f0`
 - landmap：`dca5a292225c4cb3a2df6b2913e264e7f486318ffbde452d33be152fb0941b78`（当前文件 `surf/earth_N064_surf_0172.sra`）
+- topomap：`aeabe630e3e6250b0f3a98fd921c58ba75b594cc62b1ff9e8ae176d011f07dc9`
 - topomap：`02eba779cf0ffbe80512796443cd9d65382c31aad986777b12ceab2b489eaf2b`
 - topomap：`6141e1796c098e65ecceb26ee094ddc192bf59b87a063dd3d62d6fe4a9ac6b8d`
 - topomap：`f1e41b69a8166cbd5eb960b23e5c2f4bc3c25677b4d09d22cee860890d119553`
 - topomap：`85aa8af30a5587181b9d7c6ee3b7d201b49bfb874e82ac890ac95597c1c791ee`（当前文件 `surf/earth_N064_surf_0129.sra`）
 
 ## 复现命令
+
+**`runs/t42-dt20-co2-sweep-20261105/cold_1000`**（manifest 记录的原始命令）：
+
+```bash
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --layers 10 --years 30 --greenhouse-mode pco2 --pco2-bar 0.001013250 --landmap surf/refresh-20261028-v2/nacrea_N064_surf_0172.sra --topomap surf/refresh-20261028-v2/nacrea_N064_surf_0129.sra --restart runs/t42-dt20-20261104/cold_712/MOST_REST.00000 --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp", "timestep": 20}' --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' --no-plot --workdir runs/t42-dt20-co2-sweep-20261105/cold_1000
+```
+
+**`runs/t42-dt20-co2-sweep-20261105/cold_140`**（manifest 记录的原始命令）：
+
+```bash
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --layers 10 --years 30 --greenhouse-mode pco2 --pco2-bar 0.000141855 --landmap surf/refresh-20261028-v2/nacrea_N064_surf_0172.sra --topomap surf/refresh-20261028-v2/nacrea_N064_surf_0129.sra --restart runs/t42-dt20-20261104/cold_712/MOST_REST.00000 --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp", "timestep": 20}' --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' --no-plot --workdir runs/t42-dt20-co2-sweep-20261105/cold_140
+```
+
+**`runs/t42-dt20-co2-sweep-20261105/cold_1400`**（manifest 记录的原始命令）：
+
+```bash
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --layers 10 --years 30 --greenhouse-mode pco2 --pco2-bar 0.001418550 --landmap surf/refresh-20261028-v2/nacrea_N064_surf_0172.sra --topomap surf/refresh-20261028-v2/nacrea_N064_surf_0129.sra --restart runs/t42-dt20-20261104/cold_712/MOST_REST.00000 --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp", "timestep": 20}' --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' --no-plot --workdir runs/t42-dt20-co2-sweep-20261105/cold_1400
+```
+
+**`runs/t42-dt20-co2-sweep-20261105/cold_2000`**（manifest 记录的原始命令）：
+
+```bash
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --layers 10 --years 30 --greenhouse-mode pco2 --pco2-bar 0.002026500 --landmap surf/refresh-20261028-v2/nacrea_N064_surf_0172.sra --topomap surf/refresh-20261028-v2/nacrea_N064_surf_0129.sra --restart runs/t42-dt20-20261104/cold_712/MOST_REST.00000 --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp", "timestep": 20}' --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' --no-plot --workdir runs/t42-dt20-co2-sweep-20261105/cold_2000
+```
+
+**`runs/t42-dt20-co2-sweep-20261105/cold_280`**（manifest 记录的原始命令）：
+
+```bash
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --layers 10 --years 30 --greenhouse-mode pco2 --pco2-bar 0.000283710 --landmap surf/refresh-20261028-v2/nacrea_N064_surf_0172.sra --topomap surf/refresh-20261028-v2/nacrea_N064_surf_0129.sra --restart runs/t42-dt20-20261104/cold_712/MOST_REST.00000 --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp", "timestep": 20}' --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' --no-plot --workdir runs/t42-dt20-co2-sweep-20261105/cold_280
+```
+
+**`runs/t42-dt20-co2-sweep-20261105/cold_3000`**（manifest 记录的原始命令）：
+
+```bash
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --layers 10 --years 30 --greenhouse-mode pco2 --pco2-bar 0.003039750 --landmap surf/refresh-20261028-v2/nacrea_N064_surf_0172.sra --topomap surf/refresh-20261028-v2/nacrea_N064_surf_0129.sra --restart runs/t42-dt20-20261104/cold_712/MOST_REST.00000 --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp", "timestep": 20}' --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' --no-plot --workdir runs/t42-dt20-co2-sweep-20261105/cold_3000
+```
+
+**`runs/t42-dt20-co2-sweep-20261105/cold_356`**（manifest 记录的原始命令）：
+
+```bash
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --layers 10 --years 30 --greenhouse-mode pco2 --pco2-bar 0.000360717 --landmap surf/refresh-20261028-v2/nacrea_N064_surf_0172.sra --topomap surf/refresh-20261028-v2/nacrea_N064_surf_0129.sra --restart runs/t42-dt20-20261104/cold_712/MOST_REST.00000 --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp", "timestep": 20}' --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' --no-plot --workdir runs/t42-dt20-co2-sweep-20261105/cold_356
+```
+
+**`runs/t42-dt20-co2-sweep-20261105/cold_560`**（manifest 记录的原始命令）：
+
+```bash
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --layers 10 --years 30 --greenhouse-mode pco2 --pco2-bar 0.000567420 --landmap surf/refresh-20261028-v2/nacrea_N064_surf_0172.sra --topomap surf/refresh-20261028-v2/nacrea_N064_surf_0129.sra --restart runs/t42-dt20-20261104/cold_712/MOST_REST.00000 --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp", "timestep": 20}' --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' --no-plot --workdir runs/t42-dt20-co2-sweep-20261105/cold_560
+```
+
+**`runs/t42-dt20-co2-sweep-20261105/cold_6000`**（manifest 记录的原始命令）：
+
+```bash
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --layers 10 --years 30 --greenhouse-mode pco2 --pco2-bar 0.006079500 --landmap surf/refresh-20261028-v2/nacrea_N064_surf_0172.sra --topomap surf/refresh-20261028-v2/nacrea_N064_surf_0129.sra --restart runs/t42-dt20-20261104/cold_712/MOST_REST.00000 --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp", "timestep": 20}' --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' --no-plot --workdir runs/t42-dt20-co2-sweep-20261105/cold_6000
+```
+
+**`runs/t42-dt20-20261104/cold_712`**（manifest 记录的原始命令）：
+
+```bash
+python scripts/climate/gcm/run_exoplasim.py --world data/worlds/nacrea --planet satellite_nacrea --resolution T42 --ncpus 16 --layers 10 --years 30 --greenhouse-mode pco2 --pco2-bar 0.000721434 --landmap surf/refresh-20261028-v2/nacrea_N064_surf_0172.sra --topomap surf/refresh-20261028-v2/nacrea_N064_surf_0129.sra --restart runs/t42-refresh-20261028-v2/cold_712/MOST_REST.00000 --configure '{"twobandalbedo": true, "physicsfilter": "gp|exp|sp", "timestep": 20}' --namelist '{"NHDIFF@oceanmod_namelist": "1", "HDIFFK@oceanmod_namelist": "1.0E4"}' --no-plot --workdir runs/t42-dt20-20261104/cold_712
+```
 
 **`runs/t42r/cold_1000`**（manifest 记录的原始命令）：
 
