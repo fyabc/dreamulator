@@ -203,8 +203,9 @@ def _is_derived_dir(path: Path) -> bool:
 
 def _is_scratch(path: Path) -> bool:
     """Dev-scratch / backup artifacts that must not be published (climate_diff
-    baselines like ``_baseline``, pickle caches like ``_cache``, ``*.bak``)."""
-    if path.suffix == ".bak":
+    baselines like ``_baseline``, pickle caches like ``_cache``, ``*.bak`` and
+    dated backups like ``plates.json.bak-2026-10-16``)."""
+    if path.suffix == ".bak" or path.suffix.startswith(".bak-"):
         return True
     return any(part.startswith("_") for part in path.parts)
 
