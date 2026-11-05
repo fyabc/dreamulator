@@ -154,6 +154,13 @@ def _fmt(value: float | None, spec: str) -> str:
     return spec.format(value)
 
 
+def _shared(common: dict | None, settings: dict) -> dict:
+    """Key/value pairs present and equal in ``common`` and ``settings`` (the first run sets it)."""
+    if common is None:
+        return dict(settings)
+    return {k: v for k, v in common.items() if k in settings and settings[k] == v}
+
+
 def render(runs: list[Path]) -> str:
     rows, cmds, hashes = [], [], {}
     common_conf: dict | None = None
@@ -194,9 +201,11 @@ def render(runs: list[Path]) -> str:
             if name in m.get("input_hashes", {}):
                 hashes[m["input_hashes"][name]] = name
         extras = {k: v for k, v in kw.items() if k not in PARAM_FIELDS and k != "restartfile"}
-        common_conf = extras if common_conf is None or common_conf == extras else {}
+        # Shared settings are the key/value pairs every run agrees on; a run that adds
+        # one more setting (the 20-minute timestep, say) keeps the rest listed.
+        common_conf = _shared(common_conf, extras)
         nl = m["model_options"].get("namelist_overrides") or {}
-        common_nl = nl if common_nl is None or common_nl == nl else {}
+        common_nl = _shared(common_nl, nl)
     out = ["## 共用配置", ""]
     conf = json.dumps(common_conf or {}, ensure_ascii=False)
     out.append(f"- 额外 `configure` 参数：`{conf}`")

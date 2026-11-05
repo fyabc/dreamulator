@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pytest
 
 from dreamulator.gcm.weather_pack import load_pack
 from dreamulator.media.cyclone_render import Cyclone
@@ -14,6 +15,7 @@ from dreamulator.media.cyclone_tracks import (
     TropicalCycloneSource,
     _life_weight,
     cyclones_at_frame,
+    pack_local_years,
     weather_cyclones_at_frame,
 )
 from tests.test_weather_conditioning import FRAMES, NLAT, NLON, _write_pack
@@ -276,3 +278,11 @@ def test_weather_cyclones_union(tmp_path: Path) -> None:
     assert len([c for c in again if c.kind == "tropical"]) == len(
         [c for c in combined if c.kind == "tropical"]
     )
+
+
+def test_pack_local_years_counts_phase_wraps() -> None:
+    """The orbital phase wraps every local year; each wrap is a full turn."""
+    phase = [(0.3 + 0.25 * k) % 1.0 for k in range(15)]  # 3.5 years of advance
+    assert pack_local_years({"orbital_phase": phase}) == pytest.approx(3.5)
+    assert pack_local_years({"orbital_phase": None}) == 1.0
+    assert pack_local_years({"orbital_phase": [0.40, 0.41]}) == 1.0

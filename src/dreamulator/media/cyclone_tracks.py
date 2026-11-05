@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     from dreamulator.gcm.weather_pack import WeatherPack
 
 #: Tropical cyclones per local year (canon, design-notes 0020).
-TROPICAL_PER_YEAR = 8.0
+TROPICAL_PER_YEAR = 7.0
 #: Genesis belt: no generation inside |lat| < 8° (canon).
 GENESIS_MIN_ABS_LAT = 8.0
 #: sin of the belt edge, the vorticity reference for the dead-zone burn rate.
@@ -276,6 +276,24 @@ def cyclones_at_frame(
     return out
 
 
+def pack_local_years(tmeta: dict[str, Any]) -> float:
+    """Orbital (local) years a pack spans, from its per-frame orbital phase.
+
+    The phase lies in [0, 1) and wraps at every perihelion-to-perihelion year,
+    so the span is the sum of the frame-to-frame advances with each wrap
+    counted as a full turn; a one-model-year nacrea pack spans about 3.7 local
+    years.  A pack without a phase, or one advancing less than a twentieth of a
+    year, counts as one year.
+    """
+    phase = tmeta.get("orbital_phase")
+    if not phase or len(phase) < 2:
+        return 1.0
+    step = np.diff(np.asarray(phase, dtype=np.float64))
+    step[step < 0.0] += 1.0
+    years = float(step.sum())
+    return years if years > 0.05 else 1.0
+
+
 @dataclass(frozen=True)
 class _Genesis:
     """One sampled genesis event; the lifecycle is derived deterministically."""
@@ -331,13 +349,7 @@ class TropicalCycloneSource:
         self.omega_rad_s = _pack_omega(pack)
         self.interval_h = float((pack.meta.get("calendar") or {}).get("frame_interval_h", 6.0))
         self.n_frames = int(pack.meta["frames"])
-        tmeta = pack.meta["time"]
-        hours = tmeta["hours_since_start"]
-        span_h = float(hours[-1] - hours[0])
-        phase = tmeta.get("orbital_phase")
-        advance = float(phase[-1] - phase[0]) if phase and len(phase) > 1 else 0.0
-        # Local-year length from the orbital phase where available.
-        year_h = span_h / advance if advance > 0.05 else span_h
+        local_years = pack_local_years(pack.meta["time"])
 
         rng = np.random.default_rng(int(seed))
         lat_grid = np.asarray(pack.lat, dtype=float)
@@ -361,7 +373,7 @@ class TropicalCycloneSource:
             gpi = gpi * np.clip(np.asarray(ocean_fraction, dtype=np.float64), 0.0, 1.0)
         weights = np.where(belt[None, :, None], gpi, 0.0).sum(axis=(1, 2))
         total = float(weights.sum())
-        n_events = int(rng.poisson(per_year * span_h / year_h)) if total > 0.0 else 0
+        n_events = int(rng.poisson(per_year * local_years)) if total > 0.0 else 0
 
         pi = np.maximum(np.asarray(pack.field("tc_potential_intensity"), dtype=np.float64), 0.0)
         lon_grid = np.asarray(pack.lon, dtype=float)
@@ -595,5 +607,6 @@ __all__ = [
     "TropicalCycloneSource",
     "coherent_shield_km",
     "cyclones_at_frame",
+    "pack_local_years",
     "weather_cyclones_at_frame",
 ]
