@@ -218,10 +218,50 @@ ffmpeg -framerate 24 -i frames/frame_%04d.png \
 | 星点逐帧闪烁 | 快速摇镜未开运动模糊 | 开 motion blur 或降速 |
 | ffmpeg 报 glob 不支持 | Windows 构建缺 glob | 连续编号序列或 concat |
 
+## 11. 深空场景生态（addon / 扩展 / agent skill，2026-11 调研）
+
+手搓星场/星云/碎石带能跑通但审美上限低；社区现成件把「看起来贵」的层外包，
+参数仍可脚本化回灌状态文件保持可重建。按用途选：
+
+| 件 | 给什么 | 许可 |
+|----|--------|------|
+| Dust Particles+ | 3D 多层星场粒子——相机移动时的**真实视差星迹**（等距圆柱 env 贴图星场无视差，冲刺/推镜镜头的质感短板） | 免费 |
+| Nebula Generator | 程序化星云 world/体积 shader，带控制面板与 Python 接口 | 免费（Cycles） |
+| Astrofield Generator | cinematic 碎石/小行星带（替换手摆 icosphere 岩） | 付费 |
+| SpiralForge | 几何节点程序化星系（旋臂/透镜/椭圆） | 付费 |
+| StarGen / Starfield Generator | 几何节点星场+星云（与 Dust Particles+ 二选一） | 付费 |
+| Physical Starlight & Atmosphere | 物理恒星光+大气散射（恒星特写镜头） | 免费 |
+| synapticore-studio/astronomical | Blender 4.5+ 扩展：Astropy/FITS 导入、恒星 shader、星系节点——**真星表天空**（Gaia 位） | 开源 |
+| OpenSpace | 天文馆级交互式 astroviz（NASA/ESA 支持，纪录片在用），可作真实宇宙段的渲染器/预演 | 开源 |
+| 内置 Camera Rigs addon | dolly/crane 绑定，运镜设计 | 内置 |
+
+**视图变换对深空的影响**：AgX 会把自发光天体的饱和色去饱和成灰（K/M 型星的
+橙盘读作「沙滩球」的常见根因之一）；深空镜头常选 Standard（黑位纯、色饱和，
+高光靠曝光与辉光控制）或 AgX + Punchy look 折中。选变换时先渲同一静帧三档对照。
+
+**衍射芒与 bloom**：合成器 Glare 在 headless/脚本链里调参成本高且 5.x socket 化后
+易接错（见 §10）；低成本替代是把十字芒**烘进星场纹理**（最亮 N 颗星画四向衰减
+芒刺）、bloom 用相机朝向的加色辉光精灵（Mix Shader 以 alpha 为 Fac 的生产配方）。
+
+**Agent skill 与连接器**：Anthropic 官方 Blender 连接器（2026-04，Claude for
+Creative Work）让 Claude Code 驱动活 Blender 场景做目检精修；社区 skill 包
+（el4cteo/blender-skills、RobLe3/cc-blender-skill）把建模/材质/烘焙/动画工作流
+做成可装技能；ptrthomas/blender-agent 的「渲染→视觉自检→迭代」闭环与静帧把关
+纪律同构。纪律建议：连接器/skill 只做交互精修，定稿参数回灌 headless 脚本与
+状态文件——活场景与可重建链双轨不漂移。
+
+方法论文献：[Visualizing Astronomical Data with Blender (arXiv:1306.3481)](https://arxiv.org/html/1306.3481v1)、
+[BlenderProc](https://github.com/DLR-RM/BlenderProc)、
+[awesome-cg-vfx-pipeline](https://github.com/cgwire/awesome-cg-vfx-pipeline)。
+
 ## 参考
 
 - Blender 5.2 Python API：`bpy.data.node_groups`、`CompositorNodeGlare`、
   `ShaderNodeTexEnvironment`、`Image.pixels`
+- 深空 addon 来源：[Nebula Generator docs](https://nebula-generator.readthedocs.io/)、
+  [Dust Particles+ 教程](https://www.creativeshrimp.com/create-3d-starfield-in-blender-using-a-free-add-on.html)、
+  [astronomical 扩展](https://github.com/synapticore-studio/astronomical)、
+  [Nebula Generator Python 支持帖](https://blenderartists.org/t/nebula-generator/347516)
 - 本仓库区域地形渲染：`scripts/media/blender/region_still.py`、
   `docs/design/proposals/blender-render-pipeline.md`
 - Cycles 设备与硬件基线：`docs/design/proposals/blender-render-pipeline.md`
