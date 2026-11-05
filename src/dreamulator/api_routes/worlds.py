@@ -424,6 +424,48 @@ def get_sky_background(world_name: str, branch: str | None = None) -> dict[str, 
     return data
 
 
+_SKY_CULTURE: OrderedDict[tuple[str, str | None], tuple[int, int, dict[str, Any]]] = OrderedDict()
+
+
+@router.get("/{world_name}/sky/culture")
+def get_sky_culture(world_name: str, branch: str | None = None) -> dict[str, Any]:
+    """The world's authored star lore (the civilization-layer sky-culture hook).
+
+    Cultures name and connect background objects strictly by id — positions
+    stay in the sky-background catalogue and the client joins the two, so a
+    star can move without breaking any culture.  Validated against the
+    astronomy catalogue at build time (unknown ids fail the build).  Static
+    per (world, branch): served with the same stat-validated cache posture
+    as the sky background.
+    """
+    try:
+        world_dir = _manager.world_dir(world_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    derived_dir = _resolve_layer_dir(world_dir, "civilization", "derived", branch)
+    if derived_dir is None:
+        raise HTTPException(status_code=404, detail="civilization derived layer not found")
+    culture_path = derived_dir / "sky_culture.yaml"
+    if not culture_path.exists():
+        raise HTTPException(
+            status_code=404, detail="sky_culture.yaml not found — run dreamulator build"
+        )
+    stat = culture_path.stat()
+    key = (world_name, branch)
+    cached = _SKY_CULTURE.get(key)
+    if cached is not None and cached[0] == stat.st_mtime_ns and cached[1] == stat.st_size:
+        _SKY_CULTURE.move_to_end(key)
+        return cached[2]
+    data = _load_yaml(culture_path)
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=404, detail="sky_culture.yaml is unreadable")
+    _SKY_CULTURE[key] = (stat.st_mtime_ns, stat.st_size, data)
+    _SKY_CULTURE.move_to_end(key)
+    while len(_SKY_CULTURE) > _SKY_CACHE_CAP:
+        _SKY_CULTURE.popitem(last=False)
+    return data
+
+
 @router.get("/{world_name}/habitable-zones")
 def get_habitable_zones(world_name: str, branch: str | None = None) -> dict[str, Any]:
     """Get habitable zone data from the astronomy derived layer."""

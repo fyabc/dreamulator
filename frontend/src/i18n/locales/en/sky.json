@@ -97,6 +97,10 @@
     "irregular": "Irregular",
     "type": "Type",
     "angularSize": "Angular size",
+    "asterism": "Asterism",
+    "culture": "Culture",
+    "members": "Member stars",
+    "cultureName": "Culture name",
     "dsoTypes": {
       "nebula": "Nebula",
       "cluster": "Star cluster",
@@ -126,7 +130,8 @@
       "title": "Display",
       "grids": "Coordinate grids",
       "panels": "Info panels",
-      "background": "Background sky (neighbour stars / deep sky / galactic band)"
+      "background": "Background sky (neighbour stars / deep sky / galactic band)",
+      "culture": "Asterism lines (sky cultures)"
     }
   },
   "grids": {

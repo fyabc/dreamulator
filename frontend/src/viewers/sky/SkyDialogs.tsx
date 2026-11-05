@@ -125,6 +125,10 @@ export interface SkyDisplayDialogProps {
   onGrids: (grids: GridToggles) => void
   backgroundOn: boolean
   onBackgroundOn: (on: boolean) => void
+  /** Constellation-figure lines; the row hides when the world has no sky culture. */
+  cultureOn: boolean
+  onCultureOn: (on: boolean) => void
+  hasCulture: boolean
   /** The one open right-side panel, if any (radio behaviour). */
   activePanel: SkyPanel | null
   onSelectPanel: (panel: SkyPanel | null) => void
@@ -139,6 +143,9 @@ export function SkyDisplayDialog({
   onGrids,
   backgroundOn,
   onBackgroundOn,
+  cultureOn,
+  onCultureOn,
+  hasCulture,
   activePanel,
   onSelectPanel,
   onPointerEnter,
@@ -193,6 +200,21 @@ export function SkyDisplayDialog({
         />
         {t('dialog.display.background')}
       </label>
+      {hasCulture && (
+        <label className="flex items-center gap-2 text-[11px] text-gray-400 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={cultureOn}
+            onChange={(e) => onCultureOn(e.target.checked)}
+            className="accent-neon-cyan"
+          />
+          <span
+            className="w-2.5 h-0.5 inline-block rounded"
+            style={{ backgroundColor: 'rgba(255,214,170,0.7)' }}
+          />
+          {t('dialog.display.culture')}
+        </label>
+      )}
       <div className="space-y-1">
         <div className="text-[11px] text-gray-500">{t('dialog.display.panels')}</div>
         <div className="flex gap-1.5">

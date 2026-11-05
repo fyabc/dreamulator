@@ -18,7 +18,8 @@ import { markerRadius } from './phaseGeometry'
 import { buildMarkers, glareRadiusPx, isOccultedMarker, labeledIds, type Marker } from './markers'
 import { buildGridLayers, eclipticRotation, gridLabels, type GridToggles } from './skyGrids'
 import SkyBackgroundLayer from './SkyBackground'
-import type { SkyBackground } from './types'
+import SkyCultureLayer from './SkyCultureLayer'
+import type { SkyBackground, SkyCulture } from './types'
 import SkyBodyMarker from './SkyBodyMarker'
 import { NORTH_ACCENT, SELECTED_STROKE, TEXT_HALO } from './bodyColor'
 import { altAzFromDir, type LookDirection, type Vec3 } from './panProjector'
@@ -42,6 +43,9 @@ export interface SkyChartProps {
   /** The universe setting (static directions); null until fetched. */
   background: SkyBackground | null
   backgroundOn: boolean
+  /** Star lore (constellation figures); null until fetched / when absent. */
+  culture: SkyCulture | null
+  cultureOn: boolean
 }
 
 export default function SkyChart({
@@ -55,6 +59,8 @@ export default function SkyChart({
   grids,
   background,
   backgroundOn,
+  culture,
+  cultureOn,
 }: SkyChartProps) {
   const { t } = useTranslation('sky')
   const projector = useMemo(() => skyProjector(VIEW / 2, VIEW / 2, RADIUS), [])
@@ -195,6 +201,14 @@ export default function SkyChart({
             }}
             fovDeg={null}
             height={VIEW}
+          />
+        )}
+        {cultureOn && culture && background && (
+          <SkyCultureLayer
+            culture={culture}
+            background={background}
+            rotation={eclRotation}
+            project={projectDir}
           />
         )}
         {/* Overlay grids (segments break at the horizon via null projection) */}

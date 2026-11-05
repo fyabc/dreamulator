@@ -282,3 +282,60 @@ def test_sky_background_serves_and_caches(
     # Stat-validated cache: second call reuses the parsed table.
     assert client.get("/api/worlds/test-world/sky/background").status_code == 200
     assert loads["count"] == 1
+
+
+def test_sky_culture_missing_is_404(client: TestClient) -> None:
+    worlds_module._SKY_CULTURE.clear()
+    resp = client.get("/api/worlds/test-world/sky/culture")
+    assert resp.status_code == 404
+
+
+def test_sky_culture_serves_and_caches(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    worlds_module._SKY_CULTURE.clear()
+    civ = tmp_path / "worlds" / "test-world" / "layers" / "civilization"
+    (civ / "input").mkdir(parents=True)
+    # The resolver only exposes a layer once its input side has a file
+    # (the fixture's stellar.yaml marker precedent).
+    (civ / "input" / "civilizations.yaml").write_text("civilizations: []\n", encoding="utf-8")
+    (civ / "derived").mkdir(parents=True)
+    culture = {
+        "cultures": [
+            {
+                "id": "culture_test",
+                "name": "Test Culture",
+                "description": None,
+                "star_names": {"star_a": "the Nail"},
+                "asterisms": [
+                    {
+                        "id": "asterism_test",
+                        "name": "Figure",
+                        "meaning": None,
+                        "lines": [["star_a", "dso_x"]],
+                    }
+                ],
+            }
+        ]
+    }
+    path = civ / "derived" / "sky_culture.yaml"
+    with path.open("w", encoding="utf-8") as fh:
+        yaml.safe_dump(culture, fh, allow_unicode=True)
+
+    loads = {"count": 0}
+    real_load = worlds_module._load_yaml
+
+    def counting_load(p: Any) -> Any:
+        if str(p).endswith("sky_culture.yaml"):
+            loads["count"] += 1
+        return real_load(p)
+
+    monkeypatch.setattr(worlds_module, "_load_yaml", counting_load)
+
+    resp = client.get("/api/worlds/test-world/sky/culture")
+    assert resp.status_code == 200
+    assert resp.json()["cultures"][0]["asterisms"][0]["id"] == "asterism_test"
+    assert loads["count"] == 1
+    # Stat-validated cache: second call reuses the parsed table.
+    assert client.get("/api/worlds/test-world/sky/culture").status_code == 200
+    assert loads["count"] == 1
