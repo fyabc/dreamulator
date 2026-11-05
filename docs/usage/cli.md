@@ -539,10 +539,10 @@ refined-out → gaea-out → input/）。操作细节见
 dreamulator export globe nacrea --branch gcm-t42-712 --grid 8192x4096 --globe-res 1600 --cyclones
 # 用气象图层包的一帧做条件场（云量/云层分层/太阳方向都来自模式自身天气）：
 dreamulator export globe nacrea --branch gcm-t42-712 \
-    --weather-pack exports/weather/nacrea-gcm-t42-712 --frame 400
+    --weather-pack exports/weather/nacrea-gcm-t42-712 --frame 1460
 # 同上，并叠加该帧真实气旋（移动温带轨迹 + 正典参数化热带）：
 dreamulator export globe nacrea --branch gcm-t42-712 \
-    --weather-pack exports/weather/nacrea-gcm-t42-712 --frame 477 --cyclones
+    --weather-pack exports/weather/nacrea-gcm-t42-712 --frame 1464 --cyclones
 ```
 
 `export globe` 的完整参数（`clouds` 为别名）：
