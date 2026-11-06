@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- 新增山系形态改进提案，区分地质引擎的平均场与画布的中尺度结构，并登记下一次全层重建的验收方案。
+
+### Changed
+
+- 明确公开设计提案的内容、私有信息与状态头要求，并新增第七波审计台账。
+
 ## [1.2.0] — 2026-11-06
 
 ### Added

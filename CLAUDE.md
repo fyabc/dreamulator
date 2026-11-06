@@ -370,6 +370,17 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 完成结果一行 → `CHANGELOG` + git commit；proposal 里的方案段 → 删，留「✅ 已实现 → 指针」；
 负结果 → proposal 留「已否证」一行（防重试），细节进 git。
 
+**proposal 是公开文本，入库前过三条判据**（`docs/design/audit/wave7-proposal-hygiene.md` 为执行台账）：
+
+1. **只写结论**：方案、物理依据、验收指标与已否证方向各一行入库；逐轮试验数字、调参过程、
+   带日期的诊断小节不入库，它们住 git、`CHANGELOG.md` 与私有实验目录。
+2. **不写私有信息**：不出现私有目录路径与本地数据缓存路径（改写为「复现脚本另存」），
+   不出现机器分工与开发机硬件（需要保留的性能数字只写配置，不写是谁的机器）。
+3. **有状态头**：文首写明状态（草案 / 已接受 / 部分实现 / 已实现 / 已否证终止）与立项日期；
+   历史只留在文首「更新历史」块。
+
+单一世界的定稿裁决属于该世界的 `design-notes/`，不放 `proposals/`。
+
 ### 开发流程纪律
 
 1. **新任务默认开 feature 分支**：`git checkout -b feature/<描述>`，不在 main 上直接开发；合入 main 前清理 commits（squash 为语义清晰的少量提交）。

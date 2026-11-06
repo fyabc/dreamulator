@@ -119,6 +119,7 @@
 | **P1** | **全球画布链 S2–S5**（每块大陆整块生成，23 km 粗格、90 m 像素；S2 外存填平·汇流·湖级联与 S3 区域裁窗已并入 main，S4 校验器已实现并完成首个接缝样本，S5 全局概览待做（计划见 [canvas-chain.md](pipelines/canvas-chain.md) §6.1）；S1 画布已生成，可用于接入验收；降尺度正典冻结后集中更新终版数据）→ [canvas-chain.md](pipelines/canvas-chain.md) | S4/S5 各 1–2 周 | ★★★★ |
 | P2 | **画布级二次沉积与溢口切穿（湖密度治理）**（TD 地形封闭盆地系统性偏多：永耀岛渲染级湖面占陆 9.2%，地球天然湖参照约 1.5–3%、盾状火山岛近零；治理机制是搬运-沉积充填与满溢湖溢口切穿，SPL 刻蚀不治理湖——湖盆是排水树的汇，刻蚀只会加深；侵蚀/沉积只在画布链做生产，区域 refine 链为研发台，CVT 层不做；输出独立资产层，不动 chunks 正典）→ [drainage_cartography.md](../knowledge/cartography/drainage_cartography.md) | 原型 1–2 周 + 画布放大 1 周 | ★★★★ |
 | P1 | **画布条件场的构造结构**（金字塔、同质山地与高原无镶边源于条件场只带格子平均；零均值构造结构场与 TD 配方已实现；一级气候降尺度已决定进入正典，验证与生产接入待做。**永耀岛例证：正典已改为玄武岩高原岛（作者 2026-10-31），地质网格本身即平顶高原，盾形条件场重生成未改变 TD 形态；崎岖程度经地球火山岛 90 m 统计核对落在湿热带老玄武岩岛范围内，画布保持现状**，见提案 §2 读法 5）→ [canvas-conditioning-structure.md](proposals/canvas-conditioning-structure.md) | 对照 2–3 天 + 实现 1 周 | ★★★★ |
+| P1 | **山系形态与地球的差距**（窄长山带、高原内部结构与镶边、老造山带宽度继承与分段、25–150 km 顺走向山脊；引擎部分随下一次全层重建，画布部分随同次画布重生成；[terrain-morphology-gap.md](proposals/terrain-morphology-gap.md)） | 2–4 周 | ★★★★ |
 | P3 | ~~构造-侵蚀 Δt 耦合~~——随流水侵蚀关闭搁置，重启再评估 | — | ★★ |
 | **P0** | nacrea 样板世界改造（五）：天文/地质/气候/文明种子已就绪；视频素材三件套 ✅（2026-10-02 合入）+ Blender 高清渲染链 MVP 落地（`export region` + bpy 静帧），后续 = 多图层包/相机动画/全球整球（[blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | — | ★★★★★ |
 | P1 | **月度矢量场展示** ✅ 2026-10-23：月度风场箭头与粒子流、洋流粒子流（洋流为年均场）；操作见 `usage/map-workflow.md` §4 | — | ★★★★ |
