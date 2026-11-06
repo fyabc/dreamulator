@@ -729,6 +729,7 @@ def export_render(
                 contour_labels=contour_labels,
                 contours=contours,
                 biome_legend=biome_legend,
+                vegetation_palette=vegetation_palette,
                 svg=svg,
             )
         return
