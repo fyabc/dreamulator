@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 明确公开设计提案的内容、私有信息与状态头要求，并新增第七波审计台账。
 - 清理 11 份设计提案中的私有路径和机器分工，性能测量保留配置，平台依赖保留技术要求。
 - 为 8 份设计提案补齐状态与立项时间；状态依据正文与实现，日期精度沿用原始记录。
+- 将 Nacrea 辐照重标定裁决迁入[设计笔记 0022](data/worlds/nacrea/design-notes/0022-insolation-recalibration.md)，更新相关引用，并将裁决前的候选方案与实施预案归入文首历史块。
 
 ## [1.2.0] — 2026-11-06
 
@@ -1246,8 +1247,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **pytest 并行化（xdist）**：`-n auto --maxprocesses 8 --dist worksteal` 进
   默认 addopts，全量测试 344 s → 52 s（6.6×）。单测迭代用 `-n 0` 关并行；
   `benchmarks.yml` 显式 `-n 0`（pytest-benchmark 在 xdist 下会静默自禁）。
-- **nacrea 路线 1 辐照重标定（作者终裁 2026-10-07）**：提案
-  `docs/design/proposals/nacrea-insolation-recalibration.md`（Ts-pCO2-RG
+- **nacrea 路线 1 辐照重标定（作者终裁 2026-10-07）**：设计记录见
+  [Nacrea 设计笔记 0022](data/worlds/nacrea/design-notes/0022-insolation-recalibration.md)（Ts-pCO2-RG
   三难结构 + 候选参数组 + GCM 定标判决 + 连锁清单）。终案「年长锁定 +
   [Fe/H]=−0.19 + pCO2=712 ppm」：M 0.59→0.65 M☉、L 0.0761→0.1227 L☉
   （MLR+Z 自然值）、T_eff 4055→4365 K（作者光谱钉值，较 SB 自然值低 0.5%、

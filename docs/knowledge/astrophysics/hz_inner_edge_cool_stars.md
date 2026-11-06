@@ -128,7 +128,7 @@ pCO2_ss = 280·(V/W⊕eff)^(1/n) ——**指数 1/n ≈ 2-3.3 把脱气率的不
 - 「暖 + 可呼吸 + 厚 CO2 正典」在冷星辐照下会被 GCM 否证（雪ball 平衡）；
   出路 = 提恒星质量（三重红利：通量↑、光谱蓝移 NIR 惩罚↓、S_RG 阈回升）
   + 轨道微调 + Ts 目标重设。完整推导与候选参数组见
-  `docs/design/proposals/nacrea-insolation-recalibration.md`。
+  [Nacrea 辐照重标定决策](../../../data/worlds/nacrea/design-notes/0022-insolation-recalibration.md)。
 - 均匀缩放共振链（a 全表同乘）严格保持通约比——改辐照而不动链结构的
   标准手法；N 体认证需重跑，但引力判决按周期单位尺度不变。
 

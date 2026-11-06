@@ -53,8 +53,8 @@
 
 ### 2.4 归属不对
 
-- `nacrea-insolation-recalibration.md`：单一世界的定稿裁决，已回写正典。应移到 `data/worlds/nacrea/design-notes/`
-  （编号续排），提案目录删除。
+- Nacrea 辐照重标定属于单一世界的定稿裁决，已回写正典。记录位于
+  [设计笔记 0022](../../../data/worlds/nacrea/design-notes/0022-insolation-recalibration.md)，提案目录不再保留副本。
 
 ### 2.5 缺状态头
 
@@ -77,7 +77,7 @@
 - [x] 全目录复查后，补清 `canvas-conditioning-structure.md` 和 `climate-layer-improvement.md` 中两处“本机”措辞。
 - [x] 为第 2.5 节的 8 份提案补齐状态头，状态以正文和已实现代码为依据。日期优先使用原文立项日期；
   `layer-control-model.md` 的原记录只到月份，因此保留 2026-08，未编造具体日期。
-- [ ] 将 `nacrea-insolation-recalibration.md` 迁入 Nacrea 设计笔记，并更新引用。
+- [x] 将 Nacrea 辐照重标定迁入[设计笔记 0022](../../../data/worlds/nacrea/design-notes/0022-insolation-recalibration.md)，更新索引与引用；现行定标引用 0012，历史候选与实施预案保存在文首历史块。
 - [ ] 改写第 2.2 节的日志体提案。
 - [ ] 将第 2.1 节的已实现技术参考迁入 `pipelines/`。
 

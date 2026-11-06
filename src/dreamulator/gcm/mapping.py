@@ -33,7 +33,7 @@ near-infrared band, so omitting it makes the model radiate as a G2 star and
 misjudges water-vapour absorption and the greenhouse response.
 
 Greenhouse handling: the greenhouse is composition-driven (route-1
-adjudication, ``nacrea-insolation-recalibration.md``).  With
+adjudication, ``data/worlds/nacrea/design-notes/0022-insolation-recalibration.md``).  With
 ``greenhouse_mode="none"`` (default) the CO₂ fraction of the world's
 atmosphere composition is passed as pCO2 and ExoPlaSim computes the
 greenhouse itself.  dreamulator's ``greenhouse_factor`` is the EBM's own

@@ -82,7 +82,7 @@ stars:
       z: 0.0
 
 orbits:
-  # ⚠ 路线 1 辐照重标定（2026-10-06 裁决，proposal: nacrea-insolation-recalibration）：
+  # 年长锁定的辐照参数依据见 design-notes/0022-insolation-recalibration.md。
   # 日心轨道全表 a ×1.0328064——**年长锁定**：Aegis 0.3648 AU 在 M*=0.65 下精确
   # 还原 P=99.8 d，历法/季节/纪元叙事全部保持原值；共振链通约比严格保持；
   # 卫星系轨道（parent=行星）不动。恒星第三体项 M*/a³ ×0.9999、Aegis Hill 半径
