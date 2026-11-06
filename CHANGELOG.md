@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- 将[季节热容量提案](docs/design/proposals/seasonal-heat-capacity-closure.md)整理为结构问题、候选与验收边界，现行参数和公式归入气候管线，保留海冰方案否证结论，并同步索引与验证指南回链。
 - 将[柱辐射场提案](docs/design/proposals/column-radiation-field.md)整理为物理依据、输入限制与验收，统一云诊断方案和否证结论，明确云顶结构复用仍是未决候选，并同步索引和引用。
 - 将[湿静力能辐合闭合提案](docs/design/proposals/moist-static-energy-convergence.md)压缩为阶段 0 终止说明，保留否证依据、再分析数据限制与补充候选的适用边界，并同步设计索引和跨文档引用。
 - 将[地面风提案](docs/design/proposals/surface-wind-from-pressure.md)整理为物理依据、分阶段验收与路线判决，绝对气压实现并入气候管线，明确背景风替换尚未通过前置检验，并同步相关引用。

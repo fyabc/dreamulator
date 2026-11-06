@@ -263,20 +263,11 @@ OHT），照搬到异星是隐式地球标定——传入 `config` 时叠加过�
 
 ### 3.6 季节块（月度温度）
 
-1. **地表热容量** `seasonal_heat_capacity`（:394-406）：陆地/海洋分型 + 沿海过渡
-   （`seasonal_coastal_scale_km`，其 e 折长度随 √P 重标定——水平皮肤深度）；季节
-   冰湖换成湖面热容量（~10 m 温跃层——大陆振幅被水的惯性缓和）。三个容量都是
-   **地球年标定值**，经 `period_scaled_heat_capacity` 按世界年长 √P 重标定（穿透
-   深度 δ=√(2κ/ω)；大气柱份额 C_atm≈1.02e7 周期无关——Lohmann 2020，公式与出处
-   见 energy_balance.md §5「有效热容量的周期标度」）：短年世界（nacrea ~100 d）
-   表面份额 ×0.523，地球（P=365.25 d）精确不变。
-2. **季节 EBM** `compute_seasonal_climate`（:407，实现在 `climate_seasonality.py`）：
-   月度辐照驱动 + 冰反照率开关。季节振幅
-   `T_amp = ΔQ_ω(1−α) / √(B_eff² + (ωC)²)`，其中 `B_eff = B + 6D`
-   （`climate_seasonality.py:623-627`）——显式热输送在主导季节模态（四极模 n=2，n(n+1)=6）
-   上的阻尼，取代旧标定常数；相位滞后 `tan φ = ωC/B_eff`。夏季冻结 cell 保留冰反照率
-   → 振幅缩小，区分冰盖（EF）与副极地（Dfc）。**E1（2026-09-16）**：D 与年 EBM 调用方
-   同源 Ω 标度（`0.35 × P^0.3`，地球 P=1 不变；慢自转大胞更快抹平季节距平）。
+1. **地表热容量**由 `seasonal_heat_capacity` 按海陆与距海岸距离计算。季节冰湖使用
+   `seasonal_lake_heat_capacity` 覆盖，并采用相同的周期缩放。参数与公式见第 3.6.1 节。
+2. **季节 EBM**由 `compute_seasonal_climate` 使用月度辐照驱动，调用
+   `monthly_temperature` 计算年谐波振幅与相位。夏季仍冻结的格点保留冰反照率，
+   缩小季节振幅；输送阻尼与年均 EBM 共用扩散系数及自转标度。
 3. **B0c 交接**（:430-442）：季节 EBM 自带辐射/热容量循环但**没有海拔维**——高原
    cell 会落在海平面等效的纬向温度上（安第斯 4 km：月均 +16 °C vs 年平 −3.3 °C），毒化
    t_hot/t_cold、月度蒸发与月度展示层。契约：**月度序列的形状/振幅取 EBM，水平值平移
@@ -285,6 +276,45 @@ OHT），照搬到异星是隐式地球标定——传入 `config` 时叠加过�
    是唯一权威，导出年温由终聚合重新导出（§3.8）。
 4. **湖冰钳**（:447-449）：淡水湖冬季表面停在冰点（冰盖封住辐射失热），不跟大陆的
    零下循环——物理常数，非地球标定。
+
+#### 3.6.1 有效热容量与谐波响应
+
+`engine/climate_seasonality.py` 的 `period_scaled_heat_capacity` 将地球年标定的有效热容量
+分成大气柱与地表份额。大气柱份额当前固定采用地球近似值 `C_atm = 1.02×10⁷ J/m²/K`，
+不按各世界的气压与重力重新计算；地表份额按热穿透深度缩放：
+
+    C(P) = C_atm + (C_earth − C_atm)√(P/P_earth) ,
+    P_earth = 365.25 d .
+
+`P` 是轨道年长。此处的认识论类别为近似推导：大气项取柱质量热容量的近似，地表份额
+锚定地球季节响应，平方根指数来自周期导热的穿透深度。地球年长下缩放比例为一，
+恢复输入的标定值。物理说明见[有效热容量的周期标度](../../knowledge/climatology/energy_balance.md#有效热容量的周期标度p-穿透深度)。
+
+| 配置参数 | 地球年标定值与含义 |
+|---|---|
+| `seasonal_land_heat_capacity` | 默认为 2.0×10⁷ J/m²/K，包含陆地与大气的有效储热。 |
+| `seasonal_ocean_heat_capacity` | 默认为 2.0×10⁸ J/m²/K，对应约 50 m 海洋混合层。 |
+| `seasonal_lake_heat_capacity` | 默认为 4.0×10⁷ J/m²/K，对应约 10 m 湖面参与层。 |
+| `seasonal_coastal_scale_km` | 管线配置默认为 250 km，是地球年的海岸过渡长度。 |
+
+纯函数 `seasonal_heat_capacity` 的 `coastal_scale_km` 参数缺省为 500 km，管线调用时传入
+配置中的海岸尺度。函数将海岸长度也乘以 `√(P/P_earth)`。海洋格点使用缩放后的海洋容量，
+陆地格点以 `C = C_land + (C_ocean − C_land)exp(−d/L)` 从海岸向内陆过渡，
+其中 `d` 是距海岸距离，`L` 是缩放后的长度。季节冰湖的容量覆盖使用同一个周期缩放函数。
+
+`monthly_temperature` 从十二个月的入射短波提取年傅里叶谐波 `ΔQ_ω`，计算
+
+    T_amp = ΔQ_ω(1−α)/√(B_eff² + (ωC)²) ,
+    φ_lag = arctan(ωC/B_eff) ,
+    B_eff = B_rad + 6D ,
+    ω = 2π/(P × 86400 s/d) .
+
+`B_rad` 与 `D` 的单位为 W/m²/K，`6` 来自主导季节四极模的 `n(n+1)`，其中 `n = 2`。
+调用方使用 `D = ebm_diffusion_wm2k × rotation_period_days^0.3`，自转周期以地球日为单位；
+它与轨道年长的热容量缩放是不同的输入。地球默认 `B_rad = 2.0`、`D = 0.35`，
+因此 `B_eff = 4.10 W/m²/K`。冰反照率反馈调整振幅，热惯性决定相对辐照峰值的相位滞后。
+现行实现保持单一有效热容量；短年体制的证据边界、海冰候选否证与结构候选见
+[季节热容量闭合提案](../proposals/seasonal-heat-capacity-closure.md)。
 
 ### 3.7 下沉增温的干旱度门控释放（Stage 3.5，执行于降水之后）
 
