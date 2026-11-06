@@ -108,10 +108,10 @@ mesh 重新 NN 栅格化，约 1% 像素的并列最近邻会翻到相邻 cell�
 
 ## 硬件与渲染参数基线（2026-10-02 实测）
 
-本机样例环境（8 核笔记本 CPU + RTX 3060 Laptop 6 GB，Blender 5.2.2 LTS）：
+参考测量配置为 8 核 CPU、RTX 3060 Laptop 6 GB 与 Blender 5.2.2 LTS：
 Cycles 设备自动降级 OptiX > CUDA > CPU；seed 固定 42 + OpenImageDenoise。
 6 GB 显存 = 贴图预算硬顶（8k RGBA ≈ 268 MB、16k ≈ 1 GB 慎用）；区域网格
-（数十万面）对 3060 是轻负载。浏览器/前端走 AMD 集显，与渲染不抢卡。
+（数十万面）对该配置是轻负载。浏览器前端与离线渲染共用 GPU 时，应分别测量资源占用。
 
 ## 路线（登记不排期）
 

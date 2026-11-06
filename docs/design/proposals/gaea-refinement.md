@@ -216,8 +216,8 @@ WorldMachine Indie $119；全套商业工具约 $500 一次性（不含 PS 订�
    不用 Gaea 通用色带。
 4. **Blender 地球仪渲染层**：dayside 的 Blender 插件（位移球 + 预对齐颜色 +
    单太阳灯 + Cycles，瓦片至 32K）与 Part 3 教程同款——对应本库
-   blender-render-pipeline 的全球级扩展：位移球用 16K 单纹理（本机 GPU
-   上限 16384 恰好够），更高分辨率走瓦片拼接；大气/电影镜头进 EP1 分镜
+   blender-render-pipeline 的全球级扩展：位移球用 16K 单纹理，运行前检查设备的最大纹理尺寸；
+   更高分辨率走瓦片拼接。大气/电影镜头进 EP1 分镜
    素材清单。配套转载视频「用 Gaea2 和 Blender 程序化创建城市灯光」=
    文明层夜景渲染的现成参照。
 

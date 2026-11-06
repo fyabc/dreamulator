@@ -126,7 +126,7 @@ ExoPlaSim 能提供，而要在单层框架内自产它需要垂直结构，正�
 **因此本提案在单层框架内封闭**，并留下一条值得考虑的设计：让快速模式**消费慢速模式的一个产物**
 ——GCM 跑一次给出云顶结构，EBM 在反复迭代世界时复用它。这在[两模式定位](climate-gcm-plan.md)下
 是自洽的（慢速负责垂直结构，快速负责交互），但它让快速模式对一次慢速跑产生依赖，取舍需要作者
-裁决。脚本在 `private/experiments/prescribed-cloud-20261103`。
+裁决。复现脚本另存。
 
 ## 3 验收
 
@@ -174,5 +174,4 @@ ExoPlaSim 能提供，而要在单层框架内自产它需要垂直结构，正�
   *Journal of Climate* 6, 1587–1606.（低云量与近地面稳定度的诊断关系）
 - Rodwell, M. J., Hoskins, B. J. (2001). Subtropical anticyclones and summer monsoons.
   *Journal of Climate* 14, 3192–3211.（下沉与副热带高压）
-- 实测口径见 `scripts/climate/scorecard.py`；离线检验脚本在
-  `private/experiments/radiative-descent-20261103`。
+- 实测口径见 `scripts/climate/scorecard.py`，离线检验脚本另存。

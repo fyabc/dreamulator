@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - 明确公开设计提案的内容、私有信息与状态头要求，并新增第七波审计台账。
+- 清理 11 份设计提案中的私有路径和机器分工，性能测量保留配置，平台依赖保留技术要求。
 
 ## [1.2.0] — 2026-11-06
 

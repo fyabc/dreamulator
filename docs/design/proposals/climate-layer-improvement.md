@@ -395,7 +395,7 @@ J. Climate 22:272 两模态定常线性模型：正压 ψ + 斜压 ψ̂/χ̂/φ�
   taper 55°→75°）——v1 病灶（局域 bin 噪声、地形污染、非地转 v̄）结构性消失。
 - **k-块对角求解**：zonal 基本态 ⇒ 经度 rFFT 后按 zonal wavenumber 完全块对角，
   交织排列 + 带状求解器（`solve_banded`，带宽 11）单月 **0.16 s**（v1 全 2D 稀疏
-  LU 35 s；本机复数稠密 zgesv 单次 126 ms 的慢 BLAS 路径下带状是唯一可行解）。
+  LU 35 s；参考测量中复数稠密 zgesv 单次 126 ms，慢 BLAS 路径下带状求解更适合交互预算）。
 - **消费换道**：中层 w = −p_m∇²χ̂/(ρ_m g) → 陆地 k_rain 下沉干燥门
   `subsidence_rainout_gate`（质量守恒乘性调制，与 storm/SST 门同钩子复合；不碰
   风场——v1 的 1/f BL 风放大伤害路径切断）。
