@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- 将[柱辐射场提案](docs/design/proposals/column-radiation-field.md)整理为物理依据、输入限制与验收，统一云诊断方案和否证结论，明确云顶结构复用仍是未决候选，并同步索引和引用。
 - 将[湿静力能辐合闭合提案](docs/design/proposals/moist-static-energy-convergence.md)压缩为阶段 0 终止说明，保留否证依据、再分析数据限制与补充候选的适用边界，并同步设计索引和跨文档引用。
 - 将[地面风提案](docs/design/proposals/surface-wind-from-pressure.md)整理为物理依据、分阶段验收与路线判决，绝对气压实现并入气候管线，明确背景风替换尚未通过前置检验，并同步相关引用。
 - 将[气候引擎迭代提案](docs/design/proposals/climate-engine-round.md)整理为收口结论，已实现机制由气候管线维护，首份评分卡保存在验证指南的文首历史块，并同步路线图与跨文档引用。
