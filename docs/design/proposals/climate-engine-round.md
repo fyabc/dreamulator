@@ -72,7 +72,7 @@ GCM 的高纬读数还受平板海洋海冰处理影响，不能直接作为独�
 
 现行回路与停止点的技术定义见[湿槽回路](../pipelines/climate-pipeline.md#57-gw6-湿槽回路w-供给路线默认开)。
 局地湿静力能闭合作为替换方案已经否证；海温梯度驱动的 Lindzen–Nigam 边界层模型
-仅适合作补充，方案去留由[湿静力能辐合闭合提案](moist-static-energy-convergence.md)维护。
+仅适合作补充，否证依据与候选的适用边界见[湿静力能辐合闭合终止说明](moist-static-energy-convergence.md)。
 
 ### 3.4 洋流结构
 
