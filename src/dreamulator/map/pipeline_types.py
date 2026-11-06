@@ -645,7 +645,7 @@ class TerrainPipelineConfig:
     # fit, calibration domain Earth).  Two passes scored κ −4.3 pp; ten passes
     # lower the equal-weight Köppen class agreement from 26.0% to 18.3% and the
     # wet-season phase match from 48.7% to 37.6%, so three sits near the best
-    # stopping point (2026-11-02, climate-engine-round.md 5.7).  nacrea
+    # stopping point (2026-11-02, climate-engine-round.md §3.3).  nacrea
     # same-physics regression PASS (island/mountains/ledger all held).  Known
     # accepted residual: the West-Africa corridor family (Sahara/Sahel
     # overshoot, spurious wet-trough over the Sahara, Guinea overshoot) is

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- 将[气候引擎迭代提案](docs/design/proposals/climate-engine-round.md)整理为收口结论，已实现机制由气候管线维护，首份评分卡保存在验证指南的文首历史块，并同步路线图与跨文档引用。
 - 明确公开设计提案的内容、私有信息与状态头要求，并新增第七波审计台账。
 - 清理 11 份设计提案中的私有路径和机器分工，性能测量保留配置，平台依赖保留技术要求。
 - 为 8 份设计提案补齐状态与立项时间；状态依据正文与实现，日期精度沿用原始记录。
