@@ -32,7 +32,7 @@
 - `civilization-pipeline.md` — 文明层 pipeline（宜居/农业分类与评分、湖滨淡水修正、摇篮候选发现）
 - `climate-validation.md` — 气候验证设计（数据源清单、指标、多线证据策略）
 - `earth-real-data.md` — 真实地球数据导入（ETOPO1/PB2002/GSHHG/NCEP-GPCP-Beck-SODA 的来源、流程与字段）
-- `canvas-chain.md` — 全球画布链，包含连续地质来源、接受统计准备、气候反馈、两档高清图及外存水文接口。
+- `canvas-chain.md` — 全球画布链，包含连续地质来源、接受统计准备、气候反馈、覆冰更新与冰缘塑性锥度、两档高清图及外存水文接口。
 - `orbital-weather-globe.md` — 太空俯瞰星球媒体链：L2 云纹理、L3 气旋模板、L5 单次散射大气、L1 接口与后续
 - `gcm-weather-pack.md` — GCM 气象图层包（L1）：高频瞬时快照、ISCCP 云量分层与云顶、测高公式高度、TempestExtremes 式气旋检测与追踪、包结构与读取
 - `sky-ephemeris.md` — 天球星历与背景天球：观测者天空查询的模块分工、自转轴阶梯、升落与快路径、命令行与三个只读端点、背景天球派生及已知限制

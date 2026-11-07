@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- 画布链新增[冰缘塑性锥度](docs/design/pipelines/canvas-chain.md#2512-冰缘的塑性锥度)技术参考；[冰川地貌提案](docs/design/proposals/canvas-glacial-landforms.md)第 6.1 节压缩为归因、裁决与已知瑕疵，逐轮实施记录移出，错误的冰缘定义进入已否证方向。
 - 整理[亚格子岛屿目录提案](docs/design/proposals/island-catalog.md)：已实现的阶段 A–C 指向地质管线，参数表改为实现值，过时的问题描述与已被取代的裁决删去，nacrea 的背星点裁决迁入设计笔记 0017。
 - 新增[区域数据包管线参考](docs/design/pipelines/region-pack.md)，按现行代码补齐数据包文件与元数据契约；[Blender 渲染链提案](docs/design/proposals/blender-render-pipeline.md)只保留定位、设计选择与路线，相关引用改指管线参考。
 - 新增[天球星历管线参考](docs/design/pipelines/sky-ephemeris.md)，[星历提案](docs/design/proposals/sky-ephemeris.md)只保留设计选择、未实现的事件搜索与 N 体及开放问题，用法文档和代码注释改指向管线参考。
