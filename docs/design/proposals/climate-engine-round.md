@@ -20,7 +20,7 @@ Nacrea 使用 GCM（大气环流模型）分支作模型参照，并排除其已
 
 本文保留本轮的设计结论。已实现机制的接口和参数由[气候管线](../pipelines/climate-pipeline.md)维护，
 性能测量由[性能剖析文档](../profiling.md)和 `CHANGELOG.md` 保留；
-当前偏差清单见[气候层改进方案](climate-layer-improvement.md#0-定位与当前基线)。
+当前偏差清单见[气候层改进方案](climate-layer-improvement.md#0-定位与基线)。
 
 ## 2 已完成的工作
 
