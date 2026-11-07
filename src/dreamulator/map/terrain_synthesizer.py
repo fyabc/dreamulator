@@ -1208,6 +1208,18 @@ def _synthesize_asymmetric(
     capture_source_field(source_fields, "orogen_cap_m", orogen_cap)
     elevation = apply_orogen_cap(elevation, orogen_cap, sea_level)
     capture_source_field(source_fields, "after_orogen_cap_m", elevation)
+    if config.orogen_mesoscale_relief_m_per_km > 0.0:
+        from .orogen_mesoscale_relief import (
+            apply_orogen_mesoscale_relief,
+            mesoscale_relief_field,
+        )
+
+        support = orogen > 0.0
+        field = mesoscale_relief_field(mesh.cell_xyz, support, config.radius_km, config.seed + 800)
+        elevation, meso_delta = apply_orogen_mesoscale_relief(
+            elevation, orogen, field, config.orogen_mesoscale_relief_m_per_km, sea_level
+        )
+        capture_source_field(source_fields, "orogen_mesoscale_relief_m", meso_delta)
     elevation, clamped = _apply_interior_lowlands(
         mesh, elevation, config, orogen_support=orogen > 0.0
     )

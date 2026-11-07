@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- 地形合成新增造山带中尺度起伏阶段（`orogen_mesoscale_relief.py`，`orogen_mesoscale_relief_m_per_km` 缺省 75）：带造山带起伏的陆地格子在上限之后叠加零均值的 100–400 km 起伏，幅度随造山带起伏增长，用青藏与阿尔蒂普拉诺标定；nacrea 钉为 0。地球对照否证了「高原内部山脉只沿古缝合带」。
 - 内陆低地的下压坡度改为从造山带覆盖范围起算（`interior_lowland_origin`，缺省 `orogen`），宽高原不再被压到力平衡上限以下；nacrea 钉在旧行为 `boundary`，现装地形逐值不变，全层重生成时切换。山系形态提案补充地球对照：高原平板源于 3000 m 以上缺少中尺度结构来源，上限逐格截断与格平均镶边两条假设已否证，老造山带在网格尺度上已与乌拉尔相当。
 - 整理[气候层改进提案](docs/design/proposals/climate-layer-improvement.md)：六个要素节改为现行指针、设计依据、残余、候选与否证，执行日志与逐轮验收数字移出，全文由 1117 行减到约 410 行；气候管线补齐直减率、距离季、海冰面温度、边界层投影因子与洋流消费年风的说明。
 - 画布链新增[冰缘塑性锥度](docs/design/pipelines/canvas-chain.md#2512-冰缘的塑性锥度)技术参考；[冰川地貌提案](docs/design/proposals/canvas-glacial-landforms.md)第 6.1 节压缩为归因、裁决与已知瑕疵，逐轮实施记录移出，错误的冰缘定义进入已否证方向。
