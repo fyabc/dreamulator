@@ -1,7 +1,7 @@
 # 地质层改进方案
 
 > **定位**：地质引擎改进的设计提案——物理第一性 + 文献 + 当前实现 + 未实现 proposal + 已否证方向。
-> 职责分工见根 CLAUDE.md「任务文档分工」：执行顺序 → today；优先级/技术债 → roadmap；
+> 职责分工见根 AGENTS.md「任务文档分工」：执行顺序 → today；优先级/技术债 → roadmap；
 > 实验记录/历史 → git。**本文件不写「旧值 → 新值」叙事、不写「已修复/遗留问题」历史。**
 >
 > **状态**：§1–§8 全部 ✅ 已实现（技术参数/流程见 [pipelines/geological-pipeline.md](../pipelines/geological-pipeline.md)）；

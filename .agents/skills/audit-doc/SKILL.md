@@ -1,10 +1,11 @@
 ---
-description: 审计文档↔代码一致性（file:line 引用、反引号符号、参数字段是否仍存在），产出失效清单并记入 docs/design/audit/。当需要检查某文档/某层是否忠实反映当前实现时使用（如 /audit-doc geological-pipeline）。
+name: audit-doc
+description: 审计文档↔代码一致性（file:line 引用、反引号符号、参数字段是否仍存在），产出失效清单并记入 docs/design/audit/。当需要检查某文档/某层是否忠实反映当前实现时使用（如 audit-doc geological-pipeline）。
 ---
 
 # audit-doc — 文档↔代码一致性审计
 
-> 与 `/grill-world`（审设定自洽）不同：本 skill 审「文档是否忠实反映代码」——引用是否失效、
+> 与 `grill-world` 技能（审设定自洽）不同：本 skill 审「文档是否忠实反映代码」——引用是否失效、
 > 字段是否改名/删除、参数值是否漂移。设计依据 `docs/design/audit-plan.md` 第一波
 > 「文档↔代码数值一致性扫描」。
 
@@ -45,7 +46,7 @@ description: 审计文档↔代码一致性（file:line 引用、反引号符号
 
 - 审计发现 → `docs/design/audit/waveN-<slug>.md`（映射表 + 证据 + 处置）
 - 修复 → 改文档 + 重跑 `check_doc_refs.py` 确认
-- 反复出现的「这类漂移」→ 沉淀为新的检查维度（改进环，同 `/grill-world`）
+- 反复出现的「这类漂移」→ 沉淀为新的检查维度（改进环，同 `grill-world` 技能）
 
 ## 首例参照
 

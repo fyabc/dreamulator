@@ -23,7 +23,7 @@ knowledge/
 
 - 使用 Markdown 格式
 - 文件名使用 snake_case，如 `orbital_mechanics.md`
-- 每个学科目录包含 `CLAUDE.md` 索引文件，列出关键概念和交叉引用
+- 每个学科目录包含 `AGENTS.md` 索引文件，列出关键概念和交叉引用
 - 文档应包含：
   - 核心概念和定义
   - 关键公式和参数范围

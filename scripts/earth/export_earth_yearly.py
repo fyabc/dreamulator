@@ -2,7 +2,7 @@
 """Export UCC yearly descriptors + classification for the earth reference root —
 from OBSERVED monthly climate, never from the engine.
 
-The earth root world is the real-data anchor and is never built (CLAUDE.md
+The earth root world is the real-data anchor and is never built (AGENTS.md
 "模型态 vs obs 态分离").  This importer-side script is the obs-derived
 counterpart of the engine's ``export_climate_layers`` yearly block: the shared
 machinery (``import_solar_common.write_ucc_yearly``) reads the root's

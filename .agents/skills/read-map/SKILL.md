@@ -1,4 +1,5 @@
 ---
+name: read-map
 description: 用视觉模型 + 数据交叉校验读取世界地图图层，抽取海陆/气候/生态/文明结构。用于「设定 vs 地图」审计、geography 重写、ai civ 文明锚点核查。
 ---
 

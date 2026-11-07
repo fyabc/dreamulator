@@ -1,6 +1,6 @@
 """Reference-anchor guard: earth root never builds the model (climate) layer.
 
-CLAUDE.md「模型态 vs obs 态分离」: a ``reference_anchor`` world's root holds
+AGENTS.md「模型态 vs obs 态分离」: a ``reference_anchor`` world's root holds
 only real observation (import_earth_climate); the climate engine refuses to
 write model fields (temperature/precipitation/koppen) to the root and points
 at a branch instead.

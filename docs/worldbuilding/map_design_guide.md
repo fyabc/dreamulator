@@ -93,7 +93,7 @@
 ## 生态层预期
 
 基于温度和降水的 Whittaker 群系映射（ecology 引擎已实现：Whittaker 群系、NPP、
-可驯化标签、土纲、生物地理省；设计参考 `../knowledge/ecology/CLAUDE.md`）：
+可驯化标签、土纲、生物地理省；设计参考 `../knowledge/ecology/AGENTS.md`）：
 
 | 温度 | 高降水 | 中降水 | 低降水 |
 |------|--------|--------|--------|
@@ -107,7 +107,7 @@ refugia（气候振荡期的物种蓄水池）。
 ## 文明层指导
 
 > 参考：[EU4 province 系统](https://eu4.paradoxwikis.com/Map_modding)；
-> 动力学模型见 `../knowledge/sociology/CLAUDE.md`（HANDY/SDT/Tainter）
+> 动力学模型见 `../knowledge/sociology/AGENTS.md`（HANDY/SDT/Tainter）
 
 ### 城市选址
 

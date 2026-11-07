@@ -32,7 +32,7 @@ per plate).  Velocities follow the engine convention v = ω × P on the unit sph
 rotation by ``omega_rad_yr · dt`` about the pole axis, so going back is the same
 rotation with the opposite sign.
 
-Epistemic class (CLAUDE.md §9): rotations and parcel bookkeeping are kinematics;
+Epistemic class (AGENTS.md §9): rotations and parcel bookkeeping are kinematics;
 the age-depth law is an observational fit (Earth ocean floor); holding the poles
 fixed is an M1 approximation, replaced by stage poles in M2.
 """

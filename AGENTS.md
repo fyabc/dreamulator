@@ -63,9 +63,10 @@ dreamulator/
 ├── .github/
 │   └── workflows/
 │       └── deploy-pages.yml # GitHub Pages 自动部署
-├── .claude/
-│   └── commands/            # Claude Code 自定义技能
-│       └── narrate.md       # /narrate 技能（调用 narrate 后端）
+├── AGENTS.md                # 全体 agent 共用的项目规则（各级子目录同名文件为作用域规则）
+├── CLAUDE.md                # 只含 @AGENTS.md 导入，供 Claude Code 读取
+├── .agents/skills/          # 项目技能的唯一来源（Codex 直接读取）
+├── .claude/skills/          # 技能的同步副本（Claude Code 读取，由脚本生成）
 └── tests/                   # Python 测试
 ```
 
@@ -167,24 +168,16 @@ npm run lint
 > 不依赖后端，但创建/删除/构建/验证/叙述等写操作不可用。
 > GitHub Pages 部署通过 `.github/workflows/deploy-pages.yml` 自动化。
 >
-> **⚠️ 静态导出同步**：新增 API 端点或数据字段时，**必须同步更新**以下三个文件，
-> 否则 GitHub Pages 部署后对应功能将不可用：
-> 1. `scripts/release/export_static.py` — 添加新数据到导出流程
-> 2. `frontend/src/api/staticClient.ts` — 添加对应的静态数据读取方法
-> 3. `frontend/src/api/client.ts` — 确保 unified API 在静态模式下委托给 staticClient
+> **⚠️ 静态导出同步**：新增 API 端点或数据字段时须同步三个文件，见下文「静态导出同步」。
 
-### Claude Code 自定义技能
+### 项目技能
 
-本项目在 `.claude/commands/` 中定义了自定义技能，可在 Claude Code 中直接使用：
+技能按 Agent Skills 开放格式写在 `.agents/skills/<名称>/SKILL.md`：`narrate`（口语化描述世界）、`audit-doc`（文档与代码
+一致性审计）、`grill-world`（设定自洽性拷问）、`diagnose-climate`（气候异常诊断）与 `read-map`（读图核查）。
+Claude Code 用 `/narrate earth` 调用，Codex 用 `$narrate earth` 调用。`narrate` 底层调用 `src/dreamulator/narrator.py`，
+与 CLI `dreamulator narrate` 共享逻辑。
 
-```
-/narrate earth                         # 描述基础世界
-/narrate earth --branch l4-companion   # 描述分支世界
-```
-
-技能底层调用 `src/dreamulator/narrator.py` 后端模块，与 CLI `dreamulator narrate` 命令共享逻辑。
-
-**API 配置解析链**（优先级从高到低）：
+**narrate 的 API 配置解析链**（优先级从高到低）：
 1. CLI `--model` 参数 / 环境变量 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`
 2. `~/.claude/settings.json` → `env.*` 字段及顶层 `model` 字段
 3. 内置默认值 `claude-sonnet-4-6`
@@ -309,6 +302,18 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 
 ## 开发注意事项
 
+### 多 agent 与跨平台约定
+
+- **规则只写在 `AGENTS.md`。** 根目录与子目录的 `AGENTS.md` 是 Claude Code、Codex 等工具共用的唯一来源；同目录的
+  `CLAUDE.md` 只含 `@AGENTS.md` 导入，不写内容。新建作用域规则时两个文件一起建，`tests/test_agent_instructions.py` 检查成对与导入。
+- **进入子目录先读该目录的 `AGENTS.md`。** Codex 只加载从仓库根到启动目录路径上的文件，在根目录启动时不会自动读到
+  `frontend/AGENTS.md` 或 `docs/**/AGENTS.md`；改前端前读 `frontend/AGENTS.md`，改文档前读对应目录的索引。
+- **根 `AGENTS.md` 保持在 32 KiB 以内。** 这是 Codex 拼接项目说明的缺省上限，超出部分会被截断；只适用于某个目录的规则放进该目录的 `AGENTS.md`。
+- **技能改 `.agents/skills/`。** 改完运行 `uv run python scripts/dev/sync_agent_skills.py` 同步到 `.claude/skills/`；
+  测试会比对两份内容。frontmatter 只用 Agent Skills 规范字段（`name`、`description`），参数写成 `$ARGUMENTS` 并注明宿主未替换时从用户请求读取。
+- **不提交符号链接。** Windows 需要管理员权限或开发者模式才能创建符号链接，未开启 `core.symlinks` 的克隆会把链接检出为一行文本；
+  需要共享内容时用导入或脚本生成的真实文件。规则与技能文件由 `.gitattributes` 固定为 LF 换行。
+
 ### 文档/设定更新：只写当前设定，不写历史
 
 文档或设定更新时，直接写「当前设定」，不残留之前设定、也不写「XX已修正/翻案/原XX」
@@ -406,22 +411,8 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 
 ### 气候修改差异对比
 
-改气候引擎后，用小差异难以在前端看出效果。使用 `scripts/climate/climate_diff.py` 对比两次构建：
-
-```bash
-# 改前保存基线
-cp -r data/worlds/nacrea/maps/satellite_nacrea data/worlds/nacrea/maps/_baseline
-
-# 改代码 → 构建
-uv run dreamulator build nacrea --only climate --force
-
-# 对比
-uv run python scripts/climate/climate_diff.py \
-    data/worlds/nacrea/maps/_baseline \
-    data/worlds/nacrea/maps/satellite_nacrea
-```
-
-输出：全局摘要（T/P/Köppen/biome）、纬度带平均差异、Top-N 变化最大的细胞。
+改气候引擎后用 `scripts/climate/climate_diff.py` 对比两次构建，步骤见
+[气候验证工作流](docs/usage/climate-validation-workflow.md#7-两次构建的差异对比)。
 
 ### 静态导出同步
 
@@ -441,18 +432,6 @@ cd frontend && npm run build:static:local && npm run preview:static
 > 本地静态导出/预览前，先在 `data/worlds` 上构建（`uv run dreamulator build ...` 或
 > `uv run python scripts/release/publish_world_data.py`）；`export_static.py` 默认读 `data/worlds`。
 
-### 3D 球面矢量可视化（风场/洋流箭头）
-
-1. **切空间投影不要用数值差分**。`atan2(v,u)` 在局部切空间是对的，但映射到屏幕
-   必须通过相机矩阵。数值偏移 `project(lon+de, lat)` 依赖偏移量选择（不同缩放/视角下
-   偏移量对应的屏幕像素数不同，极地附近经度偏移退化），会产生方向跳变。正确做法是让
-   `project()` 返回切空间基底在屏幕的像（`ex,ey,nx,ny`），在 `GlobeViewer.tsx` 中
-   用 THREE.js `camera.project()` 解析计算，不与缩放耦合。
-
-2. **速度和方向要分离**。洋流速度（~0.002 m/s）和风速（~5 m/s）差 2500 倍。
-   直接将 (u,v) 乘以切空间基底 → 洋流矢量趋近零被后续阈值过滤。方向用单位向量、
-   长度用速度，两者独立。
-
 ### 知识库与设计模式文档同步
 
 引入新的学科知识（公式、参数、模型）或设计模式时，**必须同步更新**对应文档：
@@ -460,7 +439,7 @@ cd frontend && npm run build:static:local && npm run preview:static
 1. **学科知识** → `docs/knowledge/<discipline>/`：
    - 新的物理公式、化学方程式、地质参数、气候模型、生态分类等
    - 参考现有格式：公式 + 参数表 + 源码引用 + 学术参考
-   - 各学科子目录的 `CLAUDE.md` 索引文件也需更新
+   - 各学科子目录的 `AGENTS.md` 索引文件也需更新
 
 2. **设计模式** → `docs/worldbuilding/design_patterns.md`：
    - 新的 YAML/JSON 配置模板、分支工作流、数据编码方式
@@ -515,59 +494,3 @@ cd frontend && npm run build:static:local && npm run preview:static
 **原则**：不在真空中设计算法、也不在真空中诊断问题。每个引擎决策和每个根因判断都要有
 **物理第一性**（从物理推导）、**地球真实参考**（观测数据）或**业界成熟方案**
 （论文/源码/竞品引擎实现）三者至少其一的支撑。竞品文档更新时，本节的速查表也需同步。
-
-### i18n：多语言字符串
-
-项目使用 `react-i18next` 做国际化。配置入口 `src/i18n/index.ts`，locale 文件在 `src/i18n/locales/<lang>/`。
-
-**命名空间**：`common`（通用 UI）、`map`（地图/球面）、`worlds`（世界管理）、`civmap`（文明地图）、`help`（帮助页内容）。
-
-**新增可翻译字符串时**：
-1. 选择正确的命名空间 JSON 文件
-2. 添加 key（中文值写到 `zh-CN/`，英文写到 `en/`）
-3. 在组件中使用 `useTranslation()` hook：`const { t } = useTranslation('map')`
-4. 硬编码中文是技术债——新代码一律走 `t()`。
-
-**约定（2026-08 i18n 扫尾后确立）**：
-- **自包含命名空间**：每个 namespace 自带它需要的 action/status/label，不跨 ns 复用
-  （`worlds.action.create` 与 `common.action.create` 并存是约定，不是重复）。
-- **词典表 → i18n key**：Köppen 群系/土纲这类「code → 中文名」的模块级映射表存 i18n
-  key（如 `'koppen.Af'`），在使用处 `t(key)` 解析——不能模块级直接 `t()`，否则语言切换不生效。
-- **类组件用 `i18n.t()`**（import i18n 单例），函数组件用 `useTranslation`。
-- **跨命名空间引用**：用绝对 key `t('help:layer.terrain.label')`（`ns:` 前缀）。
-- **扫描命令**：`grep -rnE '[一-龥]' frontend/src --include='*.ts' --include='*.tsx'`
-  （注释、语言名、死代码除外）。
-- **语言切换器**：Sidebar 页脚（`components/LanguageSwitcher.tsx`），localStorage
-  `dreamulator-lang` + 浏览器语言兜底。
-
-**添加新语言**：复制 `zh-CN/` → `<code>/`，翻译 JSON 值（key 结构保持不变），在 `index.ts` 的 `resources` 中注册。
-
-### React StrictMode + Three.js/R3F 纹理上传（2026-08 调试经验）
-
-React StrictMode 开发模式下对函数组件体、state updater、useMemo/useReducer 等双重调用。与 R3F/Three.js 交互时存在以下反模式：
-
-1. **`texture.needsUpdate` 被 StrictMode 消耗**：第一次 mount 时 Three.js 检测到 `needsUpdate=true` → 上传纹理到 GPU → 设 `needsUpdate=false`。StrictMode 卸载 WebGL 上下文后第二次 mount（真正的渲染），纹理对象被缓存复用但 `needsUpdate=false` → 纹理永远不再上传 → 显示 fallback 色。
-
-   **解决**：不依赖 `needsUpdate`。要么确保 GlobeViewer 只在纹理数据完全就绪后才挂载（避免材质切换），要么用 `key` 强制 Canvas 重建 WebGL 上下文。
-
-2. **R3F `<meshStandardMaterial>` 三元切换不可靠**：`{tex ? <M map={tex}/> : <M color/>}` 从 null→Texture 切换时，R3F 卸载旧材料挂载新材料，但纹理的 `needsUpdate` 状态可能已被前次渲染消耗。
-
-3. **`useGPUTerrain` 返回 1px 占位纹理**：该 hook 在真实地形烘焙完成前先返回一个 1px DataTexture。若在此阶段挂载 GlobeViewer，会先渲染黑球（占位纹理），真纹理到达后再切换材料——受 #1 和 #2 影响几乎必定失败。
-
-   **调试方法**：用 `performance.now()` 打时间戳日志追踪异步事件顺序。`[Violation] 'message' handler took Xms` 是 React scheduler 用 `MessageChannel.postMessage` 调度同步 work loop 的标志——这段时间内 KD-tree 构建和纹理烘焙在主线程阻塞执行。
-
-4. **生产模式无 StrictMode** → 本地开发通过不代表生产通过。`npm run build` 后的构建产物不会双重调用。
-
-### React Hooks 规则
-
-React 组件中的 hooks（`useState`、`useEffect`、`useMemo`、`useQuery` 等）**必须在每次渲染中以相同顺序调用**。禁止在 hooks 之间放置条件 `return`：
-
-```tsx
-// ❌ 错误：hooks 之间有 early return，导致 hook 调用顺序不一致
-if (!data) return null
-const computed = useMemo(() => ..., [data])  // 当 data 为 null 时不会被调用
-
-// ✅ 正确：所有 hooks 在 early return 之前调用
-const computed = useMemo(() => ..., [data])
-if (!data) return null
-```

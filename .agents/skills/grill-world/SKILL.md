@@ -1,5 +1,6 @@
 ---
-description: 拷问世界设定（设定 vs 引擎派生事实 vs 理论），跨层找矛盾并产出决策记录。当需要审一个世界/层/文明的自洽性时使用（如 /grill-world nacrea civilizations）。
+name: grill-world
+description: 拷问世界设定（设定 vs 引擎派生事实 vs 理论），跨层找矛盾并产出决策记录。当需要审一个世界/层/文明的自洽性时使用（如 grill-world nacrea civilizations）。
 ---
 
 # grill-world — 世界设定拷问
@@ -25,7 +26,7 @@ description: 拷问世界设定（设定 vs 引擎派生事实 vs 理论），�
 - **空间查询** `map/query.py::cell_facts(mesh, tree, lon, lat)`（koppen / 驯化潜力 / 离岸距离）
 - **天空几何** `engine/sky_geometry.py`：视直径 / 天空位置 / 凌掩 / Hill 球 / 视亮度 / 潮汐
 - **查询注册表** `query_registry.list_queries()` —— 7 个原语的 JSON Schema（可作 function-calling tools）
-- **数据路脚本**：读 `cvt_mesh.json` 做连通分量 / 占比统计（见 `/read-map` 的脚本模式）
+- **数据路脚本**：读 `cvt_mesh.json` 做连通分量 / 占比统计（见 `read-map` 技能 的脚本模式）
 
 > 数值一律从数据读，不许脑补；视觉只用于定性。只加 agent 不加事实库 = 更多更自信的幻觉矛盾。
 

@@ -59,7 +59,7 @@ P0 已全链路闭环（v0.20.0）：`EcologyEngine` 读气候数据，逐 cell 
    │  映射为：derived 层（类地球/异星实例化器推导），或 input 层（奇幻硬设定）
 ```
 
-这符合 CLAUDE.md 既有约定："LLM 只改 input，引擎负责 derived——防止 LLM 幻想物理结果"。**结构骨架是 input/derived 皆可，物种实例是 derived（奇幻除外）。**
+这符合 AGENTS.md 既有约定："LLM 只改 input，引擎负责 derived——防止 LLM 幻想物理结果"。**结构骨架是 input/derived 皆可，物种实例是 derived（奇幻除外）。**
 
 ### 1.4 三种风格 = 同一种骨架下的三种实例化器
 

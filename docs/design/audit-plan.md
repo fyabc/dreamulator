@@ -32,7 +32,7 @@
 | 技术债 #4：build dirty 判定 ✅（`pipeline.py::_is_dirty` 已实现） | 输入 mtime 指纹替代"输出存在即跳过"（8/6、8/13 两次踩中） | `pipeline._is_dirty()` + 测试 |
 | 技术债 #22：`derive_world_parameters()` ✅（2026-08-15 已实现） | build 时输出 `world_parameters.yaml`（原始 + 衍生参数），杜绝手算手抄 | 纯函数 + YAML 导出 + 测试（已完成） |
 | 静态导出同步检查 ✅（见 `audit/wave1-static-export-sync.md`） | `export_static.py` / `staticClient.ts` / `client.ts` 三件套与当前 API 端点逐一比对（v0.10.0 地图 404 教训） | 差异清单 |
-| i18n 硬编码扫描 ✅（见 `audit/wave1-i18n-residual.md`） | 组件中的硬编码中文 → `t()`（CLAUDE.md 约定） | 修复 commit |
+| i18n 硬编码扫描 ✅（见 `audit/wave1-i18n-residual.md`） | 组件中的硬编码中文 → `t()`（AGENTS.md 约定） | 修复 commit |
 | 前端二进制化前架构审视 ✅（评审见 `audit/wave1-binary-format-review.md`） | JSON→MessagePack/FlatBuffers（§七 P0）动工前的数据结构与 Worker 边界评审 | 评审纪要（已完成，MessagePack 落地） |
 | 地质管线漂移审计 ✅（见 `audit/wave1-geological-pipeline-drift.md`） | geological-pipeline.md 与实现的漂移定位 | 漂移清单 |
 

@@ -1,8 +1,9 @@
-# Claude Code 技能（Skill）
+# 项目技能（Skill）
 
-本页速查 dreamulator 的 Claude Code 自定义技能（`.claude/commands/`）。技能在
-Claude Code 里以 `/技能名 参数` 触发；技能文件本身是完整指令（角色/工作流/维度清单），
-本页只给「触发方式 + 典型用法 + 依赖 + 产出」。
+本页速查 dreamulator 的项目技能。技能按 Agent Skills 开放格式写在 `.agents/skills/<技能名>/SKILL.md`，
+Codex 直接读取这里；Claude Code 读取由 `scripts/dev/sync_agent_skills.py` 生成的 `.claude/skills/` 副本。
+Claude Code 以 `/技能名 参数` 触发，Codex 以 `$技能名 参数` 触发或在任务描述匹配时自动选用；下文示例使用 Claude Code 的写法。
+技能文件本身是完整指令（角色、工作流与维度清单），本页只给触发方式、典型用法、依赖与产出。修改技能时编辑 `.agents/skills/`，再运行同步脚本。
 
 ## 技能列表
 

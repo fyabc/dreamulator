@@ -16,7 +16,7 @@ docs/
 跨世界统一气候分类的单一主题目录（2026-09-24 文档收拢）：`specification.md`（主文档/规格书）、
 `design-anchors.md`（设计原则 + 锚点体系 + 已否证方向）、`examples/`（地球观测 + 太阳系四天体 +
 nacrea 架空世界的 worked examples）、`research/`（专项评审、L2 分类实验、天体气候划分文献调研、
-时间基准二元性裁决）。详见 `ucc/CLAUDE.md`。
+时间基准二元性裁决）。详见 `ucc/AGENTS.md`。
 
 ## knowledge/ — 学科知识库
 
@@ -24,7 +24,7 @@ nacrea 架空世界的 worked examples）、`research/`（专项评审、L2 分�
 
 LLM 编写世界 input 文件时应参考这些文档确保物理合理性；开发者实现模拟引擎时参考其中的公式和参数。
 
-详见 `knowledge/CLAUDE.md`。
+详见 `knowledge/AGENTS.md`。
 
 ## worldbuilding/ — 世界创建指南
 
@@ -35,7 +35,7 @@ LLM 编写世界 input 文件时应参考这些文档确保物理合理性；开
 - 常见架空世界设计模式和反模式
 - 创意决策的指导原则
 
-详见 `worldbuilding/CLAUDE.md`。
+详见 `worldbuilding/AGENTS.md`。
 
 ## usage/ — 项目用法指南
 
@@ -47,7 +47,7 @@ LLM 编写世界 input 文件时应参考这些文档确保物理合理性；开
 - 文明地图使用指南（`civmap-guide.md`）
 - 3D 恒星系可视化器操作（`frontend-3d-viewer.md`）
 
-详见 `usage/CLAUDE.md`。
+详见 `usage/AGENTS.md`。
 
 ## design/ — 架构设计文档
 
@@ -59,7 +59,7 @@ LLM 编写世界 input 文件时应参考这些文档确保物理合理性；开
 
 > 统一气候分类（UCC）已于 2026-09-24 收拢到独立目录 [`ucc/`](ucc/)，不再属于 `design/proposals/`。
 
-详见 `design/CLAUDE.md`。
+详见 `design/AGENTS.md`。
 
 ## 命名约定
 

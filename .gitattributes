@@ -1,0 +1,7 @@
+# Agent instruction and skill files are compared byte-for-byte across
+# Linux and Windows checkouts; keep them LF everywhere.
+AGENTS.md text eol=lf
+CLAUDE.md text eol=lf
+.agents/** text eol=lf
+.claude/skills/** text eol=lf
+.codex/** text eol=lf
