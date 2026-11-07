@@ -2,7 +2,7 @@
 
 按域分组，共 72 个脚本（含 gcm/ 子组 6 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
-模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §8
+模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §6
 与 `docs/usage/climate-validation-workflow.md`。
 
 ## climate/gcm/ — ExoPlaSim offline oracle（6 个）

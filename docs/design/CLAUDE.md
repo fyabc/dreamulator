@@ -70,7 +70,7 @@
 - `moist-static-energy-convergence.md` — 湿静力能辐合闭合的终止说明：局地闭合在阶段 0 未通过再分析规定输入检验，未进入实现；保留主张、否证依据与数据限制，湿槽维持三轮停止点，Lindzen–Nigam 模型仅作补充候选。2026-11-02 立项并终止。
 - `seasonal-heat-capacity-closure.md` — 季节热容量闭合的结构问题与验收边界：现行公式由气候管线维护，提案保留地球振幅与相位约束、短年不确定性和三条候选；海冰按陆地热容量处理已否证，产品维持现行闭合。
 - `climate-engine-round.md` — 气候迭代的收口结论，记录已完成工作、路线判决和专项提案指针；技术参考由气候管线维护，首份评分卡保存在气候验证指南的文首历史块。
-- `climate-layer-improvement.md` — 气候层改进方案（按要素+DAG 组织：§1 温度、§2 气压、§3 风场、§4 洋流、§5 降水、§6 分类；含已否证方向清单，不堆积实验记录）
+- `climate-layer-improvement.md` — 参数化气候引擎的改进方案：按温度、气压、风场、洋流、降水与分类六节记录设计依据、残余、候选与已否证方向，现行实现指向气候管线；§7 是残余与已知局限的单一登记处，含 GCM 交叉核查残余与单圈体制
 - `climate-gcm-plan.md` — 气候层 GCM 方案（远期备选，全动力学替代诊断式 DAG，关注涌现 vs 高效的平衡 + GPU 加速杠杆）
 - `climate-steady-coupling.md` — 气候层稳态耦合中间态（远期提案：DAG 某一步 T↔P 耦合解定点，介于单向 DAG 与瞬态 GCM 之间，先关 T↔P 干旱度反馈）
 - ~~`unified-climate-taxonomy.md`~~ — **已迁出（2026-09-24 UCC 文档收拢）**：跨世界统一气候分类 UCC 现居 `docs/ucc/`（规格书 `specification.md` + 设计锚点 `design-anchors.md` + 例证 `examples/` + 评审研究 `research/`）
