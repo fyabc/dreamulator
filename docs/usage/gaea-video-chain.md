@@ -1,7 +1,7 @@
 # Gaea 2 视频素材链操作手册和踩坑记录
 
 本文档是卫星影像素材 MVP 第 ② 步的操作配方：把 `export region` 数据包
-（pack v4，契约见 [../design/proposals/blender-render-pipeline.md](../design/proposals/blender-render-pipeline.md)）
+（pack v4，契约见 [../design/pipelines/region-pack.md](../design/pipelines/region-pack.md)）
 送进 Gaea 2 做米级侵蚀，导出供第 ③ 步气候权威着色和第 ④ 步 Blender 渲染
 使用的 8K 高程与掩膜。GUI 操作细节（按钮位置、节点面板）以 KilroysKartography
 「终极写实主义」教程 Part 2（B 站转载 BV15EHR6NEoC，05:28 起）为准；本文只固定

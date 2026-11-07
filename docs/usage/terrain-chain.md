@@ -73,8 +73,7 @@ dreamulator export region nacrea --lat 15 --lon -100 --span-km 550 \
 构建产物里没有月度气候序列时不写该通道（水文提取回退到降水权重并
 打印提示）。
 窗口数学与通道语义见
-[design/proposals/blender-render-pipeline.md](../design/proposals/blender-render-pipeline.md)
-的契约一节。
+[design/pipelines/region-pack.md](../design/pipelines/region-pack.md)。
 
 **GCM 气候分支导出**：加 `--branch gcm-t42-712`（气候层固定为 ExoPlaSim T42
 投影结果的分支，`climate_source: gcm`）时，降水/温度/径流/Köppen/群系全部取

@@ -121,10 +121,10 @@
 | P1 | **画布条件场的构造结构**（金字塔、同质山地与高原无镶边源于条件场只带格子平均；结构场、TD 细节配方、气候守恒重采样，以及曙光、南方大陆与世界岛东南的连续山带来源已进入生产；剩余为有来源的主谷、山前与高原坡折几何和沿岸平原宽度。永耀岛的例证见提案 §2 读法 5）→ [canvas-conditioning-structure.md](proposals/canvas-conditioning-structure.md) | 对照 2–3 天 + 实现 1 周 | ★★★★ |
 | P1 | **山系形态与地球的差距**（窄长山带、高原内部结构与镶边、老造山带宽度继承与分段、25–150 km 顺走向山脊；引擎部分随下一次全层重建，画布部分随同次画布重生成；[terrain-morphology-gap.md](proposals/terrain-morphology-gap.md)） | 2–4 周 | ★★★★ |
 | P3 | ~~构造-侵蚀 Δt 耦合~~——随流水侵蚀关闭搁置，重启再评估 | — | ★★ |
-| **P0** | nacrea 样板世界改造（五）：天文/地质/气候/文明种子已就绪；视频素材三件套 ✅（2026-10-02 合入）+ Blender 高清渲染链 MVP 落地（`export region` + bpy 静帧），后续 = 多图层包/相机动画/全球整球（[blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | — | ★★★★★ |
+| **P0** | nacrea 样板世界改造（五）：天文/地质/气候/文明种子已就绪；视频素材三件套 ✅（2026-10-02 合入）+ Blender 高清渲染链 MVP 落地（`export region` + bpy 静帧），后续为相机动画与整球渲染（[blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | — | ★★★★★ |
 | P1 | **月度矢量场展示** ✅ 2026-10-23：月度风场箭头与粒子流、洋流粒子流（洋流为年均场）；操作见 `usage/map-workflow.md` §4 | — | ★★★★ |
 | P1 | 文明层半格式化 Schema（3C） | 1–2 周 | ★★★★ |
-| P2 | 视频素材后续（Blender 链扩展：多图层数据包 / 相机动画 / 全球整球；见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | 按镜头排 | ★★★ |
+| P2 | 视频素材后续（Blender 链扩展：相机动画与整球渲染，多图层数据包已实现；见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | 按镜头排 | ★★★ |
 | P2 | **气象图层与太空镜头链**（L2 程序化云纹理 ✅ 2026-10-18：`export globe`，球面逐点 fBm + 流场扭曲 + 卷云拉丝；L3 参数化气旋模板 ✅ 2026-10-22；L5 大气渲染原型 ✅ 2026-10-22：恒星光谱定标、透射率表、多次散射表、云壳分层、云影与海面太阳高光；双层云壳（4 km 低云 + 9 km 卷云）✅ 2026-10-22；高壳卷云投影与卫星食通用接口 demo ✅ 2026-10-23；L4 云系平流原型 ✅ 2026-10-22（年均风占位，定版等 L1 6 小时风场）；GCM 年均云量接入 ✅ 2026-10-23（总云量取代占位场，低/高云分配两层云壳）；L1 图层包单帧接入 ✅ 2026-10-24（逐帧云量 3 帧时间平均 + 1 格距高斯平滑、两层分配与包内日下点，`--weather-pack`/`--frame`）；L4 逐帧风场 ✅ 2026-10-24（低/中云壳 `u_mid/v_mid`、卷云壳 `u_high/v_high`，小数帧线性插值，`cloud_flow_video.py --weather-pack`）；L3 真实轨迹 ✅ 2026-10-24（移动温带气旋逐帧驱动模板、准静止默认不画、热带按 `tc_genesis_potential` 正典参数化，`media/cyclone_tracks.py`）；余云顶诊断、L5 夜面城市灯光、静帧纹理逐帧风定向；L2 路线二（真实卫星斑块拼贴）已登记待评估） | 随图层包批 | ★★★★ |
 | P3 | **天球星历的事件搜索与 N 体（M4）**：查询、命令行、端点、前端天球视图与背景天球已实现（[技术参考](pipelines/sky-ephemeris.md)）；剩余食、凌与连珠的时刻搜索，长时段节点进动接 REBOUND，按消费方需要启动 → [sky-ephemeris.md](proposals/sky-ephemeris.md) | 按需 | ★★ |
 | P3 | 高清行星系视图（类 Space Engine：真实周期轨道动画 + 高清天体渲染；原视频素材轮的轨道动画项拆出独立立项，2026-10-02） | 调研后估 | ★★ |

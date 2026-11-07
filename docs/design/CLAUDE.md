@@ -36,6 +36,7 @@
 - `orbital-weather-globe.md` — 太空俯瞰星球媒体链：L2 云纹理、L3 气旋模板、L5 单次散射大气、L1 接口与后续
 - `gcm-weather-pack.md` — GCM 气象图层包（L1）：高频瞬时快照、ISCCP 云量分层与云顶、测高公式高度、TempestExtremes 式气旋检测与追踪、包结构与读取
 - `sky-ephemeris.md` — 天球星历与背景天球：观测者天空查询的模块分工、自转轴阶梯、升落与快路径、命令行与三个只读端点、背景天球派生及已知限制
+- `region-pack.md` — 区域数据包与 Blender 静帧：方位等距窗口、C1 取样、包内文件与 `meta.json` 契约、float32 并列最近邻的对齐口径、Blender 地形源选择与渲染基线
 
 ### proposals/ — 设计提案 + 方法论
 
@@ -49,7 +50,7 @@
 - `ai-cli-commands.md` — AI CLI 命令组设计（ai narrate/imagine/assist 等）
 - `moltke-engine.md` — Moltke Engine 独立实体引擎设计概要（ECS + 差分数据流）
 - `gaea-refinement.md` — Gaea 局部精细化（全局管线之后的区域后处理；提案，未实现）
-- `blender-render-pipeline.md` — Blender 高清渲染链（区域数据包 `dreamulator export region` + bpy 脚本重建场景；MVP 已实现，路线节登记扩展）
+- `blender-render-pipeline.md` — Blender 高清渲染链的定位与设计选择（脚本重建工程、纯数据直出、细化层独立成包、每场一个文件）；区域数据包与静帧已实现，技术参考在 `pipelines/region-pack.md`，提案登记相机动画与整球渲染等路线
 - `sky-ephemeris.md` — 天球星历查询：引擎查询、命令行、消费方接线、前端天球视图与背景天球已实现（技术参考在 `pipelines/sky-ephemeris.md`），提案保留设计选择、未实现的事件搜索与 N 体及开放问题；2026-11-01 立项
 - `monthly-climate-display.md` — 月度温度/降水展示（Phase 4 前端延伸；SunControl 周年滑杆驱动月度图层；提案，未实现）
 - `nonspecialist-entry.md` — 非专业用户入口（前端 UI 提案与「非专业用户导入」合并）：现状核查发现导入链的高程语义在归一化与米之间未定、`sample_heightmap` 的米制参数是死参数，所以阶段 A 先定契约，再做导入面板即文档（两个数字 + 可选掩膜 + 写盘前预览陆地占比 + 长宽比与位深警告）、计算过程可见（已有阶段划分与逐月场当时间轴，不做流式渲染）与入口放出；2026-11-04 立项

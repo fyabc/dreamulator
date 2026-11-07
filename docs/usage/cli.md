@@ -463,8 +463,8 @@ Blender 当贴图（不烘焙光照），`preview.png` 叠软 hillshade 供肉�
 Köppen 与群系各一份 uint8 类别码 `.npy` 加调色板配色 PNG。
 类别码在全网格上按类名字典序分配，同一世界不同区域的同类同码；`meta.json` 的
 `climate.*.legend` 只列本窗口出现的类，`missing` 字段给出缺值像素数。所有通道与高度
-共用同一次全网格索引切片的像素盒，套准由构造保证。设计文档见
-[design/proposals/blender-render-pipeline.md](../design/proposals/blender-render-pipeline.md)。
+共用同一正方形输出网格，套准由构造保证。技术参考见
+[design/pipelines/region-pack.md](../design/pipelines/region-pack.md)。
 
 ### 程序化侵蚀（export build --method spl）
 

@@ -23,6 +23,6 @@
 
 ## 关联
 
-- 区域地形渲染链：`docs/design/proposals/blender-render-pipeline.md`
+- 区域地形渲染链：`docs/design/pipelines/region-pack.md`（设计理由见 `docs/design/proposals/blender-render-pipeline.md`）
 - 全球画布与图像导出：`docs/design/pipelines/canvas-chain.md`
 - 太空俯瞰星球媒体链：`docs/design/pipelines/orbital-weather-globe.md`

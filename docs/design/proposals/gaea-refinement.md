@@ -52,7 +52,7 @@ refine_regions:
 切点，x 东、y 北，平面坐标即真实公里数，与全球画布链共用 `map/td_canvas.py` 的
 `CanvasGeometry` 换算单源。窗口在任意纬度都是真实千米正方形，极区中心与跨 ±180°
 经线的窗口都可直接导出；只有 span 触及对跖点（πR）时才拒绝，那里投影本身退化。
-区域窗口的投影约定与输出栅格见 `blender-render-pipeline.md`「区域窗口数学」。
+区域窗口的投影约定与输出栅格见 [区域数据包第 1 节](../pipelines/region-pack.md#1-窗口)。
 
 **已否证方向**：球极平面投影（保角、<30° 跨度适用）曾作为极区窗口的候选方案，
 但方位等距在同样的窗口尺度上角点变形约 0.03%（550 km 窗口，变形量 = c/sin c），
@@ -206,7 +206,7 @@ WorldMachine Indie $119；全套商业工具约 $500 一次性（不含 PS 订�
    后期均匀降雨。落地 = gaea_refine 导出面除 16-bit 高程外**同分辨率导出
    precipitation_mm 栅格**，Gaea 侧作降雨 mask。
    ✅ 导出面已落地（2026-10-11，`export region` pack v2 气候通道），
-   契约见 blender-render-pipeline.md「链路与数据包契约」。
+   契约见[区域数据包第 3–4 节](../pipelines/region-pack.md#3-包内文件)。
 2. **往返协议的字段契约**：dayside 的区域往返承诺「米制量程与范围在往返中
    保全」——对应本库 baked_base manifest 必须记录（高程 min/max、地理范围、
    投影参数），即 §6 第 0 步「写入球面经纬坐标参考」的具体化。
