@@ -1048,9 +1048,13 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
 > 科学依据：`knowledge/geology/terrain_synthesis.md` §4.4（Cogley 1984；ETOPO1）
 
 双峰基准（大陆 850 m）+ 汇聚边界隆起后，板块内部残留为均匀高原——纯过程合成会把
-近半陆地堆到 >1000 m，而地球陆均高 ~350–500 m。`_apply_interior_lowlands` 以汇聚
-边界 cell（`boundary_type == "convergent"` 且 `distance_to_boundary_km == 0`）为源
-做多源 BFS，得每个陆壳 cell 到最近汇聚边界的距离 `d`，再按 Hermite smoothstep 下压：
+近半陆地堆到 >1000 m，而地球陆均高 ~350–500 m。`_apply_interior_lowlands` 做多源 BFS，
+得每个陆壳 cell 到最近源的距离 `d`，再按 Hermite smoothstep 下压。源由 `interior_lowland_origin` 决定：
+缺省 `orogen` 取汇聚边界 cell（`boundary_type == "convergent"` 且 `distance_to_boundary_km == 0`）与全部带造山带
+起伏的 cell（活动与老造山带组合后大于 0，由调用方以 `orogen_support` 传入）的并集；`boundary` 只取汇聚边界 cell。
+造山带不是克拉通内部：宽高原从边界向内展宽数百千米，只按边界起算会把高原内部压到力平衡上限以下（nacrea 两块
+主要高原约 460 m），所以缺省从造山带覆盖范围的外缘起算。nacrea 的现装地形按 `boundary` 生成，在其
+`terrain_config.yaml` 中显式保留，计划中的全层重生成时切换。
 
 ```
 lowering = depth × smoothstep(d / scale)
@@ -1073,6 +1077,7 @@ elev     = softmax(elev − lowering, sea_level + floor)   # 软钳制，只降�
 | `interior_lowland_depth_m` | 600 | 200–1200 | 深部最大下压量（m） |
 | `interior_lowland_distance_scale_km` | 1500 | 500–3000 | 下压 0→满深的距离（km） |
 | `interior_lowland_floor_m` | 0 | 0–200 | 下压后离海平面最低高度（m，0=海平面） |
+| `interior_lowland_origin` | `orogen` | `orogen` / `boundary` | 下压坡度的起点：造山带覆盖范围并汇聚边界，或只用汇聚边界（旧行为） |
 
 **沉积填充**（`_apply_deposition_fill`，紧接内部低地之后）：内部低地把深部压到海平面
 以下后，`floor` 软钳制把它们钳到 ~0m（先保住海岸线），并返回**被钳制的 cell 掩码**。

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- 内陆低地的下压坡度改为从造山带覆盖范围起算（`interior_lowland_origin`，缺省 `orogen`），宽高原不再被压到力平衡上限以下；nacrea 钉在旧行为 `boundary`，现装地形逐值不变，全层重生成时切换。山系形态提案补充地球对照：高原平板源于 3000 m 以上缺少中尺度结构来源，上限逐格截断与格平均镶边两条假设已否证，老造山带在网格尺度上已与乌拉尔相当。
 - 整理[气候层改进提案](docs/design/proposals/climate-layer-improvement.md)：六个要素节改为现行指针、设计依据、残余、候选与否证，执行日志与逐轮验收数字移出，全文由 1117 行减到约 410 行；气候管线补齐直减率、距离季、海冰面温度、边界层投影因子与洋流消费年风的说明。
 - 画布链新增[冰缘塑性锥度](docs/design/pipelines/canvas-chain.md#2512-冰缘的塑性锥度)技术参考；[冰川地貌提案](docs/design/proposals/canvas-glacial-landforms.md)第 6.1 节压缩为归因、裁决与已知瑕疵，逐轮实施记录移出，错误的冰缘定义进入已否证方向。
 - 整理[亚格子岛屿目录提案](docs/design/proposals/island-catalog.md)：已实现的阶段 A–C 指向地质管线，参数表改为实现值，过时的问题描述与已被取代的裁决删去，nacrea 的背星点裁决迁入设计笔记 0017。

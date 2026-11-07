@@ -470,6 +470,13 @@ class TerrainPipelineConfig:
     # Distance (km) from the nearest convergent boundary over which the
     # lowering ramps from 0 to full depth (smoothstep).
     interior_lowland_distance_scale_km: float = 1500.0
+    # Where the ramp starts.  "orogen" (default): convergent boundary cells plus every
+    # cell carrying orogen relief (active or old), so a plateau that widened hundreds of
+    # km inland is an orogen and keeps the mean elevation its force-balance cap allows;
+    # the craton begins where the orogen footprint ends.  "boundary": convergent boundary
+    # cells only, which lowers wide plateau interiors by up to the full depth (legacy;
+    # kept for worlds whose accepted terrain predates the fix).
+    interior_lowland_origin: str = "orogen"
     # Minimum post-lowering elevation above the calibrated sea surface (m).
     # 0 = sea level (the natural limit); cells below it are soft-clamped back so
     # the 0–100 m lowland band emerges naturally instead of piling at one value.
