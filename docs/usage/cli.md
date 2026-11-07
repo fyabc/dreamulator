@@ -63,7 +63,7 @@ dreamulator conlang tokenize <word>         # 显示 ASCIIPA 词的 token 分解
 
 ## 地形
 
-地形生成由 `dreamulator build` 统一管理（见 [build 命令](#构建)）。`terrain` 子命令组现在只提供查看/导出工具。
+地形生成由 `dreamulator build` 统一管理（见 [build 命令](#构建build)）。`terrain` 子命令组现在只提供查看/导出工具。
 
 ### 生成地形
 

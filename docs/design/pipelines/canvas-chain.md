@@ -139,7 +139,12 @@ GCM 到 CVT 的降水面积输出由 `gcm/cvt_area.py` 提供：接口从有序�
 
 ### 2.5.2 连续地形来源
 
-常规布局的高程底场用上节的抗混叠取样；连续来源入口则让每个 23 km 条件格独立积分一份显式来源。`write_canvas_inputs` 接收 `height_source`，经 `terrain_source.sample_canvas` 对各条件格求值；来源实现 `TerrainSource.evaluate` 按经纬度返回高程和海陆指示值。积分采用 Gauss–Legendre 求积并用方位等距投影的球面面积因子修正权重，高程均值与陆地覆盖率分别累计；求积阶数通过逐级加密（8、16、32、64、128）比较确定，相邻阶差的第 95 百分位 ≤ 2 m、最大 ≤ 10 m，源函数覆盖不足时报错、由调用者补齐来源范围（`FootprintTerrainSource` 提供匹配目标形状的布尔支持范围）。采用该入口时 `canvas.json` 的 `height_sampling` 为 `continuous-source-v1`，`height_source` 记录来源、求积阶数和覆盖率文件校验和；`geometry_fields/land_fraction.npy` 保存结构增量叠加前的陆地覆盖率，下游海陆判定继续使用最终高程。当前常规布局沿用抗混叠入口，连续来源由显式传入的局部试验使用。
+常规布局的高程底场用上节的抗混叠取样。连续来源有两种消费方式，两者共用同一积分器 `terrain_source.average_rectangles`：每个 23 km 条件格的方形足迹用 Gauss–Legendre 求积，权重乘以方位等距投影的球面面积因子，高程均值与陆地覆盖率分别累计。来源实现 `TerrainSource.evaluate` 按经纬度返回高程和海陆指示值。
+
+- **整高程来源**：`write_canvas_inputs` 接收 `height_source`，由 `sample_canvas` 以调用者给定的固定阶数 `height_quadrature`（缺省 8）求出全部条件格，结果替换抗混叠底场。`canvas.json` 的 `height_sampling` 为 `continuous-source-v1`，`height_source` 记录来源、求积阶数和覆盖率文件校验和；`geometry_fields/land_fraction.npy` 保存结构增量叠加前的陆地覆盖率，下游海陆判定继续使用最终高程。这一入口是诊断臂，没有进入生产布局。
+- **来源差额**：`integrate_source_correction` 只积分替换类来源返回的高程差额，结果加到参考 S3 的高程条件上（2.5.3 节）。来源须实现 `FootprintTerrainSource.footprint_support`，返回与条件格形状相同的布尔支持范围；支持范围之外差额为零。阶数按给定序列逐级加密（缺省 8、16、32、64、128），相邻两阶在支持格上的差的第 95 百分位不超过 2 m 且最大值不超过 10 m 时采用较高一阶；整个序列都未达标时报错，不写出部分结果。回执记录采用的阶数、支持格数、每级误差和准备耗时。生产所选山带均走这一入口。
+
+造山替换来源的支持范围按保守上界取：足迹半对角线约束了方位等距平面内的测地位移，因此一个旧来源格只有在其格心距离不超过「到最近参考格心的距离加两倍半对角线」时，才可能成为足迹内某点的最近格；新剖面再按其物理作用距离加入支持。窄于条件格的剖面因而不会漏积分。`ContinuousOrogenReplacement` 的重建依赖三角形顶点，支持范围再放宽一个源三角形最大边长；未知剖面实现保留全部请求足迹。
 
 来源对象分六族。全部对象的支持范围和参数在取样前确定，裁窗使用相同的来源；替换类来源只返回高程差额，对应下游过程的实际响应由相应算子另行验收，调用方在来源记录中保存端点哈希。
 
@@ -151,6 +156,8 @@ GCM 到 CVT 的降水面积输出由 `gcm/cvt_area.py` 提供：接口从有序�
 | 冻结阶段替换 | `FrozenStageTerrainField` | 冻结一段参考过程的高程变化用于替代输入：参考后高程 +（替代输入 − 参考前高程），各端点先完成重建与限幅再作差；替代输入等于参考输入时准确返回参考后高程。保留参考过程的差额，过程对新输入的实际响应另行检验。 |
 | 造山剖面与包络 | `ConservativeArcField`、`orogen_source.CollisionProfileField`、`collision_source_from_contract`、`orogen_source_from_native`、`OrogenEnvelopeProfileField`、`with_continuous_arc_envelope`（诊断用 `with_continuous_endcaps`） | 沿弧保守场按弧长测度映射到共享节点、隐式图扩散平滑（零端点通量）；碰撞剖面接入现有 Airy 截面、地球粗格翼坡标定与力平衡高程上限；组合来源按显式分段/缝合带编号准备，所选剖面先取包络最大值再与其余冻结贡献合成、最后减去旧包络（保留重叠山带的主导关系），准备接口检查来源唯一性与完整参考场重放。连续弧包络为每条有限弧准备方向距离剖面，端部策略与连接度随来源元数据记录，几何定义见 [造山剖面 4.1](../../knowledge/geology/orogen_topography.md#41-有限山带端部的数值延拓)。 |
 | 岸坡与陆架 | `coastal_source_from_native`、`CoastalPlainDifferenceSource`（`footprint_support`）、`ShelfEnvelopeDifferenceSource`、`ShelfCoastalDifferenceSource`、`shelf_source_from_native` | 从 `terrain_sources.npz` 的实际陆架输出与冻结低地目标准备连续岸坡差额（入口核对档案类型、格数、地形指纹与阶段连接；宽度、平原高程分界、山岸比例由调用方显式提供）。`footprint_support` 合并新剖面宽度与旧阶段改变顶点的实际岸距，覆盖旧端点重建的全部可能差额；`protection_policy="source-weight"` 将原生资格放入同一三角网按正权重组合。这些入口供连续地物试点显式使用，生产布局的采用范围另行验收。 |
+
+`surface_transport.hillslope_transport` 是供地表过程试点调用的线性坡面输运接口，没有接入画布生成。它在均匀物理网格上用成对有限体积通量求解 dh/dt = D∇²h：扩散系数以 m²/yr 给出，时段以年给出，子步数保证 D·dt/dx² ≤ 1/4；陆面之间交换等量反向的体积，邻海面以海面为固定基准并记录输出体积，外框零通量。回执 `TransportBudget` 记录陆地初末体积、输出体积、残差与子步数，相对残差超过 5×10⁻¹² 时报错。物理尺度见 [坡面输运](../../knowledge/geology/surface_transport.md)。
 
 `FrozenOrogenReplacement.continuous_reconstruction` 为连续背景组合准备独立的 `ContinuousOrogenReplacement`：所选来源、其余活动山带、古山带和冻结地壳指示量共用正权球面三角形重建，地壳覆盖作为原指示量的连续数值比例，两份最大值包络在贡献重建后分别求值再作差，原阶段的包络重建残差保持冻结；来源记录保存独立重建哈希、覆盖策略与源三角形最大边长支持范围。
 
@@ -186,6 +193,16 @@ dreamulator export canvas refine nacrea ORIGINAL_S3 NEW_LAYOUT \
 ```
 
 默认来源 map 按地质层继承分支解析，独立重算的来源可由 `--source-map` 指定。所选碰撞来源可声明 `collision_parameter_policy`：默认 `conservative_arc` 用完整有效接触的沿弧保守场；`known_contact_vertices` 沿用已接受的正贡献接触平滑、共享顶点均值和反距离平方延拓（重建使用完整界线计算横向距离与侧别，历史缺值仅提供界线几何），该策略在所选画布配置中显式记录，来源元数据保存缺史格、参数顶点与几何的独立哈希；两种剖面共用现行 Airy 截面、翼坡与高程上限，分别按原接受范围验收。板块对的明确极性与年代来源由地质契约保存，海沟、岛弧和陆架作用域使用地壳准备完成后的共同快照；接口时点、默认近似和缓存恢复见 [地质管线 6.1](geological-pipeline.md#61-历史契约汇聚边界段orogen_contractpy)。沿轴保守传递、西岸连续岸坡与暮光实际阶段响应已获局部效果接受（固定 S3 统计幅度及方向），常规非对称地质合成已将已有挠曲作用域传入陆架阶段，连续岸坡与沿轴来源的常规画布接入分别推进。
+
+**生产采用范围。** 现装 nacrea 画布树中，只有下表三张画布用原生来源替换了所选山带，其余十六张沿用 S3 的高程条件。三张画布都以各自已接受批次的冻结共享场作统计参照，参照目录记录在 `layout.json.height_refinement.config`。
+
+| 画布 | 所选来源 | 碰撞参数策略 | 达标求积阶数 | 支持条件格 |
+|---|---|---|---:|---:|
+| `aurora`（曙光） | 活动分段 seg_064 | `conservative_arc` | 128 | 2688 |
+| `land_-24p4_+132p6`（南方大陆） | 古缝合带 suture_p4 | 不适用 | 32 | 1159 |
+| `world-southeast`（世界岛东南） | 活动分段 seg_068 | `known_contact_vertices` | 128 | 7542 |
+
+表中采用依据是局部窗口的创作接受、来源重放和积分收敛，不是地球科学验收。两种碰撞参数策略的来源口径不同，按画布分别声明，不能互相代替。原生替换之后，全部画布又经过同源地质增量刷新，含参考冰的画布再换为冰下岩石条件（2.5.11 节）。每张画布的 `canvas.json.height_refinement` 保存最近一次来源更新，`reference_canvas_sha256` 记录它所基于的上一批画布描述；整批的山带选择与收敛回执保存在根 `layout.json.height_refinement`。
 
 高程来源更新时，先核对生成批次与目标地质网格的格心、高程和地形指纹。
 生成高程条件、附带月气候和渲染图各自保存来源版本；附带气候刷新与重新渲染分别消费现有地形块。
@@ -687,6 +704,10 @@ biome、Blender 各腿无需改动。
   `land_-66p5_-018p3` ↔ `land_-62p9_-050p8` 给出高程差 266 m 与 254 m、湖判定 1 处分歧、
   河段存在性一致；接缝点附近没有河段，流量比无从比较。高程差里海陆不一致的那一点按既定
   方案走 92 km 整体混合。其余 5 对配对画布尚未接入地形块，校验器对它们报「未验证」。
+- 高程条件的编码顺序与 TD 训练预处理不同。画布接口先求米制高程的足迹面积均值，TD 导入再对这个均值做一次
+  带符号平方根变换；训练数据则先对高清高程做变换，再按约 720 m 取中位数，最后在约 23 km 范围内求均值与
+  第 5 百分位。两种顺序的差异尚未用固定来源单独检验，物理高程均值与模型条件统计因此分别记录；
+  候选与检验方案见提案 4.2 节。
 - S5 目前只有单张画布的总览图（2.8 节），跨画布拼合的大陆与全球概览尚未实现；计划见 6.1 节。
 - 细尺度浅冰响应在 5750 m 网格上求解。流动把冰量推进平坦低地时，冰量增量回到像素的插值在陡坡上
   仍沿求解格留下折线台阶（暮光中部低地边缘）。台阶幅度很小，作为已知限制保留；更细网格上的显式求解
