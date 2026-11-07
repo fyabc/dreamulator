@@ -1212,10 +1212,25 @@ def _synthesize_asymmetric(
         from .orogen_mesoscale_relief import (
             apply_orogen_mesoscale_relief,
             mesoscale_relief_field,
+            orogen_strike_frame,
         )
 
         support = orogen > 0.0
-        field = mesoscale_relief_field(mesh.cell_xyz, support, config.radius_km, config.seed + 800)
+        meso_strike: np.ndarray | None = None
+        meso_coherence: np.ndarray | None = None
+        if config.orogen_mesoscale_anisotropy > 1.0:
+            meso_strike, meso_coherence = orogen_strike_frame(
+                mesh.cell_xyz, orogen, support, config.radius_km
+            )
+        field = mesoscale_relief_field(
+            mesh.cell_xyz,
+            support,
+            config.radius_km,
+            config.seed + 800,
+            strike=meso_strike,
+            coherence=meso_coherence,
+            anisotropy=config.orogen_mesoscale_anisotropy,
+        )
         elevation, meso_delta = apply_orogen_mesoscale_relief(
             elevation, orogen, field, config.orogen_mesoscale_relief_m_per_km, sea_level
         )

@@ -482,6 +482,11 @@ class TerrainPipelineConfig:
     # 75 brings plateau interiors to Tibet/Altiplano levels (240–304 m); range 50–100.
     # 0 disables (legacy, for worlds whose accepted terrain predates the stage).
     orogen_mesoscale_relief_m_per_km: float = 75.0
+    # Along/cross-strike kernel width ratio of that relief at full strike coherence: ranges and
+    # basins run parallel to the belt (Earth's 25–150 km band is strike-parallel, parallel
+    # share 0.65). Numerical closure informed by internal ranges ~3–5x longer than wide;
+    # 1 = isotropic.
+    orogen_mesoscale_anisotropy: float = 3.0
     # Minimum post-lowering elevation above the calibrated sea surface (m).
     # 0 = sea level (the natural limit); cells below it are soft-clamped back so
     # the 0–100 m lowland band emerges naturally instead of piling at one value.
