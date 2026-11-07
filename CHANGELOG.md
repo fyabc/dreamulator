@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- 整理[亚格子岛屿目录提案](docs/design/proposals/island-catalog.md)：已实现的阶段 A–C 指向地质管线，参数表改为实现值，过时的问题描述与已被取代的裁决删去，nacrea 的背星点裁决迁入设计笔记 0017。
 - 新增[区域数据包管线参考](docs/design/pipelines/region-pack.md)，按现行代码补齐数据包文件与元数据契约；[Blender 渲染链提案](docs/design/proposals/blender-render-pipeline.md)只保留定位、设计选择与路线，相关引用改指管线参考。
 - 新增[天球星历管线参考](docs/design/pipelines/sky-ephemeris.md)，[星历提案](docs/design/proposals/sky-ephemeris.md)只保留设计选择、未实现的事件搜索与 N 体及开放问题，用法文档和代码注释改指向管线参考。
 - 将[画布条件场提案](docs/design/proposals/canvas-conditioning-structure.md)第 4.2 节压缩为来源状态表、归因结论、候选与否证结论；画布链补齐三张画布的生产采用表、来源差额的覆盖与收敛门、坡面输运接口和 TD 条件编码限制，并修正两处失效的目录锚点。
