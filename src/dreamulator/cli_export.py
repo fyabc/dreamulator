@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import math
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
@@ -667,6 +668,25 @@ def export_build(
     raise typer.Exit(code=2) from None
 
 
+def _canvas_sheet_home(pack: Path, kind: str) -> Path:
+    """Default output home for pack-derived images: ``exports/canvas/<slug>/<kind>``.
+
+    Canvas window packs land under ``<canvas>/<window>``, canvas roots under
+    ``<canvas>``, legacy region packs under their pack name.  Generated sheets
+    stay out of the canvas tree: that tree is transfer-owned chain data and is
+    gitignored, while images are export products (repo discipline puts them
+    under ``exports/``).
+    """
+    export_root = Path(os.environ.get("DREAMULATOR_EXPORT_DIR", "exports"))
+    parts = pack.parts
+    if "canvases" in parts:
+        canvas = parts[parts.index("canvases") + 2]
+        slug = f"{canvas}/{parts[-1]}" if "windows" in parts else canvas
+    else:
+        slug = pack.name
+    return export_root / "canvas" / slug / kind
+
+
 @export_app.command("render")
 def export_render(
     pack: Path = typer.Argument(
@@ -746,7 +766,7 @@ def export_render(
         if not build_dir.is_dir():
             console.print(f"[red]Build dir not found: {build_dir}[/red]")
             raise typer.Exit(code=2) from None
-        out_dir = output or (pack / "color")
+        out_dir = output or _canvas_sheet_home(pack, "color")
         console.print(f"Colorizing {pack}/input + {build_dir} → {out_dir}")
         try:
             paths = colorize_region(pack, build_dir, out_dir, texture=texture)
@@ -762,7 +782,7 @@ def export_render(
         from dreamulator.media.medieval_render import medieval_region
         from dreamulator.media.relief_render import relief_region
 
-        out_dir = output or (pack / "carto")
+        out_dir = output or _canvas_sheet_home(pack, "carto")
         if style in ("biome", "relief"):
             if style == "relief" and vegetation_palette is not None:
                 info = relief_region(

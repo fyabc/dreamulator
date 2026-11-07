@@ -18,7 +18,7 @@ min over the pack's ``height_gaea_png_range_m``), then the raw engine pack
 Usage (Blender's bundled Python — args after ``--`` are ours):
     blender -b -P scripts/media/blender/region_still.py -- \
         --datadir <pack-dir> \
-        [--render renders/still_001.png] [--res 1920x1080] \
+        [--render still_001.png] [--res 1920x1080] \
         [--samples 256] [--zscale 1.0] [--mesh-res 2048] \
         [--terrain auto|refined|gaea|input] [--subsurf 0] [--blend out.blend]
 
@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -54,6 +55,23 @@ SKY_STRENGTH = 0.6
 GAEA_HEIGHT_EXRS = ("rivers-h.exr", "erosion2-h.exr")
 
 
+def _export_home(datadir: Path) -> Path:
+    """``exports/canvas/<slug>/`` — mirrors ``cli_export._canvas_sheet_home``.
+
+    Render products live with the other exports, not inside the (gitignored,
+    transfer-owned) canvas tree: window packs under ``<canvas>/<window>``,
+    canvas roots under ``<canvas>``, legacy region packs under their name.
+    """
+    root = Path(os.environ.get("DREAMULATOR_EXPORT_DIR", "exports"))
+    parts = datadir.parts
+    if "canvases" in parts:
+        canvas = parts[parts.index("canvases") + 2]
+        slug = f"{canvas}/{parts[-1]}" if "windows" in parts else canvas
+    else:
+        slug = datadir.name
+    return root / "canvas" / slug
+
+
 def parse_args() -> argparse.Namespace:
     """Parse our flags from Blender's trailing ``--`` arguments."""
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
@@ -63,7 +81,7 @@ def parse_args() -> argparse.Namespace:
         "--render",
         type=Path,
         default=None,
-        help="Output PNG (skip = build only; bare name → <datadir>/renders/)",
+        help="Output PNG (skip = build only; bare name → exports/canvas/<slug>/renders/)",
     )
     p.add_argument("--res", default="1920x1080", help="Render resolution WxH")
     p.add_argument("--samples", type=int, default=256)
@@ -84,13 +102,15 @@ def parse_args() -> argparse.Namespace:
     args = p.parse_args(argv)
     # Blender resolves relative paths against its own startup context, not the
     # shell's CWD — make every path absolute up front.  A relative --render
-    # path always goes under <datadir>/renders/ (renders live with the pack).
+    # path and the default .blend go under exports/canvas/<slug>/ (products
+    # live with the other exports, not inside the canvas tree).
     args.datadir = args.datadir.resolve()
-    args.blend = (args.blend or args.datadir / "scene.blend").resolve()
+    home = _export_home(args.datadir)
+    args.blend = (args.blend or home / "scene.blend").resolve()
     if args.render is not None:
         rp = args.render
         if not rp.is_absolute():
-            rp = args.datadir / "renders" / rp
+            rp = home / "renders" / rp
         args.render = rp.resolve()
     return args
 

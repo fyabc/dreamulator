@@ -654,7 +654,10 @@ S4 按这些配对点对同一地点取样，检查接缝高程、湖、河与�
 
 输出目录是 `input/`（区域数据包通道与 meta）与 `refined-out/`（高程、水体掩膜、河段矢量
 与 meta），与 `export region` 加 `export build` 的产物同构，所以 colorize、carto、relief、
-biome、Blender 各腿无需改动。
+biome、Blender 各腿无需改动。各渲染腿的图像产物（`export render` 的 carto 与 color、
+`region_still.py` 的 renders 与 scene.blend）默认写在
+`exports/canvas/<画布>/<窗口>/` 下对应子目录（2026-11-07 迁移：画布目录只留链数据，
+产物归 exports 与其余导出链一致）；S2 的断点续算工作区 `hydro-work/` 完成后可清理。
 
 **渲染侧的河湖衔接**：河链会刻意把最后一段画进湖内一格，作为河与湖的可见连接。渲染载入
 时只删除两端都在水中的河段（`_river_lake_keep`），岸线穿越段保留；按岸边缓冲距离裁剪会

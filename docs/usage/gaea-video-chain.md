@@ -265,7 +265,7 @@ Gaea 的输出不回流引擎（地形 bake 往返协议是另一条待办线）
 ```bash
 uv sync --extra media        # 首次需要（OpenEXR 读 Gaea 的高度 EXR）
 dreamulator export render --style satellite <render-workdir>/nacrea-15_90_2350km
-# 读 <pack>/gaea-out/，写 <pack>/color/{albedo.png, preview.png}
+# 读 <pack>/gaea-out/（有 refined-out 时优先），写 exports/canvas/<slug>/color/{albedo.png, preview.png}
 ```
 
 实现 = `src/dreamulator/media/satellite_color.py`。口径：基色由引擎群系
@@ -323,7 +323,7 @@ Sea 的 Level（右击输 `400m` 最稳，或手算 −min/Height）。
 "/d/Blender 5.2/blender.exe" -b -P scripts/media/blender/region_still.py -- \
     --datadir <render-workdir>/nacrea-15_-100_2350km \
     --render still_4k.png --res 3840x2160 --samples 256
-# 写 <pack>/renders/*.png + <pack>/scene.blend（可随时由脚本重建）
+# 写 exports/canvas/<slug>/renders/*.png + 同目录 scene.blend（可随时由脚本重建）
 ```
 
 实现 = `scripts/media/blender/region_still.py`。地形默认取
@@ -367,7 +367,7 @@ Sea 的 Level（右击输 `400m` 最稳，或手算 −min/Height）。
 dreamulator export render --style survey <render-workdir>/nacrea-15_-100_2350km              # survey
 dreamulator export render <pack> --style hand                              # topo.hand.png
 dreamulator export render <pack> --style medieval --title "珠母星 · 海"
-# 读 <pack>/input + <pack>/gaea-out，写 <pack>/carto/
+# 读 <pack>/input + <pack>/gaea-out，写 exports/canvas/<slug>/carto/
 ```
 
 **survey（近代测绘风，默认）** = `carto_render.py`（复用 satellite_color
@@ -428,7 +428,7 @@ Earth 陆），`_lut_rgb` 查表上色；**查表值域用未 clamp 的引擎值
 
 ```bash
 dreamulator export render --style survey <render-workdir>/nacrea-15_-100_2350km --style medieval
-# 读 <pack>/input + <pack>/gaea-out，写 <pack>/carto/medieval.png
+# 读 <pack>/input + <pack>/gaea-out，写 exports/canvas/<slug>/carto/medieval.png
 ```
 
 实现 = `src/dreamulator/media/medieval_render.py`（与 carto_render 只共

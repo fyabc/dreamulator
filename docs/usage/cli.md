@@ -445,7 +445,7 @@ dreamulator export canvas mosaic <canvas_dir> --step 2    # 整画布超高清�
 ```bash
 uv sync --extra media        # 首次需要（OpenEXR）
 dreamulator export render data/worlds/nacrea/packs/nacrea-15_90_2350km --style satellite
-# 默认读 <pack>/gaea-out/，写 <pack>/color/{albedo.png, preview.png}
+# 默认读 <pack>/gaea-out/（有 refined-out 时优先），写 exports/canvas/<slug>/color/{albedo.png, preview.png}
 # --gaea / --output 可覆盖；--no-texture 关闭植被纹理（默认开）
 ```
 
