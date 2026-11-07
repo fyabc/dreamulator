@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793977192191,
+  "lastUpdate": 1794013211282,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1888,6 +1888,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007494623043795237",
             "extra": "mean: 4.0911717999989605 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "90e5ad96acf92a597090bc2fa70c1a5b1e646041",
+          "message": "feat(export): render products move to exports/canvas; S2 scratch leaves the canvas tree\n\nexport render 的 carto/color 图版与 region_still 的 renders/scene.blend 原先\n默认写在画布/窗口包内部，把产物混进传输态链数据目录，也违「导出产物一律进\nexports/」纪律。新增 _canvas_sheet_home（窗口包 → <画布>/<窗口>、画布根 →\n<画布>、旧 region 包 → 包名，尊重 DREAMULATOR_EXPORT_DIR），两脚本默认落点\n挂它，--output/--blend 覆盖保留。同轮清掉永耀岛 hydro-work/ 1.7 GB（S2 外存\n断点续算工作区，canvas-chain 明许完成后可清理），画布目录 2.5 GB → 589 MB，\n剩余全是重建必需链数据。cli.md / gaea-video-chain.md 五处引用与 canvas-chain\n§4 落点约定同步。canvases 维持 ignore：余下为数 GB 二进制链数据，单一事实源\n在服务器侧（传输契约签收表 + SHA256SUMS + freeze.json）。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-07T08:59:22+08:00",
+          "tree_id": "7db0770b7dcda63caf3d1612843d26e271a9c34e",
+          "url": "https://github.com/fyabc/dreamulator/commit/90e5ad96acf92a597090bc2fa70c1a5b1e646041"
+        },
+        "date": 1794013210460,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.3032282139290831,
+            "unit": "iter/sec",
+            "range": "stddev: 0.1178290802982518",
+            "extra": "mean: 3.2978461569999977 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.908498272025743,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05487269537265915",
+            "extra": "mean: 255.85274199998764 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.6562077414626915,
+            "unit": "iter/sec",
+            "range": "stddev: 0.9561743269179794",
+            "extra": "mean: 603.788990333328 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 992.866453113759,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005863658041168732",
+            "extra": "mean: 1.0071847999938655 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 198.00662767809064,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008399937800452328",
+            "extra": "mean: 5.050335999993649 msec\nrounds: 5"
           }
         ]
       }
