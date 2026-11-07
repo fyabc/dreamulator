@@ -118,7 +118,7 @@ Xie & Philander 1994）——雨出效率坍缩，水汽水平输出到暖池/IT
 ramp（热带/外热带结点 = GPCP 海洋格 e_rel/e_rel(0) 标定，热带敏感得多 = WTG 预期）；
 ΔSST 用符号化 5° 纬度带海洋格 cos 加权均值（半球不合并，防半球间对称差伪距平）；
 正距平零抑制（暖池/西边界流走廊的结构安全）；下限 f_min = 0.2（层积云 drizzle 残余）。
-标定细节与触发覆盖现状 → `docs/design/proposals/climate-layer-improvement.md` §5-α。
+标定细节与触发覆盖现状 → `docs/design/proposals/climate-layer-improvement.md` §5（SST 对流门的设计依据与残余）。
 
 ## 对流临界雨出门（降水是柱水汽的临界现象，2026-09-17）
 
@@ -154,7 +154,7 @@ x = W/W_sat(T)（W_sat 用冷阱同一个 `column_water_saturation`，冷区 x�
 暖池 x=1 结构性不动）；分段线性压制曲线，下限 f_min = 9d/150d（深沙漠观测滞留时间
 与引擎基底之比）。门在水分收支里按 iterate-once 应用：每月（和年）先用基底
 k_rain 解一遍得到 W₀，门由 W₀ 定出，然后带着门重解——每次求解仍是线性的。结点
-标定与验收现状 → `docs/design/proposals/climate-layer-improvement.md` §5-β。
+标定与验收现状 → `docs/design/proposals/climate-layer-improvement.md` §5（对流临界门的设计依据与共同前置）。
 
 ## 大陆西侧为什么干（副热带）
 
