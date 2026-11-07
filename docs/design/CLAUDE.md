@@ -35,6 +35,7 @@
 - `canvas-chain.md` — 全球画布链，包含连续地质来源、接受统计准备、气候反馈、两档高清图及外存水文接口。
 - `orbital-weather-globe.md` — 太空俯瞰星球媒体链：L2 云纹理、L3 气旋模板、L5 单次散射大气、L1 接口与后续
 - `gcm-weather-pack.md` — GCM 气象图层包（L1）：高频瞬时快照、ISCCP 云量分层与云顶、测高公式高度、TempestExtremes 式气旋检测与追踪、包结构与读取
+- `sky-ephemeris.md` — 天球星历与背景天球：观测者天空查询的模块分工、自转轴阶梯、升落与快路径、命令行与三个只读端点、背景天球派生及已知限制
 
 ### proposals/ — 设计提案 + 方法论
 
@@ -49,7 +50,7 @@
 - `moltke-engine.md` — Moltke Engine 独立实体引擎设计概要（ECS + 差分数据流）
 - `gaea-refinement.md` — Gaea 局部精细化（全局管线之后的区域后处理；提案，未实现）
 - `blender-render-pipeline.md` — Blender 高清渲染链（区域数据包 `dreamulator export region` + bpy 脚本重建场景；MVP 已实现，路线节登记扩展）
-- `sky-ephemeris.md` — 天球星历查询（任意观测点的天球位置/视直径/相位/升落；catalog 驱动的两体星历 + CLI/API，渲染与 FUI 共用 JSON，前端天球视图后续；提案，2026-11-01 立项）
+- `sky-ephemeris.md` — 天球星历查询：引擎查询、命令行、消费方接线、前端天球视图与背景天球已实现（技术参考在 `pipelines/sky-ephemeris.md`），提案保留设计选择、未实现的事件搜索与 N 体及开放问题；2026-11-01 立项
 - `monthly-climate-display.md` — 月度温度/降水展示（Phase 4 前端延伸；SunControl 周年滑杆驱动月度图层；提案，未实现）
 - `nonspecialist-entry.md` — 非专业用户入口（前端 UI 提案与「非专业用户导入」合并）：现状核查发现导入链的高程语义在归一化与米之间未定、`sample_heightmap` 的米制参数是死参数，所以阶段 A 先定契约，再做导入面板即文档（两个数字 + 可选掩膜 + 写盘前预览陆地占比 + 长宽比与位深警告）、计算过程可见（已有阶段划分与逐月场当时间轴，不做流式渲染）与入口放出；2026-11-04 立项
 - `browser-playground.md` — 浏览器气候实验台（Gate D 温度首图原型：拖放高度图 → 年均/逐月温度；规则 180×90 网格、只算温度；2026-10-23 原型落地，完整气候待引擎加速）

@@ -80,7 +80,7 @@ worlds) are deferred with M4's event search.
 M1 defers: eclipse/transit events and their times (M4), analytic velocities
 and disk position angles around the parent (derivable from the exported
 observer frame in M2), horizon profiles, refraction and light-time (proposal
-non-goals), and a background star catalogue (non-goal).
+non-goals).  Fixed background stars live in :mod:`dreamulator.engine.sky_background`.
 
 References:
 

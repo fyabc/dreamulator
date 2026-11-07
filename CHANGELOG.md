@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- 新增[天球星历管线参考](docs/design/pipelines/sky-ephemeris.md)，[星历提案](docs/design/proposals/sky-ephemeris.md)只保留设计选择、未实现的事件搜索与 N 体及开放问题，用法文档和代码注释改指向管线参考。
 - 将[画布条件场提案](docs/design/proposals/canvas-conditioning-structure.md)第 4.2 节压缩为来源状态表、归因结论、候选与否证结论；画布链补齐三张画布的生产采用表、来源差额的覆盖与收敛门、坡面输运接口和 TD 条件编码限制，并修正两处失效的目录锚点。
 - 将[季节热容量提案](docs/design/proposals/seasonal-heat-capacity-closure.md)整理为结构问题、候选与验收边界，现行参数和公式归入气候管线，保留海冰方案否证结论，并同步索引与验证指南回链。
 - 将[柱辐射场提案](docs/design/proposals/column-radiation-field.md)整理为物理依据、输入限制与验收，统一云诊断方案和否证结论，明确云顶结构复用仍是未决候选，并同步索引和引用。

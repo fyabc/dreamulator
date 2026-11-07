@@ -87,7 +87,7 @@
 - [ ] 将 `canvas-glacial-landforms.md` 的已实现冰缘定义与锥度参考归入 `canvas-chain.md`，保留错误定义的否证结论。
 - [ ] 将 `climate-layer-improvement.md` 的已实现参考归入气候管线，并将日志体改写为当前结论与否证列表。
 - [ ] 核对 `island-catalog.md` 的已实现接口与参数，补齐管线参考后压缩提案。
-- [ ] 核对 `sky-ephemeris.md` 的已实现接口与参数，补齐管线或用法参考后压缩提案。
+- [x] 新建[天球星历管线参考](../pipelines/sky-ephemeris.md)，收录模块分工、自转轴阶梯、升落与快路径、命令行与端点缓存及背景天球派生；提案由 119 行压到 41 行，保留设计选择、未实现的 M4 与开放问题，并改正命令行示例中的世界参数写法。
 - [ ] 核对 `blender-render-pipeline.md` 的已实现接口与参数，补齐管线或用法参考后压缩提案。
 
 本批文档链接与管线实现引用检查通过。

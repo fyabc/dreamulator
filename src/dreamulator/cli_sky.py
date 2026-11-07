@@ -1,7 +1,7 @@
 """``sky`` command — the observer's-sky ephemeris on the CLI.
 
-``sky`` runs the registered ``sky_ephemeris`` engine query (proposal
-``docs/design/proposals/sky-ephemeris.md`` M1) against a world's catalog and
+``sky`` runs the registered ``sky_ephemeris`` engine query (reference
+``docs/design/pipelines/sky-ephemeris.md``) against a world's catalog and
 prints the sky table (or its JSON — the exact payload consumers such as the
 video shot planner and FUI data cards read); the single-command group collapses
 so users type ``dreamulator sky <world> ...``.
