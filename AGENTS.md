@@ -408,6 +408,9 @@ physics → chemistry → astronomy → geological → climate → ecology → c
    `exports/`（已 gitignore），按链分子目录（`exports/globe/`、`exports/video/<类>/` 等）；
    相关导出/渲染脚本放 `scripts/media/` 随版本管理。`exports/` 内的大文件不进 git 也不走
    release（气象图层包等同理）。
+9. **长任务先估内存峰值，超限必须分块**：本机内存溢出会让整台机器重启，丢掉所有会话和未存盘的结果。
+   峰值预计超过可用内存一半的任务改为分块处理；后台长任务要设每进程内存上限（`ulimit -v`），
+   并挂一个看门狗，内存用量越线就终止该任务。
 
 ### 气候修改差异对比
 
