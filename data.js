@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794013211282,
+  "lastUpdate": 1794140786915,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -1947,6 +1947,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00008399937800452328",
             "extra": "mean: 5.050335999993649 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "aa15ca7311217e1ceb0c4e91aecb33c0e6e9cb7a",
+          "message": "refactor(export): retire the SPL erosion path; prog_erosion becomes hydrology primitives\n\nSPL programmatic erosion (--method spl / prog-out/) produced parallel comb\nchannels on smooth engine meshes (D8 receiver degeneracy) and no 90 m\nlandform detail; terrain-diffusion is the single build method now.\nRemoved: erode_region_pack, spl_erode, _hillslope_step, _roughness and the\n_spl_step_numba kernel, --method/--steps/--dt/--k options, prog-out probe\ncandidates in export render and the /packs display chain, SPL tests.\nKept: the hydrology primitives (priority-flood, accumulation, river/lake\nmasks, terminal-lake cascade, regime, river segments) shared by the TD leg\nand the canvas S2/S3 chain, and RIVER_THRESHOLD_CELLS as the calibrated\nchannel-onset threshold the TD hydrology defaults to.\nDocs: terrain-chain/cli rewritten to the TD-only current state; CHANGELOG\nRemoved entry; 2350 km SPL sample packs and their sheets deleted.\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-08T19:54:26+08:00",
+          "tree_id": "150072616a76c1e5951361948de9bc54ae1198ba",
+          "url": "https://github.com/fyabc/dreamulator/commit/aa15ca7311217e1ceb0c4e91aecb33c0e6e9cb7a"
+        },
+        "date": 1794140786459,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.2764629288428604,
+            "unit": "iter/sec",
+            "range": "stddev: 0.1418840936382829",
+            "extra": "mean: 3.617121486000002 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.002300666505698,
+            "unit": "iter/sec",
+            "range": "stddev: 0.053472673443401376",
+            "extra": "mean: 249.8562910000146 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.6566362980586085,
+            "unit": "iter/sec",
+            "range": "stddev: 0.9583575844482283",
+            "extra": "mean: 603.6327956666696 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 668.6439806479664,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00021403289927583204",
+            "extra": "mean: 1.4955641999961244 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 161.54481820265755,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00021369424880144248",
+            "extra": "mean: 6.190232600005174 msec\nrounds: 5"
           }
         ]
       }
