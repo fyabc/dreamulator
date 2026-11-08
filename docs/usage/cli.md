@@ -329,7 +329,7 @@ dreamulator guard archive nacrea --limit 20       # 归档最旧的 accepted，�
 |---|---|
 | `export layers` | 地图图层烘焙为 PNG（前端同色，守护轴取证） |
 | `export region` | 建区域数据包（Gaea/Blender 链的 `input/`） |
-| `export build` | 区域包的高清地形：`--method td`（terrain-diffusion）/ `spl`（程序化侵蚀） |
+| `export build` | 区域包的高清地形：terrain-diffusion 细化 + 水文（`--td` 仓库路径或 `--reuse-height`） |
 | `export render` | 区域包出图：`--style satellite`（卫星真彩）或制图 `survey/relief/biome/hand/medieval/all` |
 | `export globe` | 太空俯瞰镜头：地表/云纹理 + 双层云 + 大气 + 圆盘静帧（`clouds` 为历史别名） |
 | `export canvas` | 全球画布链子命令组：`plan`、`generate`、`status`、`hydrology`、`window`、`mosaic`，产出可直接 `export render` 的窗口包与整画布总览图 |
@@ -466,20 +466,6 @@ Köppen 与群系各一份 uint8 类别码 `.npy` 加调色板配色 PNG。
 共用同一次全网格索引切片的像素盒，套准由构造保证。设计文档见
 [design/proposals/blender-render-pipeline.md](../design/proposals/blender-render-pipeline.md)。
 
-### 程序化侵蚀（export build --method spl）
-
-视频链第②步的程序化变体（一条命令替代 Gaea 手动构建）：
-
-```bash
-dreamulator export build data/worlds/nacrea/packs/nacrea-15_-100_2350km --method spl
-# 写 <pack>/prog-out/（gaea-out 文件词汇，渲染腿 --gaea 指向它即可）
-# --steps 30 / --dt 5e4 / --k 2e-7 / --river-threshold 3000（默认即定版）
-```
-
-Priority-Flood 排水（Barnes 2014）+ 隐式流水功率侵蚀（Braun & Willett
-2013），吃 pack 的降水场。参数语义见 [usage/terrain-chain.md](terrain-chain.md) 与
-[knowledge/cartography/](../knowledge/cartography/README.md)。
-
 ### terrain-diffusion 细化 + 水文（export build）
 
 地形链第②步的主方法（引擎粗条件场 → 90 m 地貌重生成 → 排水/河网/湖）：
@@ -504,7 +490,7 @@ dreamulator export render <pack> --style biome                 # 群系图 biome
 dreamulator export render <pack> --style all                   # 一键出 topo + relief + biome 三张
 dreamulator export render <pack> --style hand                  # 旧印刷质感 topo.hand.png
 dreamulator export render <pack> --style medieval --title "珠母星 · 未知海域"
-# 读 <pack>/input + <pack>/gaea-out（或 --gaea 指向 refined-out/prog-out）
+# 读 <pack>/input + <pack>/gaea-out（或 --gaea 指向 refined-out）
 # survey → carto/{topo.svg, topo.png}；relief → carto/{relief.svg, relief.png}；
 # biome → carto/{biome.svg, biome.png}；hand → carto/topo.hand.png；medieval → carto/medieval.png
 # --title 自定义标题（默认「Nacrea —— 15°N 100°W 附近」式）

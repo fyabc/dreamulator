@@ -9,7 +9,6 @@ import pytest
 from scipy.ndimage import binary_erosion
 
 from dreamulator.map.prog_erosion import (
-    SPL_M,
     apply_terminal_equilibrium,
     flow_accumulation,
     heal_inland_water,
@@ -22,7 +21,6 @@ from dreamulator.map.prog_erosion import (
     regime_active_cells,
     river_mask,
     river_segments,
-    spl_erode,
     terminal_equilibrium_routing,
     terminal_lakes,
 )
@@ -152,21 +150,6 @@ def test_accumulation_grows_downstream() -> None:
     # The last land cell of the row carries the whole upstream row; the
     # frame edge itself is an outlet and does not count as producing land.
     assert row[w - 2] == pytest.approx(land[n_row][1:-1].sum())
-
-
-def test_spl_erode_cuts_channels_keeps_sea() -> None:
-    dem, land = _slope_east(64)
-    rain = np.where(land, 1.0, 0.0)
-    h, acc = spl_erode(dem.copy(), land, rain, steps=5, dt_yr=1e5, k_spl=1e-5)
-    # Sea cells untouched (base level), land only lowered (uplift = 0).
-    sea = ~land
-    assert np.allclose(h[sea], dem[sea])
-    assert (h[land] <= dem[land] + 1e-9).all()
-    # Net erosion is positive somewhere and bounded by initial relief.
-    assert (dem - h)[land].max() > 0.0
-    assert h.min() >= dem.min() - 1e-9
-    # Accumulation is a forest: each land cell drains somewhere.
-    assert (acc[land] >= rain[land]).all()
 
 
 def test_river_mask_threshold() -> None:
@@ -355,11 +338,6 @@ def test_river_segments_crosses_submmu_lake_stops_at_big() -> None:
             ix, iy = int(round(px / kmpp)), int(round((n - 1) - py / kmpp))
             if 0 <= ix < n and 0 <= iy < n and 30 < ix < 80 and 55 < iy < 115:
                 assert not core[iy, ix], "channel crossed the MMU lake"
-
-
-def test_spl_constants_documented() -> None:
-    # n = 1 is required by the implicit linear solve; m = 0.5 classic.
-    assert SPL_M == 0.5
 
 
 def test_hydrology_weight_runoff_and_fallback(tmp_path) -> None:
