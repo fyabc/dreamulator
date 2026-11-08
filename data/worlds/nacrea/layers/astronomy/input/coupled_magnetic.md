@@ -10,7 +10,7 @@ tags: [magnetic-field, dynamo, current-sheet]
 
 | 参数 | 值 | 备注 |
 |------|-----|------|
-| Aegis 表面赤道磁场 B_p | **400 μT** | planets.yaml（Christensen 2009 发电机标度律） |
+| Aegis 表面赤道磁场 B_p | **650 μT** | planets.yaml（Christensen 2009 标度律估算值，作者 2026-11-09 采纳；引擎对照 `derived.magnetic_field_estimate_ut` 一致） |
 | Nacrea 表面赤道磁场 B_s | **30 μT** | planets.yaml；潮汐加热维持熔融地核 → 发电机效应 |
 | Aegis 磁偶极轴倾角 | 44.8° | 等于自转轴倾角 |
 
@@ -18,10 +18,10 @@ tags: [magnetic-field, dynamo, current-sheet]
 
 | 参数 | 值 | 推导依据 |
 |------|-----|---------|
-| Aegis 磁矩 m_p | **1.453×10²⁷ A·m²** | B_eq × R_p³ / (μ₀/4π) |
+| Aegis 磁矩 m_p | **2.361×10²⁷ A·m²** | B_eq × R_p³ / (μ₀/4π)；引擎派生 `derived.magnetic_dipole_moment_am2` |
 | Nacrea 磁矩 m_s | **9.504×10²² A·m²** | 同上 |
-| Aegis 在 Nacrea 轨道处的背景磁场 | **0.384 μT**（384 nT） | 偶极衰减 (μ₀/4π) × m_p / a_m³ |
-| 磁场主导权 | Nacrea 自身场是外部场的 **~78 倍** | 30 / 0.384 |
+| Aegis 在 Nacrea 轨道处的背景磁场 | **0.624 μT**（624 nT） | 偶极衰减 (μ₀/4π) × m_p / a_m³；引擎派生 `derived.parent_magnetic_field_at_orbit_ut` |
+| 磁场主导权 | Nacrea 自身场是外部场的 **~48 倍** | 30 / 0.624 |
 
 ### 因变量 — 双频耦合磁场的时空形态
 
@@ -29,14 +29,14 @@ tags: [magnetic-field, dynamo, current-sheet]
 
 | 现象 | 周期 | 物理机制 | 地表表现 |
 |------|------|---------|---------|
-| **磁场扫掠 (Magnetic Sweeping)** | **4.47 小时** | Aegis 快速自转 → 磁偶极轴在空间高速旋转 | Nacrea 表面的外部 0.38 μT 磁场方向以 4.47 h 周期 360° 扫掠；频率 **62.0 μHz** 的超低频交变磁场 |
+| **磁场扫掠 (Magnetic Sweeping)** | **4.47 小时** | Aegis 快速自转 → 磁偶极轴在空间高速旋转 | Nacrea 表面的外部 0.62 μT 磁场方向以 4.47 h 周期 360° 扫掠；频率 **62.0 μHz** 的超低频交变磁场 |
 | **电流片穿越 (Current Sheet Crossing)** | **38 小时** | Nacrea 每 {{ entities.satellite_nacrea.period_days | hours | round1 }}h 公转中上下穿透 Aegis 磁赤道面 | 每 38h 经历一次磁场极性瞬间翻转 + 等离子体注入 + 阿尔芬波轰击 → 全球性地磁暴 |
 
 ### 因变量 — 生物学效应
 
 | 效应 | 机制 |
 |------|------|
-| **双频生物罗盘** | 迁徙动物体内：主磁铁矿晶体感应 30 μT 静态场 + 副罗盘感应 0.38 μT 交变场 |
+| **双频生物罗盘** | 迁徙动物体内：主磁铁矿晶体感应 30 μT 静态场 + 副罗盘感应 0.62 μT 交变场 |
 | **绝对时空感知** | 交变磁场相位与 Aegis 10h 自转严格锁定 → 副罗盘实质是天然原子钟（误差分钟级）→ 结合主磁场倾角瞬间解算精确经纬度 |
 | **电感受器普及** | 海水切割 Aegis 旋转磁场 + 穿越电流片 → 法拉第感应电场 + 微电流，电感受在海洋生物中广泛演化 |
 

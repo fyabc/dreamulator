@@ -237,6 +237,20 @@
       "description": "Surface magnetic field strength in microtesla",
       "title": "Magnetic Field Strength"
     },
+    "intrinsic_luminosity_w": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Intrinsic (residual-heat) luminosity in watts. Optional independent variable for the gas-giant magnetic-field estimate (engine/planet_dynamo.py); when unset the COND03 cooling-grid estimate is used",
+      "title": "Intrinsic Luminosity W"
+    },
     "satellite_ids": {
       "description": "IDs of natural satellites (defined in astronomy layer's stellar.yaml)",
       "items": {

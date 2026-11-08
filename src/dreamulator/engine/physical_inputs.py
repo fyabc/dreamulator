@@ -37,6 +37,11 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from dreamulator.engine.planet_dynamo import (
+    dipole_field_at_distance_ut,
+    dipole_moment_am2,
+    estimate_magnetic_field_ut,
+)
 from dreamulator.engine.satellite_dynamics import (
     PROGRADE_SAFETY_LINE_RH,
     PROGRADE_STABILITY_LIMIT_RH,
@@ -65,6 +70,7 @@ from dreamulator.engine.stellar_physics import (
     polar_circle_latitude_deg,
     solar_day_days,
 )
+from dreamulator.models.planet import PlanetType
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -972,6 +978,7 @@ def build_system_catalog(
     }
     entries = _catalog_bodies(input_data, raw_bodies, planets, index, computed_stars)
     warnings.extend(_annotate_satellite_dynamics(entries, index))
+    warnings.extend(_annotate_magnetic_fields(entries, index, {p.id: p for p in planets}))
     catalog["bodies"] = entries
     if planets:
         # The target body is the focus planet of this world (frontend 3D viewer
@@ -1245,6 +1252,91 @@ def _annotate_satellite_dynamics(
     return warnings
 
 
+def _annotate_magnetic_fields(
+    entries: list[dict[str, Any]],
+    index: _StellarIndex,
+    planets_by_id: dict[str, Planet],
+) -> list[str]:
+    """Gas-giant dynamo estimates, authored-value consistency, satellite field.
+
+    Mutates ``entries`` in place (same contract as ``_annotate_satellite_dynamics``):
+    fast-rotating gas giants with mass/radius gain ``derived.magnetic_field_estimate_ut``
+    (Christensen et al. 2009 energy-flux scaling, Jupiter-anchored; pure functions in
+    ``engine/planet_dynamo.py``) and ``derived.magnetic_dipole_moment_am2`` (computed
+    from the authored field when one exists, else from the estimate); satellites of a
+    magnetized planet gain ``derived.parent_magnetic_field_at_orbit_ut`` (dipole r^-3
+    falloff). Authored values stay authoritative — a deviation beyond the engine
+    consistency threshold only warns (same epistemic pattern as the star
+    mass–luminosity check). The gas-giant gate uses planets.yaml ``planet_type``
+    (composition semantics); catalog ``body_type`` is orbital (planet vs satellite)
+    and is only used as a fallback for raw stellar.yaml-only bodies.
+    """
+    warnings: list[str] = []
+    by_id = {str(e["id"]): e for e in entries}
+    # Maximum sidereal rotation period (days) still safely inside the scaling's
+    # rapidly-rotating (saturated, dipole-dominated) regime; real gas giants
+    # stay far below it. Same threshold intent as astronomy.py's _CONSISTENCY_THRESHOLD.
+    fast_rotator_max_days = 3.0
+    consistency_threshold = 0.20
+    for entry in entries:
+        planet = planets_by_id.get(str(entry["id"]))
+        is_gas_giant = (planet is not None and planet.planet_type == PlanetType.GAS_GIANT) or str(
+            entry.get("body_type")
+        ) == "gas_giant"
+        if not is_gas_giant:
+            continue
+        physical = entry.get("physical") or {}
+        mass_earth = _as_float(physical.get("mass_earth"))
+        radius_km = _as_float(physical.get("radius_km"))
+        rotation = _as_float(physical.get("rotation_period_days"))
+        if mass_earth is None or radius_km is None or rotation is None:
+            continue
+        if rotation > fast_rotator_max_days:
+            continue
+        star_id = _walk_to_star(str(entry["id"]), index)
+        age_gyr = index.ages.get(star_id) if star_id is not None else None
+        if age_gyr is None:
+            continue
+        estimate_ut = estimate_magnetic_field_ut(
+            mass_earth,
+            radius_km,
+            age_gyr,
+            luminosity_w=_as_float(physical.get("intrinsic_luminosity_w")),
+        )
+        authored_ut = _as_float(entry.get("magnetic_field_strength_ut"))
+        effective_ut = authored_ut if authored_ut is not None else estimate_ut
+        derived = entry.setdefault("derived", {})
+        derived["magnetic_field_estimate_ut"] = round(estimate_ut, 1)
+        derived["magnetic_dipole_moment_am2"] = float(
+            f"{dipole_moment_am2(effective_ut, radius_km):.6g}"
+        )
+        if authored_ut is not None:
+            deviation = abs(authored_ut - estimate_ut) / estimate_ut
+            if deviation > consistency_threshold:
+                warnings.append(
+                    f"Planet '{entry['id']}': dynamo-scaling estimate = {estimate_ut:.0f} uT "
+                    f"but planets.yaml authored {authored_ut:.0f} uT "
+                    f"(deviation {deviation:.1%}). Using the authored value as override."
+                )
+    for entry in entries:
+        if str(entry.get("body_type")) != "natural_satellite":
+            continue
+        parent = by_id.get(str(entry.get("parent_id")))
+        if parent is None:
+            continue
+        field_ut = _as_float(parent.get("magnetic_field_strength_ut"))
+        if field_ut is None:
+            field_ut = _as_float((parent.get("derived") or {}).get("magnetic_field_estimate_ut"))
+        parent_radius_km = _as_float((parent.get("physical") or {}).get("radius_km"))
+        a_au = _as_float((entry.get("orbit") or {}).get("semi_major_axis_au"))
+        if field_ut is None or parent_radius_km is None or a_au is None:
+            continue
+        entry.setdefault("derived", {})["parent_magnetic_field_at_orbit_ut"] = round(
+            dipole_field_at_distance_ut(field_ut, parent_radius_km, a_au * AU_KM), 4
+        )
+    return warnings
+
+
 def _catalog_body_entry(
     body_id: str,
     raw: dict[str, Any] | None,
@@ -1338,6 +1430,8 @@ def _catalog_body_entry(
         physical["axial_tilt_deg"] = round(tilt, 2)
     if albedo is not None:
         physical["albedo"] = round(albedo, 4)
+    if planet is not None and planet.intrinsic_luminosity_w is not None:
+        physical["intrinsic_luminosity_w"] = float(f"{planet.intrinsic_luminosity_w:.6g}")
     if physical:
         entry["physical"] = physical
 

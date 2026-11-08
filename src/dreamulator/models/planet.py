@@ -103,6 +103,17 @@ class Planet(BaseModel):
         default=None, ge=0, description="Surface magnetic field strength in microtesla"
     )
 
+    intrinsic_luminosity_w: float | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Intrinsic (residual-heat) luminosity in watts. Optional independent "
+            "variable for the gas-giant magnetic-field estimate "
+            "(engine/planet_dynamo.py); when unset the COND03 cooling-grid "
+            "estimate is used"
+        ),
+    )
+
     satellite_ids: list[str] = Field(
         default_factory=list,
         description="IDs of natural satellites (defined in astronomy layer's stellar.yaml)",
