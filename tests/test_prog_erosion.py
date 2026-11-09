@@ -896,6 +896,57 @@ def test_terminal_routing_emits_lake_records() -> None:
             assert r["kept_water_cells"] <= cap, (r["label"], r["kept_water_cells"], cap)
 
 
+def test_terminal_verdict_uses_the_cascaded_inflow() -> None:
+    """A lake fed by an upstream lake's overflow is judged on its total inflow.
+
+    Two closed basins in series on an eastward ramp: the western bowl sits in a
+    wet, cool climate and overflows; the eastern bowl's own catchment is dry and
+    its lake surface is hot, so its own runoff cannot meet the evaporation demand,
+    but the upstream overflow can.  The verdict must be taken after the cascade
+    has delivered that overflow (topological order, predecessors first), so the
+    eastern bowl passes water on instead of being cut as terminal.
+    """
+    n = 96
+    _y, x = np.mgrid[0:n, 0:n]
+    dem = (n - 1 - x).astype(np.float64) * 5.0
+    dem[30:50, 20:34] -= 60.0  # upstream bowl (west)
+    dem[30:50, 56:70] -= 60.0  # downstream bowl (east)
+    land = dem > 0.0
+    runoff = np.where(x < 20, 1000.0, 0.0)  # mm/yr: only the far west generates water
+    rbar = float(runoff[land].mean())
+    filled, order, rec = priority_flood(dem, land)
+    lakes_draw = keep_large_lakes(lake_mask(filled, dem), lake_mmu_cells(1.0))
+    wet_west = x < 45
+    *_rest, records = terminal_equilibrium_routing(
+        dem,
+        land,
+        lakes_draw,
+        order,
+        rec,
+        weight=np.array(runoff / rbar, copy=True),
+        precip_mm=np.where(wet_west, 2100.0, 50.0),
+        temp_c=np.where(wet_west, 10.0, 30.0),
+        runoff_land_mean_mm=rbar,
+        mmu_cells=lake_mmu_cells(1.0),
+        km_per_px=1.0,
+        sea_level_m=0.0,
+    )
+    east = [
+        r
+        for r in records
+        if r["spill_cell"] and 30 <= r["spill_cell"][0] <= 50 and r["spill_cell"][1] >= 56
+    ]
+    west = [
+        r
+        for r in records
+        if r["spill_cell"] and 30 <= r["spill_cell"][0] <= 50 and r["spill_cell"][1] < 45
+    ]
+    assert east and west, "fixture must record both bowls"
+    assert west[0]["verdict"] == "passthrough"
+    assert east[0]["demand_mm"] > 0.0  # its own climate is a net evaporation sink
+    assert east[0]["verdict"] == "passthrough", east[0]
+
+
 def test_river_segment_y_uses_the_canvas_height() -> None:
     """A shorter chunk box must not shift reaches toward the canvas bottom.
 

@@ -1023,8 +1023,12 @@ def terminal_equilibrium_routing(
     del acc_all  # whole-grid f64 twin released before the cascade rewrites
     demand = (LAKE_EVAPORATION_FACTOR * pet_sum - p_sum) / runoff_land_mean_mm
     total = external.copy()
-    is_term = (demand > 0.0) & (total < demand)
+    is_term = np.zeros(demand.shape, dtype=bool)
     for a in topo:  # predecessors first: total[a] is final when popped
+        # The verdict uses the cascaded inflow: a lake whose own catchment falls
+        # short can still be filled by an upstream lake's overflow, so it is
+        # judged only once every predecessor has handed its outflow on.
+        is_term[a] = demand[a] > 0.0 and total[a] < demand[a]
         if is_term[a]:
             continue  # terminal lakes hand nothing on
         b = int(downstream_of[a])

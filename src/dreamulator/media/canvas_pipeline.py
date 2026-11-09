@@ -837,7 +837,7 @@ def run_canvas_rivers(
     store: CanvasStore,
     *,
     sea_level: float = 0.0,
-    threshold_cells: int = 7000,
+    threshold_cells: int = 27000,  # same onset as the CLI default (about 2.1 m3/s at 90 m)
     verbose: bool = True,
 ) -> dict[str, object]:
     """Extract channel mask and vector river segments from the final fill.
