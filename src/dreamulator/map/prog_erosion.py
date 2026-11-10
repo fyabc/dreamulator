@@ -598,13 +598,18 @@ def _lake_balances(
     evaporation_factor: float,
     *,
     climate_block: int = 1,
+    open_water_mm: np.ndarray | None = None,
 ) -> tuple[np.ndarray, int, np.ndarray, np.ndarray, np.ndarray]:
     """Per-component water-balance terms of a lake mask.
 
-    Returns ``(labels, n, inflow_acc, pet_sum_mm_cells, p_sum_mm_cells)``:
+    Returns ``(labels, n, inflow_acc, evap_sum_mm_cells, p_sum_mm_cells)``:
     ``inflow_acc[k]`` is the runoff accumulation entering component k (in
-    reference-cell units), the sums are Hamon annual PET and annual
-    precipitation over the component's cells (mm·cells).  Entry
+    reference-cell units), the sums are the annual lake-surface evaporation
+    and annual precipitation over the component's cells (mm·cells).  The
+    evaporation is ``open_water_mm`` (annual open-water evaporation on the
+    climate grid, :func:`dreamulator.engine.lake_evaporation.open_water_evaporation`)
+    when given, else ``evaporation_factor`` × Hamon PET on the annual-mean
+    temperature, the fallback for inputs without that channel.  Entry
     accounting: any cell OUTSIDE the component whose receiver is inside it
     delivers its whole upstream accumulation — a land shore cell, and the
     SPILL CELL OF AN UPSTREAM LAKE alike (a pass-through lake chain
@@ -646,15 +651,21 @@ def _lake_balances(
         if climate_block <= 1
         else (lake_idx // (climate_block * ww)) * ncc + (lake_idx // climate_block) % ncc
     )
-    t_vals = temp_c.reshape(-1)[climate_idx]
-    t_lake = np.where(np.isnan(t_vals), 0.0, t_vals)
-    t12 = np.repeat(t_lake.reshape(-1, 1), 12, axis=1)
-    pet_lake = np.asarray(potential_evapotranspiration_hamon(t12, 365.25 / 12))
+    if open_water_mm is not None:
+        e_vals = open_water_mm.reshape(-1)[climate_idx]
+        evap_lake = np.where(np.isnan(e_vals), 0.0, e_vals)
+    else:
+        t_vals = temp_c.reshape(-1)[climate_idx]
+        t_lake = np.where(np.isnan(t_vals), 0.0, t_vals)
+        t12 = np.repeat(t_lake.reshape(-1, 1), 12, axis=1)
+        evap_lake = evaporation_factor * np.asarray(
+            potential_evapotranspiration_hamon(t12, 365.25 / 12)
+        )
     p_cells = precip_mm.reshape(-1)[climate_idx]
     p_lake = np.where(np.isnan(p_cells), 0.0, p_cells)
-    pet_sum = np.bincount(lake_flat[lake_idx], weights=pet_lake, minlength=n + 1)
+    evap_sum = np.bincount(lake_flat[lake_idx], weights=evap_lake, minlength=n + 1)
     p_sum = np.bincount(lake_flat[lake_idx], weights=p_lake, minlength=n + 1)
-    return lbl, n, inflow, pet_sum, p_sum
+    return lbl, n, inflow, evap_sum, p_sum
 
 
 def terminal_lakes(
@@ -667,6 +678,7 @@ def terminal_lakes(
     temp_c: np.ndarray,
     runoff_land_mean_mm: float,
     evaporation_factor: float = LAKE_EVAPORATION_FACTOR,
+    open_water_mm: np.ndarray | None = None,
 ) -> np.ndarray:
     """Lakes whose water balance never overflows — terminal drains.
 
@@ -692,7 +704,7 @@ def terminal_lakes(
     out = np.zeros_like(lake, dtype=bool)
     if runoff_land_mean_mm <= 0.0:
         return out
-    lbl, n, inflow, pet_sum, p_sum = _lake_balances(
+    lbl, n, inflow, evap_sum, p_sum = _lake_balances(
         lake,
         receiver,
         accumulation,
@@ -700,6 +712,7 @@ def terminal_lakes(
         temp_c,
         runoff_land_mean_mm,
         evaporation_factor,
+        open_water_mm=open_water_mm,
     )
     if not n:
         return out
@@ -709,7 +722,7 @@ def terminal_lakes(
     for i in range(1, n + 1):
         if i in edge_lbl:
             continue
-        demand = evaporation_factor * pet_sum[i] - p_sum[i]
+        demand = evap_sum[i] - p_sum[i]
         if demand <= 0.0:
             continue
         if inflow[i] * runoff_land_mean_mm < demand:
@@ -821,6 +834,7 @@ def apply_terminal_equilibrium(
     mmu_cells: int,
     sea_level_m: float,
     evaporation_factor: float = LAKE_EVAPORATION_FACTOR,
+    open_water_mm: np.ndarray | None = None,
 ) -> tuple[np.ndarray | None, np.ndarray, np.ndarray, dict[str, int]]:
     """Rewrite terminal lakes from a single (receiver, accumulation) pair.
 
@@ -830,7 +844,7 @@ def apply_terminal_equilibrium(
     single-pair accounting overcount (the dendritic-arm lesson).
     """
 
-    lbl, n, inflow, pet_sum, p_sum = _lake_balances(
+    lbl, n, inflow, evap_sum, p_sum = _lake_balances(
         lake_terminal,
         receiver,
         accumulation,
@@ -838,8 +852,9 @@ def apply_terminal_equilibrium(
         temp_c,
         runoff_land_mean_mm,
         evaporation_factor,
+        open_water_mm=open_water_mm,
     )
-    demand = (evaporation_factor * pet_sum - p_sum) / runoff_land_mean_mm
+    demand = (evap_sum - p_sum) / runoff_land_mean_mm
     return _equilibrium_water(
         h,
         land,
@@ -867,6 +882,7 @@ def terminal_equilibrium_routing(
     km_per_px: float,
     sea_level_m: float,
     climate_block: int = 1,
+    open_water_mm: np.ndarray | None = None,
     consume_receiver: bool = False,
     keep_rewritten_h: bool = True,
 ) -> tuple[
@@ -954,6 +970,7 @@ def terminal_equilibrium_routing(
         runoff_land_mean_mm,
         LAKE_EVAPORATION_FACTOR,
         climate_block=climate_block,
+        open_water_mm=open_water_mm,
     )
     if not n:
         acc = flow_accumulation(order, receiver, weight).reshape(h.shape)
@@ -1031,7 +1048,7 @@ def terminal_equilibrium_routing(
             if indeg[b] == 0:
                 dq.append(b)
 
-    _l2, _n2, _in2, pet_sum, p_sum = _lake_balances(
+    _l2, _n2, _in2, evap_sum, p_sum = _lake_balances(
         lakes_draw,
         receiver,
         acc_all,
@@ -1040,9 +1057,10 @@ def terminal_equilibrium_routing(
         runoff_land_mean_mm,
         LAKE_EVAPORATION_FACTOR,
         climate_block=climate_block,
+        open_water_mm=open_water_mm,
     )
     del acc_all  # whole-grid f64 twin released before the cascade rewrites
-    demand = (LAKE_EVAPORATION_FACTOR * pet_sum - p_sum) / runoff_land_mean_mm
+    demand = (evap_sum - p_sum) / runoff_land_mean_mm
     total = external.copy()
     is_term = np.zeros(demand.shape, dtype=bool)
     for a in topo:  # predecessors first: total[a] is final when popped
@@ -1683,6 +1701,13 @@ def erode_region_pack(
         temp_c = np.nan_to_num(np.load(t_path).astype(np.float64), nan=0.0)
     else:
         print(f"[erode] no temperature.C.npy under {inp}; terminal-lake balance off")
+    open_water: np.ndarray | None = None
+    lake_path = inp / "lake_evaporation.mm.npy"
+    if temp_c is not None and lake_path.exists():
+        lake_grid = np.nan_to_num(np.load(lake_path).astype(np.float64), nan=0.0)
+        open_water = (
+            tile_coarse_field(lake_grid, h.shape) if lake_grid.shape != h.shape else lake_grid
+        )
     # Terminal-lake equilibrium with through-flow depletion (the shared
     # helper): pass-through lakes deduct their net evaporation from the
     # through-flow; routing stays on the pre-rewrite tree.
@@ -1710,6 +1735,7 @@ def erode_region_pack(
         mmu_cells=mmu,
         km_per_px=km_pp,
         sea_level_m=float(meta["sea_level_m"]),
+        open_water_mm=open_water,
     )
     assert h_rw is not None  # keep_rewritten_h defaults to True here
     h = h_rw
@@ -1756,10 +1782,11 @@ def erode_region_pack(
                 "terminal_lakes": lake_stats["terminal"],
                 "dry_playas": lake_stats["dry_playas"],
                 "shrunk_lakes": lake_stats["shrunk"],
-                "lake_balance": {
-                    "pet": "hamon-annual",
-                    "evaporation_factor": LAKE_EVAPORATION_FACTOR,
-                },
+                "lake_balance": (
+                    {"evaporation": "open-water energy balance (lake_evaporation.mm.npy)"}
+                    if open_water is not None
+                    else {"pet": "hamon-annual", "evaporation_factor": LAKE_EVAPORATION_FACTOR}
+                ),
             },
             ensure_ascii=False,
             indent=1,

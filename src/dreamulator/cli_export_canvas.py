@@ -189,6 +189,12 @@ def canvas_plan(
         ids = _select(staged, canvas)
         t_m, p_m = load_climate_monthly(map_dir)
         cols = tb.MeshColumns.from_mesh(mesh, t_m, p_m)
+        astronomy = tb.load_astronomy(map_dir)
+        if astronomy is None:
+            console.print(
+                "[yellow]climate_metadata.json lacks the orbit: no lake_evaporation channel; "
+                "S2 falls back to the Hamon lake demand[/yellow]"
+            )
         stale = []
         for plan in layout.plans:
             if plan.canvas_id not in ids:
@@ -204,6 +210,7 @@ def canvas_plan(
                 source,
                 structure=cfg.structure,
                 precipitation_field=native_precipitation,
+                astronomy=astronomy,
             )
             if old is not None:
                 new = json.loads((planned / "canvas.json").read_text(encoding="utf-8"))

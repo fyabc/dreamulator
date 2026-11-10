@@ -34,6 +34,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from . import td_canvas as tc
+from .astronomy_inputs import load_astronomy as load_astronomy
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -62,12 +63,19 @@ LAYOUT_FORMAT = "td-canvas-layout-v1"
 HEIGHT_SAMPLING = "antialias-v1"
 CANVAS_FORMAT = "td-canvas-v1"
 #: Climate channels whose values exist on land only (NaN on ocean coarse cells).
-LAND_ONLY = ("runoff.mm", "pet_hamon.mm", "npp.gc_m2_yr", "runoff_monthly.mm")
+LAND_ONLY = (
+    "runoff.mm",
+    "pet_hamon.mm",
+    "npp.gc_m2_yr",
+    "runoff_monthly.mm",
+    "lake_evaporation.mm",
+)
 UNITS = {
     "temperature.C": "degC",
     "precipitation.mm": "mm/yr",
     "runoff.mm": "mm/yr",
     "pet_hamon.mm": "mm/yr",
+    "lake_evaporation.mm": "mm/yr",
     "temperature_monthly.C": "degC",
     "precipitation_monthly.mm": "mm/month",
     "runoff_monthly.mm": "mm/month",
@@ -327,6 +335,7 @@ class MeshColumns:
     p_monthly_mm: np.ndarray  # (n, 12)
     relief_std_m: np.ndarray | None = None  # sub-grid relief (NaN off land)
     is_sea_lake: np.ndarray | None = None  # closed water the mesh upgraded to sea class
+    cloud_total: np.ndarray | None = None  # annual total cloud fraction (GCM climates only)
 
     @classmethod
     def from_mesh(
@@ -349,6 +358,7 @@ class MeshColumns:
             is_sea_lake=np.array(
                 [bool(getattr(c, "is_lake", False)) and c.water_class == "ocean" for c in cells]
             ),
+            cloud_total=_cloud_column(cells),
             ice_m=col("ice_thickness_m", 0.0),
             npp=col("npp_gc_m2_yr"),
             koppen=[c.koppen_class for c in cells],
@@ -417,6 +427,7 @@ def write_canvas_inputs(
     height_source: TerrainSource | None = None,
     height_quadrature: int = 8,
     precipitation_field: NativePrecipitationField | None = None,
+    astronomy: dict[str, Any] | None = None,
 ) -> Path:
     """Write ``<root>/<canvas_id>/`` (canvas.json, conditioning/, climate/); returns the dir.
 
@@ -492,7 +503,7 @@ def write_canvas_inputs(
     ocean_cell = cond["heightmap"] <= 0.0
 
     climate_meta, legends = _write_canvas_climate(
-        out, geom, cols, ocean_cell, precipitation_field, precipitation_coverage
+        out, geom, cols, ocean_cell, precipitation_field, precipitation_coverage, astronomy
     )
 
     canvas = {
@@ -609,6 +620,56 @@ def _save_precipitation_coverage(
     }
 
 
+def _cloud_column(cells: list[Any]) -> np.ndarray | None:
+    """Annual total cloud per cell, or None when the climate carries none (engine worlds)."""
+    vals = [getattr(c, "cloud_total_frac", None) for c in cells]
+    if all(v is None for v in vals):
+        return None
+    return np.array([np.nan if v is None else float(v) for v in vals], dtype=np.float64)
+
+
+def lake_evaporation_channel(
+    geom: tc.CanvasGeometry,
+    t_monthly: np.ndarray,
+    elevation_m: np.ndarray,
+    cloud: np.ndarray | None,
+    astronomy: dict[str, Any],
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Annual open-water evaporation on the coarse grid (mm/yr) and its provenance.
+
+    ``t_monthly`` (12, n, n) is the canvas's own monthly temperature channel and
+    ``elevation_m`` the coarse-cell mean height it refers to; insolation comes
+    from the coarse-cell latitude and the world's orbit, the same
+    ``monthly_insolation`` the climate engine uses.
+    """
+    from dreamulator.engine.lake_evaporation import EARTH_LAND_MEAN_CLOUD, open_water_evaporation
+
+    from .astronomy_inputs import monthly_toa_insolation, solar_constant_w_m2
+
+    n = geom.ncell
+    lat, _lon = geom.coarse_centres_latlon()
+    solar = solar_constant_w_m2(astronomy)
+    q = monthly_toa_insolation(lat, astronomy)
+    if cloud is None:
+        c = np.full(n * n, EARTH_LAND_MEAN_CLOUD)
+        cloud_source = (
+            f"Earth land-mean total cloud {EARTH_LAND_MEAN_CLOUD} (no climate cloud field)"
+        )
+    else:
+        c = np.where(np.isfinite(cloud), cloud, EARTH_LAND_MEAN_CLOUD).reshape(-1)
+        cloud_source = "climate annual total cloud (GCM), block mean of the mesh field"
+    t = np.moveaxis(np.asarray(t_monthly, dtype=np.float64), 0, -1).reshape(-1, 12)
+    e = open_water_evaporation(np.nan_to_num(t), q, c, np.nan_to_num(elevation_m).reshape(-1))
+    meta = {
+        "method": "Priestley-Taylor open water, FAO-56 radiation, ice when monthly T < 0 C "
+        "(engine/lake_evaporation.py)",
+        "cloud_source": cloud_source,
+        "solar_constant_w_m2": round(float(solar), 3),
+        "astronomy": {k: v for k, v in astronomy.items()},
+    }
+    return e.reshape(n, n), meta
+
+
 def _write_canvas_climate(
     out: Path,
     geom: tc.CanvasGeometry,
@@ -616,6 +677,7 @@ def _write_canvas_climate(
     ocean_cell: np.ndarray,
     precipitation_field: NativePrecipitationField | None,
     precipitation_coverage: CanvasPrecipitationCoverage | None = None,
+    astronomy: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     t_m, p_m, xyz = cols.t_monthly_c, cols.p_monthly_mm, cols.xyz
     lat, lon = cols.lat, cols.lon
@@ -665,8 +727,21 @@ def _write_canvas_climate(
         climate["runoff_monthly.mm"] = np.moveaxis(
             runoff_m.reshape(geom.ncell, geom.ncell, 12), -1, 0
         )
+    lake_meta = None
+    if astronomy is not None:
+        cloud = (
+            None if cols.cloud_total is None else tc.sample_mesh_field(geom, cols.cloud_total, xyz)
+        )
+        climate["lake_evaporation.mm"], lake_meta = lake_evaporation_channel(
+            geom,
+            climate["temperature_monthly.C"].astype(np.float32).astype(np.float64),
+            tc.sample_mesh_field(geom, cols.elevation_m, xyz),
+            cloud,
+            astronomy,
+        )
     for name in LAND_ONLY:
-        climate[name] = np.where(ocean_cell, np.nan, climate[name])
+        if name in climate:
+            climate[name] = np.where(ocean_cell, np.nan, climate[name])
     climate["ice.m"] = np.where(ocean_cell, 0.0, np.maximum(climate["ice.m"], 0.0))
     for name in ("precipitation.mm", "precipitation_monthly.mm"):
         climate[name] = np.maximum(climate[name], 0.0)
@@ -702,6 +777,11 @@ def _write_canvas_climate(
             "missing": missing,
             "sampling": sampling,
         }
+        if name == "lake_evaporation.mm" and lake_meta is not None:
+            climate_meta[name]["sampling"] = (
+                "derived on the coarse grid from the monthly temperature channel"
+            )
+            climate_meta[name].update(lake_meta)
         if precipitation_field is not None and name in (
             "pet_hamon.mm",
             "runoff.mm",
@@ -722,6 +802,7 @@ def refresh_canvas_climate(
     precipitation_field: NativePrecipitationField,
     precipitation_coverage: CanvasPrecipitationCoverage | None = None,
     refresh_conditioning: bool = False,
+    astronomy: dict[str, Any] | None = None,
 ) -> None:
     """Refresh staged climate, optionally replacing TD's climate conditioning.
 
@@ -754,7 +835,7 @@ def refresh_canvas_climate(
     if height.shape != (geom.ncell, geom.ncell):
         raise ValueError("accepted height conditioning shape differs from canvas geometry")
     climate_meta, legends = _write_canvas_climate(
-        canvas_dir, geom, cols, height <= 0, precipitation_field, precipitation_coverage
+        canvas_dir, geom, cols, height <= 0, precipitation_field, precipitation_coverage, astronomy
     )
     if refresh_conditioning:
         monthly = precipitation_coverage.cells.means(precipitation_field.component_monthly_mm).sum(

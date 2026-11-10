@@ -520,6 +520,16 @@ def export_region(
                 "will fall back to the precipitation weight[/yellow]"
             )
 
+    # Orbit of the climate build: the lake-evaporation channel's insolation.
+    from dreamulator.map.astronomy_inputs import load_astronomy
+
+    astronomy = load_astronomy(map_dir) if climate_monthly is not None else None
+    if climate_monthly is not None and astronomy is None:
+        console.print(
+            "[yellow]climate_metadata.json lacks the orbit: no lake_evaporation.mm channel; "
+            "the terminal-lake verdict falls back to the Hamon demand[/yellow]"
+        )
+
     # Default pack home: inside the world's data dir next to maps/ (both are
     # gitignored build outputs — one place for all bulk world data).  The
     # basename keeps the world prefix so pack names stay unique across worlds
@@ -555,6 +565,7 @@ def export_region(
             climate_monthly=climate_monthly,
             seafloor_clamp_m=seafloor_clamp,
             out_res=out_res,
+            astronomy=astronomy,
         )
     except RegionWindowError as exc:
         console.print(f"[red]Region rejected: {exc}[/red]")

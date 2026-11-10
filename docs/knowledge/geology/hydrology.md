@@ -124,13 +124,52 @@ Natural Earth 风格标定。想要更密的河源就调低它（减半 ≈ 1 m�
 暴雨径流是干旱区刻蚀的主力，侵蚀看的是雨，河网看的是水（Gaea 链
 时代的裁决，沿用）。
 
+### 湖面蒸发：能量型开阔水面蒸发
+
+湖面的年蒸发由水面吸收的能量决定，不由气温单独决定。冷而晴朗的高原
+气温低，但日照强、气压低，湖面蒸发仍可观：纳木错（4724 m，年均温约
+0 °C）的年蒸发约 635 mm（Ma 等 2016），而只看气温的 Hamon 公式给出约
+220 mm。画布链与侵蚀原型因此用 Priestley–Taylor 形式的开阔水面蒸发
+（`engine/lake_evaporation.py`）：
+
+> E = α · Δ/(Δ + γ) · max(Rn, 0) / λ，逐月计算后相加；月均气温低于 0 °C 的月份按封冻计，蒸发为零。
+
+各项含义如下。α = 1.26 是饱和下垫面的 Priestley–Taylor 系数；Δ 是
+饱和水汽压曲线的斜率；γ 是干湿表常数，与气压成正比，所以高海拔的湖把
+同样的能量更多地分给蒸发；λ 是汽化潜热。水面净辐射 Rn 用 FAO-56 的
+关系式（Allen 等 1998）由逐月大气顶日照、总云量与气温推出：地表短波
+Rs = (0.25 + 0.50 · (1 − 云量)) · Q_toa，晴空短波 Rso = (0.75 + 2×10⁻⁵ z) · Q_toa，
+水面反照率 0.08，净长波损失 σT⁴(0.34 − 0.14√e_a)(1.35 Rs/Rso − 0.35)。
+引擎不带湿度，水汽压 e_a 取相对湿度 0.7 时的值；相对湿度从 0.5 改到
+0.85，长波只变约 4%，对蒸发的影响更小（Ma 等 2016 的敏感性试验：湿度
+变化 10% 只改变湖面蒸发 1%）。湖体热储量只把蒸发在无冰月份之间挪动，
+不改变年总量，这里不计。
+
+地球检验用 14 个有观测的湖，海拔从 −210 m 到 4724 m，覆盖热带、干旱、
+温带与高原（气温取 ERA5，云量与大气顶短波取 NCEP 1991–2020 气候态）。
+模型与观测年蒸发之比的中位数为 1.06（四分位 0.92–1.19），相关 0.94，
+14 个湖中 11 个落在 ±25% 以内；Hamon 乘湖面系数 0.9 的中位比值只有
+0.60，在纳木错低估约三倍。偏差最大的是纳赛尔湖这类强平流的沙漠水库，
+模型偏低约 10%，这是 Priestley–Taylor 系数的已知局限。把短波换成
+Kasten–Czeplak 云量关系时，地表短波更接近再分析，湖面蒸发却高估约 1.5 倍；
+再分析的陆面辐射通量不能直接当作湖面的真值，因此标定以湖面蒸发本身为准。
+
+云量取 GCM 气候的年均总云量；没有 GCM 的引擎世界取地球陆地平均总云量
+0.43（NCEP 1991–2020，不含南极，与上面的检验同源）。常年封冻（每月
+均温都低于 0 °C）的湖在本公式下蒸发为零，实际的冰面升华约为每年数十
+厘米，这一项未计入。
+
 ### 终点湖判据与平衡水位
 
 达到制图门槛的湖按年度水量收支二分。记 R̄ 为陆域年均径流
-（mm/yr）、PET 为湖面年均温下的 Hamon 年蒸散、P 为湖面年均降水：
+（mm/yr）、E 为湖面年蒸发、P 为湖面年均降水：
 
-> 入库径流（Σ 入湖格累积 × R̄） < 蒸散需求（f·PET − P）按湖格累计
+> 入库径流（Σ 入湖格累积 × R̄） < 湖面需求（E − P）按湖格累计
 > ⇒ 终点湖；否则过路湖。
+
+E 取画布气候通道或区域数据包里的 `lake_evaporation.mm`（上一节的能量型
+开阔水面蒸发）。在这个字段出现之前规划的画布或导出的数据包，退回
+0.9 × Hamon 年蒸散（湖面年均温代入），它在冷而晴的高原上严重偏低。
 
 两侧同是参考格（入流 × R₀ 恢复 mm/yr），格面积相消。**入库必须用
 级联记账**（`terminal_equilibrium_routing`），单遍累计会错：树枝状湖
@@ -171,11 +210,7 @@ Natural Earth 风格标定。想要更密的河源就调低它（减半 ≈ 1 m�
 低于海平面的床面抹平，从改写后的场无法再导出判据，快速迭代环必须
 从原始几何重新推导。
 
-两个近似都往「过路」方向偏保守：湖面蒸发系数 f = 1.0（深水湖年蒸发
-约为参考蒸散面的 0.9–1.3 倍，取下侧使判据恰在干旱带不误伤）；PET 用
-年均温代入（Magnus 饱和汽压对温度是凸函数，年均温的 PET 略低于
-月均温 PET 的年平均）。图边界上的湖强制过路（流域被窗口截断，
-续流是更保守的读法）。低于海平面的封闭洼地（heal_inland_water 的
+图边界上的湖强制过路（流域被窗口截断，续流是更保守的读法）。低于海平面的封闭洼地（heal_inland_water 的
 `inland_big`）参与同一判据：装得满的照常是湖，装不满的干化为盐滩；
 其收支为正但 DEM 封闭时（洼地本应溢流却无溢口可凿），诚实语义是
 保持终点并在 meta 里记录（凿口属于传输损失一档的后续工作）。
@@ -273,6 +308,17 @@ stream_m = (1−f)·W_m + B_m
   Earth's surface. *Monthly Weather Review*, 97(12), 739–774.（§7 土壤桶）
 - Hamon, W. R. (1961). Estimating potential evapotranspiration. *Proc. ASCE,
   Journal of the Hydraulics Division*, 87(HY3), 107–120.（§7 蒸散需求）
+- Priestley, C. H. B., & Taylor, R. J. (1972). On the assessment of surface heat
+  flux and evaporation using large-scale parameters. *Monthly Weather Review*,
+  100(2), 81–92.（§7 湖面蒸发）
+- Allen, R. G., Pereira, L. S., Raes, D., & Smith, M. (1998). Crop
+  evapotranspiration. *FAO Irrigation and Drainage Paper* 56.（§7 净辐射关系式）
+- Ma, N., Szilagyi, J., Niu, G.-Y., et al. (2016). Evaporation variability of Nam
+  Co Lake in the Tibetan Plateau. *Journal of Hydrology*, 537, 27–35.（§7 高原湖面蒸发）
+- Finch, J., & Calver, A. (2008). Methods for the quantification of evaporation
+  from lakes. WMO Commission for Hydrology.（§7 方法综述与水面反照率）
+- Zhao, G., Li, Y., Zhou, L., & Gao, H. (2022). Evaporative water loss of 1.42
+  million global lakes. *Nature Communications*, 13, 3686.（§7 全球湖面蒸发与冰期处理）
 - Pike, J. G. (1964). The estimation of annual run-off from meteorological
   data in a tropical climate. *Journal of Hydrology*, 2(2), 116–123.
   （§7 Turc–Pike 旁证锚，n = 2）
