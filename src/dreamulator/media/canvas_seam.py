@@ -264,7 +264,7 @@ def _anchored_sea_of(
         return cache[canvas_root]
     sea: AnchoredSea | None = None
     try:
-        from dreamulator.media.canvas_pipeline import _anchored_sea, _geological_ocean
+        from dreamulator.media.canvas_pipeline import canvas_anchored_sea
 
         keys = [
             (int(c[0]), int(c[1]))
@@ -283,13 +283,8 @@ def _anchored_sea_of(
             ci, cj = key
             return np.asarray(np.load(canvas_root / "chunks" / f"r{ci:03d}_c{cj:03d}.npy"))
 
-        sea = _anchored_sea(
-            keys,
-            load,
-            tile,
-            _geological_ocean(canvas_root, _canvas_geometry(canvas_root), 0.0),
-            0.0,
-            workers=4,
+        sea = canvas_anchored_sea(
+            canvas_root, _canvas_geometry(canvas_root), keys, load, tile, 0.0, workers=4
         )
     except (OSError, ValueError, KeyError):
         sea = None

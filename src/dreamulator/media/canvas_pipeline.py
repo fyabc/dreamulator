@@ -132,23 +132,27 @@ def _declares_sea_mask(store: CanvasStore) -> bool:
 
 @dataclass(frozen=True)
 class AnchoredSea:
-    """Sea of the installed surface: boundary-linked and geologically oceanic.
+    """Sea of the installed surface: boundary-linked and geologically oceanic,
+    or inside a closed water body the mesh upgraded to sea class.
 
     ``boundary`` holds the water bodies that reach the canvas's open boundary,
     ``geological`` the bodies that contain a pixel inside a 23 km
-    geological-ocean cell.  Both passes run on the same water mask, so they
-    partition it into the same bodies and the intersection picks the bodies
-    that pass both tests.
+    geological-ocean cell, and ``mesh`` (when the canvas ships the mesh
+    sea-lake field) the bodies that contain a pixel inside the interior of a
+    mesh lake upgraded to ``water_class == "ocean"``.  All passes run on the same water mask, so
+    they partition it into the same bodies.
     """
 
     boundary: SeaConnectivity
     geological: SeaConnectivity
+    mesh: SeaConnectivity | None = None
 
     def mask(self, key: tuple[int, int], water: np.ndarray) -> np.ndarray:
         """Sea pixels of a chunk, from the same water mask used to connect it."""
-        return np.asarray(
-            self.boundary.mask(key, water) & self.geological.mask(key, water), dtype=bool
-        )
+        sea = self.boundary.mask(key, water) & self.geological.mask(key, water)
+        if self.mesh is not None:
+            sea = sea | self.mesh.mask(key, water)
+        return np.asarray(sea, dtype=bool)
 
 
 def _geological_ocean(root: Path, geometry: CanvasGeometry, sea_level: float) -> np.ndarray:
@@ -170,6 +174,36 @@ def _geological_ocean(root: Path, geometry: CanvasGeometry, sea_level: float) ->
     return grid <= sea_level
 
 
+#: Canvas field with the mesh's sea-class lakes (closed water upgraded to
+#: ``water_class == "ocean"``) on the 23 km grid; written by S1.
+MESH_SEA_LAKE_FILE = "geometry_fields/mesh_sea_lake.npy"
+
+
+def _mesh_sea_lake_interior(root: Path, geometry: CanvasGeometry) -> np.ndarray | None:
+    """23 km cells well inside the mesh's sea-class lakes, or None without the field.
+
+    The mesh treats the closed water bodies it upgraded to sea class
+    (``upgrade_large_endorheic_lakes``) as sea at sea level, and the GCM does
+    the same.  The global ocean is not in the field: there the boundary and
+    geological tests stay in charge, so closed shelf ponds and ice-dammed
+    hollows inside ocean cells remain inland lows.  One 3 x 3 erosion keeps the
+    coarse cells that the nearest-cell sampling put on a lake shore from
+    reaching across into a land hollow next to it.
+    """
+    from scipy.ndimage import binary_erosion
+
+    path = root / MESH_SEA_LAKE_FILE
+    if not path.exists():
+        return None
+    grid = np.asarray(np.load(path)).astype(bool)
+    ncell = geometry.ncell
+    if grid.shape != (ncell, ncell):
+        raise ValueError(
+            f"mesh sea-lake field {path} has shape {grid.shape}, expected {(ncell, ncell)}"
+        )
+    return np.asarray(binary_erosion(grid, np.ones((3, 3), bool), border_value=1))
+
+
 def _cell_span(start: int, stop: int) -> tuple[np.ndarray, np.ndarray]:
     """23 km cell indices covering pixels [start, stop) and their pixel counts."""
     ks = np.arange(start // PX_PER_CELL, -(-stop // PX_PER_CELL))
@@ -184,15 +218,17 @@ def _anchored_sea(
     geo: np.ndarray,
     sea_level: float,
     *,
+    mesh_interior: np.ndarray | None = None,
     workers: int = 8,
 ) -> AnchoredSea:
-    """Both connectivity passes of the anchored sea over one chunk list.
+    """The connectivity passes of the anchored sea over one chunk list.
 
     ``load`` returns a chunk's raw surface and is called once per pass.  The
     boundary pass seeds the open boundary the fill itself honours — the outer
     edges of the chunk grid and the edges facing a missing chunk; the
     geological pass seeds the pixels inside 23 km geological-ocean cells of
-    ``geo``, upsampled to native resolution.
+    ``geo``, upsampled to native resolution; with ``mesh_interior`` a third
+    pass seeds the pixels inside those 23 km cells the same way.
     """
     from dreamulator.map.canvas_marine import connect_sea
 
@@ -223,17 +259,47 @@ def _anchored_sea(
                 seed[sl] = True
         return water, water & seed
 
-    def read_geological(key: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
-        ci, cj = key
-        water = load(key) <= sea_level
-        rk, rcount = _cell_span(ci * tile, (ci + 1) * tile)
-        ck, ccount = _cell_span(cj * tile, (cj + 1) * tile)
-        geo_px = np.repeat(np.repeat(geo[np.ix_(rk, ck)], rcount, axis=0), ccount, axis=1)
-        return water, water & geo_px
+    def cell_seed(grid: np.ndarray) -> Callable[[tuple[int, int]], tuple[np.ndarray, np.ndarray]]:
+        def read(key: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
+            ci, cj = key
+            water = load(key) <= sea_level
+            rk, rcount = _cell_span(ci * tile, (ci + 1) * tile)
+            ck, ccount = _cell_span(cj * tile, (cj + 1) * tile)
+            px = np.repeat(np.repeat(grid[np.ix_(rk, ck)], rcount, axis=0), ccount, axis=1)
+            return water, water & px
 
+        return read
+
+    mesh = None
+    if mesh_interior is not None and mesh_interior.any():
+        mesh = connect_sea(keys, cell_seed(mesh_interior), workers=workers)
     return AnchoredSea(
         boundary=connect_sea(keys, read_boundary, workers=workers),
-        geological=connect_sea(keys, read_geological, workers=workers),
+        geological=connect_sea(keys, cell_seed(geo), workers=workers),
+        mesh=mesh,
+    )
+
+
+def canvas_anchored_sea(
+    root: Path,
+    geometry: CanvasGeometry,
+    keys: list[tuple[int, int]],
+    load: Callable[[tuple[int, int]], np.ndarray],
+    tile: int,
+    sea_level: float,
+    *,
+    workers: int = 8,
+) -> AnchoredSea:
+    """The anchored sea of a canvas directory — the one rule S2, the seam check
+    and the window renderer share."""
+    return _anchored_sea(
+        keys,
+        load,
+        tile,
+        _geological_ocean(root, geometry, sea_level),
+        sea_level,
+        mesh_interior=_mesh_sea_lake_interior(root, geometry),
+        workers=workers,
     )
 
 
@@ -249,22 +315,30 @@ def surface_sea(store: CanvasStore, sea_level: float, *, workers: int = 8) -> An
       (``conditioning/heightmap.npy`` at or below sea level, upsampled to native
       resolution).
 
-    A water body is sea when it passes both tests.  Boundary reach alone would
+    A water body is sea when it passes both tests, or when it contains a pixel
+    inside a closed water body the mesh upgraded to sea class
+    (``geometry_fields/mesh_sea_lake.npy``, 3 x 3-eroded).  Boundary reach alone would
     make a sea out of an inland closed basin that happens to touch the canvas's
     artificial edge — canvases overlap, so one canvas's boundary runs through
     another's interior.  Geological contact alone is the coarse-seed rule,
     which misjudges ice-dammed hollows and ponds inside shallow shelf cells.
     Each condition closes the other's failure mode, with no new parameter.
+    The mesh rule follows the long-wavelength canon: closed water bodies the
+    mesh upgraded to sea class share sea level with the global ocean there and
+    in the GCM, so S2 does not fill them to their sill.  A canvas planned
+    before the field existed keeps the two-test rule (``canvas mesh-sea-lake``
+    backfills it).
 
     The canvas's own water, not its bed: hydrology runs on the installed
     surface, where grounded ice can close a basin that the sub-ice bed links
     to the ocean.
     """
-    return _anchored_sea(
+    return canvas_anchored_sea(
+        store.root,
+        store.geometry,
         list(store.chunks),
         lambda key: store.raw(*key),
         store.tile,
-        _geological_ocean(store.root, store.geometry, sea_level),
         sea_level,
         workers=workers,
     )
@@ -454,7 +528,12 @@ def run_canvas_fill(
     if _declares_sea_mask(store):
         sea = surface_sea(store, sea_level)
         if verbose:
-            print("[hydrology] sea: boundary connectivity anchored to the geological ocean")
+            rule = "boundary connectivity anchored to the geological ocean"
+            if sea.mesh is not None:
+                rule += ", plus the mesh's sea-class lakes"
+            elif not (store.root / MESH_SEA_LAKE_FILE).exists():
+                rule += f" ({MESH_SEA_LAKE_FILE} missing: mesh sea-class lakes not applied)"
+            print(f"[hydrology] sea: {rule}")
 
     # Stage 1: local flood per chunk; summaries on disk.
     summaries: dict[tuple[int, int], dict[str, np.ndarray]] = {}

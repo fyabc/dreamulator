@@ -302,13 +302,14 @@ def _sea_connectivity(source: CanvasSource) -> AnchoredSea:
     it as sea strands lakes in the ocean, the 65.3S 15.2W report.  The shared
     builder keeps this from drifting out of sync with the hydrology rule.
     """
-    from dreamulator.media.canvas_pipeline import _anchored_sea, _geological_ocean
+    from dreamulator.media.canvas_pipeline import canvas_anchored_sea
 
-    return _anchored_sea(
+    return canvas_anchored_sea(
+        source.root,
+        source.geometry,
         sorted(source.chunks),
         lambda key: np.asarray(source.chunk(*key)),
         source.tile,
-        _geological_ocean(source.root, source.geometry, 0.0),
         0.0,
         workers=4,
     )

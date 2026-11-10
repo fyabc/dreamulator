@@ -413,6 +413,7 @@ dreamulator export canvas plan nacrea --canvas aurora     # 只重写一张画�
 dreamulator export canvas generate <root> --td <terrain-diffusion 克隆> --gpus 0-7   # S1 生成，可续算
 dreamulator export canvas status <root> --verify          # 每张画布的完成数与校验和
 dreamulator export canvas hydrology <canvas_dir>          # S2 外存水文
+dreamulator export canvas mesh-sea-lake <canvas_dir>         # 为旧画布补写网格类海湖字段（S2 海陆判定用）
 dreamulator export canvas window <canvas_dir> --lat 15 --lon -100 --span-km 550   # S3 裁窗
 dreamulator export render <窗口包> --style all             # topo + relief + biome
 dreamulator export canvas mosaic <canvas_dir> --step 2    # 整画布超高清总览图（约 180 m 一像素，缺省即共享印刷外观并叠加覆冰）
@@ -421,6 +422,9 @@ dreamulator export canvas mosaic <canvas_dir> --step 2    # 整画布超高清�
 - `plan` 的布局根目录默认是 `data/worlds/<世界>/canvases/<分支>/`（已被 git 忽略），`--root` 可改。
   分支默认取布局配置的 `branch`。已有分块的画布如果几何、条件场或生成参数变了，`plan` 会拒绝继续，
   需要先把旧的 `chunks/` 与 `chunks.sha256` 移走（`--force` 只跳过这项检查）。
+- `hydrology` 把网格升级的类海湖判为海（与全球海洋共用 0 m 海平面），依据是 S1 写出的
+  `geometry_fields/mesh_sea_lake.npy`；旧画布缺这个文件时用 `mesh-sea-lake` 补写（网格指纹须与规划时一致），
+  补写后要用 `--force` 重跑 S2。
 - `generate` 每张 GPU 起一个 worker，用 terrain-diffusion 虚拟环境的解释器运行（安装见
   [knowledge/cartography/terrain_diffusion.md](../knowledge/cartography/terrain_diffusion.md)）；
   中断后重跑即续算，`--canvas` 可只跑指定的画布。

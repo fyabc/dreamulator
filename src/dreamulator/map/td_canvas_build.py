@@ -326,6 +326,7 @@ class MeshColumns:
     t_monthly_c: np.ndarray  # (n, 12)
     p_monthly_mm: np.ndarray  # (n, 12)
     relief_std_m: np.ndarray | None = None  # sub-grid relief (NaN off land)
+    is_sea_lake: np.ndarray | None = None  # closed water the mesh upgraded to sea class
 
     @classmethod
     def from_mesh(
@@ -345,6 +346,9 @@ class MeshColumns:
             xyz=tc.unit_vectors(lat, lon),
             elevation_m=np.array([c.elevation for c in cells], dtype=np.float64),
             is_ocean=np.array([c.water_class == "ocean" for c in cells]),
+            is_sea_lake=np.array(
+                [bool(getattr(c, "is_lake", False)) and c.water_class == "ocean" for c in cells]
+            ),
             ice_m=col("ice_thickness_m", 0.0),
             npp=col("npp_gc_m2_yr"),
             koppen=[c.koppen_class for c in cells],
@@ -512,6 +516,8 @@ def write_canvas_inputs(
         canvas["precipitation_source"] = _save_precipitation_coverage(
             out, precipitation_field, precipitation_coverage
         )
+    sea_lake = cols.is_sea_lake if cols.is_sea_lake is not None else np.zeros(len(xyz), bool)
+    canvas["mesh_sea_lake"] = write_mesh_sea_lake(out, geom, sea_lake, xyz)
     if height_source is not None and source_averages is not None:
         from .terrain_source import SOURCE_SAMPLING
 
@@ -533,6 +539,34 @@ def write_canvas_inputs(
         json.dumps(canvas, indent=1, ensure_ascii=False), encoding="utf-8"
     )
     return out
+
+
+MESH_SEA_LAKE_PATH = "geometry_fields/mesh_sea_lake.npy"
+
+
+def write_mesh_sea_lake(
+    out: Path, geom: tc.CanvasGeometry, is_sea_lake: np.ndarray, xyz: np.ndarray
+) -> dict[str, Any]:
+    """Write the mesh's sea-class lakes on the 23 km grid; returns the canvas.json entry.
+
+    Nearest mesh cell at each coarse-cell centre.  Sea-class lakes are the closed
+    water bodies the mesh upgraded to ``water_class == "ocean"``
+    (``upgrade_large_endorheic_lakes``); S2 reads the field so they share sea
+    level with the ocean, as in the mesh and the GCM.  The global ocean is left
+    out: S2 decides it by boundary reach.  The field sits outside
+    ``conditioning/`` because TD never sees it.
+    """
+    grid = tc.sample_mesh_field(
+        geom, np.asarray(is_sea_lake, dtype=np.uint8), xyz, categorical=True
+    )
+    path = out / MESH_SEA_LAKE_PATH
+    path.parent.mkdir(exist_ok=True)
+    np.save(path, np.asarray(grid, dtype=np.uint8))
+    return {
+        "path": MESH_SEA_LAKE_PATH,
+        "sha256": sha256_file(path),
+        "meaning": "1 where the nearest mesh cell is a lake upgraded to water_class ocean",
+    }
 
 
 def _check_precipitation_radius(geom: tc.CanvasGeometry, field: NativePrecipitationField) -> None:

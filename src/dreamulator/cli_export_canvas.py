@@ -485,6 +485,66 @@ def canvas_hydrology(
     _run_hydrology(canvas, resume=resume, force=force, threshold_cells=threshold_cells)
 
 
+@canvas_app.command("mesh-sea-lake")
+def canvas_mesh_sea_lake(
+    canvas: Path = typer.Argument(help="Canvas directory (canvas.json)"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """Backfill geometry_fields/mesh_sea_lake.npy (mesh sea-class lakes) on a planned canvas.
+
+    S1 writes the field for new canvases.  The mesh is located from canvas.json's
+    source and must still carry the fingerprint the canvas was planned from.
+    """
+    import numpy as np
+
+    from dreamulator.gcm.fields import mesh_fingerprint
+    from dreamulator.map import td_canvas as tc
+    from dreamulator.map import td_canvas_build as tb
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
+    from dreamulator.map.manager import MapManager
+    from dreamulator.world_manager import WorldManager
+
+    _require_canvas_dir(canvas)
+    _set_data_dir(data_dir)
+    meta_path = canvas / "canvas.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    source = meta.get("source", {})
+    try:
+        world_dir = WorldManager().world_dir(source["world"])
+        map_dir = MapManager(world_dir, source.get("branch"))._maps_dir(source["planet"])
+    except (KeyError, FileNotFoundError):
+        console.print("[red]canvas.json source does not name an existing world and planet[/red]")
+        raise typer.Exit(code=1) from None
+    mesh_file = find_mesh_file(map_dir) if map_dir is not None else None
+    if mesh_file is None:
+        console.print(f"[red]No mesh file for planet '{source['planet']}'[/red]")
+        raise typer.Exit(code=1) from None
+    mesh = load_cvt_mesh_model(mesh_file)
+    fingerprint = mesh_fingerprint(mesh)[:12]
+    if source.get("mesh_fingerprint") not in (None, fingerprint):
+        console.print(
+            f"[red]Mesh fingerprint {fingerprint} differs from the planned "
+            f"{source['mesh_fingerprint']}: re-plan the canvas instead[/red]"
+        )
+        raise typer.Exit(code=1) from None
+    g = meta["geometry"]
+    geom = tc.CanvasGeometry(
+        float(g["center_lat"]), float(g["center_lon"]), float(g["radius_km"]), int(g["ncell"])
+    )
+    cells = mesh.cells
+    lat = np.array([c.lat for c in cells])
+    lon = np.array([c.lon for c in cells])
+    sea_lake = np.array([bool(c.is_lake) and c.water_class == "ocean" for c in cells])
+    meta["mesh_sea_lake"] = tb.write_mesh_sea_lake(
+        canvas, geom, sea_lake, tc.unit_vectors(lat, lon)
+    )
+    meta_path.write_text(json.dumps(meta, indent=1, ensure_ascii=False), encoding="utf-8")
+    grid = np.load(canvas / tb.MESH_SEA_LAKE_PATH)
+    console.print(
+        f"Wrote {tb.MESH_SEA_LAKE_PATH}: {int(grid.sum())} of {grid.size} cells sea-class lake"
+    )
+
+
 @canvas_app.command("window")
 def canvas_window(
     canvas: Path = typer.Argument(help="Canvas directory (canvas.json + chunks/ + climate/)"),
