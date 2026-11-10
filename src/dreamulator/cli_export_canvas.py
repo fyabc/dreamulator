@@ -450,14 +450,16 @@ def canvas_status_cmd(
     console.print(table)
 
 
-def _run_hydrology(canvas: Path, *, resume: bool, force: bool, threshold_cells: int) -> None:
+def _run_hydrology(
+    canvas: Path, *, resume: bool, force: bool, threshold_cells: int, workers: int | None = None
+) -> None:
     from dreamulator.media.canvas_pipeline import CanvasStore, run_canvas_fill, run_canvas_rivers
 
     store = CanvasStore.load(canvas)
     finals = list((store.work / "final").glob("r*_c*.npy"))
     if force or len(finals) < len(store.chunks):
         console.print(f"Running hydrology on {canvas.name} ({len(store.chunks)} chunks)")
-        stats = run_canvas_fill(store, resume=resume)
+        stats = run_canvas_fill(store, resume=resume, workers=workers)
         console.print(f"  {int(stats['watersheds'])} watersheds · {stats['stages_seconds']:.1f} s")
     else:
         console.print(f"Hydrology already complete under {store.work}")
@@ -479,10 +481,15 @@ def canvas_hydrology(
     ),
     force: bool = typer.Option(False, "--force", help="Re-run even when work files are complete"),
     threshold_cells: int = typer.Option(27000, "--threshold-cells", help=_THRESHOLD_HELP),
+    workers: int | None = typer.Option(
+        None, "--workers", help="Processes for the per-chunk fill stages (default: CPUs, max 16)"
+    ),
 ) -> None:
     """S2: out-of-core fill, flow accumulation and river segments of one canvas."""
     _require_canvas_dir(canvas)
-    _run_hydrology(canvas, resume=resume, force=force, threshold_cells=threshold_cells)
+    _run_hydrology(
+        canvas, resume=resume, force=force, threshold_cells=threshold_cells, workers=workers
+    )
 
 
 @canvas_app.command("mesh-sea-lake")

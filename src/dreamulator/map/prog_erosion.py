@@ -160,14 +160,30 @@ def apply_terrain_roughness(dem: np.ndarray, land: np.ndarray) -> np.ndarray:
 
 
 def priority_flood(
-    dem: np.ndarray, land: np.ndarray, eps: float = PF_EPS_M, breach: bool = False
+    dem: np.ndarray,
+    land: np.ndarray,
+    eps: float = PF_EPS_M,
+    breach: bool = False,
+    *,
+    parallel: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Fill depressions from the sea inward; return (filled, order, receiver).
 
     ``order`` lists cells downstream-first (a cell's receiver always appears
     earlier); ``receiver`` is the D8 steepest-descent neighbour on the
     filled surface (-1 for ocean).  Numba-jitted heap walk, O(n log n).
+
+    ``parallel`` runs the tiled multi-threaded variant
+    (:mod:`dreamulator.map._parallel_flood`): the same fill and a valid
+    drainage tree, with exactly tied slopes and flats resolved by scan order
+    instead of the serial discovery chain.  It does not breach.
     """
+    if parallel:
+        if breach:
+            raise ValueError("the parallel Priority-Flood does not breach")
+        from ._parallel_flood import priority_flood_tiled
+
+        return priority_flood_tiled(dem, land, eps)
     from ._erosion_kernels import _priority_flood_numba
 
     return _priority_flood_numba(
@@ -613,9 +629,14 @@ def _lake_balances(
     lake_mask_flat = lake.reshape(-1)
     acc_flat = accumulation.reshape(-1)
     rec_flat = receiver.reshape(-1)
-    cand = _lake_entry_donors(rec_flat, lake_flat, require_other_lake=True)
-    inflow = np.bincount(lake_flat[rec_flat[cand]], weights=acc_flat[cand], minlength=n + 1)
-    del cand
+    from ._erosion_kernels import _lake_inflow_numba
+
+    inflow = _lake_inflow_numba(
+        np.ascontiguousarray(rec_flat),
+        np.ascontiguousarray(lake_flat),
+        np.ascontiguousarray(acc_flat),
+        n,
+    )
 
     lake_idx = np.nonzero(lake_mask_flat)[0]
     ncc = precip_mm.shape[1]
