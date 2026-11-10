@@ -87,6 +87,7 @@
 | [**World Machine**](https://www.world-machine.com/) | 商用 | 节点图地形：确定性侵蚀设备、多掩码导出。地质时间线模拟（GeoGlyph 附加） | 同上；适合可复现的资产管线，无气候/生态/文明 |
 | [**Gaia Pro**](https://www.procedural-worlds.com/products/professional/gaia-pro/) (Unity) | 商用 | Unity 地形 + 植被/水体一键生成；2024 最佳开发工具奖 | 游戏引擎资产生成器，非科学模拟 |
 | [**TerreSculptor**](https://www.demenzunmedia.com/terresculptor/) | 商用 | 高度图雕刻 + 侵蚀滤镜 | 同 Gaea/World Machine |
+| [**Terragenesis（山川形意）**](https://github.com/HouraisanSeiran/Terragenesis) | 开源 Python，仓库未附许可证（默认保留全部权利，只借鉴思路、不复制代码） | 面向无限世界与 Minecraft 的米制地形管线：30 m 基底上的河网、河湖连接与河槽几何、水沙账本，三角洲（有限地质库存堆出连续平原）、海洋岛链与火山岛，Terrain Diffusion 局部细化，以及洞穴、悬挑等非高度场三维地貌；用 E1–E9 评价项验收自然度与多尺度一致性 | 局部尺度更细（30 m），已有三角洲与河槽几何；没有恒星系到气候的全球因果链，供水与输沙仍是情景参数。可借鉴：河槽宽深按流量的水力几何、三角洲堆积的库存约束、自然度评价项 |
 | [**Nixis**](https://github.com/MightyBOBcnc/nixis) | 开源 Python | 球面类地行星程序化生成：构造 + 水力侵蚀 + 河流/流域 | 早期阶段（仅灰度输出）；算法思路可参考 |
 | [**the-dark-candle**](https://github.com/feinorgh/the-dark-candle) | 开源 Rust/Bevy | 3D 测地线行星生成：多构造模式 + 侵蚀 + 等距圆柱/Mollweide/正射投影 + GPU 着色器 | CVT 而非 Voronoi；构造 timelapse 回放是 Dreamulator 的待做项（视图配置业界对照见 §九） |
 | [**Cartographer 2**](https://apps.apple.com/tw/app/cartographer-2-rpg-world-maker/id6744778305) | iOS 商用 | 一键程序化世界 + 气候/生物群系模拟 + 海平面/冰盖调节 | 移动端；简化但完整的"气候→群系"链 |
