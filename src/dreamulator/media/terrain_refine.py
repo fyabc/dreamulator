@@ -430,6 +430,22 @@ def refine_region_pack(
         temp_r = np.kron(temp_p, np.ones((factor, factor)))[:res, :res]
     else:
         print(f"[refine] no temperature.C.npy in {pack_dir / 'input'}; terminal-lake balance off")
+    # Lake-surface demand: the pack's energy-based open-water channel; packs
+    # exported before it fall back to the Hamon demand (low on cold plateaus).
+    lake_path = pack_dir / "input" / "lake_evaporation.mm.npy"
+    open_water_r: np.ndarray | None = None
+    if temp_r is not None and lake_path.exists():
+        lake_p = np.nan_to_num(np.load(lake_path).astype(np.float64), nan=0.0)
+        open_water_r = np.kron(lake_p, np.ones((factor, factor)))[:res, :res]
+    if temp_r is not None:
+        print(
+            "[refine] lake evaporation: "
+            + (
+                "open-water energy balance"
+                if open_water_r is not None
+                else "Hamon fallback (no lake_evaporation.mm.npy; re-export the pack)"
+            )
+        )
 
     filled, order, rec = priority_flood(h, land)
     lakes = lake_footprint(lake_mask(filled, h), filled, h)
@@ -459,6 +475,7 @@ def refine_region_pack(
             mmu_cells=mmu,
             km_per_px=km_pp,
             sea_level_m=float(meta["sea_level_m"]),
+            open_water_mm=open_water_r,
         )
     )
     assert h is not None  # keep_rewritten_h defaults to True here
@@ -518,10 +535,11 @@ def refine_region_pack(
         "dry_playas": lake_stats["dry_playas"],
         "shrunk_lakes": lake_stats["shrunk"],
         "lakes": lake_records,
-        "lake_balance": {
-            "pet": "hamon-annual",
-            "evaporation_factor": LAKE_EVAPORATION_FACTOR,
-        },
+        "lake_balance": (
+            {"evaporation": "open-water energy balance (input/lake_evaporation.mm.npy)"}
+            if open_water_r is not None
+            else {"pet": "hamon-annual", "evaporation_factor": LAKE_EVAPORATION_FACTOR}
+        ),
     }
     if month_act is not None:
         sheet_meta["regime"] = {

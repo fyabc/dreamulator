@@ -472,3 +472,64 @@ def test_read_radius_km_own_map_wins_over_root(tmp_path: Path) -> None:
     (own_map / "map.yaml").write_text("radius_km: 3000.0\n", encoding="utf-8")
 
     assert read_radius_km(own_map, tmp_path) == 3000.0
+
+
+# ---------------------------------------------------------------------------
+# Lake evaporation channel (the terminal-lake verdict's demand)
+# ---------------------------------------------------------------------------
+
+_EARTH_ORBIT = {
+    "stellar_luminosity_sol": 1.0,
+    "orbital_distance_au": 1.0,
+    "orbital_period_days": 365.25,
+    "axial_tilt_deg": 23.44,
+    "eccentricity": 0.0167,
+    "perihelion_day": 0.0,
+}
+
+
+def test_lake_evaporation_channel_known_answer(tmp_path: Path) -> None:
+    # Constant months over the island: the channel equals the open-water
+    # formula on the same forcing (cell elevation, Earth land-mean cloud,
+    # the climate engine's insolation at the cell latitude).
+    from dreamulator.engine.lake_evaporation import EARTH_LAND_MEAN_CLOUD, open_water_evaporation
+    from dreamulator.map.astronomy_inputs import monthly_toa_insolation
+
+    mesh = _patch_mesh()
+    n = mesh.num_cells
+    t12 = np.full((n, 12), 24.5)
+    p12 = np.full((n, 12), 2100.0 / 12.0)
+    meta = export_region_pack(
+        mesh,
+        out_dir=tmp_path,
+        climate_monthly=(t12, p12),
+        astronomy=_EARTH_ORBIT,
+        **(_clim_kwargs()),  # type: ignore[arg-type]
+    )
+    lake = np.load(tmp_path / "lake_evaporation.mm.npy")
+    assert lake.dtype == np.float32
+    lat = np.array([c.lat for c in mesh.cells])
+    elev = np.array([c.elevation for c in mesh.cells])
+    col = open_water_evaporation(
+        t12, monthly_toa_insolation(lat, _EARTH_ORBIT), np.full(n, EARTH_LAND_MEAN_CLOUD), elev
+    )
+    assert 1000.0 < float(np.nanmedian(lake)) < 3000.0
+    assert float(np.nanmin(lake)) >= float(col.min()) * (1 - 2e-3)
+    assert float(np.nanmax(lake)) <= float(col.max()) * (1 + 2e-3)
+    info = meta["climate"]["lake_evaporation_mm"]
+    assert "Priestley-Taylor" in info["method"]
+    assert "Earth land-mean" in info["cloud_source"]
+    assert info["solar_constant_w_m2"] == pytest.approx(1361.0)
+
+
+def test_lake_evaporation_channel_needs_the_orbit(tmp_path: Path) -> None:
+    mesh = _patch_mesh()
+    n = mesh.num_cells
+    meta = export_region_pack(
+        mesh,
+        out_dir=tmp_path,
+        climate_monthly=(np.full((n, 12), 10.0), np.full((n, 12), 50.0)),
+        **(_clim_kwargs()),  # type: ignore[arg-type]
+    )
+    assert not (tmp_path / "lake_evaporation.mm.npy").exists()
+    assert "lake_evaporation_mm" not in meta["climate"]

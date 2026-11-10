@@ -34,6 +34,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from . import td_canvas as tc
+from .astronomy_inputs import load_astronomy as load_astronomy
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -627,35 +628,6 @@ def _cloud_column(cells: list[Any]) -> np.ndarray | None:
     return np.array([np.nan if v is None else float(v) for v in vals], dtype=np.float64)
 
 
-def load_astronomy(map_dir: Path) -> dict[str, Any] | None:
-    """Insolation parameters from a map's ``climate_metadata.json`` (None when absent).
-
-    ``perihelion_day`` is missing from climate builds that predate it; the
-    season phase then defaults to perihelion at the vernal equinox, which moves
-    monthly insolation on eccentric orbits but barely the annual sums.
-    """
-    path = map_dir / "climate_metadata.json"
-    if not path.exists():
-        return None
-    meta = json.loads(path.read_text(encoding="utf-8"))
-    keys = (
-        "stellar_luminosity_sol",
-        "orbital_distance_au",
-        "orbital_period_days",
-        "axial_tilt_deg",
-    )
-    if any(meta.get(k) is None for k in keys):
-        return None
-    out: dict[str, Any] = {k: float(meta[k]) for k in keys}
-    out["eccentricity"] = float(meta.get("eccentricity") or 0.0)
-    if meta.get("perihelion_day") is None:
-        out["perihelion_day"] = 0.0
-        out["perihelion_day_assumed"] = True
-    else:
-        out["perihelion_day"] = float(meta["perihelion_day"])
-    return out
-
-
 def lake_evaporation_channel(
     geom: tc.CanvasGeometry,
     t_monthly: np.ndarray,
@@ -670,23 +642,14 @@ def lake_evaporation_channel(
     from the coarse-cell latitude and the world's orbit, the same
     ``monthly_insolation`` the climate engine uses.
     """
-    from dreamulator.engine.climate_physics import SOLAR_CONSTANT
-    from dreamulator.engine.climate_seasonality import monthly_insolation
     from dreamulator.engine.lake_evaporation import EARTH_LAND_MEAN_CLOUD, open_water_evaporation
+
+    from .astronomy_inputs import monthly_toa_insolation, solar_constant_w_m2
 
     n = geom.ncell
     lat, _lon = geom.coarse_centres_latlon()
-    solar = (
-        SOLAR_CONSTANT * astronomy["stellar_luminosity_sol"] / astronomy["orbital_distance_au"] ** 2
-    )
-    q = monthly_insolation(
-        np.radians(lat.reshape(-1)),
-        astronomy["axial_tilt_deg"],
-        solar,
-        astronomy["orbital_period_days"],
-        astronomy["eccentricity"],
-        astronomy["perihelion_day"],
-    )
+    solar = solar_constant_w_m2(astronomy)
+    q = monthly_toa_insolation(lat, astronomy)
     if cloud is None:
         c = np.full(n * n, EARTH_LAND_MEAN_CLOUD)
         cloud_source = (

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- 能量型湖面蒸发（`engine/lake_evaporation.py`）：Priestley–Taylor 开阔水面蒸发，净辐射由逐月大气顶日照、云量与气温按 FAO-56 关系式推出，气压随海拔变化，月均温低于 0 °C 按封冻计。地球 14 个湖（−210 m 到 4724 m）与观测之比的中位数为 1.06、相关 0.94，原 Hamon 乘湖面系数为 0.60，纳木错低估约三倍。S1 新写出画布气候通道 `lake_evaporation.mm`（云量取 GCM 年均总云量，引擎世界取地球陆地平均 0.43），S2 的终端湖判据优先使用它，旧画布退回 Hamon；气候元数据补写 `perihelion_day`。`prog_erosion._lake_balances` 改为返回湖面蒸发需求（已含湖面系数）。区域链仍用 Hamon。
+- 能量型湖面蒸发（`engine/lake_evaporation.py`）：Priestley–Taylor 开阔水面蒸发，净辐射由逐月大气顶日照、云量与气温按 FAO-56 关系式推出，气压随海拔变化，月均温低于 0 °C 按封冻计。地球 14 个湖（−210 m 到 4724 m）与观测之比的中位数为 1.06、相关 0.94，原 Hamon 乘湖面系数为 0.60，纳木错低估约三倍。S1 新写出画布气候通道 `lake_evaporation.mm`（云量取 GCM 年均总云量，引擎世界取地球陆地平均 0.43），S2 的终端湖判据优先使用它，旧画布退回 Hamon；气候元数据补写 `perihelion_day`。`prog_erosion._lake_balances` 改为返回湖面蒸发需求（已含湖面系数）。区域数据包同样写出 `lake_evaporation.mm`，区域构建的两条路径（TD 与程序化侵蚀）都改读它；轨道参数读取与逐月日照移到 `map/astronomy_inputs.py`，画布与区域共用。
 - 项目规则与技能改为多 agent 共用：根目录与各文档子目录的规则改写在 `AGENTS.md`，同目录 `CLAUDE.md` 只做 `@AGENTS.md` 导入；前端专属规则移到 `frontend/AGENTS.md`，根文件保持在 Codex 32 KiB 缺省上限以内；技能按 Agent Skills 格式移到 `.agents/skills/`，由 `scripts/dev/sync_agent_skills.py` 生成 `.claude/skills/` 真实文件副本；不使用符号链接，`.gitattributes` 固定 LF，`tests/test_agent_instructions.py` 检查成对导入、体积、无符号链接与技能同步。
 - 新增山系形态改进提案，区分地质引擎的平均场与画布的中尺度结构，并登记下一次全层重建的验收方案。
 

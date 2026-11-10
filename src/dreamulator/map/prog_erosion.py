@@ -1701,6 +1701,13 @@ def erode_region_pack(
         temp_c = np.nan_to_num(np.load(t_path).astype(np.float64), nan=0.0)
     else:
         print(f"[erode] no temperature.C.npy under {inp}; terminal-lake balance off")
+    open_water: np.ndarray | None = None
+    lake_path = inp / "lake_evaporation.mm.npy"
+    if temp_c is not None and lake_path.exists():
+        lake_grid = np.nan_to_num(np.load(lake_path).astype(np.float64), nan=0.0)
+        open_water = (
+            tile_coarse_field(lake_grid, h.shape) if lake_grid.shape != h.shape else lake_grid
+        )
     # Terminal-lake equilibrium with through-flow depletion (the shared
     # helper): pass-through lakes deduct their net evaporation from the
     # through-flow; routing stays on the pre-rewrite tree.
@@ -1728,6 +1735,7 @@ def erode_region_pack(
         mmu_cells=mmu,
         km_per_px=km_pp,
         sea_level_m=float(meta["sea_level_m"]),
+        open_water_mm=open_water,
     )
     assert h_rw is not None  # keep_rewritten_h defaults to True here
     h = h_rw
@@ -1774,10 +1782,11 @@ def erode_region_pack(
                 "terminal_lakes": lake_stats["terminal"],
                 "dry_playas": lake_stats["dry_playas"],
                 "shrunk_lakes": lake_stats["shrunk"],
-                "lake_balance": {
-                    "pet": "hamon-annual",
-                    "evaporation_factor": LAKE_EVAPORATION_FACTOR,
-                },
+                "lake_balance": (
+                    {"evaporation": "open-water energy balance (lake_evaporation.mm.npy)"}
+                    if open_water is not None
+                    else {"pet": "hamon-annual", "evaporation_factor": LAKE_EVAPORATION_FACTOR}
+                ),
             },
             ensure_ascii=False,
             indent=1,

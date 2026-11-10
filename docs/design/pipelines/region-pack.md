@@ -37,6 +37,7 @@
 | `precipitation.mm`、`temperature.C`、`ice.m`、`npp.gc_m2_yr` | 年降水、年均温、冰厚（无冰为 0）与 Miami NPP，各有 `.npy` 数值与 `.png` 归一图。 |
 | `runoff.mm` | 年径流，由逐格年降水与 Hamon 潜在蒸散按 Turc–Pike 公式计算后插值；仅在有月气候时写出。 |
 | `lake_ice.months.npy` | uint8，月均气温低于 0 °C 的月数；12 表示常年封冻，1–11 为季节性封冻，0 为不封冻；仅在有月气候时写出。 |
+| `lake_evaporation.mm` | 湖面年蒸发（mm/yr），逐格用 Priestley–Taylor 开阔水面蒸发计算后插值（`_lake_evaporation_column`，物理见知识库 hydrology.md §7）：月均气温、格平均高程、GCM 年均总云量（没有时取地球陆地平均 0.43），以及由气候元数据轨道参数经 `monthly_toa_insolation` 求出的逐月日照；`meta.json` 记录方法、云量来源、太阳常数与轨道参数。仅在有月气候且气候元数据带轨道参数时写出；区域构建的终端湖判据优先读它，缺少时退回 0.9 × Hamon。 |
 | `headwaters.png` | 16 位掩膜，标出降水大于 Hamon 潜在蒸散的水量盈余陆地，作为 Gaea 河流节点的源区输入。 |
 | `glacier.mask.png` | 16 位掩膜，冰厚大于 0 或群系为冰的像素，作为 Gaea 冰川节点的参考输入。 |
 | `koppen.codes.npy`、`koppen.png`，`biome.codes.npy`、`biome.png` | uint8 类别码与调色板配色图。类别码在全网格按类名字典序分配，跨窗口稳定。 |

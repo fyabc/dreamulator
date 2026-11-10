@@ -564,7 +564,56 @@ def _export_climate_channels(
             criterion="Turc-Pike (Budyko n=2) annual runoff (annual P vs Hamon annual PET)",
         )
         channels["runoff_mm"] = runoff_meta
+    lake_evap = scalars.get("lake_evaporation_mm")
+    if lake_evap is not None:
+        lake_max = float(np.nanmax(lake_evap)) if not np.isnan(lake_evap).all() else 0.0
+        channels["lake_evaporation_mm"] = _export_scalar_channel(
+            lake_evap, out_dir, "lake_evaporation.mm", png_min=0.0, png_max=lake_max
+        )
     return channels
+
+
+def _lake_evaporation_column(
+    mesh: CVTMesh, t_monthly: np.ndarray, astronomy: dict[str, Any]
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Annual open-water evaporation per mesh cell (mm/yr) and its provenance.
+
+    Same physics as the canvas channel (``td_canvas_build.lake_evaporation_channel``):
+    monthly air temperature, cell elevation, GCM annual cloud (Earth's land
+    mean when the climate has none) and the climate engine's insolation.
+    """
+    from dreamulator.engine.lake_evaporation import EARTH_LAND_MEAN_CLOUD, open_water_evaporation
+
+    from .astronomy_inputs import monthly_toa_insolation, solar_constant_w_m2
+
+    cells = mesh.cells
+    lat = np.array([c.lat for c in cells], dtype=np.float64)
+    elev = np.array([c.elevation for c in cells], dtype=np.float64)
+    clouds = [getattr(c, "cloud_total_frac", None) for c in cells]
+    if all(v is None for v in clouds):
+        cloud = np.full(lat.size, EARTH_LAND_MEAN_CLOUD)
+        cloud_source = (
+            f"Earth land-mean total cloud {EARTH_LAND_MEAN_CLOUD} (no climate cloud field)"
+        )
+    else:
+        cloud = np.array(
+            [EARTH_LAND_MEAN_CLOUD if v is None else float(v) for v in clouds], dtype=np.float64
+        )
+        cloud_source = "climate annual total cloud (GCM) per mesh cell"
+    col = open_water_evaporation(
+        np.asarray(t_monthly, dtype=np.float64),
+        monthly_toa_insolation(lat, astronomy),
+        cloud,
+        elev,
+    )
+    info = {
+        "method": "Priestley-Taylor open water, FAO-56 radiation, ice when monthly T < 0 C "
+        "(engine/lake_evaporation.py)",
+        "cloud_source": cloud_source,
+        "solar_constant_w_m2": round(solar_constant_w_m2(astronomy), 3),
+        "astronomy": dict(astronomy),
+    }
+    return col, info
 
 
 def export_region_pack(
@@ -585,8 +634,15 @@ def export_region_pack(
     climate_monthly: tuple[np.ndarray, np.ndarray] | None = None,
     seafloor_clamp_m: float = -400.0,
     out_res: int = DEFAULT_OUT_RES,
+    astronomy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Export the region data pack; returns the written ``meta`` dict."""
+    """Export the region data pack; returns the written ``meta`` dict.
+
+    With ``climate_monthly`` and ``astronomy`` (the orbit from the climate
+    build, :func:`dreamulator.map.astronomy_inputs.load_astronomy`) the pack
+    also carries ``lake_evaporation.mm.npy``, the energy-based open-water
+    evaporation the terminal-lake verdict reads.
+    """
     window = region_window(center_lat, center_lon, span_km, radius_km)
 
     # The equirect index grid survives only as the alignment probe's subject;
@@ -680,6 +736,7 @@ def export_region_pack(
     }
     if include_climate:
         clim_scalars: dict[str, np.ndarray] = {}
+        lake_info: dict[str, Any] = {}
         for field, none_as in (
             ("precipitation_mm", math.nan),
             ("temperature_C", math.nan),
@@ -718,7 +775,14 @@ def export_region_pack(
             freeze_col = (t_monthly < 0.0).sum(axis=1).astype(np.uint8)
             lake_ice = freeze_col[indices_fine]
             np.save(out_dir / "lake_ice.months.npy", lake_ice)
+            if astronomy is not None:
+                lake_col, lake_info = _lake_evaporation_column(mesh, t_monthly, astronomy)
+                clim_scalars["lake_evaporation_mm"] = _interpolate_window(
+                    mesh, window, out_res, lake_col, lake_col[indices_fine]
+                )
         meta["climate"] = _export_climate_channels(mesh, indices_fine, out_dir, clim_scalars)
+        if "lake_evaporation_mm" in meta["climate"]:
+            meta["climate"]["lake_evaporation_mm"].update(lake_info)
         if climate_monthly is not None:
             meta["climate"]["lake_ice_months"] = {
                 "units": "months with monthly mean air temperature < 0 °C (uint8, 0-12)",
