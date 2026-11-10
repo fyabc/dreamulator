@@ -165,6 +165,49 @@ def _seam_node(lab: np.ndarray, off: np.ndarray, tile: int, ntx: int, y: int, x:
 
 
 @numba.njit(cache=True)
+def minimax_levels(nn: int, ea: np.ndarray, eb: np.ndarray, ew: np.ndarray) -> np.ndarray:
+    """Lowest spill level of every node: Priority-Flood over an undirected graph from node 0.
+
+    A node's level is the minimum over paths to node 0 of the largest edge weight
+    on the path (node 0 sits at -inf); nodes not connected to node 0 keep +inf.
+    The value is unique, so edge order and duplicate edges do not change it.
+    """
+    m = ea.size
+    deg = np.zeros(nn + 1, np.int64)
+    for i in range(m):
+        deg[ea[i] + 1] += 1
+        deg[eb[i] + 1] += 1
+    for i in range(nn):
+        deg[i + 1] += deg[i]
+    adj = np.empty(2 * m, np.int64)
+    wgt = np.empty(2 * m, np.float64)
+    pos = deg[:-1].copy()
+    for i in range(m):
+        a, b = ea[i], eb[i]
+        adj[pos[a]], wgt[pos[a]] = b, ew[i]
+        pos[a] += 1
+        adj[pos[b]], wgt[pos[b]] = a, ew[i]
+        pos[b] += 1
+    level = np.full(nn, np.inf)
+    level[0] = -np.inf
+    done = np.zeros(nn, np.uint8)
+    heap = np.empty((2, 2 * m + 1), np.float64)
+    hl = _push(heap, 0, -np.inf, 0)
+    while hl > 0:
+        hl, cur, nf = _pop(heap, hl)
+        node = int(nf)
+        if done[node]:
+            continue
+        done[node] = 1
+        for j in range(deg[node], deg[node + 1]):
+            cand = max(cur, wgt[j])
+            if cand < level[adj[j]]:
+                level[adj[j]] = cand
+                hl = _push(heap, hl, cand, adj[j])
+    return level
+
+
+@numba.njit(cache=True)
 def _label_levels(
     dem: np.ndarray,
     lab: np.ndarray,
@@ -218,37 +261,7 @@ def _label_levels(
                         ea[m], eb[m] = u, v
                         ew[m] = max(dem[s - 1, x], dem[s, nx])
                         m += 1
-    deg = np.zeros(nn + 1, np.int64)
-    for i in range(m):
-        deg[ea[i] + 1] += 1
-        deg[eb[i] + 1] += 1
-    for i in range(nn):
-        deg[i + 1] += deg[i]
-    adj = np.empty(2 * m, np.int64)
-    wgt = np.empty(2 * m, np.float64)
-    pos = deg[:-1].copy()
-    for i in range(m):
-        a, b = ea[i], eb[i]
-        adj[pos[a]], wgt[pos[a]] = b, ew[i]
-        pos[a] += 1
-        adj[pos[b]], wgt[pos[b]] = a, ew[i]
-        pos[b] += 1
-    level = np.full(nn, np.inf)
-    level[0] = -np.inf
-    done = np.zeros(nn, np.uint8)
-    heap = np.empty((2, 2 * m + 1), np.float64)
-    hl = _push(heap, 0, -np.inf, 0)
-    while hl > 0:
-        hl, cur, nf = _pop(heap, hl)
-        node = int(nf)
-        if done[node]:
-            continue
-        done[node] = 1
-        for j in range(deg[node], deg[node + 1]):
-            cand = max(cur, wgt[j])
-            if cand < level[adj[j]]:
-                level[adj[j]] = cand
-                hl = _push(heap, hl, cand, adj[j])
+    level = minimax_levels(nn, ea[:m], eb[:m], ew[:m])
     return level, off
 
 

@@ -539,7 +539,10 @@ Priority-Flood 的算法本体、物理判据与文献讲解在知识库
 子进程只写本块文件并返回校验和，校验账本由父进程统一追加，结果与进程数和启动方式无关。spawn
 会在子进程里重新导入主模块，自写脚本调用 `run_canvas_fill` 时必须放在
 `if __name__ == "__main__":` 之下；命令行入口不受影响。world-west
-（1588 块、67 亿像素）在 16 个进程下整个填平约 5 分钟，阶段二的串行流域图约占其中 2 分钟。
+（1588 块、67 亿像素）在 16 个进程下整个填平不到 3 分钟。阶段二把各块局部标签编成紧凑的全局
+节点号，接缝边按右邻块、下邻块与两个斜对角块成批生成，在压缩邻接表上用 numba 跑最小化路径最大值的
+Priority-Flood（`_watershed_levels`，复用 `minimax_levels`），world-west 的 750 万个流域约 6 秒；
+流域水位取值唯一，结果与字典加堆的参照实现 `_watershed_levels_reference` 逐位相同。
 `canvas_hydrology.py` 另有一套全局前沿 Dijkstra 实现
 （`flood_canvas`），作为正确性参照（oracle）：两者在合成 DEM 上逐位一致，包括带海与
 多分块的情形。
