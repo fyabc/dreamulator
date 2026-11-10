@@ -1287,6 +1287,20 @@ def run_canvas_rivers(
         precip = np.nan_to_num(np.load(precip_path).astype(np.float32), nan=0.0)
         temp_c = np.nan_to_num(np.load(temp_path).astype(np.float32), nan=0.0)
         climate_block = PX_PER_CELL  # one climate cell = PX_PER_CELL pixels
+    # Lake-surface demand: the energy-based open-water channel S1 writes
+    # (engine/lake_evaporation.py); canvases planned before it fall back to
+    # the Hamon demand, which underestimates cold clear plateaus severalfold.
+    open_water = None
+    lake_path = climate / "lake_evaporation.mm.npy"
+    if has_basis and lake_path.exists():
+        open_water = np.nan_to_num(np.load(lake_path).astype(np.float32), nan=0.0)
+    if verbose and has_basis:
+        source = (
+            "open-water energy balance"
+            if open_water is not None
+            else ("Hamon fallback (no lake_evaporation.mm channel; re-plan the canvas)")
+        )
+        print(f"[hydrology] lake evaporation: {source}")
     (
         _h_rewritten,
         land,
@@ -1312,6 +1326,7 @@ def run_canvas_rivers(
         km_per_px=km,
         sea_level_m=sea_level,
         climate_block=climate_block,
+        open_water_mm=open_water,
         consume_receiver=True,
         keep_rewritten_h=False,
     )

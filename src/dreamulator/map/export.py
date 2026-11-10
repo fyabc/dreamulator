@@ -1326,6 +1326,7 @@ def export_climate_layers(
         "rotation_period_days": config.rotation_period_days,
         "albedo": config.albedo,
         "eccentricity": config.eccentricity,
+        "perihelion_day": config.perihelion_day,
     }
     meta_path = output_dir / "climate_metadata.json"
     with meta_path.open("w", encoding="utf-8") as _f:
