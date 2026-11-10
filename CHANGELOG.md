@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- S2 外存填平的阶段一（逐块局部填平）与阶段三（抬升到流域水位）改为按块在进程池中并行，阶段三由逐标签全块比较改为查表；Linux 用 fork、Windows 用 spawn，`export canvas hydrology` 新增 `--workers`。world-west 上整个填平由约 4.5 小时降到约 5 分钟（16 进程），1588 块最终面与串行结果逐位相同。湖水量平衡的入湖流量改为单遍 numba 累加，结果逐位不变，并省去两块整网格临时数组。
 - S2 水文的海陆判定跟随地质网格：网格升级为类海水体（`water_class` 为 `ocean`）的封闭水体，其内部粗格成为第三类海种子，水体与全球海洋共用 0 m 海平面，不再被灌满到溢口画成高出海平面的巨型湖。S1 新写出 `geometry_fields/mesh_sea_lake.npy`，旧画布可用 `export canvas mesh-sea-lake` 补写；没有该字段时退回原有两条件规则。S2、接缝检查与高清窗口改用同一入口 `canvas_anchored_sea`。
 - 造山带中尺度起伏的带通核沿造山带走向拉长（`orogen_strike_frame`，`orogen_mesoscale_anisotropy` 缺省 3）；画布结构场新增顺走向方向选项（缺省仍为横向）。三次私有 TD 试验使画布 25–150 km 波段的平行份额累计提高约 0.1–0.2，但未达验收门，一致度不受条件场方向影响。
 - 地形合成新增造山带中尺度起伏阶段（`orogen_mesoscale_relief.py`，`orogen_mesoscale_relief_m_per_km` 缺省 75）：带造山带起伏的陆地格子在上限之后叠加零均值的 100–400 km 起伏，幅度随造山带起伏增长，用青藏与阿尔蒂普拉诺标定；nacrea 钉为 0。地球对照否证了「高原内部山脉只沿古缝合带」。

@@ -613,9 +613,14 @@ def _lake_balances(
     lake_mask_flat = lake.reshape(-1)
     acc_flat = accumulation.reshape(-1)
     rec_flat = receiver.reshape(-1)
-    cand = _lake_entry_donors(rec_flat, lake_flat, require_other_lake=True)
-    inflow = np.bincount(lake_flat[rec_flat[cand]], weights=acc_flat[cand], minlength=n + 1)
-    del cand
+    from ._erosion_kernels import _lake_inflow_numba
+
+    inflow = _lake_inflow_numba(
+        np.ascontiguousarray(rec_flat),
+        np.ascontiguousarray(lake_flat),
+        np.ascontiguousarray(acc_flat),
+        n,
+    )
 
     lake_idx = np.nonzero(lake_mask_flat)[0]
     ncc = precip_mm.shape[1]

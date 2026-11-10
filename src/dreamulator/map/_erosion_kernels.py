@@ -250,3 +250,24 @@ def _spl_step_numba(
         dist = np.sqrt(float((yr - y0) ** 2 + (xr - x0) ** 2))
         f_coef = k * dt * acc.reshape(-1)[i] ** m / dist
         flat_h[i] = (flat_h[i] + dt * uplift + f_coef * hr) / (1.0 + f_coef)
+
+
+@numba.njit(cache=True)
+def _lake_inflow_numba(
+    rec_flat: np.ndarray, lake_flat: np.ndarray, acc_flat: np.ndarray, n: int
+) -> np.ndarray:
+    """Accumulation entering each lake from cells outside it, in one pass.
+
+    Cell-id order and float64 sums, as ``np.bincount`` over the donor list
+    does, so the result is bit-identical to that formulation; float32
+    accumulations are read in place without a whole-grid copy.
+    """
+    inflow = np.zeros(n + 1)
+    for i in range(rec_flat.size):
+        r = rec_flat[i]
+        if r < 0:
+            continue
+        lab = lake_flat[r]
+        if lab > 0 and lab != lake_flat[i]:
+            inflow[lab] += np.float64(acc_flat[i])
+    return inflow
