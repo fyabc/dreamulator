@@ -160,14 +160,30 @@ def apply_terrain_roughness(dem: np.ndarray, land: np.ndarray) -> np.ndarray:
 
 
 def priority_flood(
-    dem: np.ndarray, land: np.ndarray, eps: float = PF_EPS_M, breach: bool = False
+    dem: np.ndarray,
+    land: np.ndarray,
+    eps: float = PF_EPS_M,
+    breach: bool = False,
+    *,
+    parallel: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Fill depressions from the sea inward; return (filled, order, receiver).
 
     ``order`` lists cells downstream-first (a cell's receiver always appears
     earlier); ``receiver`` is the D8 steepest-descent neighbour on the
     filled surface (-1 for ocean).  Numba-jitted heap walk, O(n log n).
+
+    ``parallel`` runs the tiled multi-threaded variant
+    (:mod:`dreamulator.map._parallel_flood`): the same fill and a valid
+    drainage tree, with exactly tied slopes and flats resolved by scan order
+    instead of the serial discovery chain.  It does not breach.
     """
+    if parallel:
+        if breach:
+            raise ValueError("the parallel Priority-Flood does not breach")
+        from ._parallel_flood import priority_flood_tiled
+
+        return priority_flood_tiled(dem, land, eps)
     from ._erosion_kernels import _priority_flood_numba
 
     return _priority_flood_numba(
