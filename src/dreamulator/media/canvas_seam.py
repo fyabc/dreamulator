@@ -35,6 +35,7 @@ is not a zero-flow claim (the canvas contract's own rule for lake tables).
 
 from __future__ import annotations
 
+import functools
 import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
@@ -213,6 +214,14 @@ def _local_index(loc: SeamLocation, tile: int) -> tuple[int, int]:
     return row, col
 
 
+@functools.lru_cache(maxsize=64)
+def _increments(canvas_root: Path) -> Path | None:
+    """The canvas's erosion increments when that product is complete (the S2 surface)."""
+    from dreamulator.media.canvas_surface_process import resolve_increments
+
+    return resolve_increments(canvas_root, "auto")
+
+
 def _chunk_path(canvas_root: Path, loc: SeamLocation) -> Path:
     ci, cj = loc.chunk
     return canvas_root / "chunks" / f"r{ci:03d}_c{cj:03d}.npy"
@@ -227,7 +236,11 @@ def sample_elevation(canvas_root: Path, loc: SeamLocation, tile: int) -> float |
     if not (0 <= row < tile and 0 <= col < tile):
         return None
     chunk = np.load(path, mmap_mode="r")
-    return float(chunk[row, col])
+    value = float(chunk[row, col])
+    inc = _increments(canvas_root)
+    if inc is not None:
+        value += float(np.load(inc / path.name, mmap_mode="r")[row, col])
+    return value
 
 
 def sample_ice(canvas_root: Path, loc: SeamLocation, tile: int) -> float | None:
@@ -279,9 +292,15 @@ def _anchored_sea_of(
             )
         tile = _tile_size(canvas_root)
 
+        inc = _increments(canvas_root)
+
         def load(key: tuple[int, int]) -> np.ndarray:
             ci, cj = key
-            return np.asarray(np.load(canvas_root / "chunks" / f"r{ci:03d}_c{cj:03d}.npy"))
+            name = f"r{ci:03d}_c{cj:03d}.npy"
+            arr = np.asarray(np.load(canvas_root / "chunks" / name))
+            if inc is not None:
+                arr = arr.astype(np.int32) + np.load(inc / name)
+            return arr
 
         sea = canvas_anchored_sea(
             canvas_root, _canvas_geometry(canvas_root), keys, load, tile, 0.0, workers=4

@@ -329,7 +329,11 @@ def _load_rows(r0: int, r1: int, files: dict[tuple[int, int], str] | None = None
                 continue
             blk = np.load(f, mmap_mode="r")
             cols = slice(cj * CHUNK_PX - c0, (cj + 1) * CHUNK_PX - c0)
-            h[a0 - r0 : a1 - r0, cols] = blk[a0 - ci * CHUNK_PX : a1 - ci * CHUNK_PX]
+            rows = slice(a0 - ci * CHUNK_PX, a1 - ci * CHUNK_PX)
+            h[a0 - r0 : a1 - r0, cols] = blk[rows]
+            inc = _ctx.get("inc_files", {}).get((ci, cj))
+            if inc is not None:  # the eroded surface S2 used (surface_process increments)
+                h[a0 - r0 : a1 - r0, cols] += np.load(inc, mmap_mode="r")[rows]
     return h
 
 
@@ -391,8 +395,15 @@ def render_mosaic(
     quality: int = 90,
     workers: int = 8,
     ice_overlay: bool = False,
+    surface: str = "auto",
 ) -> dict[str, Any]:
-    """Write the mosaic image and its sidecar; returns the sidecar dict."""
+    """Write the mosaic image and its sidecar; returns the sidecar dict.
+
+    ``surface`` picks the installed surface as S2 does (``resolve_increments``).
+    """
+    from dreamulator.media.canvas_surface_process import resolve_increments
+
+    increments = resolve_increments(canvas_dir, surface)
     if step < 1 or CHUNK_PX % step:
         raise ValueError("step must divide 2048")
     if style not in STYLES:
@@ -417,6 +428,9 @@ def render_mosaic(
     ve = float(exaggeration) if exaggeration is not None else km_px / (23.0 / 256)
     ctx = {
         "files": files,
+        "inc_files": {k: str(increments / Path(f).name) for k, f in files.items()}
+        if increments is not None
+        else {},
         "ice_files": {
             (int(p.stem[1:4]), int(p.stem[6:9])): str(p)
             for p in (canvas_dir / "surface" / "ice_chunks").glob("r*_c*.npy")
@@ -487,6 +501,7 @@ def render_mosaic(
         "canvas_rows": [ctx["r0"], ctx["r1"]],
         "canvas_cols": [ctx["c0"], ctx["c1"]],
         "geometry": g,
+        "surface": "td" if increments is None else "surface-process",
         "style": style,
         "palette": palette,
         "sea": sea,
