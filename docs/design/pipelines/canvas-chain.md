@@ -121,7 +121,7 @@ nacrea 当前是 19 张画布、9259 个分块、约 388 亿像素，int16 存�
 
 #### 气候通道
 
-年均与月均气温、年降水与月降水、年径流（Turc–Pike，n = 2）、Hamon 年潜在蒸散、湖面年蒸发、月径流（土壤水桶加基流给出月形状，乘以年径流）、冰厚、NPP、柯本与群系编码。湖面年蒸发 `lake_evaporation.mm`（mm/yr，仅陆地）在粗格上由画布自己的月均气温通道、粗格平均高程、云量与逐月大气顶日照算出（`lake_evaporation_channel`，Priestley–Taylor 开阔水面蒸发，物理与地球检验见知识库 hydrology.md §7）：日照用粗格中心纬度与气候元数据 `climate_metadata.json` 里的轨道参数，经气候引擎同一个 `monthly_insolation` 计算（`load_astronomy` 读取，旧气候构建缺 `perihelion_day` 时按近日点在春分处理并在元数据中注明）；云量取网格的 GCM 年均总云量，没有时取地球陆地平均 0.43；元数据记录方法、云量来源、太阳常数与轨道参数。气候元数据缺轨道参数时不写这个通道。公式派生的量先在 CVT 格上算好再取样，不在粗格上重算非线性量；连续场用 Clough–Tocher 插值（`clough_tocher`）并截断到所在三角形的顶点取值范围，月径流与类别编码用 `sample_mesh_field`。海洋粗格上的陆地专属量记为 NaN；编码通道取粗格中心的最近格，在海岸会与高程判定的海陆不一致——消费者判定海陆一律以高程是否大于 0 m 为准。
+年均与月均气温、年降水与月降水、年径流（Turc–Pike，n = 2）、Hamon 年潜在蒸散、湖面年蒸发、月径流（土壤水桶加基流给出月形状，乘以年径流）、冰厚、NPP、柯本与群系编码。湖面年蒸发 `lake_evaporation.mm`（mm/yr，仅陆地）在粗格上由画布自己的月均气温通道、粗格平均高程、云量与逐月大气顶日照算出（`lake_evaporation_channel`，Priestley–Taylor 开阔水面蒸发，物理与地球检验见知识库 hydrology.md §7）：日照用粗格中心纬度与气候元数据 `climate_metadata.json` 里的轨道参数，经气候引擎同一个 `monthly_insolation` 计算（`load_astronomy` 读取，旧气候构建缺 `perihelion_day` 时按近日点在春分处理并在元数据中注明）；云量取网格的 GCM 年均总云量，没有时取地球陆地平均 0.43；元数据记录方法、云量来源、太阳常数与轨道参数。同一计算的逐月值另存为 `lake_evaporation_monthly.mm`（12 个月，mm/月，`lake_evaporation_monthly_channel`），年通道等于它的十二个月之和，S2 的过路湖逐月收支读它；规划早于该通道的画布用 `canvas plan --backfill lake-evaporation` 从网格补写两个通道（`write_lake_evaporation`）。气候元数据缺轨道参数时不写这个通道。公式派生的量先在 CVT 格上算好再取样，不在粗格上重算非线性量；连续场用 Clough–Tocher 插值（`clough_tocher`）并截断到所在三角形的顶点取值范围，月径流与类别编码用 `sample_mesh_field`。海洋粗格上的陆地专属量记为 NaN；编码通道取粗格中心的最近格，在海岸会与高程判定的海陆不一致——消费者判定海陆一律以高程是否大于 0 m 为准。
 
 #### 原生降水覆盖
 
@@ -688,7 +688,12 @@ Dijkstra，时间 O(M log M)、空间 O(M)，M 为平区格数，通常远小于
 河道提取复用区域链的 `river_segments`：D8 最陡下降、Chaikin 平滑、湖岸停步与溢出口
 续走、短链保留。河段以画布 SW 原点 km 输出，与区域链 `refined-out` 的坐标约定一致。
 常流与非常流按 12 个月的累积流量判定：任一月低于 1 L/s 的活动门槛即记为非常流，连续
-同类格合成一个情相段。
+同类格合成一个情相段。年度判为过路的湖在月度累积里逐月记账（`month_active_counts` 的
+`lakes` 参数）：`terminal_equilibrium_routing` 交出过路湖的格、出口与湖图（`PassThroughLakes`），
+`lake_monthly_demand` 由月度湖面蒸发与月降水给出各湖逐月净需水，`lake_monthly_outflow` 按出口
+以下的蓄水亏缺算出周期稳态的月出流，再从出口注入第二组月累积。物理与近似见知识库
+hydrology.md 的月度情相一节。缺 `lake_evaporation_monthly.mm` 时不扣湖面月收支；所用方式与湖数
+写进水文元数据的 `regime_lakes`。
 
 河道起始门槛采用“物理起始流量不变”原则：区域链的基数是 3000 个 2048/550 km 包格，
 细化时按像素数平方换算到 4096²（12000 格），对应约 2.1 m³/s 的平均流量起点。画布

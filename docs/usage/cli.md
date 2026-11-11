@@ -453,7 +453,8 @@ dreamulator canvas mosaic data/worlds/nacrea/canvases/gcm-t42-712 --step 2
 - `plan` 的布局根默认是 `data/worlds/<世界>/canvases/<分支>/`（已被 git 忽略），`--root` 可改，分支默认取布局配置的
   `branch`。已有分块的画布如果几何、条件场或生成参数变了，`plan` 会拒绝继续，需要先把旧的 `chunks/` 与
   `chunks.sha256` 移走（`--force` 只跳过这项检查）。`--backfill mesh-sea-lake` 不做规划，只给已规划的画布补写
-  网格类海湖字段（要求网格指纹与规划时一致），补写后要重跑 S2。
+  网格类海湖字段；`--backfill lake-evaporation` 补写年度与逐月的湖面蒸发通道（过路湖的逐月收支要用）。
+  两者都要求网格指纹与规划时一致，补写后要重跑 S2。
 - `generate` 每张 GPU 起一个 worker，用 terrain-diffusion 虚拟环境的解释器运行（安装见
   [knowledge/cartography/terrain_diffusion.md](../knowledge/cartography/terrain_diffusion.md)）；中断后重跑即续算，
   `--canvas` 可只跑指定的画布。
