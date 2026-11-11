@@ -19,7 +19,7 @@
   它以独立子进程运行、不导入其代码，结果写入 `refined-out/`，不覆盖 `input/` 的原始通道。
 - **每个场一个文件。** 不合并为 `.npz`，因为 zip 头带时间戳会破坏逐字节复现，合并容器也牺牲逐层懒加载；
   与外部工具的互通格式是 16 位 PNG、GeoTIFF 或 EXR。
-- **资产位置。** 正式命令行入口在包内（`dreamulator export region`，与 `export layers` 同族），Blender 胶水在
+- **资产位置。** 正式命令行入口在包内（`dreamulator region pack`，与 `map layers` 同族），Blender 胶水在
   `scripts/media/blender/`，数据包与渲染输出在渲染工作目录，不入 git。
 
 ## 3. 与相邻链路的关系

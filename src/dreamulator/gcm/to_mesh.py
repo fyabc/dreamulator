@@ -3,7 +3,7 @@
 Two outputs share one computation (:func:`compute_field_set`):
 
 - a mesh file in the same format as an engine build, with the climate fields
-  replaced by the GCM's, so ``dreamulator export layers --mesh`` renders it
+  replaced by the GCM's, so ``dreamulator map layers --mesh`` renders it
   through exactly the frontend palettes and GCM and EBM can be compared pixel
   for pixel (:func:`project_to_mesh`);
 - a pinned field set (:mod:`dreamulator.gcm.fields`) for a branch whose climate

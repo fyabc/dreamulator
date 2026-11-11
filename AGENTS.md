@@ -104,6 +104,10 @@ uv run dreamulator narrate myworld --branch pangea
 # 文明地图底图数据（已通过 Git LFS 存储在仓库中，无需手动下载）
 uv run dreamulator narrate myworld -m claude-opus-4-6   # 指定模型
 
+# 地图与画布（详见 docs/usage/cli.md）：map layers|globe、region pack|build、render
+uv run dreamulator canvas run data/worlds/nacrea/canvases/gcm-t42-712   # 生成后：侵蚀 + S2 水文
+uv run dreamulator canvas window <画布> --lat 15 --lon -100 --span-km 550
+
 # 启动服务器（API + 前端，一条命令）
 uv run dreamulator serve --open              # 启动并打开浏览器
 uv run dreamulator serve --reload             # 开发模式（热重载）

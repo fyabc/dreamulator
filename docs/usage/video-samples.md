@@ -19,22 +19,22 @@
 3. **ffmpeg**：视频脚本优先找系统 ffmpeg，找不到就回退
    `imageio-ffmpeg`。手册统一用 `uv run --with imageio-ffmpeg python ...`，
    不污染项目依赖。
-4. **依赖**：`uv sync --all-extras`（`export globe` 的噪声核需要 media extra）。
+4. **依赖**：`uv sync --all-extras`（`map globe` 的噪声核需要 media extra）。
 5. **内存约束**：8K 渲染与长视频很吃内存，重负载任务串行执行，不要并行开两个渲染。
 
-## 1. 静帧（export globe）
+## 1. 静帧（map globe）
 
 静帧是所有云流/自转/掩食视频的输入。同一个命令出两版：无风暴版（`-clear`）与
 风暴版（`--cyclones`，气象包的真实移动温带气旋轨迹 + 正典参数化热带气旋）。
 
 ```bash
 # 无风暴版（当前样片：exports/globe/nacrea-gcm-t42-712-f1460-clear）
-uv run dreamulator export globe nacrea -p satellite_nacrea -b gcm-t42-712 \
+uv run dreamulator map globe nacrea -p satellite_nacrea -b gcm-t42-712 \
     --weather-pack exports/weather/nacrea-gcm-t42-712 --frame 1460 \
     -o exports/globe/nacrea-gcm-t42-712-f1460-clear
 
 # 风暴版（当前样片：exports/globe/nacrea-gcm-t42-712-f1460-cyclones）
-uv run dreamulator export globe nacrea -p satellite_nacrea -b gcm-t42-712 \
+uv run dreamulator map globe nacrea -p satellite_nacrea -b gcm-t42-712 \
     --weather-pack exports/weather/nacrea-gcm-t42-712 --frame 1460 --cyclones \
     -o exports/globe/nacrea-gcm-t42-712-f1460-cyclones
 ```
@@ -162,7 +162,7 @@ uv run --with imageio-ffmpeg python scripts/geology/paleo_render.py \
 
 | 成品 | 输入 | 命令入口 | 耗时量级 |
 |------|------|----------|----------|
-| 静帧（clear / cyclones） | 气象包 + 构建地图 | `dreamulator export globe` | 分钟级 |
+| 静帧（clear / cyclones） | 气象包 + 构建地图 | `dreamulator map globe` | 分钟级 |
 | 云流视频 24 h | 静帧 + 气象包 | `scripts/media/cloud_flow_video.py` | ~30–60 分钟 |
 | 自转视频（倾斜 19.9°） | 静帧 | `scripts/media/spin_video.py` | ~20 分钟 |
 | 掩食静图 / 视频 | 静帧 + 气象包 | `scripts/media/render_satellite_still.py` / `eclipse_flow_video.py` | 秒级 / ~20 分钟 |

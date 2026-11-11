@@ -1,4 +1,4 @@
-"""Tests for the export globe YAML configuration."""
+"""Tests for the map globe YAML configuration."""
 
 from __future__ import annotations
 

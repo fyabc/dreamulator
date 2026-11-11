@@ -356,7 +356,7 @@
         },
         {
           "title": "QA workflow",
-          "content": "When chasing a rendering issue: find the spot on the sub-map → click → copy the `--lat … --lon …` arguments → paste them straight into `dreamulator export region/refine/carto` to re-export that window. The graticule lines share the printed topo sheet's ink, so on-screen positions line up with the rendered sheet."
+          "content": "When chasing a rendering issue: find the spot on the sub-map → click → copy the `--lat … --lon …` arguments → paste them straight into `dreamulator region pack/refine/carto` to re-export that window. The graticule lines share the printed topo sheet's ink, so on-screen positions line up with the rendered sheet."
         },
         {
           "title": "Data & conventions",

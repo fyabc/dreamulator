@@ -1,7 +1,7 @@
 # GCM 气象图层包：瞬时快照、云量分层与气旋轨迹
 
 > 本文描述太空俯瞰星球链的 L1 数据层：从 ExoPlaSim 的高频瞬时快照生成「气象图层包」，给
-> `export globe` 与云流动画提供模式自己的云、风、降水和气旋。渲染一侧见
+> `map globe` 与云流动画提供模式自己的云、风、降水和气旋。渲染一侧见
 > [orbital-weather-globe.md](orbital-weather-globe.md)。
 >
 > 源码：`src/dreamulator/gcm/weather_pack.py`（打包与读取）、`src/dreamulator/gcm/cyclones.py`

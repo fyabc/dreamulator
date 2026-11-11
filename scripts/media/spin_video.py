@@ -1,4 +1,4 @@
-"""Render a short full-disk planet rotation video from an ``export globe`` run.
+"""Render a short full-disk planet rotation video from an ``map globe`` run.
 
 The cloud export directory must contain ``surface.png``, ``clouds.png`` and
 ``meta.json`` (the L5 atmosphere block is required).  The camera and star stay
@@ -58,7 +58,7 @@ def _load_model(meta: dict[str, Any]) -> AtmosphereModel:
     atmosphere = meta.get("atmosphere")
     if not isinstance(atmosphere, dict):
         raise SystemExit(
-            "meta.json has no atmosphere block — re-export with `export globe` "
+            "meta.json has no atmosphere block — re-export with `map globe` "
             "(atmosphere enabled) first"
         )
     return AtmosphereModel(
@@ -154,7 +154,7 @@ def _rotated_fields(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("clouds_dir", type=Path, help="an export globe output directory")
+    parser.add_argument("clouds_dir", type=Path, help="an map globe output directory")
     parser.add_argument("-o", "--output", type=Path, help="output .mp4 path")
     parser.add_argument("--seconds", type=float, default=8.0, help="clip length")
     parser.add_argument("--fps", type=int, default=30)

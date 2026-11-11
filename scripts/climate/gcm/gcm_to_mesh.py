@@ -3,7 +3,7 @@
 
 ``--out`` writes a mesh file in the engine's format with the climate fields
 replaced by the GCM's (see dreamulator.gcm.to_mesh), plus a ``.gcm.json``
-summary; render it with ``dreamulator export layers <world> --mesh <out>``.
+summary; render it with ``dreamulator map layers <world> --mesh <out>``.
 ``--emit-fields`` writes the pinned field set of a frozen-climate branch
 (``climate_source: gcm``), plus its tracked ``.provenance.json``.  Needs the
 ``[gcm]`` environment (netCDF4).

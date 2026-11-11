@@ -9,17 +9,17 @@
 > `weather_conditioning.py`（L1 逐帧条件场适配器）、
 > `cyclone_render.py`（L3 模板）、`atmosphere_render.py`（L5 大气）、
 > `cloud_config.py`（YAML 配置）。命令行入口是
-> `src/dreamulator/cli_export.py` 的 `export globe` 子命令。
+> `src/dreamulator/cli_export.py` 的 `map globe` 子命令。
 
 ## 1. 数据流与命令
 
 一条命令完成纹理、气旋与预览：
 
 ```bash
-dreamulator export globe nacrea --branch gcm-t42-712 --grid 8192x4096 \
+dreamulator map globe nacrea --branch gcm-t42-712 --grid 8192x4096 \
     --cyclones --atmosphere
 # 或用气象图层包的一帧驱动条件场（云量、云层分层与太阳方向都来自模式天气）：
-dreamulator export globe nacrea --branch gcm-t42-712 \
+dreamulator map globe nacrea --branch gcm-t42-712 \
     --weather-pack exports/weather/nacrea-gcm-t42-712 --frame 400
 ```
 
@@ -179,7 +179,7 @@ L2 纹理按风暴轴做螺旋扭曲，眼区主动清除底云。尺度由环�
 风暴在死区内一两天内消亡，不会漂过赤道。同时在世的风暴数由数据自然给出：一个
 模式年平均同时在世约 1–3 条温带气旋。潜势与强度场在不宜环境里有微小负值（实测
 GPI 至 −0.002、PI 至 −1 m/s），按「无潜势」截断到零。生成只落在洋面：GPI 场本身
-不知道地表类型（大陆内部照样出现高潜势），`export globe` 会把行星地图的陆海判定
+不知道地表类型（大陆内部照样出现高潜势），`map globe` 会把行星地图的陆海判定
 重采样到包网格写成静帧目录的 `ocean_fraction.npy`（`pack_ocean_fraction`），
 视频链把它乘进生成权重（`--storm-seed` 换的是「哪片海出风暴」，不改变物理）。
 采样源取风场时小数帧在相邻两个 6 h 快照间线性插值，轨迹积分每条腿用腿中点的风、
@@ -250,7 +250,7 @@ m/s）先换成角位移，经度项除以 `cos(latitude)`，经度周期采样�
 为双线性的 3 倍。`cloud_flow_video.py` 默认使用三次插值，可用 `--interp linear`
 换回快速版。`advection_substeps` 按每步位移不超过约 8 个格子给出子步数上限。
 
-`scripts/media/cloud_flow_video.py` 从 `export globe` 输出目录读取云纹理与网格，
+`scripts/media/cloud_flow_video.py` 从 `map globe` 输出目录读取云纹理与网格，
 把云不透明度重采样到平流网格后逐帧推进，再用 `SpinRenderer.set_cloud` 更新云场、
 渲染固定机位的全圆盘；相机与恒星不动，晨昏线固定。风源两档：`--weather-pack`
 给定时代用图层包的逐帧风——低/中云壳随 `u_mid/v_mid`（σ≈0.57，兼作风暴中心的
@@ -269,7 +269,7 @@ m/s）先换成角位移，经度项除以 `cos(latitude)`，经度周期采样�
 Holland 涡旋」里平流，眼壁风每 ~5 圈/天的差速旋转会在一天内把旋臂差速卷绕上千
 度并叠加累积插值扩散，24 h 首末帧形变过大（用户 QA 2026-10-25）。温带逗号在
 此档不旋转（锋面驱动，v1 简化），位置与强度逐帧更新。输入用无风暴静帧
-（`export globe` 不带 `--cyclones`）。`vortex` 为旧路径：`cyclone_wind_field`
+（`map globe` 不带 `--cyclones`）。`vortex` 为旧路径：`cyclone_wind_field`
 的切向涡旋风（热带全额、温带压零，0.9–1.25 倍外围半径间平滑收敛）叠加进平流
 风，输入为已印风暴的静帧，模板随差速切变被动变形。`none` 不画风暴
 （`--no-vortex` 是其废弃别名）。模板噪声场只依赖网格与种子
@@ -301,7 +301,7 @@ uv run --with imageio-ffmpeg python scripts/media/cloud_flow_video.py \
 大气只算一次，每一帧只按经度偏移重采样纹理并重新合成；`frame(0)` 与静态
 `render_globe_atmosphere` 逐位一致。
 
-`scripts/media/spin_video.py` 读取一次 `export globe` 的输出目录（`surface.png`、
+`scripts/media/spin_video.py` 读取一次 `map globe` 的输出目录（`surface.png`、
 `clouds_low.png`、`clouds_cirrus.png`、`meta.json`），从 `meta.json` 还原大气模型与海洋掩膜，渲染一整圈旋转
 加一段定格，按 16:9 画布居中并编码 H.264：
 

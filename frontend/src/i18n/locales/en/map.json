@@ -490,7 +490,7 @@
     "clickToProbe": "Click to probe cell values",
     "pickPrompt": "Pack",
     "noPacks": "No region packs found",
-    "noMeta": "meta.json missing — run export region first",
+    "noMeta": "meta.json missing — run `dreamulator region pack` first",
     "base": "Base",
     "baseOptions": {
       "topo": "Topo body",

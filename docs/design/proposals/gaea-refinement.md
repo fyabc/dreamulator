@@ -47,7 +47,7 @@ refine_regions:
 
 ## 3 区域投影：局部方位等距
 
-区域包（`export region`）把球面窗口投影到平面高度图供 Gaea/Blender 链导入。
+区域包（`region pack`）把球面窗口投影到平面高度图供 Gaea/Blender 链导入。
 当前实现是**局部方位等距投影**（azimuthal equidistant，pack v4 起）：以请求中心为
 切点，x 东、y 北，平面坐标即真实公里数，与全球画布链共用 `map/td_canvas.py` 的
 `CanvasGeometry` 换算单源。窗口在任意纬度都是真实千米正方形，极区中心与跨 ±180°
@@ -205,7 +205,7 @@ WorldMachine Indie $119；全套商业工具约 $500 一次性（不含 PS 订�
    界面正中）——印证 §6 的判断：降水→侵蚀耦合做进引擎/导出面，而非留给
    后期均匀降雨。落地 = gaea_refine 导出面除 16-bit 高程外**同分辨率导出
    precipitation_mm 栅格**，Gaea 侧作降雨 mask。
-   ✅ 导出面已落地（2026-10-11，`export region` pack v2 气候通道），
+   ✅ 导出面已落地（2026-10-11，`region pack` pack v2 气候通道），
    契约见[区域数据包第 3–4 节](../pipelines/region-pack.md#3-包内文件)。
 2. **往返协议的字段契约**：dayside 的区域往返承诺「米制量程与范围在往返中
    保全」——对应本库 baked_base manifest 必须记录（高程 min/max、地理范围、

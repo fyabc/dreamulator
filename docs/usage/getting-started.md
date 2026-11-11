@@ -234,7 +234,7 @@ uv run dreamulator serve --open
 无需打开浏览器，直接把地图图层导出成 PNG（配色与前端完全同源）：
 
 ```bash
-uv run dreamulator export layers myworld --layers terrain,koppen --output export/
+uv run dreamulator map layers myworld --layers terrain,koppen --output export/
 ```
 
 预期输出：

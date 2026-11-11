@@ -1,4 +1,4 @@
-"""YAML configuration for the ``export globe`` command.
+"""YAML configuration for the ``map globe`` command.
 
 The command has accumulated enough knobs (grid, seed, view, cover scaling and
 the L3 cyclone block) that a file is easier to keep with a shot than a long
@@ -132,7 +132,7 @@ class EclipseSettings(BaseModel):
 
 
 class CloudRenderConfig(BaseModel):
-    """Settings for one ``export globe`` run."""
+    """Settings for one ``map globe`` run."""
 
     model_config = ConfigDict(extra="forbid")
 

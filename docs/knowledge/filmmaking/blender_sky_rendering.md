@@ -117,7 +117,7 @@ img.pack()
 
 ## 5. 大地形网格（从 `.npy` 高度场）
 
-区域包（`export region` / S3 窗口）给出 `height.meters.npy` 与 `meta.json`。
+区域包（`region pack` / S3 窗口）给出 `height.meters.npy` 与 `meta.json`。
 一千个格点的边长会产生百万顶点，逐点 `from_pydata` 很慢；用 `foreach_set`
 批量写顶点、循环与面：
 

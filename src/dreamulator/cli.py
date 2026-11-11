@@ -206,11 +206,16 @@ from dreamulator.cli_climate import climate_app  # noqa: E402
 
 app.add_typer(climate_app, name="climate")
 
-# Export subcommand group — imported late to avoid a circular import
-# (cli_export registers commands on this module's `app`).
-from dreamulator.cli_export import export_app  # noqa: E402
+# Map, region and canvas product groups plus the shared renderer — imported late
+# to avoid a circular import.  `export` keeps the pre-2026-11 paths, hidden.
+from dreamulator.cli_export import export_app, export_render, map_app, region_app  # noqa: E402
+from dreamulator.cli_export_canvas import canvas_app  # noqa: E402
 
-app.add_typer(export_app, name="export")
+app.add_typer(map_app, name="map")
+app.add_typer(region_app, name="region")
+app.add_typer(canvas_app, name="canvas")
+app.command("render")(export_render)
+app.add_typer(export_app, name="export", hidden=True)
 
 # Data package group — versioned dev data packages (M1-P1), imported late.
 from dreamulator.cli_data import data_app  # noqa: E402

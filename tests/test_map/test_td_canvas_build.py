@@ -267,7 +267,7 @@ def test_mosaic_crops_to_generated_chunks(tmp_path: Path) -> None:
         tm.render_mosaic(c, out, step=3)
 
 
-def test_export_canvas_cli_status_and_mosaic(tmp_path: Path) -> None:
+def test_canvas_cli_status_and_mosaic(tmp_path: Path) -> None:
     from typer.testing import CliRunner
 
     from dreamulator.cli import app
@@ -279,13 +279,13 @@ def test_export_canvas_cli_status_and_mosaic(tmp_path: Path) -> None:
     layout = {"canvases": [{"id": "cv"}]}
     (tmp_path / "layout.json").write_text(json.dumps(layout), encoding="utf-8")
     runner = CliRunner()
-    res = runner.invoke(app, ["export", "canvas", "status", str(tmp_path)])
+    res = runner.invoke(app, ["canvas", "status", str(tmp_path)])
     assert res.exit_code == 0, res.output
     assert "cv" in res.output
     out = tmp_path / "m.jpg"
     res = runner.invoke(
         app,
-        ["export", "canvas", "mosaic", str(c), "-o", str(out), "--step", "16", "--workers", "1"],
+        ["canvas", "mosaic", str(c), "-o", str(out), "--step", "16", "--workers", "1"],
     )
     assert res.exit_code == 0, res.output
     assert out.exists() and (tmp_path / "m.jpg.json").exists()
@@ -293,6 +293,16 @@ def test_export_canvas_cli_status_and_mosaic(tmp_path: Path) -> None:
     # shared print defaults: relief, pastel, carto sea, fixed exaggeration, ice overlay on
     assert (side["style"], side["palette"], side["sea"]) == ("relief", "pastel", "carto")
     assert side["exaggeration"] == pytest.approx(4.0) and side["ice_overlay"] is True
+    assert side["surface"] == "td"
+    # a layout root runs every canvas; --output names one image only
+    res = runner.invoke(app, ["canvas", "mosaic", str(tmp_path), "-o", str(out), "--step", "16"])
+    assert res.exit_code == 0, res.output  # the root holds a single canvas
+    res = runner.invoke(app, ["canvas", "mosaic", str(tmp_path / "nowhere")])
+    assert res.exit_code == 2
+    # the pre-2026-11 path still works and points at the new one
+    res = runner.invoke(app, ["export", "canvas", "status", str(tmp_path)])
+    assert res.exit_code == 0, res.output
+    assert "deprecated path" in res.output and "dreamulator canvas status" in res.output
 
 
 def test_mosaic_relief_style_palettes_and_seas(tmp_path: Path) -> None:
