@@ -16,7 +16,7 @@ GCM 验证工具（`[gcm]` 可选 extra + Fortran 工具链，单位约定见
 - `compare_resolution.py` 比较已有 GCM 运行，读取模式实际采用的扩散参数，按共同物理时间窗口统计温度与辐射，并输出纬度预算和晴空辐射分解。
 - `bootstrap.sh` — 任意 Ubuntu 容器/WSL 环境引导（含 pyfft/meson 坑的修复）
 - `make_landmap.py` — 世界网格 → ExoPlaSim `.sra` 海陆掩膜与地表位势
-- `gcm_to_mesh.py` — GCM 结果投影到世界网格：`--out` 输出对比用网格，供 `dreamulator export layers --mesh` 与 EBM 对比；`--emit-fields` 输出固定气候分支（`climate_source: gcm`）的字段文件
+- `gcm_to_mesh.py` — GCM 结果投影到世界网格：`--out` 输出对比用网格，供 `dreamulator map layers --mesh` 与 EBM 对比；`--emit-fields` 输出固定气候分支（`climate_source: gcm`）的字段文件
 
 ## climate/ — 气候验证与诊断（33 个）
 
@@ -136,10 +136,10 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
 Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
 `docs/design/proposals/blender-render-pipeline.md`：工程与渲染输出入
 `<render-workdir>/<项目>/` 不入 git，`.blend` 一律由脚本从数据包重建）。
-数据侧的正式 CLI 在 in-package（`dreamulator export region`），不在本组。
+数据侧的正式 CLI 在 in-package（`dreamulator region pack`），不在本组。
 
 - `blender/region_still.py` — bpy 场景构建 + Cycles 渲染（消费
-  `dreamulator export region` 的数据包；`blender -b -P … -- --datadir <pack>
+  `dreamulator region pack` 的数据包；`blender -b -P … -- --datadir <pack>
   [--render …]`；OptiX>CUDA>CPU 自动降级，seed 固定）。
 
 ## dev/ — 开发工具（5 个）

@@ -490,7 +490,7 @@
     "clickToProbe": "点击探测格点值",
     "pickPrompt": "区域包",
     "noPacks": "未找到区域包",
-    "noMeta": "缺少 meta.json——先运行 export region 生成包",
+    "noMeta": "缺少 meta.json——先运行 `dreamulator region pack` 生成数据包",
     "base": "底图",
     "baseOptions": {
       "topo": "地形（测绘体）",

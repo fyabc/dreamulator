@@ -7,7 +7,7 @@ Example:
         --weather snapshots.nc --out refined-precipitation.npz
 
 This preparation leaves the world unchanged. The resulting archive is consumed
-by gcm_to_mesh.py --precipitation-field and export canvas's climate refresh.
+by gcm_to_mesh.py --precipitation-field and canvas's climate refresh.
 """
 
 from __future__ import annotations

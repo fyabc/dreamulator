@@ -60,9 +60,15 @@ class CanvasSource:
     tile: int = CHUNK_PX
     _chunk_cache: dict[tuple[int, int], np.ndarray] | None = None
     _sea: SeaConnectivity | AnchoredSea | None = None
+    #: ``surface_process/increments`` when the window renders the eroded surface
+    increments: Path | None = None
 
     @classmethod
-    def load(cls, root: Path) -> CanvasSource:
+    def load(cls, root: Path, *, surface: str = "auto") -> CanvasSource:
+        """Open a canvas; ``surface`` picks the installed surface as S2 does
+        (:func:`dreamulator.media.canvas_surface_process.resolve_increments`)."""
+        from dreamulator.media.canvas_surface_process import resolve_increments
+
         meta = json.loads((root / "canvas.json").read_text(encoding="utf-8"))
         geom = meta["geometry"]
         geometry = CanvasGeometry(
@@ -80,7 +86,14 @@ class CanvasSource:
         first = sorted(chunks)[0]
         first_path = root / "chunks" / f"r{first[0]:03d}_c{first[1]:03d}.npy"
         tile = int(np.load(first_path, mmap_mode="r").shape[0])
-        return cls(root=root, geometry=geometry, chunks=set(chunks), tile=tile, _chunk_cache={})
+        return cls(
+            root=root,
+            geometry=geometry,
+            chunks=set(chunks),
+            tile=tile,
+            _chunk_cache={},
+            increments=resolve_increments(root, surface),
+        )
 
     def chunk(self, ci: int, cj: int) -> np.ndarray | None:
         key = (ci, cj)
@@ -88,8 +101,11 @@ class CanvasSource:
             return None
         assert self._chunk_cache is not None
         if key not in self._chunk_cache:
-            path = self.root / "chunks" / f"r{ci:03d}_c{cj:03d}.npy"
-            self._chunk_cache[key] = np.load(path)
+            name = f"r{ci:03d}_c{cj:03d}.npy"
+            arr = np.load(self.root / "chunks" / name)
+            if self.increments is not None:
+                arr = (arr.astype(np.int32) + np.load(self.increments / name)).astype(arr.dtype)
+            self._chunk_cache[key] = arr
         return self._chunk_cache[key]
 
     def climate(self, name: str) -> np.ndarray | None:
@@ -109,9 +125,11 @@ class CanvasSource:
         if isinstance(rng, list) and len(rng) == 2:
             return (float(rng[0]), float(rng[1]))
         lo, hi = np.inf, -np.inf
-        for ci, cj in self.chunks:
-            path = self.root / "chunks" / f"r{ci:03d}_c{cj:03d}.npy"
-            arr = np.load(path, mmap_mode="r")
+        for ci, cj in self.chunks:  # one chunk at a time: the cache would hold the canvas
+            name = f"r{ci:03d}_c{cj:03d}.npy"
+            arr = np.load(self.root / "chunks" / name, mmap_mode="r")
+            if self.increments is not None:
+                arr = arr.astype(np.int32) + np.load(self.increments / name)
             lo = min(lo, float(arr.min()))
             hi = max(hi, float(arr.max()))
         return (lo, hi)

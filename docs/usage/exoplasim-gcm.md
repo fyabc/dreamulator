@@ -334,7 +334,7 @@ python scripts/climate/gcm/compare_resolution.py \
 ## 8. 与 EBM 对比：投影到网格并导出图层
 
 为了让 GCM 和 EBM 用完全相同的配色、投影和分辨率比较，先把 GCM 结果投影到世界的 CVT 网格上，
-再用 `dreamulator export layers` 渲染：
+再用 `dreamulator map layers` 渲染：
 
 ```bash
 source <gcm-workdir>/venv/bin/activate
@@ -344,11 +344,11 @@ python scripts/climate/gcm/gcm_to_mesh.py --world data/worlds/nacrea --planet sa
 deactivate
 G=<gcm-workdir>/mesh/nacrea_t42_712/cvt_mesh.msgpack.gz
 E=data/worlds/nacrea/maps/satellite_nacrea/cvt_mesh.msgpack.gz
-uv run dreamulator export layers nacrea -l koppen,temperature,precipitation,pressure \
+uv run dreamulator map layers nacrea -l koppen,temperature,precipitation,pressure \
     --mesh $G -o <gcm-workdir>/export/gcm
-uv run dreamulator export layers nacrea -l koppen,temperature,precipitation,pressure \
+uv run dreamulator map layers nacrea -l koppen,temperature,precipitation,pressure \
     -o <gcm-workdir>/export/ebm
-uv run dreamulator export layers nacrea -l temperature_diff,precipitation_diff,koppen_agreement \
+uv run dreamulator map layers nacrea -l temperature_diff,precipitation_diff,koppen_agreement \
     --mesh $G --compare-mesh $E -o <gcm-workdir>/export/diff
 ```
 

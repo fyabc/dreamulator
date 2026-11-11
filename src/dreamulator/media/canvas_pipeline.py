@@ -58,9 +58,25 @@ class CanvasStore:
     tile: int
     work: Path
     _checked: dict[str, str] = field(default_factory=dict)
+    #: ``surface_process/increments`` when S2 runs on the eroded surface
+    increments: Path | None = None
+    #: label of the installed surface, recorded in ``hydro-work/`` and ``hydro/``
+    surface: str = "td"
 
     @classmethod
-    def load(cls, root: Path, *, work: Path | None = None) -> CanvasStore:
+    def load(cls, root: Path, *, work: Path | None = None, surface: str = "auto") -> CanvasStore:
+        """Open a canvas for S2.
+
+        ``surface`` picks the installed surface: ``"td"`` the TD chunks,
+        ``"surface-process"`` chunks plus the erosion-deposition increments
+        (``media.canvas_surface_process``), ``"auto"`` the latter when that
+        product is complete.  The work directory and ``hydro/`` keep their
+        names; both record the surface they were built on (``surface.json``)
+        and the fill refuses to resume on a different surface.
+        """
+        from dreamulator.media.canvas_surface_process import resolve_increments, surface_tag
+
+        increments = resolve_increments(root, surface)
         meta = json.loads((root / "canvas.json").read_text(encoding="utf-8"))
         geom = meta["geometry"]
         geometry = CanvasGeometry(
@@ -83,7 +99,15 @@ class CanvasStore:
         work = work or (root / "hydro-work")
         for sub in ("fill", "labels", "summary", "final"):
             (work / sub).mkdir(parents=True, exist_ok=True)
-        store = cls(root=root, geometry=geometry, chunks=chunks, tile=tile, work=work)
+        store = cls(
+            root=root,
+            geometry=geometry,
+            chunks=chunks,
+            tile=tile,
+            work=work,
+            increments=increments,
+            surface=surface_tag(root, increments),
+        )
         sums = work / "chunks.sha256"
         if sums.exists():
             for line in sums.read_text(encoding="utf-8").splitlines():
@@ -92,9 +116,11 @@ class CanvasStore:
         return store
 
     def raw(self, ci: int, cj: int) -> np.ndarray:
-        return np.asarray(
-            np.load(self.root / "chunks" / f"r{ci:03d}_c{cj:03d}.npy"), dtype=np.float64
-        )
+        name = f"r{ci:03d}_c{cj:03d}.npy"
+        dem = np.asarray(np.load(self.root / "chunks" / name), dtype=np.float64)
+        if self.increments is not None:
+            dem += np.load(self.increments / name)
+        return dem
 
     def path(self, sub: str, ci: int, cj: int, ext: str) -> Path:
         return self.work / sub / f"r{ci:03d}_c{cj:03d}.{ext}"
@@ -936,6 +962,22 @@ def run_canvas_fill(
     ncol = (max(cj for _, cj in store.chunks) + 1) * t
     stats = {"cells": 0.0, "watersheds": 0.0, "stages_seconds": 0.0}
     t0 = time.time()
+    from dreamulator.media.canvas_surface_process import read_surface_tag, write_surface_tag
+
+    done_on = read_surface_tag(store.work)
+    if done_on is not None and done_on != store.surface:
+        if resume:
+            raise RuntimeError(
+                f"{store.work} was filled on surface {done_on!r}, not {store.surface!r}: "
+                "rerun without resume (canvas hydrology --force)"
+            )
+        for sub in ("fill", "labels", "summary", "final"):
+            for stale in (store.work / sub).glob("r*_c*.*"):
+                stale.unlink()
+        (store.work / "chunks.sha256").unlink(missing_ok=True)
+        (store.work / "heal.npz").unlink(missing_ok=True)
+        store._checked.clear()
+    write_surface_tag(store.work, store.surface)
     heal, heal_fresh = _ensure_heal_delta(store, sea_level, verbose=verbose)
     if heal_fresh and any((store.work / "fill").glob("r*_c*.i16.npy")):
         # Fill caches predating the heal generation treat pit cells as flood
@@ -958,6 +1000,9 @@ def run_canvas_fill(
             elif not (store.root / MESH_SEA_LAKE_FILE).exists():
                 rule += f" ({MESH_SEA_LAKE_FILE} missing: mesh sea-class lakes not applied)"
             print(f"[hydrology] sea: {rule}")
+    if verbose:
+        surface = "TD chunks + surface_process increments" if store.increments else "TD chunks"
+        print(f"[hydrology] surface: {surface} ({store.surface})")
 
     # Stage 1: local flood per chunk; summaries on disk.  Chunks are
     # independent, so they run in a process pool; the parent alone appends to
@@ -1361,6 +1406,9 @@ def run_canvas_rivers(
     )
     hydro = store.root / "hydro"
     hydro.mkdir(exist_ok=True)
+    from dreamulator.media.canvas_surface_process import write_surface_tag
+
+    write_surface_tag(hydro, store.surface)
     np.save(hydro / "rivers.line.npy", segs.astype(np.float32))
     np.save(hydro / "rivers.flow.npy", flows.astype(np.float32))
     np.save(hydro / "rivers.regime.npy", regimes.astype(np.uint8))

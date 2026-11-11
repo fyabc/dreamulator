@@ -1,6 +1,6 @@
 """Region pack API — serves terrain video-chain packs for the /packs QA page.
 
-A region pack (``dreamulator export region``) is a directory under the packs
+A region pack (``dreamulator region pack``) is a directory under the packs
 root holding ``input/`` (2048² engine channels + meta.json), ``refined-out/``
 (4096² refined terrain + hydrology products), and optional render legs
 (``color/``, ``carto/``, ``renders/``).  The /packs frontend page displays the
@@ -72,7 +72,7 @@ def _pack_roots() -> list[Path]:
 
     ``DREAMULATOR_PACKS_DIR`` overrides with a single flat root (tests,
     custom setups); the default scans every world's ``packs/`` directory —
-    the ``export region`` default output, kept next to the world's other
+    the ``region pack`` default output, kept next to the world's other
     bulk build outputs (maps/, layers/*/derived/).
     """
     env_dir = os.environ.get("DREAMULATOR_PACKS_DIR")

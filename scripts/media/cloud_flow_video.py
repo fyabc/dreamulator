@@ -1,4 +1,4 @@
-"""Render a short cloud-evolution clip (L4 prototype) from an ``export globe`` run.
+"""Render a short cloud-evolution clip (L4 prototype) from an ``map globe`` run.
 
 The cloud alpha is advected (semi-Lagrangian + BFECC) while the camera and
 star stay fixed, so the terminator does not move.  With ``--weather-pack``
@@ -86,7 +86,7 @@ def _load_meta(clouds_dir: Path) -> dict[str, Any]:
 def _load_model(meta: dict[str, Any]) -> AtmosphereModel:
     atmosphere = meta.get("atmosphere")
     if not isinstance(atmosphere, dict):
-        raise SystemExit("meta.json has no atmosphere block — re-export with `export globe` first")
+        raise SystemExit("meta.json has no atmosphere block — re-export with `map globe` first")
     return AtmosphereModel(
         planet_radius_km=float(meta["radius_km"]),
         gravity_m_s2=float(atmosphere["gravity_m_s2"]),
@@ -230,7 +230,7 @@ def _ffmpeg_exe() -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("clouds_dir", type=Path, help="an export globe output directory")
+    parser.add_argument("clouds_dir", type=Path, help="an map globe output directory")
     parser.add_argument("-o", "--output", type=Path, help="output .mp4 path")
     parser.add_argument("--seconds", type=float, default=8.0, help="clip length")
     parser.add_argument("--fps", type=int, default=30)
@@ -381,7 +381,7 @@ def main() -> None:
     # Template-noise and tropical-sampler seed: match the still export's
     # cyclone seed so a rigid clip shows the same storms as the cyclone still.
     storm_seed = int(args.storm_seed or (meta.get("cyclones") or {}).get("seed") or 31)
-    # Ocean mask written next to the still by `export globe`: tropical
+    # Ocean mask written next to the still by `map globe`: tropical
     # cyclogenesis is an ocean phenomenon, and the GCM's genesis-potential
     # field does not know surface type.
     ocean_mask_path = clouds_dir / "ocean_fraction.npy"

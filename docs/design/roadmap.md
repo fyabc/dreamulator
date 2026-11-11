@@ -4,7 +4,7 @@
 > 全球均温 13.5 °C、陆地年降水约 1040 mm，Köppen A/B/C/D/E 群占陆地 40.0/21.1/11.0/2.2/25.7%；
 > 画布覆冰按新气候重算（v7，冰缘塑性锥度），天气包换代（4 h × 2250 帧），热带气旋正典改为每个当地年
 > 约 7 个，Miami NPP 折碳修复；服务器批 47 提交合入。全球画布链 S2 外存水文与 S3 区域裁窗见
-> [canvas-chain.md](pipelines/canvas-chain.md)。v1.1.0 发版内容：程序化云纹理 `export clouds`、
+> [canvas-chain.md](pipelines/canvas-chain.md)。v1.1.0 发版内容：程序化云纹理 `map globe`、
 > 区域包查看页 `/packs`、2D 地图收敛为等距圆柱单投影、nacrea 轨道集合收尾与两档正典、
 > earth 板块运动 PB2002 欧拉极修正。详情见 CHANGELOG）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
@@ -115,18 +115,18 @@
 | 优先级 | 模块 | 预计工作量 | 关键性 |
 |--------|------|-----------|--------|
 | **P0** | **nacrea 地形修复批次与重新生成**：✅ 修复与重新生成已完成并入 main（2026-10-23，见 CHANGELOG）；剩余为冻结板块与构造实现（技术债 49）与经 release 分发新数据 | 剩余 1 周 | ★★★★★ |
-| **P1** | **局部地形精细化管线**（全球输出 → 专业工具局部高清：export/import-region CLI + 16-bit GeoTIFF + Gaea 模板 + QGIS 矢量化；export 侧首片已落地 = `dreamulator export region`，见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md)；调研见 [gaea-refinement.md](proposals/gaea-refinement.md) §6） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
+| **P1** | **局部地形精细化管线**（全球输出 → 专业工具局部高清：export/import-region CLI + 16-bit GeoTIFF + Gaea 模板 + QGIS 矢量化；export 侧首片已落地 = `dreamulator region pack`，见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md)；调研见 [gaea-refinement.md](proposals/gaea-refinement.md) §6） | 设计 0.5 周 + 实现 1–2 周 | ★★★★ |
 | **P1** | **全球画布链 S2–S5**（每块大陆整块生成，23 km 粗格、90 m 像素；S2 外存填平·汇流·湖级联与 S3 区域裁窗已并入 main，S4 校验器已实现并完成首个接缝样本，S5 全局概览待做（计划见 [canvas-chain.md](pipelines/canvas-chain.md) §6.1）；S1 画布已生成，可用于接入验收；降尺度正典冻结后集中更新终版数据）→ [canvas-chain.md](pipelines/canvas-chain.md) | S4/S5 各 1–2 周 | ★★★★ |
-| P2 | **画布级二次沉积与溢口切穿（湖密度治理）**（TD 地形封闭盆地系统性偏多：永耀岛渲染级湖面占陆 9.2%，地球天然湖参照约 1.5–3%、盾状火山岛近零；治理机制是搬运-沉积充填与满溢湖溢口切穿，并补湿润高原的外流河下切；草案已立项）→ [canvas-erosion-deposition.md](proposals/canvas-erosion-deposition.md) | 原型 1–2 周 + 画布放大 1 周 | ★★★★ |
+| P2 | **画布级二次沉积与溢口切穿（湖密度治理）**（TD 地形封闭盆地系统性偏多：永耀岛渲染级湖面占陆 9.2%，地球天然湖参照约 1.5–3%、盾状火山岛近零；治理机制是搬运-沉积充填与满溢湖溢口切穿，并补湿润高原的外流河下切；已产品化为 `canvas erode`，随全量重生成切换正典）→ [canvas-erosion-deposition.md](proposals/canvas-erosion-deposition.md) | 原型 1–2 周 + 画布放大 1 周 | ★★★★ |
 | P3 | **水体分区水位**（每片封闭水体按水量平衡定水面，取代全局锁定海平面与固定湖深；前置的能量型湖面蒸发已实现；草案，暂不实施）→ [water-body-levels.md](proposals/water-body-levels.md) | 2–3 周 | ★★★ |
 | P1 | **画布条件场的构造结构**（金字塔、同质山地与高原无镶边源于条件场只带格子平均；结构场、TD 细节配方、气候守恒重采样，以及曙光、南方大陆与世界岛东南的连续山带来源已进入生产；剩余为有来源的主谷、山前与高原坡折几何和沿岸平原宽度。永耀岛的例证见提案 §2 读法 5）→ [canvas-conditioning-structure.md](proposals/canvas-conditioning-structure.md) | 对照 2–3 天 + 实现 1 周 | ★★★★ |
 | P1 | **山系形态与地球的差距**（窄长山带、高原内部结构与镶边、老造山带宽度继承与分段、25–150 km 顺走向山脊；引擎部分随下一次全层重建，画布部分随同次画布重生成；[terrain-morphology-gap.md](proposals/terrain-morphology-gap.md)） | 2–4 周 | ★★★★ |
 | P3 | ~~构造-侵蚀 Δt 耦合~~——随流水侵蚀关闭搁置，重启再评估 | — | ★★ |
-| **P0** | nacrea 样板世界改造（五）：天文/地质/气候/文明种子已就绪；视频素材三件套 ✅（2026-10-02 合入）+ Blender 高清渲染链 MVP 落地（`export region` + bpy 静帧），后续为相机动画与整球渲染（[blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | — | ★★★★★ |
+| **P0** | nacrea 样板世界改造（五）：天文/地质/气候/文明种子已就绪；视频素材三件套 ✅（2026-10-02 合入）+ Blender 高清渲染链 MVP 落地（`region pack` + bpy 静帧），后续为相机动画与整球渲染（[blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | — | ★★★★★ |
 | P1 | **月度矢量场展示** ✅ 2026-10-23：月度风场箭头与粒子流、洋流粒子流（洋流为年均场）；操作见 `usage/map-workflow.md` §4 | — | ★★★★ |
 | P1 | 文明层半格式化 Schema（3C） | 1–2 周 | ★★★★ |
 | P2 | 视频素材后续（Blender 链扩展：相机动画与整球渲染，多图层数据包已实现；见 [blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | 按镜头排 | ★★★ |
-| P2 | **气象图层与太空镜头链**（L2 程序化云纹理 ✅ 2026-10-18：`export globe`，球面逐点 fBm + 流场扭曲 + 卷云拉丝；L3 参数化气旋模板 ✅ 2026-10-22；L5 大气渲染原型 ✅ 2026-10-22：恒星光谱定标、透射率表、多次散射表、云壳分层、云影与海面太阳高光；双层云壳（4 km 低云 + 9 km 卷云）✅ 2026-10-22；高壳卷云投影与卫星食通用接口 demo ✅ 2026-10-23；L4 云系平流原型 ✅ 2026-10-22（年均风占位，定版等 L1 6 小时风场）；GCM 年均云量接入 ✅ 2026-10-23（总云量取代占位场，低/高云分配两层云壳）；L1 图层包单帧接入 ✅ 2026-10-24（逐帧云量 3 帧时间平均 + 1 格距高斯平滑、两层分配与包内日下点，`--weather-pack`/`--frame`）；L4 逐帧风场 ✅ 2026-10-24（低/中云壳 `u_mid/v_mid`、卷云壳 `u_high/v_high`，小数帧线性插值，`cloud_flow_video.py --weather-pack`）；L3 真实轨迹 ✅ 2026-10-24（移动温带气旋逐帧驱动模板、准静止默认不画、热带按 `tc_genesis_potential` 正典参数化，`media/cyclone_tracks.py`）；余云顶诊断、L5 夜面城市灯光、静帧纹理逐帧风定向；L2 路线二（真实卫星斑块拼贴）已登记待评估） | 随图层包批 | ★★★★ |
+| P2 | **气象图层与太空镜头链**（L2 程序化云纹理 ✅ 2026-10-18：`map globe`，球面逐点 fBm + 流场扭曲 + 卷云拉丝；L3 参数化气旋模板 ✅ 2026-10-22；L5 大气渲染原型 ✅ 2026-10-22：恒星光谱定标、透射率表、多次散射表、云壳分层、云影与海面太阳高光；双层云壳（4 km 低云 + 9 km 卷云）✅ 2026-10-22；高壳卷云投影与卫星食通用接口 demo ✅ 2026-10-23；L4 云系平流原型 ✅ 2026-10-22（年均风占位，定版等 L1 6 小时风场）；GCM 年均云量接入 ✅ 2026-10-23（总云量取代占位场，低/高云分配两层云壳）；L1 图层包单帧接入 ✅ 2026-10-24（逐帧云量 3 帧时间平均 + 1 格距高斯平滑、两层分配与包内日下点，`--weather-pack`/`--frame`）；L4 逐帧风场 ✅ 2026-10-24（低/中云壳 `u_mid/v_mid`、卷云壳 `u_high/v_high`，小数帧线性插值，`cloud_flow_video.py --weather-pack`）；L3 真实轨迹 ✅ 2026-10-24（移动温带气旋逐帧驱动模板、准静止默认不画、热带按 `tc_genesis_potential` 正典参数化，`media/cyclone_tracks.py`）；余云顶诊断、L5 夜面城市灯光、静帧纹理逐帧风定向；L2 路线二（真实卫星斑块拼贴）已登记待评估） | 随图层包批 | ★★★★ |
 | P3 | **天球星历的事件搜索与 N 体（M4）**：查询、命令行、端点、前端天球视图与背景天球已实现（[技术参考](pipelines/sky-ephemeris.md)）；剩余食、凌与连珠的时刻搜索，长时段节点进动接 REBOUND，按消费方需要启动 → [sky-ephemeris.md](proposals/sky-ephemeris.md) | 按需 | ★★ |
 | P3 | 高清行星系视图（类 Space Engine：真实周期轨道动画 + 高清天体渲染；原视频素材轮的轨道动画项拆出独立立项，2026-10-02） | 调研后估 | ★★ |
 | P3 | **海基接地冰（陆缘冰）**：现行架构无法表达——重建把可分辨的海一律判为无冰，GCM 只收到陆地掩膜与地表位势两个场。实测可接地的浅海约 390 万 km²（行星表面的 0.67%，arctic 282 万、暮光 105 万），但气候杠杆很小：那些浅海已经常年封冻、反照率 0.60（高纬陆地只有 0.45），全球强迫约 −0.16 W/m²、约 −0.1~−0.2 K；主要影响是海平面约 −4 m 与极地海岸线观感。路线是异步耦合（自有浅冰求解器定接地范围 → 改写 GCM 的陆地掩膜与地表位势 → 开 ExoPlaSim 冰川开关取冰川反照率 → 迭代），见 [canvas-glacial-landforms.md](proposals/canvas-glacial-landforms.md) 6.1.1 | 调研后估 | ★ |

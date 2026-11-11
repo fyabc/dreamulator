@@ -7,15 +7,16 @@ axis: ``/read-map`` skill, ``ai civ``, and CI auditing all need headless layer
 rasters without a browser or manual screenshots.
 
 Usage:
-    dreamulator export layers nacrea --layers terrain,koppen,biome,agriculture,habitability
+    dreamulator map layers nacrea --layers terrain,koppen,biome,agriculture,habitability
 """
 
 from __future__ import annotations
 
+import functools
 import math
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import numpy as np
 import typer
@@ -24,6 +25,8 @@ from rich.console import Console
 from rich.table import Table
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import numpy as np
 
     from dreamulator.media.atmosphere_render import AtmosphereModel
@@ -56,8 +59,18 @@ from dreamulator.map.region_export import (
 )
 from dreamulator.world_manager import WorldManager
 
+map_app = typer.Typer(
+    help="Whole-planet map products: coloured layer PNGs and the orbital globe view.",
+    no_args_is_help=True,
+)
+region_app = typer.Typer(
+    help="Single-region packs sampled straight from the mesh: pack, then build; "
+    "draw them with `dreamulator render`.",
+    no_args_is_help=True,
+)
+#: Pre-2026-11 command paths (``dreamulator export …``), kept hidden for one release.
 export_app = typer.Typer(
-    help="Headless map-layer export utilities (colour PNGs matching the frontend).",
+    help="Deprecated command paths; see `dreamulator map`, `region`, `canvas` and `render`.",
     no_args_is_help=True,
 )
 console = Console()
@@ -267,7 +280,6 @@ def _render_diff_layer(
     raise ValueError(f"Unknown diff layer: {name}")
 
 
-@export_app.command("layers")
 def export_layers(
     world: str = typer.Argument(help="World name"),
     layers: str = typer.Option(
@@ -430,7 +442,6 @@ def export_layers(
     console.print(table)
 
 
-@export_app.command("region")
 def export_region(
     world: str = typer.Argument(help="World name"),
     lat: float = typer.Option(0.0, "--lat", help="Region centre latitude (degrees)"),
@@ -594,7 +605,6 @@ def export_region(
     console.print(f"[green]Alignment probe OK (max offset {max_off}°).[/green]")
 
 
-@export_app.command("build")
 def export_build(
     pack: Path = typer.Argument(
         help="Region pack ROOT dir (with input/ subdir), e.g. "
@@ -678,7 +688,6 @@ def export_build(
     raise typer.Exit(code=2) from None
 
 
-@export_app.command("render")
 def export_render(
     pack: Path = typer.Argument(
         help="Region pack ROOT dir (with input/ subdir), e.g. "
@@ -958,8 +967,6 @@ def _atmosphere_from_world(
     )
 
 
-@export_app.command("globe")
-@export_app.command("clouds")
 def export_clouds(
     ctx: typer.Context,
     world: str = typer.Argument(help="World name"),
@@ -1287,7 +1294,54 @@ def export_clouds(
     console.print(f"  done in {elapsed:.1f}s")
 
 
-# Global canvas chain (plan → generate → hydrology → window, status, mosaic) as a subgroup.
-from dreamulator.cli_export_canvas import canvas_app  # noqa: E402
+map_app.command("layers")(export_layers)
+map_app.command("globe")(export_clouds)
+region_app.command("pack")(export_region)
+region_app.command("build")(export_build)
 
-export_app.add_typer(canvas_app, name="canvas")
+
+def _deprecated(fn: Callable[..., Any], new: str) -> Callable[..., Any]:
+    """The same command under its old path, with a pointer to the new one."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        console.print(f"[yellow]deprecated path: use `dreamulator {new}`[/yellow]")
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+from dreamulator.cli_export_canvas import (  # noqa: E402
+    backfill_mesh_sea_lake,
+    canvas_app,
+)
+
+for _old, _fn, _new in (
+    ("layers", export_layers, "map layers"),
+    ("globe", export_clouds, "map globe"),
+    ("clouds", export_clouds, "map globe"),
+    ("region", export_region, "region pack"),
+    ("build", export_build, "region build"),
+    ("render", export_render, "render"),
+):
+    export_app.command(_old, hidden=True)(_deprecated(_fn, _new))
+
+_legacy_canvas = typer.Typer(help="Deprecated: `dreamulator canvas`.", no_args_is_help=True)
+for _cmd in canvas_app.registered_commands:
+    _name = _cmd.name or ""
+    assert _cmd.callback is not None
+    _legacy_canvas.command(_name, hidden=True)(_deprecated(_cmd.callback, f"canvas {_name}"))
+
+
+def _legacy_mesh_sea_lake(
+    canvas: Path = typer.Argument(help="Canvas directory (canvas.json)"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """Backfill the mesh sea-class lake field on one planned canvas."""
+    backfill_mesh_sea_lake(canvas, data_dir)
+
+
+_legacy_canvas.command("mesh-sea-lake", hidden=True)(
+    _deprecated(_legacy_mesh_sea_lake, "canvas plan <world> --backfill mesh-sea-lake")
+)
+export_app.add_typer(_legacy_canvas, name="canvas", hidden=True)

@@ -9,12 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- 画布二次侵蚀与沉积产品化：`map/surface_process.py`（隐式河流功率下切、阈值坡度、泥沙搬运与湖盆充填、单向锚定与网格盆地双向锚定，与原型逐位相同）、`map/incision_time.py`（由造山契约回放有效下切时间）、`media/canvas_surface_process.py`（粗网格加 90 m 分块两级求解，原生级进程池并行），新命令 `export canvas erode` 写出 `surface_process/` 逐块增量；S2、S3 裁窗、接缝检查与总览图经 `resolve_increments` 统一选择「安装地表」（产品完整时读「TD 块 + 增量」），`hydro-work/` 与 `hydro/` 记录所用地表，地表变了自动整体重算。
 - 能量型湖面蒸发（`engine/lake_evaporation.py`）：Priestley–Taylor 开阔水面蒸发，净辐射由逐月大气顶日照、云量与气温按 FAO-56 关系式推出，气压随海拔变化，月均温低于 0 °C 按封冻计。地球 14 个湖（−210 m 到 4724 m）与观测之比的中位数为 1.06、相关 0.94，原 Hamon 乘湖面系数为 0.60，纳木错低估约三倍。S1 新写出画布气候通道 `lake_evaporation.mm`（云量取 GCM 年均总云量，引擎世界取地球陆地平均 0.43），S2 的终端湖判据优先使用它，旧画布退回 Hamon；气候元数据补写 `perihelion_day`。`prog_erosion._lake_balances` 改为返回湖面蒸发需求（已含湖面系数）。区域数据包同样写出 `lake_evaporation.mm`，区域构建的两条路径（TD 与程序化侵蚀）都改读它；轨道参数读取与逐月日照移到 `map/astronomy_inputs.py`，画布与区域共用。
 - 项目规则与技能改为多 agent 共用：根目录与各文档子目录的规则改写在 `AGENTS.md`，同目录 `CLAUDE.md` 只做 `@AGENTS.md` 导入；前端专属规则移到 `frontend/AGENTS.md`，根文件保持在 Codex 32 KiB 缺省上限以内；技能按 Agent Skills 格式移到 `.agents/skills/`，由 `scripts/dev/sync_agent_skills.py` 生成 `.claude/skills/` 真实文件副本；不使用符号链接，`.gitattributes` 固定 LF，`tests/test_agent_instructions.py` 检查成对导入、体积、无符号链接与技能同步。
 - 新增山系形态改进提案，区分地质引擎的平均场与画布的中尺度结构，并登记下一次全层重建的验收方案。
 
 ### Changed
 
+- 命令行按对象重整：`dreamulator map`（`layers`、`globe`，`clouds` 并入 `globe`）、`dreamulator region`（`pack`、`build`）、`dreamulator canvas`（按流水线顺序列出，新增 `run` 一键完成侵蚀与 S2）与顶层 `dreamulator render`；逐张画布的命令接受画布目录或布局根（`--canvas` 选择）；`mesh-sea-lake` 并入 `canvas plan --backfill mesh-sea-lake`；河网阈值统一为 `--river-threshold`。旧的 `dreamulator export …` 路径保留一个版本，运行时提示新名字。
 - S2 外存填平的阶段二（全局流域图）改为 numpy 成批生成接缝边、numba 求最小化路径最大值水位，world-west 上由约 2 分钟降到约 6 秒，父进程内存峰值由约 8 GB 降到约 4 GB；整个填平约 2.7 分钟，最终面与串行结果逐位相同。原字典实现保留为测试参照。
 - `prog_erosion.priority_flood` 新增 `parallel` 选项（缺省关闭，现有产品逐位不变）：按分块多线程填平（Barnes 2016 的分块加流域图方案，填平面与串行版逐位相同），平地按广度优先从出口排水，下游顺序与 ε 坡道用指针倍增并行计算。world-west 全画布 1.44 km（7350 万格）上 11.6 秒降到 1.6 秒，永耀岛 720 m 上 1.0 秒降到 0.08 秒；完全并列的坡向按扫描顺序取舍，与串行版不同，永耀岛 20 Myr 侵蚀回归的湖面份额、洼地份额、起伏与平底份额与串行版一致。
 - S2 外存填平的阶段一（逐块局部填平）与阶段三（抬升到流域水位）改为按块在进程池中并行，阶段三由逐标签全块比较改为查表；Linux 用 fork、Windows 用 spawn，`export canvas hydrology` 新增 `--workers`。world-west 上整个填平由约 4.5 小时降到约 5 分钟（16 进程），1588 块最终面与串行结果逐位相同。湖水量平衡的入湖流量改为单遍 numba 累加，结果逐位不变，并省去两块整网格临时数组。

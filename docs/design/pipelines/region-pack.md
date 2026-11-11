@@ -1,6 +1,6 @@
 # 区域数据包与 Blender 静帧
 
-本文是区域数据包（`dreamulator export region`）及其 Blender 消费脚本的实现参考。数据包把引擎网格上的高程与气候裁成一个
+本文是区域数据包（`dreamulator region pack`）及其 Blender 消费脚本的实现参考。数据包把引擎网格上的高程与气候裁成一个
 真实千米正方形窗口，供 terrain-diffusion 细化、Gaea、着色出图和 Blender 渲染共同读取。操作步骤见
 [地形视频链](../../usage/terrain-chain.md)与 [CLI 参考](../../usage/cli.md#区域数据包export-region)，设计理由与后续扩展见
 [提案](../proposals/blender-render-pipeline.md)。
