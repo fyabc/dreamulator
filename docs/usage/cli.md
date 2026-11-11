@@ -458,7 +458,8 @@ dreamulator canvas mosaic data/worlds/nacrea/canvases/gcm-t42-712 --step 2
   [knowledge/cartography/terrain_diffusion.md](../knowledge/cartography/terrain_diffusion.md)）；中断后重跑即续算，
   `--canvas` 可只跑指定的画布。
 - `erode` 先在约 720 m 粗网格上做下切、谷坡与沉积（大画布用 `--block 16`，即 1.44 km），再在 90 m 分块上清理
-  亚格子凹坑（`--no-native` 跳过）；平台与岛屿的下切时长取 `--t-max-myr`（缺省 50 Myr）。结果写成
+  亚格子凹坑（`--no-native` 跳过）；平台与岛屿的下切时长取 `--t-max-myr`（缺省 50 Myr）。粗级时间步按「最大河流的
+  裂点每步后退 `--cells-per-step` 格」取（缺省 5，地球标定值；20 仍收敛，world-west 这样的大画布约快 4 倍）。结果写成
   `surface_process/` 下的逐块增量，不改 TD 块。
 - `hydrology` 读「安装地表」：缺省 `--surface auto` 在侵蚀产品完整时读「TD 块加增量」，否则读 TD 块；`--surface td`
   强制用 TD 块。结果在 `hydro-work/`（每个分块带校验和，可续算）与 `hydro/`，两处都记录所用地表；地表变了会
