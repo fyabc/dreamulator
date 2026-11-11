@@ -4,7 +4,8 @@ One subcommand per stage, in chain order; per-canvas commands take a canvas
 directory or a layout root (every canvas, or those ``--canvas`` names):
 
 * ``plan``      S1 layout, ownership tables and per-canvas inputs (``canvas_layout.yaml``);
-                ``--backfill mesh-sea-lake`` adds that field to planned canvases instead
+                ``--backfill mesh-sea-lake|lake-evaporation`` adds that field to planned
+                canvases instead
 * ``refine``    S1 native mountain-source selection, integration and accepted reference statistics
 * ``generate``  S1 chunk generation with terrain-diffusion, one worker per GPU, resumable
 * ``status``    per-canvas progress and checksums
@@ -187,7 +188,8 @@ def canvas_plan(
         None,
         "--backfill",
         help="Only add a field to the planned canvases under the root instead of planning: "
-        "mesh-sea-lake (the mesh's sea-class lakes S2 reads as sea)",
+        "mesh-sea-lake (the mesh's sea-class lakes S2 reads as sea) or lake-evaporation "
+        "(annual and monthly open-water evaporation)",
     ),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
@@ -211,13 +213,19 @@ def canvas_plan(
         native_precipitation = NativePrecipitationField.load(precipitation_field)
     branch = branch or cfg.branch
     if backfill is not None:
-        if backfill != "mesh-sea-lake":
-            console.print(f"[red]Unknown --backfill {backfill!r}; use mesh-sea-lake[/red]")
+        fill = {
+            "mesh-sea-lake": backfill_mesh_sea_lake,
+            "lake-evaporation": backfill_lake_evaporation,
+        }
+        if backfill not in fill:
+            console.print(
+                f"[red]Unknown --backfill {backfill!r}; use mesh-sea-lake or lake-evaporation[/red]"
+            )
             raise typer.Exit(code=2) from None
         layout_root = root or world_dir / "canvases" / (branch or "root")
         for path in _targets(layout_root, canvas):
             console.print(f"[bold]{path.name}[/bold]")
-            backfill_mesh_sea_lake(path, data_dir)
+            fill[backfill](path, data_dir)
         return
     mesh, layout, _r, map_dir, world_dir, source = _plan_world(world, branch, planet, cfg)
     root = root or world_dir / "canvases" / (branch or "root")
@@ -573,20 +581,14 @@ def canvas_hydrology(
         )
 
 
-def backfill_mesh_sea_lake(
-    canvas: Path,
-    data_dir: Path | None = None,
-) -> None:
-    """Backfill geometry_fields/mesh_sea_lake.npy (mesh sea-class lakes) on a planned canvas.
+def _planned_mesh(canvas: Path, data_dir: Path | None) -> tuple[Any, dict[str, Any], Any, Path]:
+    """The mesh a planned canvas came from, with canvas.json, its geometry and the map dir.
 
-    S1 writes the field for new canvases.  The mesh is located from canvas.json's
-    source and must still carry the fingerprint the canvas was planned from.
+    The mesh is located from canvas.json's source and must still carry the
+    fingerprint the canvas was planned from.
     """
-    import numpy as np
-
     from dreamulator.gcm.fields import mesh_fingerprint
     from dreamulator.map import td_canvas as tc
-    from dreamulator.map import td_canvas_build as tb
     from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
     from dreamulator.map.manager import MapManager
     from dreamulator.world_manager import WorldManager
@@ -603,7 +605,7 @@ def backfill_mesh_sea_lake(
         console.print("[red]canvas.json source does not name an existing world and planet[/red]")
         raise typer.Exit(code=1) from None
     mesh_file = find_mesh_file(map_dir) if map_dir is not None else None
-    if mesh_file is None:
+    if map_dir is None or mesh_file is None:
         console.print(f"[red]No mesh file for planet '{source['planet']}'[/red]")
         raise typer.Exit(code=1) from None
     mesh = load_cvt_mesh_model(mesh_file)
@@ -618,6 +620,21 @@ def backfill_mesh_sea_lake(
     geom = tc.CanvasGeometry(
         float(g["center_lat"]), float(g["center_lon"]), float(g["radius_km"]), int(g["ncell"])
     )
+    return mesh, meta, geom, map_dir
+
+
+def backfill_mesh_sea_lake(canvas: Path, data_dir: Path | None = None) -> None:
+    """Backfill geometry_fields/mesh_sea_lake.npy (mesh sea-class lakes) on a planned canvas.
+
+    S1 writes the field for new canvases.
+    """
+    import numpy as np
+
+    from dreamulator.map import td_canvas as tc
+    from dreamulator.map import td_canvas_build as tb
+
+    mesh, meta, geom, _map_dir = _planned_mesh(canvas, data_dir)
+    meta_path = canvas / "canvas.json"
     cells = mesh.cells
     lat = np.array([c.lat for c in cells])
     lon = np.array([c.lon for c in cells])
@@ -629,6 +646,40 @@ def backfill_mesh_sea_lake(
     grid = np.load(canvas / tb.MESH_SEA_LAKE_PATH)
     console.print(
         f"Wrote {tb.MESH_SEA_LAKE_PATH}: {int(grid.sum())} of {grid.size} cells sea-class lake"
+    )
+
+
+def backfill_lake_evaporation(canvas: Path, data_dir: Path | None = None) -> None:
+    """Rewrite the annual and monthly open-water evaporation channels of a planned canvas.
+
+    S1 writes both for new canvases; S2 reads the monthly one for the
+    pass-through lakes' monthly balance.  Rerun S2 afterwards.
+    """
+    import numpy as np
+
+    from dreamulator.map import td_canvas_build as tb
+    from dreamulator.map.export import load_climate_monthly
+
+    mesh, meta, geom, map_dir = _planned_mesh(canvas, data_dir)
+    astronomy = tb.load_astronomy(map_dir)
+    if astronomy is None:
+        console.print(f"[red]No climate_metadata.json orbit under {map_dir}[/red]")
+        raise typer.Exit(code=1) from None
+    try:
+        monthly = load_climate_monthly(map_dir)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    cols = tb.MeshColumns.from_mesh(mesh, *monthly)
+    entries = tb.write_lake_evaporation(canvas, geom, cols, astronomy)
+    meta.setdefault("climate", {}).update(entries)
+    (canvas / "canvas.json").write_text(
+        json.dumps(meta, indent=1, ensure_ascii=False), encoding="utf-8"
+    )
+    annual = np.load(canvas / "climate" / "lake_evaporation.mm.npy")
+    console.print(
+        "Wrote lake_evaporation.mm and lake_evaporation_monthly.mm: "
+        f"land median {float(np.nanmedian(annual)):.0f} mm/yr"
     )
 
 

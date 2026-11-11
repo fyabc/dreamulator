@@ -22,6 +22,7 @@ The algorithm follows the public papers (Barnes 2014; Braun & Willett
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -885,6 +886,7 @@ def terminal_equilibrium_routing(
     open_water_mm: np.ndarray | None = None,
     consume_receiver: bool = False,
     keep_rewritten_h: bool = True,
+    pass_through_out: list[PassThroughLakes] | None = None,
 ) -> tuple[
     np.ndarray | None,
     np.ndarray,
@@ -937,6 +939,10 @@ def terminal_equilibrium_routing(
     component counts, and per-drawn-lake records (label, verdict, spill
     cell + elevation, downstream label, inflow/demand in mm-equivalents) —
     the spill data that used to live only in transient arrays.
+
+    ``pass_through_out``, when given, receives one :class:`PassThroughLakes`
+    (the pass-through lakes' cells, exits and lake graph) for the monthly
+    regime pass; it stays empty on the early-exit paths without verdicts.
     """
 
     stats = {"terminal": 0, "dry_playas": 0, "shrunk": 0}
@@ -1171,6 +1177,12 @@ def terminal_equilibrium_routing(
                 "demand_mm": round(float(demand[a]), 3),
             }
         )
+    if pass_through_out is not None:
+        pass_through_out.append(
+            _pass_through_lakes(
+                lake_flat, lake_cells, exits, rec_flat, is_term, downstream_of, topo
+            )
+        )
     return (
         h_rw,
         land_rw,
@@ -1382,6 +1394,142 @@ def regime_active_cells(
     )
 
 
+@dataclass(frozen=True)
+class PassThroughLakes:
+    """Pass-through lakes of an annual verdict, in compact ids ``0..k-1``.
+
+    Built by :func:`terminal_equilibrium_routing`; the monthly regime pass
+    (:func:`month_active_counts`) routes each lake's monthly outflow from it.
+    ``labels`` are the original component labels (the ``lake_records``
+    labels); ``downstream`` is the next pass-through lake on the lake graph,
+    ``-1`` for the sea, the frame or a terminal lake; ``topo`` lists the ids
+    predecessors first.  Exits whose drainage re-enters their own lake
+    (dendritic arms) are dropped: the lake's water leaves through the others.
+    """
+
+    labels: np.ndarray
+    cells: np.ndarray
+    cell_lake: np.ndarray
+    exits: np.ndarray
+    exit_lake: np.ndarray
+    exit_target: np.ndarray
+    downstream: np.ndarray
+    topo: np.ndarray
+
+    @property
+    def count(self) -> int:
+        return int(self.labels.size)
+
+
+def _pass_through_lakes(
+    lake_flat: np.ndarray,
+    lake_cells: np.ndarray,
+    exits: np.ndarray,
+    rec_flat: np.ndarray,
+    is_term: np.ndarray,
+    downstream_of: np.ndarray,
+    topo: list[int],
+) -> PassThroughLakes:
+    from ._erosion_kernels import _exit_targets_numba
+
+    keep = ~is_term
+    keep[0] = False
+    labels = np.flatnonzero(keep)
+    ids = np.full(keep.size, -1, dtype=np.int64)
+    ids[labels] = np.arange(labels.size)
+    cell_lbl = lake_flat[lake_cells]
+    sel = keep[cell_lbl]
+    ex_lbl = lake_flat[exits].astype(np.int64)
+    walk = _exit_targets_numba(
+        np.ascontiguousarray(rec_flat), np.ascontiguousarray(lake_flat), exits.astype(np.int64)
+    )
+    leaves = keep[ex_lbl] & (walk != ex_lbl)
+    ex = exits[leaves]
+    nxt = downstream_of[labels]
+    return PassThroughLakes(
+        labels=labels,
+        cells=lake_cells[sel].astype(np.int64),
+        cell_lake=ids[cell_lbl[sel]],
+        exits=ex.astype(np.int64),
+        exit_lake=ids[ex_lbl[leaves]],
+        exit_target=rec_flat[ex].astype(np.int64),
+        downstream=np.where(nxt > 0, ids[nxt], -1),
+        topo=np.array([ids[a] for a in topo if keep[a]], dtype=np.int64),
+    )
+
+
+def lake_monthly_demand(
+    lakes: PassThroughLakes,
+    evaporation_monthly_mm: np.ndarray,
+    precip_monthly_mm: np.ndarray,
+    width: int,
+    *,
+    climate_block: int = 1,
+    reference_mm: float = RUNOFF_REFERENCE_MM,
+) -> np.ndarray:
+    """Monthly net surface demand per pass-through lake, (k, 12), reference cells.
+
+    ``Σ (E_m − P_m) / reference_mm`` over each lake's cells, with E the
+    monthly open-water evaporation and P the monthly precipitation, both
+    (12, n, n) on the climate grid (``climate_block`` pixels per climate
+    cell, the lookup of :func:`_lake_balances`).  A reference cell of monthly
+    accumulation is the same unit the monthly weights ``r_m / reference_mm``
+    carry, so demand and inflow subtract directly.
+    """
+    nc = evaporation_monthly_mm.shape[-1]
+    c = lakes.cells
+    idx = (
+        c if climate_block <= 1 else (c // (climate_block * width)) * nc + (c // climate_block) % nc
+    )
+    out = np.zeros((lakes.count, 12), dtype=np.float64)
+    for m in range(12):
+        e = np.nan_to_num(evaporation_monthly_mm[m].reshape(-1)[idx].astype(np.float64))
+        pr = np.nan_to_num(precip_monthly_mm[m].reshape(-1)[idx].astype(np.float64))
+        out[:, m] = np.bincount(lakes.cell_lake, weights=e - pr, minlength=lakes.count)
+    return out / reference_mm
+
+
+def lake_monthly_outflow(
+    lakes: PassThroughLakes, inflow: np.ndarray, demand: np.ndarray
+) -> tuple[np.ndarray, dict[str, int]]:
+    """Monthly outflow of each pass-through lake at the periodic steady state.
+
+    Water balance with storage below the sill: a lake whose month nets
+    ``inflow − demand < 0`` draws down below its outlet and spills nothing;
+    later surplus first refills that deficit, and only water above the sill
+    leaves.  The closure is mass conservation with two approximations: the
+    surface area stays the drawn area while the stage moves, and water above
+    the sill leaves within the month (no outlet rating curve).  The yearly
+    outflow equals the annual surplus whenever that surplus is positive, so
+    the monthly family stays on the annual verdict's water.  Lakes cascade
+    in topological order: an upstream outflow joins the next lake's inflow
+    month by month.  ``inflow`` and ``demand`` are (k, 12) in reference
+    cells; returns the (k, 12) outflow and counts of the outcome classes.
+    """
+    total = np.array(inflow, dtype=np.float64, copy=True)
+    out = np.zeros_like(total)
+    stats = {"lakes": lakes.count, "seasonal_outflow": 0, "no_outflow": 0}
+    for a in lakes.topo:
+        net = total[a] - demand[a]
+        if net.sum() <= 0.0:
+            stats["no_outflow"] += 1  # the monthly totals fall short of the annual verdict
+        else:
+            deficit = 0.0
+            for year in range(2):  # the first year reaches the sill; the second is periodic
+                for m in range(12):
+                    deficit -= float(net[m])
+                    q = -deficit if deficit < 0.0 else 0.0
+                    deficit = max(deficit, 0.0)
+                    if year == 1:
+                        out[a, m] = q
+            if (out[a] <= 0.0).any():
+                stats["seasonal_outflow"] += 1
+        b = int(lakes.downstream[a])
+        if b >= 0:
+            total[b] += out[a]
+    return out, stats
+
+
 def month_active_counts(
     order: np.ndarray,
     receiver: np.ndarray,
@@ -1391,17 +1539,24 @@ def month_active_counts(
     *,
     factor: int = 1,
     reference_mm: float = RUNOFF_REFERENCE_MM,
+    lakes: tuple[PassThroughLakes, np.ndarray] | None = None,
+    lake_stats_out: dict[str, int] | None = None,
 ) -> np.ndarray:
     """Months per cell whose accumulated streamflow clears the active rule.
 
     The monthly family shares the ANNUAL family's fixed reference: weights
     ``r_m / reference_mm`` accumulated on the final routing (terminal
-    footprints cut, no monthly lake depletion — the demand verdict is an
-    annual one, and omitting its monthly split only biases months below
-    desert lakes toward active, i.e. toward perennial, the conservative
-    direction).  Linearity of the accumulation gives ``Σ_m acc_m ≡`` the
-    no-depletion annual accumulation on the same normaliser, keeping the
-    monthly classification and the annual extraction on one water field.
+    footprints cut).  Which lakes are terminal is the annual verdict.
+
+    ``lakes`` = ``(pass_through, demand)`` adds the monthly lake balance:
+    ``demand`` is :func:`lake_monthly_demand`.  The pass-through lakes are
+    cut into sinks, a first set of twelve accumulations reads each lake's
+    monthly inflow, :func:`lake_monthly_outflow` turns inflow minus demand
+    into the outflow at the periodic steady state, and a second set of
+    twelve accumulations routes that outflow from the lake exits.  Without
+    it (inputs lacking the monthly evaporation channel) no lake loses water
+    month by month, which biases the months below desert lakes toward
+    active, i.e. toward perennial.
 
     ``active_cells`` is the independent small-discharge active rule from
     ``regime_active_cells``; it is deliberately unrelated to the annual
@@ -1433,7 +1588,9 @@ def month_active_counts(
     acc = np.empty((h, w), dtype=np.float32)
     o = np.ascontiguousarray(order)
     r = np.ascontiguousarray(receiver)
-    for m in range(runoff_monthly_pack.shape[-1]):
+    months = runoff_monthly_pack.shape[-1]
+
+    def fill(m: int) -> None:
         pack_m = runoff_monthly_pack[..., m]
         for i in range(pack_m.shape[0]):
             r0, r1 = i * factor, min(h, (i + 1) * factor)
@@ -1441,8 +1598,44 @@ def month_active_counts(
                 continue
             row = np.repeat(np.nan_to_num(pack_m[i], nan=0.0), factor)[:w] / reference_mm
             acc[r0:r1] = row[None, :]
-        _accumulate_into(o, r, acc)
-        counts += acc >= active_cells
+
+    if lakes is None or lakes[0].count == 0:
+        for m in range(months):
+            fill(m)
+            _accumulate_into(o, r, acc)
+            counts += acc >= active_cells
+        return counts
+
+    pt, demand = lakes
+    flat = acc.reshape(-1)
+    # The receivers are cut at the lake cells in place (``r`` may be the
+    # caller's array) and restored afterwards: a copy is a whole-canvas twin.
+    saved = r[pt.cells].copy()
+    r[pt.cells] = -1
+    try:
+        inflow = np.zeros((pt.count, months), dtype=np.float64)
+        for m in range(months):
+            fill(m)
+            # The lake's own surface is in the demand (E - P); its runoff
+            # weight is not water reaching the lake.
+            flat[pt.cells] = 0.0
+            _accumulate_into(o, r, acc)
+            inflow[:, m] = np.bincount(
+                pt.cell_lake, weights=flat[pt.cells].astype(np.float64), minlength=pt.count
+            )
+        outflow, stats = lake_monthly_outflow(pt, inflow, demand)
+        n_exits = np.bincount(pt.exit_lake, minlength=pt.count)
+        share = 1.0 / np.maximum(n_exits[pt.exit_lake], 1)
+        for m in range(months):
+            fill(m)
+            flat[pt.cells] = 0.0
+            np.add.at(flat, pt.exit_target, (outflow[pt.exit_lake, m] * share).astype(np.float32))
+            _accumulate_into(o, r, acc)
+            counts += acc >= active_cells
+    finally:
+        r[pt.cells] = saved
+    if lake_stats_out is not None:
+        lake_stats_out.update(stats)
     return counts
 
 

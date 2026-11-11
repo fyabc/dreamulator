@@ -69,6 +69,7 @@ LAND_ONLY = (
     "npp.gc_m2_yr",
     "runoff_monthly.mm",
     "lake_evaporation.mm",
+    "lake_evaporation_monthly.mm",
 )
 UNITS = {
     "temperature.C": "degC",
@@ -76,6 +77,7 @@ UNITS = {
     "runoff.mm": "mm/yr",
     "pet_hamon.mm": "mm/yr",
     "lake_evaporation.mm": "mm/yr",
+    "lake_evaporation_monthly.mm": "mm/month",
     "temperature_monthly.C": "degC",
     "precipitation_monthly.mm": "mm/month",
     "runoff_monthly.mm": "mm/month",
@@ -555,6 +557,45 @@ def write_canvas_inputs(
 MESH_SEA_LAKE_PATH = "geometry_fields/mesh_sea_lake.npy"
 
 
+def write_lake_evaporation(
+    canvas_dir: Path,
+    geom: tc.CanvasGeometry,
+    cols: MeshColumns,
+    astronomy: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Rewrite the annual and monthly open-water evaporation channels of a planned canvas.
+
+    The same derivation as planning: the canvas's own monthly temperature
+    channel, the mesh elevation and cloud sampled at the coarse centres, and
+    the world's orbit.  Ocean coarse cells (NaN in ``runoff.mm``) stay NaN.
+    Returns the two ``canvas.json`` climate entries.
+    """
+    climate = canvas_dir / "climate"
+    t_monthly = np.load(climate / "temperature_monthly.C.npy").astype(np.float64)
+    ocean = np.isnan(np.load(climate / "runoff.mm.npy"))
+    cloud = (
+        None if cols.cloud_total is None else tc.sample_mesh_field(geom, cols.cloud_total, cols.xyz)
+    )
+    months, lake_meta = lake_evaporation_monthly_channel(
+        geom, t_monthly, tc.sample_mesh_field(geom, cols.elevation_m, cols.xyz), cloud, astronomy
+    )
+    months = np.where(ocean[None], np.nan, months)
+    entries: dict[str, dict[str, Any]] = {}
+    for name, arr in (
+        ("lake_evaporation_monthly.mm", months),
+        ("lake_evaporation.mm", months.sum(axis=0)),
+    ):
+        np.save(climate / f"{name}.npy", arr.astype(np.float32))
+        entries[name] = {
+            "units": UNITS[name],
+            "shape": list(arr.shape),
+            "missing": "NaN on ocean coarse cells",
+            "sampling": "derived on the coarse grid from the monthly temperature channel",
+            **lake_meta,
+        }
+    return entries
+
+
 def write_mesh_sea_lake(
     out: Path, geom: tc.CanvasGeometry, is_sea_lake: np.ndarray, xyz: np.ndarray
 ) -> dict[str, Any]:
@@ -637,12 +678,30 @@ def lake_evaporation_channel(
 ) -> tuple[np.ndarray, dict[str, Any]]:
     """Annual open-water evaporation on the coarse grid (mm/yr) and its provenance.
 
+    The sum of :func:`lake_evaporation_monthly_channel`'s twelve months.
+    """
+    months, meta = lake_evaporation_monthly_channel(geom, t_monthly, elevation_m, cloud, astronomy)
+    return months.sum(axis=0), meta
+
+
+def lake_evaporation_monthly_channel(
+    geom: tc.CanvasGeometry,
+    t_monthly: np.ndarray,
+    elevation_m: np.ndarray,
+    cloud: np.ndarray | None,
+    astronomy: dict[str, Any],
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Monthly open-water evaporation on the coarse grid, (12, n, n) mm/month.
+
     ``t_monthly`` (12, n, n) is the canvas's own monthly temperature channel and
     ``elevation_m`` the coarse-cell mean height it refers to; insolation comes
     from the coarse-cell latitude and the world's orbit, the same
     ``monthly_insolation`` the climate engine uses.
     """
-    from dreamulator.engine.lake_evaporation import EARTH_LAND_MEAN_CLOUD, open_water_evaporation
+    from dreamulator.engine.lake_evaporation import (
+        EARTH_LAND_MEAN_CLOUD,
+        open_water_evaporation_monthly,
+    )
 
     from .astronomy_inputs import monthly_toa_insolation, solar_constant_w_m2
 
@@ -659,7 +718,9 @@ def lake_evaporation_channel(
         c = np.where(np.isfinite(cloud), cloud, EARTH_LAND_MEAN_CLOUD).reshape(-1)
         cloud_source = "climate annual total cloud (GCM), block mean of the mesh field"
     t = np.moveaxis(np.asarray(t_monthly, dtype=np.float64), 0, -1).reshape(-1, 12)
-    e = open_water_evaporation(np.nan_to_num(t), q, c, np.nan_to_num(elevation_m).reshape(-1))
+    e = open_water_evaporation_monthly(
+        np.nan_to_num(t), q, c, np.nan_to_num(elevation_m).reshape(-1)
+    )
     meta = {
         "method": "Priestley-Taylor open water, FAO-56 radiation, ice when monthly T < 0 C "
         "(engine/lake_evaporation.py)",
@@ -667,7 +728,7 @@ def lake_evaporation_channel(
         "solar_constant_w_m2": round(float(solar), 3),
         "astronomy": {k: v for k, v in astronomy.items()},
     }
-    return e.reshape(n, n), meta
+    return np.moveaxis(e.reshape(n, n, 12), -1, 0), meta
 
 
 def _write_canvas_climate(
@@ -732,13 +793,15 @@ def _write_canvas_climate(
         cloud = (
             None if cols.cloud_total is None else tc.sample_mesh_field(geom, cols.cloud_total, xyz)
         )
-        climate["lake_evaporation.mm"], lake_meta = lake_evaporation_channel(
+        lake_months, lake_meta = lake_evaporation_monthly_channel(
             geom,
             climate["temperature_monthly.C"].astype(np.float32).astype(np.float64),
             tc.sample_mesh_field(geom, cols.elevation_m, xyz),
             cloud,
             astronomy,
         )
+        climate["lake_evaporation_monthly.mm"] = lake_months
+        climate["lake_evaporation.mm"] = lake_months.sum(axis=0)
     for name in LAND_ONLY:
         if name in climate:
             climate[name] = np.where(ocean_cell, np.nan, climate[name])
@@ -777,7 +840,7 @@ def _write_canvas_climate(
             "missing": missing,
             "sampling": sampling,
         }
-        if name == "lake_evaporation.mm" and lake_meta is not None:
+        if name in ("lake_evaporation.mm", "lake_evaporation_monthly.mm") and lake_meta is not None:
             climate_meta[name]["sampling"] = (
                 "derived on the coarse grid from the monthly temperature channel"
             )

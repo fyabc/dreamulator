@@ -1290,7 +1290,9 @@ def run_canvas_rivers(
     from dreamulator.map.prog_erosion import (
         LAKE_MIN_WIDTH_KM,
         RUNOFF_REFERENCE_MM,
+        PassThroughLakes,
         lake_mmu_cells,
+        lake_monthly_demand,
         month_active_counts,
         regime_active_cells,
         renderable_lakes,
@@ -1346,6 +1348,7 @@ def run_canvas_rivers(
             else ("Hamon fallback (no lake_evaporation.mm channel; re-plan the canvas)")
         )
         print(f"[hydrology] lake evaporation: {source}")
+    pass_through: list[PassThroughLakes] = []
     (
         _h_rewritten,
         land,
@@ -1374,15 +1377,19 @@ def run_canvas_rivers(
         open_water_mm=open_water,
         consume_receiver=True,
         keep_rewritten_h=False,
+        pass_through_out=pass_through,
     )
     # Routing consumed them; the regime pass and segment extraction below
     # work from order/rec_route/acc (and the monthly pack's own weights).
     del dem, weight
     rivers = river_mask(acc, land, threshold_cells)
 
-    # Monthly regime on the FINAL routing (terminal footprints cut; the
-    # demand verdict is annual, see month_active_counts).
+    # Monthly regime on the FINAL routing (terminal footprints cut by the
+    # annual verdict); pass-through lakes run their monthly balance when the
+    # monthly evaporation channel exists (see month_active_counts).
     month_active = None
+    monthly_lakes = "no monthly runoff"
+    monthly_lake_stats: dict[str, int] = {}
     monthly_path = climate / "runoff_monthly.mm.npy"
     if monthly_path.exists():
         monthly = np.load(monthly_path).astype(np.float32)
@@ -1390,9 +1397,39 @@ def run_canvas_rivers(
             monthly = np.moveaxis(monthly, 0, -1)  # (12,n,n) -> (n,n,12)
             active = regime_active_cells(km)
             factor = PX_PER_CELL
+            lakes_arg = None
+            evap_m_path = climate / "lake_evaporation_monthly.mm.npy"
+            precip_m_path = climate / "precipitation_monthly.mm.npy"
+            if not pass_through or pass_through[0].count == 0:
+                monthly_lakes = "no pass-through lakes"
+            elif evap_m_path.exists() and precip_m_path.exists():
+                demand = lake_monthly_demand(
+                    pass_through[0],
+                    np.load(evap_m_path),
+                    np.load(precip_m_path),
+                    w,
+                    climate_block=PX_PER_CELL,
+                )
+                lakes_arg = (pass_through[0], demand)
+                monthly_lakes = "monthly balance with storage below the sill"
+            else:
+                monthly_lakes = (
+                    "no monthly depletion (no lake_evaporation_monthly.mm channel; "
+                    "plan --backfill lake-evaporation)"
+                )
+            if verbose:
+                print(f"[hydrology] monthly lakes: {monthly_lakes}")
             month_active = month_active_counts(
-                order, rec_route, monthly, land, active, factor=factor
+                order,
+                rec_route,
+                monthly,
+                land,
+                active,
+                factor=factor,
+                lakes=lakes_arg,
+                lake_stats_out=monthly_lake_stats,
             )
+    del pass_through
 
     segs, flows, regimes = river_segments(
         rivers,
@@ -1434,6 +1471,7 @@ def run_canvas_rivers(
         "perennial": int((regimes == 0).sum()),
         "non_perennial": int((regimes == 1).sum()),
         "regime_source": "monthly-runoff" if month_active is not None else "annual-default",
+        "regime_lakes": {"method": monthly_lakes, **monthly_lake_stats},
         "terminal_lakes": lake_stats,
         "sea_source": (
             "surface-boundary-connectivity" if _declares_sea_mask(store) else "sea-level"

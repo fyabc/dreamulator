@@ -271,3 +271,22 @@ def _lake_inflow_numba(
         if lab > 0 and lab != lake_flat[i]:
             inflow[lab] += np.float64(acc_flat[i])
     return inflow
+
+
+@numba.njit(cache=True)
+def _exit_targets_numba(
+    receiver: np.ndarray, lake_label: np.ndarray, exits: np.ndarray
+) -> np.ndarray:
+    """Lake label each exit cell's drainage path reaches next (0 = sea or frame).
+
+    The walk starts at the exit's receiver and follows the receivers over
+    non-lake cells; a dendritic arm that re-enters its own lake returns that
+    lake's label, which callers treat as internal.
+    """
+    out = np.zeros(exits.size, dtype=np.int64)
+    for k in range(exits.size):
+        t = receiver[exits[k]]
+        while t >= 0 and lake_label[t] == 0:
+            t = receiver[t]
+        out[k] = lake_label[t] if t >= 0 else 0
+    return out
