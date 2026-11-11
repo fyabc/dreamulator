@@ -691,6 +691,7 @@ def _erode_one(
     native_time_myr: float,
     workers: int | None,
     data_dir: Path | None,
+    cells_per_step: float = 5.0,
 ) -> None:
     """Erosion and deposition of one canvas (TD surface -> surface_process/ increments)."""
     import numpy as np
@@ -700,6 +701,7 @@ def _erode_one(
     from dreamulator.map.incision_time import effective_incision_time_myr
     from dreamulator.map.manager import MapManager
     from dreamulator.map.orogen_contract import load_orogen_contract
+    from dreamulator.map.surface_process import SurfaceProcessParams
     from dreamulator.map.td_canvas import unit_vectors
     from dreamulator.media.canvas_surface_process import (
         CanvasSurfaceConfig,
@@ -759,7 +761,11 @@ def _erode_one(
         teff,
         unit_vectors(lat, lon),
         CanvasSurfaceConfig(
-            block=block, t_max_myr=t_max_myr, native=native, native_time_myr=native_time_myr
+            block=block,
+            t_max_myr=t_max_myr,
+            native=native,
+            native_time_myr=native_time_myr,
+            params=SurfaceProcessParams(max_cells_per_step=cells_per_step),
         ),
         workers=workers,
         source={
@@ -906,12 +912,20 @@ def canvas_erode(
         True, "--native/--no-native", help="Run the 90 m chunk pass after the coarse level"
     ),
     native_time_myr: float = typer.Option(4.0, "--native-time-myr", help="Native pass time"),
+    cells_per_step: float = typer.Option(
+        5.0,
+        "--cells-per-step",
+        help="Coarse time step as the knickpoint retreat per step in cells (5 calibrated; "
+        "up to 20 converges and is 4x faster on large canvases)",
+    ),
     workers: int | None = typer.Option(None, "--workers", help="Processes for the native pass"),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Erosion and deposition: TD surface -> surface_process/ increments (per canvas)."""
     for path in _targets(target, canvas):
-        _erode_one(path, block, t_max_myr, native, native_time_myr, workers, data_dir)
+        _erode_one(
+            path, block, t_max_myr, native, native_time_myr, workers, data_dir, cells_per_step
+        )
 
 
 def canvas_mosaic(
@@ -977,6 +991,12 @@ def canvas_run(
     ),
     block: int = typer.Option(8, "--block", help="Erosion coarse block (8: 720 m; 16: 1.44 km)"),
     t_max_myr: float = typer.Option(50.0, "--t-max-myr", help="Incision time of platforms"),
+    cells_per_step: float = typer.Option(
+        5.0,
+        "--cells-per-step",
+        help="Coarse time step as the knickpoint retreat per step in cells (5 calibrated; "
+        "up to 20 converges and is 4x faster on large canvases)",
+    ),
     river_threshold: int = typer.Option(27000, "--river-threshold", help=_THRESHOLD_HELP),
     workers: int | None = typer.Option(None, "--workers", help="Processes per stage"),
     force: bool = typer.Option(False, "--force", help="Redo every step, finished or not"),
@@ -988,7 +1008,7 @@ def canvas_run(
     for path in _targets(target, canvas):
         console.print(f"[bold]{path.name}[/bold]")
         if erode and (force or not surface_process_complete(path)):
-            _erode_one(path, block, t_max_myr, True, 4.0, workers, data_dir)
+            _erode_one(path, block, t_max_myr, True, 4.0, workers, data_dir, cells_per_step)
         elif erode:
             console.print("  erosion already complete")
         _run_hydrology(
