@@ -579,12 +579,28 @@ def _exit_of(order: np.ndarray, rec: np.ndarray, out: np.ndarray) -> np.ndarray:
     return ex
 
 
+def chunk_order(st: CanvasStore, key: tuple[int, int]) -> np.ndarray:
+    """Downstream-first order of a chunk's cells, memoised under ``flow/order``.
+
+    The order is the graded surface's stable argsort, so it depends on ``flow/graded`` alone and
+    is shared by every routing over the chunk.  The monthly regime accumulates twenty-four
+    times; recomputing the sort each time dominated that stage.  ``flow/order`` is a cache:
+    deleting it only costs the sorts again.
+    """
+    p = flow_path(st, "order", key)
+    if p.exists():
+        return np.asarray(np.load(p)).astype(np.int64)
+    g = load_chunk(st, "graded", key).ravel()
+    order = np.argsort(np.where(np.isfinite(g), g, np.inf), kind="stable")
+    _atomic_save(p, order.astype(np.int32))
+    return order
+
+
 def _local(
     st: CanvasStore, key: tuple[int, int], dir_kind: str = "dir"
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     code = load_chunk(st, dir_kind, key)
-    g = load_chunk(st, "graded", key).ravel()
-    order = np.argsort(np.where(np.isfinite(g), g, np.inf), kind="stable")
+    order = chunk_order(st, key)
     rec, out = _local_receivers(code)
     return order, rec, out
 

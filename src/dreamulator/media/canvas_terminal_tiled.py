@@ -68,6 +68,12 @@ class TerminalResult:
     n_exits: np.ndarray
     kept_counts: np.ndarray
     stats: dict[str, int]
+    #: one row per lake exit, in cell-index order: the exit cell, its lake, the cell its
+    #: receiver lands on and the lake that receiver chain first reaches (0 = sea or frame).
+    exit_cell: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
+    exit_lake: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
+    exit_target: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
+    exit_reach: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
     lake_records: list[dict[str, object]] = field(default_factory=list)
 
 
@@ -742,6 +748,10 @@ def tiled_terminal_routing(
         n_exits=n_exits,
         kept_counts=kept_counts,
         stats=stats,
+        exit_cell=np.array([e[0] for e in exits], dtype=np.int64),
+        exit_lake=np.array([e[1] for e in exits], dtype=np.int64),
+        exit_target=np.array([e[4] for e in exits], dtype=np.int64),
+        exit_reach=np.array([e[6] for e in exits], dtype=np.int64),
         lake_records=records,
     )
 

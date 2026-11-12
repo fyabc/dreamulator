@@ -1562,10 +1562,30 @@ def lake_monthly_outflow(
     month by month.  ``inflow`` and ``demand`` are (k, 12) in reference
     cells; returns the (k, 12) outflow and counts of the outcome classes.
     """
+    return monthly_outflow_cascade(
+        np.asarray(lakes.topo), lakes.downstream, lakes.count, inflow, demand
+    )
+
+
+def monthly_outflow_cascade(
+    topo: np.ndarray,
+    downstream: np.ndarray,
+    count: int,
+    inflow: np.ndarray,
+    demand: np.ndarray,
+) -> tuple[np.ndarray, dict[str, int]]:
+    """The monthly lake cascade on the compact pass-through tables.
+
+    ``topo`` lists the lake ids predecessors first and ``downstream[a]`` is the next
+    pass-through lake (-1 for the sea, the frame or a terminal lake); see
+    :func:`lake_monthly_outflow` for the closure the storage term expresses.  The
+    out-of-core chain (:mod:`dreamulator.media.canvas_month_tiled`) keeps the lake cells
+    on disk and calls this directly.
+    """
     total = np.array(inflow, dtype=np.float64, copy=True)
     out = np.zeros_like(total)
-    stats = {"lakes": lakes.count, "seasonal_outflow": 0, "no_outflow": 0}
-    for a in lakes.topo:
+    stats = {"lakes": int(count), "seasonal_outflow": 0, "no_outflow": 0}
+    for a in topo:
         net = total[a] - demand[a]
         if net.sum() <= 0.0:
             stats["no_outflow"] += 1  # the monthly totals fall short of the annual verdict
@@ -1580,7 +1600,7 @@ def lake_monthly_outflow(
                         out[a, m] = q
             if (out[a] <= 0.0).any():
                 stats["seasonal_outflow"] += 1
-        b = int(lakes.downstream[a])
+        b = int(downstream[a])
         if b >= 0:
             total[b] += out[a]
     return out, stats
