@@ -34,6 +34,7 @@ from dreamulator.media.canvas_flow_tiled import (
     _default_workers,
     _pool_map,
     _store_of,
+    drop_kinds,
     load_chunk,
     save_chunk,
 )
@@ -49,6 +50,9 @@ RIVER_KIND = "rivers"
 
 #: Peak bytes per cell of the whole-grid rivers chain (about ten canvas-sized fields).
 WHOLE_GRID_BYTES_PER_CELL = 100.0
+
+#: Long side of the channel QA raster ``hydro/rivers.png``; bigger canvases are max-pooled.
+RASTER_MAX_PX = 16384
 
 
 def _extra() -> dict[str, Any]:
@@ -252,6 +256,7 @@ def run_canvas_rivers_tiled(
     sea_level: float = 0.0,
     threshold_cells: int = 27000,
     workers: int | None = None,
+    keep_work: bool = False,
     verbose: bool = True,
 ) -> dict[str, object]:
     """The rivers stage of :func:`canvas_pipeline.run_canvas_rivers`, out of core.
@@ -354,14 +359,24 @@ def run_canvas_rivers_tiled(
     np.save(hydro / "rivers.line.npy", segs.astype(np.float32))
     np.save(hydro / "rivers.flow.npy", flows.astype(np.float32))
     np.save(hydro / "rivers.regime.npy", regimes.astype(np.uint8))
-    # The channel raster is one byte per canvas pixel — the only whole-canvas array the stage
-    # builds, and two orders of magnitude under the float fields it replaced.
+    # The channel raster is a QA image, so it is max-pooled to at most RASTER_MAX_PX on the long
+    # side: at canvas pitch a world-sized bounding box is 1.9e10 pixels, which neither fits in
+    # memory nor opens anywhere.  Pooling by the maximum keeps one-pixel channels visible, and
+    # a canvas under the cap is written at full pitch.  The per-chunk rasters under
+    # ``hydro-work/flow/rivers`` stay at full resolution for anything that needs them.
     t = store.tile
-    png = np.zeros(layout.shape, dtype=np.uint8)
+    pool = max(1, -(-max(layout.shape) // RASTER_MAX_PX))
+    ph, pw = -(-layout.shape[0] // pool), -(-layout.shape[1] // pool)
+    png = np.zeros((ph, pw), dtype=np.uint8)
     for key in store.chunks:
         rivers = load_chunk(store, RIVER_KIND, key).astype(bool)
         rivers &= ~load_chunk(store, "lakes_render", key).astype(bool)
-        png[key[0] * t : (key[0] + 1) * t, key[1] * t : (key[1] + 1) * t] = rivers * np.uint8(255)
+        loc = np.flatnonzero(rivers.ravel())
+        if loc.size == 0:
+            continue
+        gr = (key[0] * t + loc // t) // pool
+        gc = (key[1] * t + loc % t) // pool
+        png.reshape(-1)[gr * pw + gc] = 255
     Image.fromarray(png, mode="L").save(hydro / "rivers.png")
     del png
 
@@ -397,10 +412,17 @@ def run_canvas_rivers_tiled(
         "lake_mmu_cells": mmu,
         "lake_min_width_km": LAKE_MIN_WIDTH_KM,
         "solver": "out-of-core",
+        "raster_pool": pool,
     }
     (hydro / "rivers.meta.json").write_text(
         json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    if not keep_work:
+        flow = store.work / "flow"
+        kinds = sorted(d.name for d in flow.iterdir() if d.is_dir()) if flow.is_dir() else []
+        drop_kinds(store, *kinds)
+        if flow.is_dir() and not any(flow.iterdir()):
+            flow.rmdir()
     if verbose:
         print(
             f"[hydrology] rivers: {len(flows)} segments "

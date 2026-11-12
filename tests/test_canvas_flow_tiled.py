@@ -468,6 +468,7 @@ def test_out_of_core_rivers_driver_writes_the_same_products(tmp_path: Path) -> N
     b = build(tmp_path / "chunks")
     stats_a = run_canvas_rivers(a, threshold_cells=8, verbose=False)
     stats_b = run_canvas_rivers_tiled(b, threshold_cells=8, workers=1, verbose=False)
+    assert not (b.work / "flow").exists()  # the stage cleans its own working files up
     # The two accumulations differ in the last float32 digits (step 1), which moves a few cells
     # across the channel threshold, so the segment counts agree to a fraction of a percent.
     assert stats_b["segments"] == pytest.approx(stats_a["segments"], rel=0.01)
@@ -476,6 +477,12 @@ def test_out_of_core_rivers_driver_writes_the_same_products(tmp_path: Path) -> N
     ha, hb = a.root / "hydro", b.root / "hydro"
     for name in ("rivers.line.npy", "rivers.flow.npy", "rivers.regime.npy", "rivers.png"):
         assert (hb / name).exists(), name
+    from PIL import Image
+
+    with Image.open(hb / "rivers.png") as img, Image.open(ha / "rivers.png") as ref:
+        assert img.size == ref.size  # under the cap, the QA raster keeps the canvas pitch
+        got, want = np.asarray(img) > 0, np.asarray(ref) > 0
+        assert int((got != want).sum()) < 0.01 * int(want.sum())
     meta_a = json.loads((ha / "rivers.meta.json").read_text(encoding="utf-8"))
     meta_b = json.loads((hb / "rivers.meta.json").read_text(encoding="utf-8"))
     for k in ("threshold_cells", "weight_source", "km_per_px", "regime_source", "sea_source",
@@ -498,6 +505,7 @@ def test_out_of_core_rivers_driver_writes_the_same_products(tmp_path: Path) -> N
         assert q.exists(), p.name
         assert np.array_equal(np.load(p)["idx"], np.load(q)["idx"])
         assert np.array_equal(np.load(p)["lake_id"], np.load(q)["lake_id"])
+
 
 def test_chunk_reads_retry_a_stale_handle(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """A network filesystem's ESTALE on a just-renamed chunk file is retried, not raised."""

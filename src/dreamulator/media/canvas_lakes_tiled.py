@@ -30,6 +30,7 @@ from dreamulator.media.canvas_flow_tiled import (
     _default_workers,
     _pool_map,
     _store_of,
+    drop_kinds,
     flow_path,
     load_chunk,
     load_npy,
@@ -319,6 +320,8 @@ def tiled_geometry_lakes(
     inland = inland_by_chunk(store)
     _pool_map(_lake_mask_chunk, [(k, keep_ids, inland.get(k)) for k in keys], ctx, n)
     lakes = tiled_components(store, "lakes0", workers=n, ctx=ctx)
+    # The depth masks and their labels only served the lake seeding above.
+    drop_kinds(store, "wet", "deep", "lbl_wet", "lbl_deep")
     if log is not None:
         log(
             f"[lakes] cores {core_ids.size}, wet components {wet.count}, kept {keep_ids.size}, "

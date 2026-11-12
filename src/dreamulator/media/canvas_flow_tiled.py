@@ -461,6 +461,7 @@ def tiled_graded(
         if log is not None:
             log(f"[flow] graded flats: seam round {rounds}, {len(pending)} chunks to revisit")
     _pool_map(_graded_levels, keys, ctx, n)
+    drop_kinds(store, "dist")  # the flat distances are consumed by the levels pass
     return rounds
 
 
@@ -508,6 +509,23 @@ def _direction_chunk(key: tuple[int, int]) -> None:
     else:
         w = land.astype(np.float32)
     save_chunk(st, "w_runoff", key, w)
+
+
+def drop_kinds(store: CanvasStore, *kinds: str) -> None:
+    """Delete the chunk files of scratch kinds nothing reads once their stage is done.
+
+    The out-of-core chain writes about twenty kinds per chunk; most are a stage's own working
+    state (the flat distances, the wet/deep component labels, the cut routings).  On a
+    377M-cell canvas they come to several GB, and on a world-sized canvas to tens, so each
+    stage drops its own as soon as the last reader of it has run.
+    """
+    for kind in kinds:
+        d = store.work / "flow" / kind
+        if not d.is_dir():
+            continue
+        for path in sorted(d.glob("*")):
+            path.unlink()
+        d.rmdir()
 
 
 def healed_by_chunk(store: CanvasStore) -> dict[tuple[int, int], np.ndarray] | None:

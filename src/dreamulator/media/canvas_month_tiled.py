@@ -36,6 +36,7 @@ from dreamulator.media.canvas_flow_tiled import (
     _default_workers,
     _pool_map,
     _store_of,
+    drop_kinds,
     load_chunk,
     save_chunk,
     tiled_accumulation,
@@ -295,11 +296,7 @@ def tiled_month_active(
         )
         tiled_accumulation(store, WEIGHT_KIND, dir_kind=DIR_KIND, out_kind=ACC_KIND, workers=n_work)
         _pool_map(_month_count, keys, ctx, n_work)
-    for kind in (WEIGHT_KIND, ACC_KIND):
-        d = store.work / "flow" / kind
-        for p in sorted(d.glob("*")):
-            p.unlink()
-        d.rmdir()
+    drop_kinds(store, WEIGHT_KIND, ACC_KIND, DIR_KIND)
     if log is not None:
         log(f"[month] {months} months in {time.time() - t0:.0f} s")
     return MonthResult(months=months, pass_through=k, stats=stats)

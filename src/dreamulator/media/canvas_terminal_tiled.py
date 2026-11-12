@@ -41,6 +41,7 @@ from dreamulator.media.canvas_flow_tiled import (
     _pool_map,
     _ring_index,
     _store_of,
+    drop_kinds,
     halo,
     load_chunk,
     save_chunk,
@@ -737,6 +738,8 @@ def tiled_terminal_routing(
             f"[terminal] {n} lakes: {int(is_term.sum())} terminal "
             f"(dry playas {stats['dry_playas']}, shrunk {stats['shrunk']})"
         )
+    # The cut routing and its accumulation only served the first-touch inflow.
+    drop_kinds(store, "dir_cut", "acc_cut")
     return TerminalResult(
         n=n,
         external=external,
