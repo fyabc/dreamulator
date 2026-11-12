@@ -589,6 +589,14 @@ def _lake_entry_donors(
     return np.nonzero(hits)[0]
 
 
+def climate_cell_index(cells: np.ndarray, width: int, block: int, ncols: int) -> np.ndarray:
+    """Flat index into a coarse climate grid of ``ncols`` columns for flat cells of a grid
+    ``width`` cells wide, ``block`` cells per climate cell (row and column divided separately:
+    the pixel grid may be narrower than the climate grid, as a canvas's chunk bounding box is)."""
+    c = np.asarray(cells, dtype=np.int64)
+    return np.asarray((c // width // block) * ncols + (c % width) // block)
+
+
 def _lake_balances(
     lake: np.ndarray,
     receiver: np.ndarray,
@@ -648,9 +656,7 @@ def _lake_balances(
     ncc = precip_mm.shape[1]
     ww = lake.shape[1]
     climate_idx = (
-        lake_idx
-        if climate_block <= 1
-        else (lake_idx // (climate_block * ww)) * ncc + (lake_idx // climate_block) % ncc
+        lake_idx if climate_block <= 1 else climate_cell_index(lake_idx, ww, climate_block, ncc)
     )
     if open_water_mm is not None:
         e_vals = open_water_mm.reshape(-1)[climate_idx]
@@ -809,7 +815,9 @@ def _equilibrium_water(
             stats["dry_playas"] += 1
         else:
             stats["shrunk"] += 1
-        deepest = np.argsort(h_flat[cells])[:k]
+        # stable: equal heights (integer DEMs have many) go by cell index, a rule the tiled
+        # canvas path reproduces; the default quicksort picked ties by its internals
+        deepest = np.argsort(h_flat[cells], kind="stable")[:k]
         keep_cells = cells[deepest]
         water_flat[keep_cells] = True
         land_flat[keep_cells] = False
@@ -866,6 +874,64 @@ def apply_terminal_equilibrium(
         sea_level_m=sea_level_m,
         labels=lbl,
     )
+
+
+def lake_topological_order(downstream_of: np.ndarray, spill_elev: np.ndarray) -> list[int]:
+    """Upstream-first order over the lake graph, breaking its cycles (mutates ``downstream_of``).
+
+    ``downstream_of[a]`` is the lake that lake ``a``'s first exit (in cell-index order) reaches,
+    0 for the sea or the frame.  The receiver forest is acyclic cell by cell, but the contracted
+    lake graph is not: two neighbouring lakes at nearly the same fill level can each send their
+    first exit into the other (five two-lake cycles among 7876 lakes on one canvas).  Kahn's order
+    leaves exactly the cycle members, since every lake has one outgoing edge at most.  Each
+    cycle is cut at the member with the lowest spill (``spill_elev``, inf for no exit; ties go to
+    the smaller label): it is the floor of the merged basin, so the other members drain into it
+    and it becomes the sink of the chain.  Without the cut those lakes got no verdict, no
+    cascade and no exit depletion — a dry pair with zero inflow stayed drawn full.
+    """
+    n = downstream_of.size - 1
+    indeg = np.zeros(n + 1, dtype=np.int64)
+    for a in range(1, n + 1):
+        b = int(downstream_of[a])
+        if b > 0:
+            indeg[b] += 1
+    from collections import deque
+
+    topo: list[int] = []
+
+    def drain(dq: deque[int]) -> None:
+        while dq:
+            a = dq.popleft()
+            topo.append(a)
+            b = int(downstream_of[a])
+            if b > 0:
+                indeg[b] -= 1
+                if indeg[b] == 0:
+                    dq.append(b)
+
+    drain(deque(a for a in range(1, n + 1) if indeg[a] == 0))
+    if len(topo) == n:
+        return topo
+    done = np.zeros(n + 1, dtype=bool)
+    done[topo] = True
+    starts: list[int] = []
+    for a in range(1, n + 1):
+        if done[a]:
+            continue
+        cycle = [a]
+        done[a] = True
+        b = int(downstream_of[a])
+        while not done[b]:
+            done[b] = True
+            cycle.append(b)
+            b = int(downstream_of[b])
+        cut = min(cycle, key=lambda c: (float(spill_elev[c]), c))
+        nxt = int(downstream_of[cut])
+        downstream_of[cut] = 0
+        indeg[nxt] -= 1
+        starts.append(nxt)  # the member just past the cut now has no unresolved donor
+    drain(deque(sorted(starts)))
+    return topo
 
 
 def terminal_equilibrium_routing(
@@ -1024,6 +1090,9 @@ def terminal_equilibrium_routing(
     rec_lake = rec_flat[lake_cells]
     is_exit = (rec_lake >= 0) & (lake_flat[np.maximum(rec_lake, 0)] != lake_flat[lake_cells])
     exits = lake_cells[is_exit]
+    # The receivers of the exits, kept before the terminal cut below rewrites them (with
+    # consume_receiver the cut lands in this very array): the records read the spill from them.
+    exit_rec = rec_flat[exits].copy()
     del rec_lake, is_exit  # exits itself feeds the depletion pass and records
     downstream_of = np.zeros(n + 1, dtype=np.int64)  # 0 = sea/frame
     for e in exits:
@@ -1035,24 +1104,11 @@ def terminal_equilibrium_routing(
             tgt = int(lake_flat[t]) if t >= 0 else 0
             if tgt != src_lbl:  # self re-entry (dendritic arm) is internal
                 downstream_of[src_lbl] = tgt
-    # Kahn topological order over the (forest-contracted, hence acyclic) graph.
-    indeg = np.zeros(n + 1, dtype=np.int64)
-    for a in range(1, n + 1):
-        b = int(downstream_of[a])
-        if b > 0:
-            indeg[b] += 1
-    from collections import deque
-
-    dq = deque(a for a in range(1, n + 1) if indeg[a] == 0)
-    topo = []
-    while dq:
-        a = dq.popleft()
-        topo.append(a)
-        b = int(downstream_of[a])
-        if b > 0:
-            indeg[b] -= 1
-            if indeg[b] == 0:
-                dq.append(b)
+    # Upstream-first order over the lake graph; its cycles are cut at the lowest spill.
+    spill_elev = np.full(n + 1, np.inf)
+    np.minimum.at(spill_elev, lake_flat[exits], h.reshape(-1)[exit_rec].astype(np.float64))
+    topo = lake_topological_order(downstream_of, spill_elev)
+    del spill_elev
 
     _l2, _n2, _in2, evap_sum, p_sum = _lake_balances(
         lakes_draw,
@@ -1150,14 +1206,16 @@ def terminal_equilibrium_routing(
     for a in range(1, n + 1):
         if draw_counts[a] == 0:
             continue
-        ex = exits[lake_flat[exits] == a]
+        sel = lake_flat[exits] == a
+        ex = exits[sel]
         spill_cell = None
         spill_elev_m = None
         if ex.size:
-            tgt = rec_flat[ex]
-            pick = int(ex[int(np.argmin(h_flat[tgt]))])
+            tgt = exit_rec[sel]
+            j = int(np.argmin(h_flat[tgt]))
+            pick = int(ex[j])
             spill_cell = [int(pick // ww), int(pick % ww)]
-            spill_elev_m = round(float(h_flat[int(rec_flat[pick])]), 3)
+            spill_elev_m = round(float(h_flat[int(tgt[j])]), 3)
         draw_cells = int(draw_counts[a])
         kept = int(kept_counts[a])
         if is_term[a]:
@@ -1478,9 +1536,7 @@ def lake_monthly_demand(
     """
     nc = evaporation_monthly_mm.shape[-1]
     c = lakes.cells
-    idx = (
-        c if climate_block <= 1 else (c // (climate_block * width)) * nc + (c // climate_block) % nc
-    )
+    idx = c if climate_block <= 1 else climate_cell_index(c, width, climate_block, nc)
     out = np.zeros((lakes.count, 12), dtype=np.float64)
     for m in range(12):
         e = np.nan_to_num(evaporation_monthly_mm[m].reshape(-1)[idx].astype(np.float64))

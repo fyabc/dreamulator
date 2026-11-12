@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 项目规则与技能改为多 agent 共用：根目录与各文档子目录的规则改写在 `AGENTS.md`，同目录 `CLAUDE.md` 只做 `@AGENTS.md` 导入；前端专属规则移到 `frontend/AGENTS.md`，根文件保持在 Codex 32 KiB 缺省上限以内；技能按 Agent Skills 格式移到 `.agents/skills/`，由 `scripts/dev/sync_agent_skills.py` 生成 `.claude/skills/` 真实文件副本；不使用符号链接，`.gitattributes` 固定 LF，`tests/test_agent_instructions.py` 检查成对导入、体积、无符号链接与技能同步。
 - 新增山系形态改进提案，区分地质引擎的平均场与画布的中尺度结构，并登记下一次全层重建的验收方案。
 
+### Fixed
+
+- 湖图有环时，环上的湖被 Kahn 排序整个漏掉：`downstream_of` 取各湖第一个出口走到的湖，逐格的受水森林无环，但水位相近的两个相邻湖可以各自的第一个出口指向对方。这些湖因此拿不到终端判定、不参与入流级联、出口也不做需水扣减，入流近乎为零的干湖会一直按满水画出。排序与破环提为 `prog_erosion.lake_topological_order`，整图与分块实现共用，每个环在溢口最低的成员处切断（溢口相同取较小标号），该成员成为合并盆地的汇。12p2 上 7876 个湖有五对成环，终端湖由 3777 增至 3781。
+- 终端湖的溢口记录在 `consume_receiver=True` 时错位：受水数组被就地改写后，记录再去读溢口读到的是改写后的值。改为在切断之前保存出口的受水。
+- 粗网格的气候查表在外接矩形比气候网格窄时列号错位（`climate_cell_index`），19 张画布中有 15 张受影响。
+- 缩湖取同高程格子改用稳定排序，结果不再依赖排序实现。
+
 ### Changed
 
 - 命令行按对象重整：`dreamulator map`（`layers`、`globe`，`clouds` 并入 `globe`）、`dreamulator region`（`pack`、`build`）、`dreamulator canvas`（按流水线顺序列出，新增 `run` 一键完成侵蚀与 S2）与顶层 `dreamulator render`；逐张画布的命令接受画布目录或布局根（`--canvas` 选择）；`mesh-sea-lake` 并入 `canvas plan --backfill mesh-sea-lake`；河网阈值统一为 `--river-threshold`。旧的 `dreamulator export …` 路径保留一个版本，运行时提示新名字。
