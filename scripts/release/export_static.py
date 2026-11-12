@@ -211,8 +211,9 @@ def _export_layer_data(world_dir: Path, branch: str | None = None) -> dict:
     # 6. CivMap territory data (countries, snapshots, assignments)
     civ_territory = resolver.load_layer_yaml("civilization", "civ_territory.yaml")
     if civ_territory:
+        # The frontend decides from civ_territory.json itself; a separate flag file had no
+        # reader and was written once per world.
         result["civ_territory"] = civ_territory
-        result["has_civmap"] = True
 
     # 8. Layer documents (.md files) — export for all layers
     for layer in ("astronomy", "geological", "climate", "ecology", "civilization"):
@@ -386,9 +387,7 @@ def _export_map_data(
         # Root only: on a branch a placeholder would answer 200-empty and
         # shadow the root world's real file — the frontend's branch→root
         # fallback only fires on 404.
-        for placeholder_name, placeholder in (
-            ("plates.json", {"plates": []}),
-        ):
+        for placeholder_name, placeholder in (("plates.json", {"plates": []}),):
             if branch is not None:
                 break
             placeholder_path = planet_out / placeholder_name

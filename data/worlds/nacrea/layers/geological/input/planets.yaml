@@ -259,7 +259,7 @@ planets:
         CH4: 0.003
         NH3: 0.002
       greenhouse_factor: 0.0
-    magnetic_field_strength: 400.0  # ~8× Jupiter (质量更大 + 快速自转)
+    magnetic_field_strength: 650.0  # Christensen 2009 标度律估算值（约 1.5× 木星；2026-11-09 作者裁决采纳）
     satellite_ids:
       - satellite_nacrea
       - satellite_cadence

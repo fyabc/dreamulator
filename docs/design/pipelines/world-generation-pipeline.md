@@ -26,7 +26,7 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 
 | 引擎 | 层级 | requires | 产出 | 技术参考 |
 |------|------|----------|------|---------|
-| `AstronomyEngine` | astronomy | — | 恒星/行星派生参数、`system_catalog.yaml` 天体目录 | 无 pipeline 文档（缺口已登记 roadmap §七-2）；纯函数见 `engine/stellar_physics.py`、`satellite_dynamics.py` |
+| `AstronomyEngine` | astronomy | — | 恒星/行星派生参数、`system_catalog.yaml` 天体目录 | 无 pipeline 文档（缺口已登记 roadmap §七-2）；纯函数见 `engine/stellar_physics.py`、`satellite_dynamics.py`、`planet_dynamo.py` |
 | `GeologicalEngine` | geological | astronomy | `maps/{planet}/` 保存压缩网格、地形和板块图层，可按需捕获阶段来源。 | [geological-pipeline.md](geological-pipeline.md) |
 | `ClimateEngine` | climate | astronomy, geological | 温度/降水/Köppen/风/洋流/月度场，写回 mesh | [climate-pipeline.md](climate-pipeline.md) |
 | `EcologyEngine` | ecology | climate, geological | 群系/NPP/可驯化/土纲/生物地理省图层 | [ecology-pipeline.md](ecology-pipeline.md)；设计动机见 [ecology-layer.md](../proposals/ecology-layer.md) |

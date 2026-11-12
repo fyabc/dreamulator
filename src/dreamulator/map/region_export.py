@@ -24,17 +24,16 @@ same-resolution climate channels of the satellite-imagery contract
 * ``precipitation.mm.npy`` — float32 annual precipitation (mm), the Gaea 2
   rainfall-mask channel; ``precipitation.mm.png`` is the 16-bit visual twin,
   normalised to ``[0, region max]`` (range recorded in meta);
-* ``temperature.C.npy`` / ``temperature.C.png`` — float32 / 16-bit mean
-  annual temperature (°C), normalised to the region's own [min, max];
-* ``runoff.mm.npy`` / ``runoff.mm.png`` — float32 annual land runoff (mm/yr)
+* ``temperature.C.npy`` — float32 mean annual temperature (°C);
+* ``runoff.mm.npy`` — float32 annual land runoff (mm/yr)
   from the Turc–Pike (Budyko, n = 2) curve on annual P vs Hamon annual PET,
   written when the caller passes the monthly climate series; the hydrology
   legs weight their flow accumulation by this channel so channels start
   where the water balance allows, not on bare slopes;
-* ``ice.m.npy`` / ``ice.m.png`` — float32 glacier ice thickness (m, ice-free
+* ``ice.m.npy`` / ``ice.m.png`` — float32 / 16-bit glacier ice thickness (m, ice-free
   cells = 0.0); the snowline mask is derived downstream from this channel and
   ``temperature.C.npy`` rather than baked here;
-* ``npp.gc_m2_yr.npy`` / ``npp.gc_m2_yr.png`` — Miami net primary productivity
+* ``npp.gc_m2_yr.npy`` — Miami net primary productivity
   (gC/m²/yr), the continuous vegetation-density channel the colorizer uses
   for within-biome modulation;
 * ``headwaters.png`` — 8-bit mask of water-surplus land (P > Hamon PET),
@@ -377,19 +376,22 @@ def _export_scalar_channel(
     *,
     png_min: float,
     png_max: float,
+    png: bool = False,
 ) -> dict[str, Any]:
-    """Write one numeric channel as float32 ``.npy`` + 16-bit PNG twin.
+    """Write one numeric channel as float32 ``.npy``, with a 16-bit PNG twin when asked.
 
-    NaN (missing cell values) maps to 0 in the PNG; the normalisation range is
-    returned so meta can record it verbatim.
+    Every consumer of a numeric channel reads the ``.npy``; the PNG twin exists for the hand
+    built Gaea graph, which names only the precipitation and ice masks as File nodes, so only
+    those two ask for one.  NaN (missing cell values) maps to 0 in the PNG, and the
+    normalisation range is returned so meta can record it verbatim.
     """
     np.save(out_dir / f"{stem}.npy", values.astype(np.float32))
-    png_values = np.where(np.isnan(values), 0.0, values)
-    export_layer_png(png_values, out_dir / f"{stem}.png", min_val=png_min, max_val=png_max)
-    return {
-        "png_range": [round(float(png_min), 4), round(float(png_max), 4)],
-        "missing": int(np.isnan(values).sum()),
-    }
+    meta: dict[str, Any] = {"missing": int(np.isnan(values).sum())}
+    if png:
+        png_values = np.where(np.isnan(values), 0.0, values)
+        export_layer_png(png_values, out_dir / f"{stem}.png", min_val=png_min, max_val=png_max)
+        meta["png_range"] = [round(float(png_min), 4), round(float(png_max), 4)]
+    return meta
 
 
 def _export_headwaters(
@@ -537,12 +539,14 @@ def _export_climate_channels(
     )
     channels: dict[str, Any] = {
         "precipitation_mm": _export_scalar_channel(
-            precip, out_dir, "precipitation.mm", png_min=0.0, png_max=precip_max
+            precip, out_dir, "precipitation.mm", png_min=0.0, png_max=precip_max, png=True
         ),
         "temperature_C": _export_scalar_channel(
             temp, out_dir, "temperature.C", png_min=t_min, png_max=t_max
         ),
-        "ice_m": _export_scalar_channel(ice, out_dir, "ice.m", png_min=0.0, png_max=ice_max),
+        "ice_m": _export_scalar_channel(
+            ice, out_dir, "ice.m", png_min=0.0, png_max=ice_max, png=True
+        ),
         "npp_gc_m2_yr": _export_scalar_channel(
             npp, out_dir, "npp.gc_m2_yr", png_min=0.0, png_max=npp_max
         ),

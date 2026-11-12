@@ -137,3 +137,403 @@ def test_tiled_lakes_match_the_in_memory_oracle(
         sl = np.s_[ci * T : (ci + 1) * T, cj * T : (cj + 1) * T]
         assert np.array_equal(load_chunk(store, "lakes0", (ci, cj)).astype(bool), lakes[sl])
         assert np.array_equal(load_chunk(store, "lbl_lakes0", (ci, cj)), lbl[sl])
+
+
+def _terminal_oracle(  # type: ignore[no-untyped-def]
+    store: CanvasStore, precip: np.ndarray, temp: np.ndarray, ow: np.ndarray
+):
+    from dreamulator.map.prog_erosion import (
+        RUNOFF_REFERENCE_MM,
+        lake_mmu_cells,
+        renderable_lakes,
+        terminal_equilibrium_routing,
+    )
+    from dreamulator.map.td_canvas import PX_PER_CELL
+
+    graded, dem, rec, _acc, land, order, weight, inland = canvas_flow_fields(store)
+    km = store.geometry.px_km
+    mmu = lake_mmu_cells(km)
+    lakes0 = renderable_lakes(graded, dem, inland, mmu, km)
+    w = weight.ravel().copy()
+    out = terminal_equilibrium_routing(
+        dem, land, lakes0, order, rec.copy(), w,
+        precip_mm=precip, temp_c=temp, runoff_land_mean_mm=RUNOFF_REFERENCE_MM,
+        mmu_cells=mmu, km_per_px=km, sea_level_m=0.0, climate_block=PX_PER_CELL,
+        open_water_mm=ow, keep_rewritten_h=False,
+    )  # fmt: skip
+    return out, w.reshape(graded.shape), lakes0, mmu, km
+
+
+def _make_lakes_canvas(
+    root: Path, runoff_west: float, evaporation_east: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Three pits on an eastward slope to the sea; the middle pit spans four chunks.
+
+    Runoff is high in the west climate column, lake evaporation high in the east one, so the
+    lakes cascade west to east and the eastern ones can go terminal.
+    """
+    geom = CanvasGeometry(10.0, 20.0, 6816.97, 4)
+    keys = [(i, j) for i in range(4) for j in range(4)]
+    (root / "chunks").mkdir(parents=True)
+    (root / "climate").mkdir()
+    g = geom.to_dict()
+    g["chunk_px"] = T
+    (root / "canvas.json").write_text(
+        json.dumps({"geometry": g, "chunks": [list(k) for k in keys]}), encoding="utf-8"
+    )
+    px = geom.px_km
+    width = 4 * T * px
+    for ci, cj in keys:
+        r = np.arange(T, dtype=float)[:, None]
+        c = np.arange(T, dtype=float)[None, :]
+        x = (cj * T + c + 0.5) * px
+        y = (ci * T + r + 0.5) * px
+        dem = 600.0 - 12.0 * x + 3.0 * np.abs(y - width / 2)
+        for xc in (0.24 * width, 0.5 * width, 0.74 * width):
+            dem -= 70.0 * np.exp(-((x - xc) ** 2 + (y - width / 2) ** 2) / (2 * 2.5**2))
+        dem = np.where(x > 0.92 * width, -40.0, dem)
+        np.save(root / "chunks" / f"r{ci:03d}_c{cj:03d}.npy", dem.astype(np.int16))
+    n = 4
+    runoff = np.full((n, n), 2.0, dtype=np.float32)
+    runoff[:, 0] = runoff_west
+    precip = np.full((n, n), 100.0)
+    precip[:, 0] = 900.0
+    ow = np.full((n, n), evaporation_east)
+    ow[:, 0] = 1000.0
+    temp = np.full((n, n), 24.0)
+    np.save(root / "climate" / "runoff.mm.npy", runoff)
+    np.save(root / "climate" / "precipitation.mm.npy", precip.astype(np.float32))
+    np.save(root / "climate" / "temperature.C.npy", temp.astype(np.float32))
+    return precip, temp, ow
+
+
+@pytest.mark.parametrize(
+    ("case", "runoff_west", "evaporation_east"),
+    [("cascade", 200.0, 2500.0), ("shrunk", 100.0, 4000.0), ("playa", 25.0, 2500.0)],
+)
+def test_tiled_terminal_routing_matches_the_in_memory_oracle(
+    tmp_path: Path, case: str, runoff_west: float, evaporation_east: float
+) -> None:
+    from dreamulator.map.prog_erosion import RUNOFF_REFERENCE_MM
+    from dreamulator.map.td_canvas import PX_PER_CELL
+    from dreamulator.media.canvas_flow_tiled import (
+        load_chunk,
+        tiled_accumulation,
+        tiled_directions,
+        tiled_graded,
+    )
+    from dreamulator.media.canvas_lakes_tiled import tiled_geometry_lakes
+    from dreamulator.media.canvas_terminal_tiled import tiled_terminal_routing
+
+    root = tmp_path / "canvas"
+    root.mkdir()
+    precip, temp, ow = _make_lakes_canvas(root, runoff_west, evaporation_east)
+    store = CanvasStore.load(root)
+    run_canvas_fill(store, verbose=False, workers=1)
+    oracle, w_dep, lakes0, mmu, km = _terminal_oracle(store, precip, temp, ow)
+    h_rw, land2, render, chain, desc, rec_route, _acc, water, stats, records = oracle
+    assert len(records) == 3 and sum(r["downstream_label"] > 0 for r in records) >= 1
+    expect = {"cascade": "passthrough", "shrunk": "shrunk", "playa": "dry_playa"}[case]
+    assert any(r["verdict"] == expect for r in records)
+    if case == "shrunk":  # the fringe descent has work to do
+        assert desc is not None and ((desc >= 0) & ~render.ravel()).sum() > 50
+
+    tiled_graded(store, workers=1)
+    tiled_directions(store, workers=1)
+    comps = tiled_geometry_lakes(store, mmu, km, workers=1)
+    res = tiled_terminal_routing(
+        store, comps, precip_mm=precip, temp_c=temp, open_water_mm=ow,
+        runoff_land_mean_mm=RUNOFF_REFERENCE_MM, mmu_cells=mmu, km_per_px=km,
+        climate_block=PX_PER_CELL, workers=1,
+    )  # fmt: skip
+    assert res.stats == stats
+    assert len(res.lake_records) == len(records)
+    for a, b in zip(res.lake_records, records, strict=True):
+        for k in ("label", "verdict", "draw_cells", "kept_water_cells", "spill_cell",
+                  "spill_elev_m", "downstream_label"):  # fmt: skip
+            assert a[k] == b[k], (k, a, b)
+        for k in ("inflow_mm", "demand_mm"):
+            assert a[k] == pytest.approx(b[k], rel=1e-5, abs=1e-3)
+    h, w = lakes0.shape
+    rr, cc = np.mgrid[0:T, 0:T]
+    from dreamulator.media.canvas_hydrology import _NEIGHBOURS
+
+    for key in store.chunks:
+        sl = np.s_[key[0] * T : (key[0] + 1) * T, key[1] * T : (key[1] + 1) * T]
+        assert np.array_equal(load_chunk(store, "lakes_render", key).astype(bool), render[sl])
+        assert np.array_equal(load_chunk(store, "term_water", key).astype(bool), water[sl])
+        assert np.array_equal(load_chunk(store, "land2", key).astype(bool), land2[sl])
+        code = load_chunk(store, "dir_route", key)
+        got = np.full((T, T), -1, dtype=np.int64)
+        for k, (dy, dx) in enumerate(_NEIGHBOURS):
+            m = code == k
+            got[m] = (key[0] * T + rr[m] + dy) * w + (key[1] * T + cc[m] + dx)
+        assert np.array_equal(got, rec_route.reshape(h, w)[sl])
+        if desc is not None:
+            assert np.array_equal(load_chunk(store, "desc", key), desc.reshape(h, w)[sl])
+        assert np.array_equal(load_chunk(store, "w_depleted", key), w_dep[sl])
+    tiled_accumulation(store, "w_depleted", dir_kind="dir_route", workers=1)
+    del h_rw, chain
+
+
+def test_tiled_month_active_matches_the_in_memory_oracle(tmp_path: Path) -> None:
+    """Twenty-four monthly accumulations with the pass-through lakes' own monthly balance."""
+    from dreamulator.map.prog_erosion import (
+        RUNOFF_REFERENCE_MM,
+        PassThroughLakes,
+        lake_monthly_demand,
+        month_active_counts,
+        regime_active_cells,
+    )
+    from dreamulator.map.td_canvas import PX_PER_CELL
+    from dreamulator.media.canvas_flow_tiled import (
+        load_chunk,
+        tiled_directions,
+        tiled_graded,
+    )
+    from dreamulator.media.canvas_lakes_tiled import tiled_geometry_lakes
+    from dreamulator.media.canvas_month_tiled import tiled_month_active
+    from dreamulator.media.canvas_terminal_tiled import tiled_terminal_routing
+
+    root = tmp_path / "canvas"
+    root.mkdir()
+    precip, temp, ow = _make_lakes_canvas(root, 200.0, 2500.0)
+    store = CanvasStore.load(root)
+    run_canvas_fill(store, verbose=False, workers=1)
+    # a wet half-year in the west, a dry one everywhere: the lakes draw down and spill seasonally
+    n = 4
+    season = np.array([0.1, 0.1, 0.4, 1.4, 2.6, 3.0, 2.4, 1.2, 0.4, 0.1, 0.1, 0.1])
+    monthly = np.full((n, n, 12), 2.0 / 12.0, dtype=np.float32) * season
+    monthly[:, 0, :] = 200.0 / 12.0 * season
+    evap_m = np.repeat((ow / 12.0)[None, :, :], 12, axis=0).astype(np.float32)
+    evap_m *= (2.0 - 0.5 * season)[:, None, None]
+    precip_m = (
+        np.repeat((precip / 12.0)[None, :, :], 12, axis=0).astype(np.float32)
+        * season[:, None, None]
+    )
+
+    pt_out: list[PassThroughLakes] = []
+    graded, dem, rec, _acc, land, order, weight, inland = canvas_flow_fields(store)
+    from dreamulator.map.prog_erosion import lake_mmu_cells, renderable_lakes
+
+    km = store.geometry.px_km
+    mmu = lake_mmu_cells(km)
+    lakes0 = renderable_lakes(graded, dem, inland, mmu, km)
+    from dreamulator.map.prog_erosion import terminal_equilibrium_routing
+
+    out = terminal_equilibrium_routing(
+        dem, land, lakes0, order, rec.copy(), weight.ravel().copy(),
+        precip_mm=precip, temp_c=temp, runoff_land_mean_mm=RUNOFF_REFERENCE_MM,
+        mmu_cells=mmu, km_per_px=km, sea_level_m=0.0, climate_block=PX_PER_CELL,
+        open_water_mm=ow, keep_rewritten_h=False, pass_through_out=pt_out,
+    )  # fmt: skip
+    rec_route = out[5]
+    pt = pt_out[0]
+    assert pt.count >= 1
+    demand = lake_monthly_demand(pt, evap_m, precip_m, land.shape[1], climate_block=PX_PER_CELL)
+    active = regime_active_cells(km)
+    stats_oracle: dict[str, int] = {}
+    expect = month_active_counts(
+        order, rec_route, monthly, land, active, factor=PX_PER_CELL,
+        lakes=(pt, demand), lake_stats_out=stats_oracle,
+    )  # fmt: skip
+    assert 0 < int(expect.max()) <= 12 and stats_oracle["lakes"] == pt.count
+
+    tiled_graded(store, workers=1)
+    tiled_directions(store, workers=1)
+    comps = tiled_geometry_lakes(store, mmu, km, workers=1)
+    term = tiled_terminal_routing(
+        store, comps, precip_mm=precip, temp_c=temp, open_water_mm=ow,
+        runoff_land_mean_mm=RUNOFF_REFERENCE_MM, mmu_cells=mmu, km_per_px=km,
+        climate_block=PX_PER_CELL, workers=1,
+    )  # fmt: skip
+    res = tiled_month_active(
+        store, comps, term, runoff_monthly_pack=monthly, evaporation_monthly_mm=evap_m,
+        precip_monthly_mm=precip_m, active_cells=active, factor=PX_PER_CELL,
+        climate_block=PX_PER_CELL, workers=1,
+    )  # fmt: skip
+    assert res.pass_through == pt.count and res.stats == stats_oracle
+    assert stats_oracle["seasonal_outflow"] >= 1  # the dry season empties a lake below its sill
+    for key in store.chunks:
+        sl = np.s_[key[0] * T : (key[0] + 1) * T, key[1] * T : (key[1] + 1) * T]
+        assert np.array_equal(load_chunk(store, "month_active", key), expect[sl])
+    assert not (store.work / "flow" / "w_month").exists()
+
+    # without the monthly lake channels no lake loses water month by month
+    plain = month_active_counts(order, rec_route, monthly, land, active, factor=PX_PER_CELL)
+    res2 = tiled_month_active(
+        store, comps, term, runoff_monthly_pack=monthly, evaporation_monthly_mm=None,
+        precip_monthly_mm=None, active_cells=active, factor=PX_PER_CELL,
+        climate_block=PX_PER_CELL, workers=1,
+    )  # fmt: skip
+    assert res2.pass_through == 0 and not res2.stats
+    assert (plain != expect).any()  # the lake balance does change the regime
+    for key in store.chunks:
+        sl = np.s_[key[0] * T : (key[0] + 1) * T, key[1] * T : (key[1] + 1) * T]
+        assert np.array_equal(load_chunk(store, "month_active", key), plain[sl])
+
+
+def test_tiled_channel_graph_matches_the_in_memory_segments(tmp_path: Path) -> None:
+    """The chain table gathered per chunk gives the same rivers as the whole-grid gather."""
+    from dreamulator.map.prog_erosion import (
+        RUNOFF_REFERENCE_MM,
+        lake_mmu_cells,
+        renderable_lakes,
+        river_mask,
+        river_segments,
+        river_segments_from_graph,
+        terminal_equilibrium_routing,
+    )
+    from dreamulator.map.td_canvas import PX_PER_CELL
+    from dreamulator.media.canvas_flow_tiled import (
+        load_chunk,
+        tiled_accumulation,
+        tiled_directions,
+        tiled_graded,
+    )
+    from dreamulator.media.canvas_lakes_tiled import tiled_geometry_lakes
+    from dreamulator.media.canvas_rivers_tiled import tiled_channel_graph
+    from dreamulator.media.canvas_terminal_tiled import tiled_terminal_routing
+
+    root = tmp_path / "canvas"
+    root.mkdir()
+    precip, temp, ow = _make_lakes_canvas(root, 100.0, 4000.0)  # the "shrunk" case: dried fringes
+    store = CanvasStore.load(root)
+    run_canvas_fill(store, verbose=False, workers=1)
+    graded, dem, rec, _acc0, land, order, weight, inland = canvas_flow_fields(store)
+    km = store.geometry.px_km
+    mmu = lake_mmu_cells(km)
+    lakes0 = renderable_lakes(graded, dem, inland, mmu, km)
+    w = weight.ravel().copy()
+    out = terminal_equilibrium_routing(
+        dem, land, lakes0, order, rec.copy(), w,
+        precip_mm=precip, temp_c=temp, runoff_land_mean_mm=RUNOFF_REFERENCE_MM,
+        mmu_cells=mmu, km_per_px=km, sea_level_m=0.0, climate_block=PX_PER_CELL,
+        open_water_mm=ow, keep_rewritten_h=False,
+    )  # fmt: skip
+    _h, land2, render, chain_stop, desc, rec_route, acc, _water, _stats, _records = out
+    threshold = 8
+
+    tiled_graded(store, workers=1)
+    tiled_directions(store, workers=1)
+    comps = tiled_geometry_lakes(store, mmu, km, workers=1)
+    tiled_terminal_routing(
+        store, comps, precip_mm=precip, temp_c=temp, open_water_mm=ow,
+        runoff_land_mean_mm=RUNOFF_REFERENCE_MM, mmu_cells=mmu, km_per_px=km,
+        climate_block=PX_PER_CELL, workers=1,
+    )  # fmt: skip
+    tiled_accumulation(store, "w_depleted", dir_kind="dir_route", workers=1)
+    # Both paths read the SAME accumulation: the tiled sums are float64 and the whole-grid ones
+    # float32, which moves a couple of hundred cells across the channel threshold (step 1
+    # covers that difference).  What is under test here is the sparse gather.
+    acc_t = np.zeros(land.shape, dtype=np.float32)
+    for key in store.chunks:
+        sl = np.s_[key[0] * T : (key[0] + 1) * T, key[1] * T : (key[1] + 1) * T]
+        acc_t[sl] = load_chunk(store, "acc_w_depleted", key)
+    rivers = river_mask(acc_t, land2, threshold)
+    assert rivers.sum() > 100
+    segs, flows, regimes = river_segments(
+        rivers, rec_route, acc_t, km, lake=chain_stop,
+        lake_descend=desc, pixel_rows=store.geometry.size_px,
+    )  # fmt: skip
+    assert len(segs) > 50
+    graph = tiled_channel_graph(
+        store, comps, threshold_cells=threshold, mmu_cells=mmu, km_per_px=km,
+        pixel_rows=store.geometry.size_px, month_kind=None, workers=1,
+    )  # fmt: skip
+    segs2, flows2, regimes2 = river_segments_from_graph(graph)
+    assert np.array_equal(segs, segs2)
+    assert np.array_equal(flows, flows2)
+    assert np.array_equal(regimes, regimes2)
+    for key in store.chunks:
+        sl = np.s_[key[0] * T : (key[0] + 1) * T, key[1] * T : (key[1] + 1) * T]
+        assert np.array_equal(load_chunk(store, "rivers", key).astype(bool), rivers[sl])
+
+
+def test_out_of_core_rivers_driver_writes_the_same_products(tmp_path: Path) -> None:
+    """The chunked driver's rivers, lakes and metadata match the whole-grid driver's."""
+    import json
+
+    from dreamulator.media.canvas_pipeline import run_canvas_rivers
+    from dreamulator.media.canvas_rivers_tiled import run_canvas_rivers_tiled
+
+    def build(root: Path) -> CanvasStore:
+        root.mkdir()
+        _make_lakes_canvas(root, 100.0, 4000.0)
+        store = CanvasStore.load(root)
+        run_canvas_fill(store, verbose=False, workers=1)
+        return store
+
+    a = build(tmp_path / "memory")
+    b = build(tmp_path / "chunks")
+    stats_a = run_canvas_rivers(a, threshold_cells=8, verbose=False)
+    stats_b = run_canvas_rivers_tiled(b, threshold_cells=8, workers=1, verbose=False)
+    assert not (b.work / "flow").exists()  # the stage cleans its own working files up
+    # The two accumulations differ in the last float32 digits (step 1), which moves a few cells
+    # across the channel threshold, so the segment counts agree to a fraction of a percent.
+    assert stats_b["segments"] == pytest.approx(stats_a["segments"], rel=0.01)
+    assert stats_b["non_perennial"] == stats_a["non_perennial"] == 0.0  # no monthly channel
+
+    ha, hb = a.root / "hydro", b.root / "hydro"
+    for name in ("rivers.line.npy", "rivers.flow.npy", "rivers.regime.npy", "rivers.png"):
+        assert (hb / name).exists(), name
+    from PIL import Image
+
+    with Image.open(hb / "rivers.png") as img, Image.open(ha / "rivers.png") as ref:
+        assert img.size == ref.size  # under the cap, the QA raster keeps the canvas pitch
+        got, want = np.asarray(img) > 0, np.asarray(ref) > 0
+        assert int((got != want).sum()) < 0.01 * int(want.sum())
+    meta_a = json.loads((ha / "rivers.meta.json").read_text(encoding="utf-8"))
+    meta_b = json.loads((hb / "rivers.meta.json").read_text(encoding="utf-8"))
+    for k in ("threshold_cells", "weight_source", "km_per_px", "regime_source", "sea_source",
+              "healed_pit_cells", "lake_mmu_cells", "terminal_lakes"):  # fmt: skip
+        assert meta_a[k] == meta_b[k], k
+    assert meta_b["solver"] == "out-of-core"
+    lakes_a = json.loads((ha / "lakes.json").read_text(encoding="utf-8"))["lakes"]
+    lakes_b = json.loads((hb / "lakes.json").read_text(encoding="utf-8"))["lakes"]
+    assert len(lakes_a) == len(lakes_b) >= 3
+    for la, lb in zip(lakes_a, lakes_b, strict=True):
+        for k in ("id", "verdict", "draw_cells", "kept_water_cells", "area_km2"):
+            assert la[k] == lb[k], (k, la, lb)
+    # the sparse pixels carry the lakes.json ids, so the two products join
+    ids_b: set[int] = set()
+    for p in sorted((hb / "lakes.sparse").glob("*.npz")):
+        ids_b |= {int(v) for v in np.unique(np.load(p)["lake_id"])}
+    assert ids_b and ids_b <= {int(r["id"]) for r in lakes_b}
+    for p in sorted((ha / "lakes.sparse").glob("*.npz")):
+        q = hb / "lakes.sparse" / p.name
+        assert q.exists(), p.name
+        assert np.array_equal(np.load(p)["idx"], np.load(q)["idx"])
+        assert np.array_equal(np.load(p)["lake_id"], np.load(q)["lake_id"])
+
+
+def test_chunk_reads_retry_a_stale_handle(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """A network filesystem's ESTALE on a just-renamed chunk file is retried, not raised."""
+    import errno
+
+    from dreamulator.media import canvas_flow_tiled as cft
+
+    path = tmp_path / "chunk.npy"
+    np.save(path, np.arange(4, dtype=np.int32))
+    real = np.load
+    calls = {"n": 0}
+
+    def flaky(p, *a, **k):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise OSError(errno.ESTALE, "Stale file handle")
+        return real(p, *a, **k)
+
+    monkeypatch.setattr(cft.np, "load", flaky)
+    monkeypatch.setattr(cft, "_LOAD_BACKOFF_S", 0.001)
+    assert np.array_equal(cft.load_npy(path), np.arange(4))
+    assert calls["n"] == 3
+    # a different OSError is not a stale handle and must surface
+    calls["n"] = 0
+
+    def denied(p, *a, **k):  # type: ignore[no-untyped-def]
+        raise OSError(errno.EACCES, "denied")
+
+    monkeypatch.setattr(cft.np, "load", denied)
+    with pytest.raises(OSError, match="denied"):
+        cft.load_npy(path)

@@ -274,14 +274,12 @@ def test_climate_channels_roundtrip(tmp_path: Path) -> None:
     assert written["climate"]["koppen"]["legend"] == {"1": "Af"}
     assert written["climate"]["biome"]["legend"] == {"1": "tropical_rainforest"}
 
-    for name in (
-        "precipitation.mm.png",
-        "temperature.C.png",
-        "ice.m.png",
-        "koppen.png",
-        "biome.png",
-    ):
+    # Only the channels the hand-built Gaea graph names get a PNG twin; the others are
+    # read as .npy by every consumer, so writing one was dead weight in the pack.
+    for name in ("precipitation.mm.png", "ice.m.png", "koppen.png", "biome.png"):
         assert (tmp_path / name).exists(), name
+    for name in ("temperature.C.png", "runoff.mm.png", "npp.gc_m2_yr.png"):
+        assert not (tmp_path / name).exists(), name
 
 
 def test_climate_channels_missing_values(tmp_path: Path) -> None:
@@ -417,8 +415,7 @@ def test_runoff_channel_known_answer(tmp_path: Path) -> None:
     clim = meta["climate"]["runoff_mm"]
     assert clim["demand_model"] == "hamon-1961"
     assert "Turc-Pike" in clim["criterion"]
-    assert clim["png_range"][0] == 0.0
-    assert (tmp_path / "runoff.mm.png").exists()
+    assert "png_range" not in clim  # no PNG twin, so no normalisation range to record
     # Lake freeze regime rides the same monthly input: a warm year (24.5 °C
     # in every month) freezes no month.
     lake_ice = np.load(tmp_path / "lake_ice.months.npy")

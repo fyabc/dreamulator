@@ -1625,6 +1625,7 @@ def clouds_globe(
     multiple_scattering: bool = True,
     atmosphere_exposure: str = "white_balance",
     provenance: dict[str, str] | None = None,
+    debug: bool = False,
 ) -> dict[str, Path]:
     """Run the full L2 prototype: texture + cover field + globe preview.
 
@@ -1632,7 +1633,10 @@ def clouds_globe(
     texture (a synthetic track set is a QA placeholder until the L1 layer pack
     provides real tracks).  ``atmosphere`` switches the globe preview from the
     legacy limb-glow composite to the L5 physical atmosphere shell; the
-    remaining atmosphere arguments configure that path.  ``weather`` (a frame
+    remaining atmosphere arguments configure that path.  ``debug`` adds the diagnostic
+    images nothing downstream reads — the cover field and the two cyclone stages — which are
+    tens of MB a run and are only looked at when the cloud or cyclone parameters are being
+    tuned.  ``weather`` (a frame
     from :func:`media.weather_conditioning.load_weather_frame`) replaces the
     annual conditioning with the model's own weather at that instant: the
     cover field, the two-shell vertical split and — when the sun arguments are
@@ -1686,7 +1690,6 @@ def clouds_globe(
         # kept apart so the L5 renderer can put them on two shells.
         alpha_low = 1.0 - (1.0 - products.alpha_low) * (1.0 - products.alpha_haze)
         alpha_cirrus = products.alpha_cirrus_high
-        alpha_cirrus_legacy = products.alpha_cirrus
         # GCM vertical cloud split: shift opacity between the two shells where
         # the model puts cloud high or low.  This is applied to the ambient
         # texture only, before the L3 cyclone composite, so storm intensity is
@@ -1695,7 +1698,6 @@ def clouds_globe(
             low_weight, high_weight = vertical_weights
             alpha_low = np.clip(alpha_low * low_weight, 0.0, 1.0)
             alpha_cirrus = np.clip(alpha_cirrus * high_weight, 0.0, 1.0)
-            alpha_cirrus_legacy = np.clip(alpha_cirrus_legacy * high_weight, 0.0, 1.0)
         alpha = alpha_low
         if cyclones:
             from dreamulator.media.cyclone_render import (
@@ -1786,22 +1788,16 @@ def clouds_globe(
                 )
                 base = 1.0 - (1.0 - base) * (1.0 - 0.95 * trop_env * trop_template)
             alpha = np.clip(base, 0.0, 1.0)
-            Image.fromarray((template * 255.0).astype(np.uint8), "L").save(
-                str(out_dir / "cyclone_template.png")
-            )
-            paths["cyclone_template"] = out_dir / "cyclone_template.png"
-            Image.fromarray((envelope * 255.0).astype(np.uint8), "L").save(
-                str(out_dir / "cyclone_envelope.png")
-            )
-            paths["cyclone_envelope"] = out_dir / "cyclone_envelope.png"
+            if debug:
+                Image.fromarray((template * 255.0).astype(np.uint8), "L").save(
+                    str(out_dir / "cyclone_template.png")
+                )
+                paths["cyclone_template"] = out_dir / "cyclone_template.png"
+                Image.fromarray((envelope * 255.0).astype(np.uint8), "L").save(
+                    str(out_dir / "cyclone_envelope.png")
+                )
+                paths["cyclone_envelope"] = out_dir / "cyclone_envelope.png"
         alpha_low = alpha
-        alpha = 1.0 - (1.0 - alpha_low) * (1.0 - alpha_cirrus_legacy)
-        rgba = np.empty((height, width, 4), dtype=np.uint8)
-        rgba[..., 0] = CLOUD_RGB[0]
-        rgba[..., 1] = CLOUD_RGB[1]
-        rgba[..., 2] = CLOUD_RGB[2]
-        rgba[..., 3] = (np.clip(alpha, 0.0, 1.0) * 255.0).astype(np.uint8)
-        save_rgba_png(rgba, out_dir / "clouds.png")
         layer_rgba = np.empty((height, width, 4), dtype=np.uint8)
         layer_rgba[..., 0] = CLOUD_RGB[0]
         layer_rgba[..., 1] = CLOUD_RGB[1]
@@ -1810,13 +1806,16 @@ def clouds_globe(
         save_rgba_png(layer_rgba, out_dir / "clouds_low.png")
         layer_rgba[..., 3] = (np.clip(alpha_cirrus, 0.0, 1.0) * 255.0).astype(np.uint8)
         save_rgba_png(layer_rgba, out_dir / "clouds_cirrus.png")
-        Image.fromarray((products.cover * 255.0).astype(np.uint8), "L").save(
-            str(out_dir / "cloud_cover.png")
-        )
-        paths["clouds"] = out_dir / "clouds.png"
+        # The merged ``clouds.png`` was the two shells composited — the same pixels again, at
+        # 30 MB a 4K run and about 120 MB at 8K.  Consumers read the two shells; the ones that
+        # still fall back to the merged file keep working on exports that have one.
         paths["clouds_low"] = out_dir / "clouds_low.png"
         paths["clouds_cirrus"] = out_dir / "clouds_cirrus.png"
-        paths["cover"] = out_dir / "cloud_cover.png"
+        if debug:
+            Image.fromarray((products.cover * 255.0).astype(np.uint8), "L").save(
+                str(out_dir / "cloud_cover.png")
+            )
+            paths["cover"] = out_dir / "cloud_cover.png"
     else:
         alpha = np.zeros((height, width), dtype=np.float64)
         alpha_low = np.zeros((height, width), dtype=np.float64)

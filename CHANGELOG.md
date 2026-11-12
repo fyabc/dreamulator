@@ -9,7 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- S2 河网阶段外存化的前两步（技术债 54，尚未接入 `canvas run`）：`media/canvas_flow_tiled.py` 逐块做平地坡化（接缝间迭代交换平地步数，坡化值与整图核心逐位相同）、D8 方向码（每格 1 字节）与 Barnes 2017 三段分块汇流（float64 求和）；`media/canvas_lakes_tiled.py` 做跨接缝并查集的分块连通区标记（编号与 scipy 整图标记一致）与几何湖。land_-12p2_-137p4 上与整图实现逐位一致，第 1 步 53 s / 12 GB（整图 1092 s / 67 GB），第 2 步 39 s / 3.6 GB（整图 1170 s / 53 GB）。
+- S2 河网阶段外存化的第四、五步，月度情相与河段提取（技术债 54）：`media/canvas_month_tiled.py` 在终点湖判定留下的路由上做二十四次分块累积——过路湖的格从路由里切掉，十二次累积读出各湖逐月入流，共用的 `monthly_outflow_cascade` 给出周期稳态的月出流，再注回出口做十二次计数累积。`media/canvas_rivers_tiled.py` 写出河道掩膜并把「链可能走到的格子」收成排序稀疏表 `ChannelGraph`（河链本身稀疏，游走不需要分块），`run_canvas_rivers_tiled` 把五步串成与拼装路径同样的产品（河段、河道图、湖表、`rivers.meta.json`）。`dreamulator canvas hydrology` 缺省按可用内存选路径（整图链按每格约 100 字节估峰值，超过空闲内存一半即走外存），`--out-of-core/--in-memory` 可强制，所选路径记在 `rivers.meta.json` 的 `solver`。永耀岛（3.77 亿格，带月度湖通道）的月度情相与整图逐格一致，分块 147 s；河段表在同一份累积上与整图逐值一致。
+- S2 河网阶段外存化的第三步，终端湖收支（技术债 54）：`media/canvas_terminal_tiled.py` 做分块的终端湖收支——湖格切断后的首触入流、顺流第一个碰到的湖（块内求解加跨块链接解析）、湖图的拓扑级联、按高程直方图定阈值的平衡面积缩湖、保留水面门槛与逐湖的湖缘下降树。12p2（7876 个湖）上 106 s / 峰值约 31 GB，整图 1297 s；判定统计、`dir_route` 与扣减后的权重与整图逐位一致，单格差异只剩一个湖的取整边界（分块的首触入流用 float64，整图用 float32，平衡面积 12758.997 的向上取整落在边界上）。
+- S2 河网阶段外存化的前两步（技术债 54）：`media/canvas_flow_tiled.py` 逐块做平地坡化（接缝间迭代交换平地步数，坡化值与整图核心逐位相同）、D8 方向码（每格 1 字节）与 Barnes 2017 三段分块汇流（float64 求和）；`media/canvas_lakes_tiled.py` 做跨接缝并查集的分块连通区标记（编号与 scipy 整图标记一致）与几何湖。land_-12p2_-137p4 上与整图实现逐位一致，第 1 步 53 s / 12 GB（整图 1092 s / 67 GB），第 2 步 39 s / 3.6 GB（整图 1170 s / 53 GB）。
 - 二次侵蚀粗级按流域求解（`map/surface_process_basins.py`，`canvas erode`/`canvas run` 缺省 `--by-basin`，`--single-grid` 保留旧求解）：初始地表汇流一次后按出口划分流域，每个流域在自己的裁窗里用同一求解器运行，步长按本流域最大流量、时长按本流域最长下切时长，流域间并行；一次运行内分水岭固定，步长上限 80 kyr（`SurfaceProcessParams.max_dt_yr`）。以全画布单一时间步为参照，永耀岛与 land_-12p2_-137p4 的湖面、湖数与 10 km 起伏差异在 6% 以内，快 11.6 与 31 倍。原生级进程数改由 `utils/resources.py` 的 `worker_budget` 按 CPU 配额（亲和掩码与 cgroup）和可用内存的一半确定，不再写死 16。world-west 在缺省设置（每步 5 格、50 Myr、粗块 16）下整跑由估计 14 小时以上降到 2 h 5 min（粗级 43 min，原生级 59 进程 73 min，内存峰值 101 GB）。冰面格不再接收湖盆充填的泥沙（`_erodible_lake_lists`），无冰画布结果逐位不变。
 - 过路湖的逐月收支：月度情相不再假定湖面不耗水。S1 新写出 `lake_evaporation_monthly.mm`（年通道为其十二个月之和），旧画布用 `canvas plan --backfill lake-evaporation` 补写；S2 由 `terminal_equilibrium_routing` 交出过路湖的格、出口与湖图（`PassThroughLakes`），`lake_monthly_demand` 给出逐月净需水，`lake_monthly_outflow` 按出口以下的蓄水亏缺取周期稳态月出流（一年出流之和等于年度盈余），再从出口注入第二组月累积。两张干旱画布的非常流河长占比由 6.2% 升到 16.0%、由 29.1% 升到 40.0%，湿润的永耀岛基本不变；S2 多用约 0.3 到 1.7 分钟。缺月度通道时退回旧做法，水文元数据 `regime_lakes` 记录所用方式。
 - `canvas erode` 与 `canvas run` 新增 `--cells-per-step`（缺省 5）：粗级时间步按最大河流裂点每步后退的格数取，20 仍收敛，world-west 上粗级约快 4 倍。
@@ -18,7 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 项目规则与技能改为多 agent 共用：根目录与各文档子目录的规则改写在 `AGENTS.md`，同目录 `CLAUDE.md` 只做 `@AGENTS.md` 导入；前端专属规则移到 `frontend/AGENTS.md`，根文件保持在 Codex 32 KiB 缺省上限以内；技能按 Agent Skills 格式移到 `.agents/skills/`，由 `scripts/dev/sync_agent_skills.py` 生成 `.claude/skills/` 真实文件副本；不使用符号链接，`.gitattributes` 固定 LF，`tests/test_agent_instructions.py` 检查成对导入、体积、无符号链接与技能同步。
 - 新增山系形态改进提案，区分地质引擎的平均场与画布的中尺度结构，并登记下一次全层重建的验收方案。
 
+### Fixed
+
+- `lakes.json` 的每湖面积取自另一套编号：计数来自对渲染湖重新连通区标记，却用湖记录的画出湖编号去索引，中间少掉的干盐滩（一张画布 3548 个）把其后每个湖的编号整体平移，于是面积张冠李戴。两张湖表改为统一用画出湖的编号，`lakes.sparse/` 的像素仍是渲染水面，`area_km2` 也改为渲染水面的面积。
+- 湖图有环时，环上的湖被 Kahn 排序整个漏掉：`downstream_of` 取各湖第一个出口走到的湖，逐格的受水森林无环，但水位相近的两个相邻湖可以各自的第一个出口指向对方。这些湖因此拿不到终端判定、不参与入流级联、出口也不做需水扣减，入流近乎为零的干湖会一直按满水画出。排序与破环提为 `prog_erosion.lake_topological_order`，整图与分块实现共用，每个环在溢口最低的成员处切断（溢口相同取较小标号），该成员成为合并盆地的汇。12p2 上 7876 个湖有五对成环，终端湖由 3777 增至 3781。
+- 终端湖的溢口记录在 `consume_receiver=True` 时错位：受水数组被就地改写后，记录再去读溢口读到的是改写后的值。改为在切断之前保存出口的受水。
+- 粗网格的气候查表在外接矩形比气候网格窄时列号错位（`climate_cell_index`），19 张画布中有 15 张受影响。
+- 缩湖取同高程格子改用稳定排序，结果不再依赖排序实现。
+
 ### Changed
+
+- 导出产物精简：按「有没有消费方」清掉了几类写出但无人读的文件。区域数据包的标量通道只有降水与冰厚还写 16 位 PNG 孪生（手工 Gaea 工程里具名的 File 节点），温度、径流、NPP 与湖面蒸发四个通道只写 `.npy`（每包省 12–24 MB）；`region build` 的 `refined-out/height.gaea.png` 不再写（Gaea 读的是数据包 `input/` 那张，15–25 MB/包），汇流诊断图 `flow-accum.png` 改到 `--debug` 后（20–35 MB/包）。`map globe` 不再写把两层云壳合成好的 `clouds.png`（4K 30 MB、8K 约 120 MB，像素就是两层叠加的结果；脚本里读它的回退分支保留，旧导出照常可用），云量场与气旋模板、包络三张诊断图改到 `--debug` 后。画布窗口包不再写 `input/pet_hamon.mm.npy`（包这一侧无人读），`input/height.meters.npy` 改为硬链接到 `refined-out/` 那份而不是写第二遍（各省 16.8 MB/窗口）。静态导出不再写无人读的 `has_civmap.json`；`canvas generate --check` 的跨进程自检改为直接与邻居已写出的块比对并把最大差值记进日志，比完不留文件。
+
+- 河段游走提为共用的 `ChannelGraph` 与 `river_segments_from_graph`，整图路径改为装配同一张表后调用它。链头与溢口格的先后由集合遍历顺序改为按格下标，所以输出数组里少量河段的位置变了（一张试验画布 13.15 万段中 26 段换位），河段集合与总长度不变。
 
 - 命令行按对象重整：`dreamulator map`（`layers`、`globe`，`clouds` 并入 `globe`）、`dreamulator region`（`pack`、`build`）、`dreamulator canvas`（按流水线顺序列出，新增 `run` 一键完成侵蚀与 S2）与顶层 `dreamulator render`；逐张画布的命令接受画布目录或布局根（`--canvas` 选择）；`mesh-sea-lake` 并入 `canvas plan --backfill mesh-sea-lake`；河网阈值统一为 `--river-threshold`。旧的 `dreamulator export …` 路径保留一个版本，运行时提示新名字。
 - S2 外存填平的阶段二（全局流域图）改为 numpy 成批生成接缝边、numba 求最小化路径最大值水位，world-west 上由约 2 分钟降到约 6 秒，父进程内存峰值由约 8 GB 降到约 4 GB；整个填平约 2.7 分钟，最终面与串行结果逐位相同。原字典实现保留为测试参照。

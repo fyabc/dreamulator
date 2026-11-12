@@ -49,7 +49,7 @@ router = APIRouter(prefix="/api/packs", tags=["packs"])
 #: Top-level pack subdirectories the image endpoint may serve.  ``carto/`` is
 #: excluded on purpose: those sheets carry figure furniture (margins, legends,
 #: graticule labels), so their pixels are not map-registered.
-_IMAGE_TOP_DIRS = frozenset({"input", "refined-out", "color", "prog-out", "gaea-out", "renders"})
+_IMAGE_TOP_DIRS = frozenset({"input", "refined-out", "color", "gaea-out", "renders"})
 
 _PACK_NAME_RE = re.compile(r"[^/\\]+")
 
@@ -261,7 +261,6 @@ def list_packs() -> dict[str, Any]:
                         "refined": (entry / "refined-out" / "meta.json").is_file(),
                         "carto": (entry / "carto").is_dir(),
                         "renders": (entry / "renders").is_dir(),
-                        "prog": (entry / "prog-out").is_dir(),
                         "gaea": (entry / "gaea-out").is_dir(),
                     },
                 }
@@ -397,8 +396,8 @@ def _river_lookup(pack_dir: Path, u: float, v: float, win: _Win) -> tuple[float 
 
 
 def _best_gaea_dir(pack_dir: Path) -> Path | None:
-    """The best build available for display (refined → prog → gaea → input)."""
-    for rel in ("refined-out", "prog-out", "gaea-out", "input"):
+    """The best build available for display (refined → gaea → input)."""
+    for rel in ("refined-out", "gaea-out", "input"):
         d = pack_dir / rel
         if (d / "height.meters.npy").is_file() or (d / "rivers-h.exr").is_file():
             return d

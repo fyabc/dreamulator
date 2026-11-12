@@ -658,8 +658,15 @@ Dijkstra，时间 O(M log M)、空间 O(M)，M 为平区格数，通常远小于
 该实现只支持 D8 这类不分叉流向，与区域链语义一致。时间主导项是逐块的稳定排序与每格
 常数次的累积和折回，与全局版同阶；跨块事件数以分块边界格数为上界，远小于像素数。
 
-当前 `run_canvas_rivers` 的河段提取仍会把整张画布的填平面装入内存后计算 D8 与累积
-（`canvas_flow_fields`），因此适用于试点画布尺寸；把河段提取也接到分块波次上是后续工作。
+河段提取有两条求解路径，产品相同。**外存路径**（`canvas_rivers_tiled.run_canvas_rivers_tiled`）
+整条链都在分块文件上跑：平地坡化、D8 方向与分块汇流（`canvas_flow_tiled`）、跨接缝并查集的
+连通区标记与几何湖（`canvas_lakes_tiled`）、终点湖收支与平衡面积缩湖（`canvas_terminal_tiled`）、
+二十四次月度累积（`canvas_month_tiled`）、河段提取（`canvas_rivers_tiled`）。**拼装路径**
+（`canvas_pipeline.run_canvas_rivers`）把整张画布装入内存，保留为参照实现与小画布的快路径。
+`dreamulator canvas hydrology` 缺省按可用内存选择（`prefer_out_of_core`：整图链按每格约 100 字节
+估峰值，超过空闲内存的一半就走外存路径），`--out-of-core/--in-memory` 可强制；所选路径写进
+`rivers.meta.json` 的 `solver`。两条路径的差异只在累积的求和精度——分块版用 float64 求和后存
+float32，整图版全程 float32，阈值附近少量格子的河道判定因此不同。
 拼装路径的 D8 接收格计算自 2026-10-30 起分带执行：最陡坡与接收格候选都是带内局部量，
 逐行带（默认 2048 行）配合一行上下文切片复用 `_shift` 取邻域值，使逐邻居临时数组与
 带同阶而非与画布同阶——此前全图 `mgrid` 加 `np.where` 链在 20480×18432 画布上峰值
@@ -690,7 +697,9 @@ Dijkstra，时间 O(M log M)、空间 O(M)，M 为平区格数，通常远小于
 
 湖表三件随河段一起生产（S2 消费侧 schema）：`lakes.sparse/`（分块稀疏湖格 + 湖
 编号，S3 裁窗优先读取）、`lakes.json`（`canvas-lakes-v1`：每湖面积、判据结论、溢口
-格与高程、下游湖编号、入库与需求的毫米当量）、`terminal_lakes.json`
+格与高程、下游湖编号、入库与需求的毫米当量）。两张表的湖编号都是**画出的湖**的连通区编号，
+也就是湖记录带的那个编号，稀疏表的像素则是判定之后**渲染出的水面**；`area_km2` 是渲染水面的
+面积，缩湖取的是可见水面而不是判定前的湖盆、`terminal_lakes.json`
 （`canvas-terminal-lakes-v1`：终点湖统计与方法 provenance）。湖表存在即「湖产品已
 生产」信号；缺失不构成零湖声明。洼地层级与 Fill–Spill–Merge 级联
 （`canvas_lakes.py`）仍作为算法实现与测试基准保留。
@@ -698,7 +707,10 @@ Dijkstra，时间 O(M log M)、空间 O(M)，M 为平区格数，通常远小于
 ### 3.6 矢量河段与情相
 
 河道提取复用区域链的 `river_segments`：D8 最陡下降、Chaikin 平滑、湖岸停步与溢出口
-续走、短链保留。河段以画布 SW 原点 km 输出，与区域链 `refined-out` 的坐标约定一致。
+续走、短链保留。河链本身是稀疏的（成河要上百格汇水），所以游走不分块：两条路径都把「链
+可能走到的格子」收进同一张排序稀疏表 `ChannelGraph`（河道格、停步湖格、各自的下游格与干湖
+缘的下降链，连同累积、活动月数与接收格），再交给共用的 `river_segments_from_graph` 游走。
+拼装路径从自己的整网格数组装配这张表，外存路径逐块采集（`tiled_channel_graph`）。河段以画布 SW 原点 km 输出，与区域链 `refined-out` 的坐标约定一致。
 常流与非常流按 12 个月的累积流量判定：任一月低于 1 L/s 的活动门槛即记为非常流，连续
 同类格合成一个情相段。年度判为过路的湖在月度累积里逐月记账（`month_active_counts` 的
 `lakes` 参数）：`terminal_equilibrium_routing` 交出过路湖的格、出口与湖图（`PassThroughLakes`），
@@ -799,7 +811,10 @@ S4 按这些配对点对同一地点取样，检查接缝高程、湖、河与�
 
 输出目录是 `input/`（区域数据包通道与 meta）与 `refined-out/`（高程、水体掩膜、河段矢量
 与 meta），与 `region pack` 加 `region build` 的产物同构，所以 colorize、carto、relief、
-biome、Blender 各腿无需改动。
+biome、Blender 各腿无需改动。各渲染腿的图像产物（`render` 的 carto 与 color、
+`region_still.py` 的 renders 与 scene.blend）默认写在
+`exports/canvas/<画布>/<窗口>/` 下对应子目录（2026-11-07 迁移：画布目录只留链数据，
+产物归 exports 与其余导出链一致）；S2 的断点续算工作区 `hydro-work/` 完成后可清理。
 
 **渲染侧的河湖衔接**：河链会刻意把最后一段画进湖内一格，作为河与湖的可见连接。渲染载入
 时只删除两端都在水中的河段（`_river_lake_keep`），岸线穿越段保留；按岸边缓冲距离裁剪会

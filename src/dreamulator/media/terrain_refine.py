@@ -325,6 +325,7 @@ def refine_region_pack(
     river_threshold: int | None = None,
     coast_warp: bool = False,
     reuse_height: bool = False,
+    debug: bool = False,
 ) -> dict[str, object]:
     """CLI entry: refine a region pack's terrain, write ``refined-out/``.
 
@@ -332,10 +333,12 @@ def refine_region_pack(
     hydrology from the previous ``refined-out/height.meters.npy`` — the
     iteration loop for drainage/lake semantics changes (a full re-run is
     deterministic for the same seed but pays the whole inference again).
+    ``debug=True`` adds ``flow-accum.png``, the accumulation field nothing downstream reads
+    (20-35 MB of high-entropy 16-bit noise a pack) but which is worth looking at when the
+    drainage is being tuned.
     """
     from PIL import Image
 
-    from dreamulator.map.export import export_elevation_png
     from dreamulator.map.prog_erosion import (
         LAKE_EVAPORATION_FACTOR,
         LAKE_MIN_WIDTH_KM,
@@ -498,7 +501,6 @@ def refine_region_pack(
     lo, hi = float(h.min()), float(h.max())
     span = hi - lo or 1.0
     np.save(out / "height.meters.npy", h.astype(np.float32))
-    export_elevation_png(h, out / "height.gaea.png", min_m=lo, max_m=hi)
     segs, flows, regimes = river_segments(
         rivers, rec, acc, km_pp, lake=chain_stop, lake_descend=fringe_desc, month_active=month_act
     )
@@ -518,11 +520,11 @@ def refine_region_pack(
     Image.fromarray(np.clip(sea_depth * 65535, 0, 65535).astype(np.uint16)).save(
         out / "sea-depth.png"
     )
-    Image.fromarray(np.clip(acc / max(acc.max(), 1.0) * 65535.0).astype(np.uint16)).save(
-        out / "flow-accum.png"
-    )
+    if debug:
+        Image.fromarray(np.clip(acc / max(acc.max(), 1.0) * 65535.0).astype(np.uint16)).save(
+            out / "flow-accum.png"
+        )
     sheet_meta: dict[str, object] = {
-        "height_gaea_png_range_m": [lo, hi],
         "sea_level_m": meta["sea_level_m"],
         "source": "terrain-diffusion 90m refined",
         "td_snr": TD_SNR,

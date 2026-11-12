@@ -1115,3 +1115,148 @@ def test_perihelion_day_none_for_non_synchronous_inclined_satellite(tmp_path: Pa
     perihelion_day, warnings = resolve_perihelion_day(engine, planet, 99.82)
     assert perihelion_day is None
     assert any("synchronous" in w for w in warnings)
+
+
+# ===================================================================
+# Gas-giant magnetic dynamo estimates (engine/planet_dynamo.py)
+# ===================================================================
+
+
+def _mag_stellar() -> dict[str, Any]:
+    """Aegis (gas giant, raw body) + satellite nacrea around star_ignis."""
+    return {
+        "stars": [{"id": "star_ignis", "luminosity": 0.0414, "mass": 0.4665, "age_gyr": 5.9}],
+        "orbits": [
+            {
+                "body_id": "planet_aegis",
+                "parent_id": "star_ignis",
+                "semi_major_axis_au": 0.2504,
+                "eccentricity": 0.005,
+            },
+            {
+                "body_id": "satellite_nacrea",
+                "parent_id": "planet_aegis",
+                "semi_major_axis_au": 0.00494,
+                "eccentricity": 0.002,
+            },
+        ],
+        "bodies": [
+            {
+                "id": "planet_aegis",
+                "mass_earth": 508.5,
+                "radius_km": 71355.0,
+                "rotation_period_days": 0.1864,
+            },
+            # body_type here is the orbital classification (raw stellar.yaml
+            # semantics); without it the satellite would read as "terrestrial".
+            {"id": "satellite_nacrea", "body_type": "natural_satellite"},
+        ],
+    }
+
+
+def _mag_planets(**aegis_overrides: Any) -> dict[str, Any]:
+    aegis: dict[str, Any] = {
+        "id": "planet_aegis",
+        "name": "Aegis",
+        "orbits": "star_ignis",
+        "planet_type": "gas_giant",
+        "mass": 508.5,
+        "radius": 11.2,
+        "rotation_period_days": 0.1864,
+        "axial_tilt_deg": 44.8,
+        "albedo": 0.343,
+    }
+    aegis.update(aegis_overrides)
+    nacrea: dict[str, Any] = {
+        "id": "satellite_nacrea",
+        "name": "Nacrea",
+        "orbits": "planet_aegis",
+        "mass": 1.2,
+        "radius": 1.07,
+        "rotation_period_days": 3.25,
+        "axial_tilt_deg": 9.0,
+        "albedo": 0.30,
+    }
+    return {"planets": [aegis, nacrea]}
+
+
+def _mag_stub(tmp_path: Path, planets: dict[str, Any]) -> _StubEngine:
+    stellar = _write(tmp_path, "stellar.yaml", _mag_stellar())
+    planet_path = _write(tmp_path, "planets.yaml", planets)
+    return _StubEngine({"stellar.yaml": stellar, "planets.yaml": planet_path})
+
+
+def test_catalog_magnetic_estimate_warns_on_authored_deviation(tmp_path: Path) -> None:
+    """Authored 400 uT vs ~650 uT estimate: authored wins, deviation warns."""
+    from dreamulator.engine.planet_dynamo import dipole_moment_am2
+    from dreamulator.engine.sky_geometry import AU_KM
+
+    catalog, warnings = build_system_catalog(
+        _mag_stub(tmp_path, _mag_planets(magnetic_field_strength=400.0))
+    )
+    by_id = {b["id"]: b for b in catalog["bodies"]}
+    aegis = by_id["planet_aegis"]
+
+    # Authored value passes through and wins; estimate lands in derived.
+    assert aegis["magnetic_field_strength_ut"] == 400.0
+    assert aegis["derived"]["magnetic_field_estimate_ut"] == pytest.approx(650.5, rel=1e-2)
+    radius_km = 11.2 * 6371.0
+    assert aegis["derived"]["magnetic_dipole_moment_am2"] == pytest.approx(
+        dipole_moment_am2(400.0, radius_km), rel=1e-3
+    )
+
+    # The satellite gets the parent's dipole field at its own orbit (r^-3).
+    expected_at_orbit = 400.0 * (radius_km / (0.00494 * AU_KM)) ** 3
+    assert by_id["satellite_nacrea"]["derived"]["parent_magnetic_field_at_orbit_ut"] == (
+        pytest.approx(expected_at_orbit, rel=1e-3)
+    )
+
+    assert any("planet_aegis" in w and "uT" in w and "deviation" in w for w in warnings), warnings
+
+
+def test_catalog_magnetic_estimate_fills_derived_without_author(tmp_path: Path) -> None:
+    """No authored field: the estimate itself drives the derived block, no warning."""
+    from dreamulator.engine.planet_dynamo import dipole_moment_am2
+
+    catalog, warnings = build_system_catalog(_mag_stub(tmp_path, _mag_planets()))
+    aegis = next(b for b in catalog["bodies"] if b["id"] == "planet_aegis")
+    assert "magnetic_field_strength_ut" not in aegis
+    estimate = aegis["derived"]["magnetic_field_estimate_ut"]
+    assert estimate == pytest.approx(650.5, rel=1e-2)
+    assert aegis["derived"]["magnetic_dipole_moment_am2"] == pytest.approx(
+        dipole_moment_am2(estimate, 11.2 * 6371.0), rel=1e-3
+    )
+    assert not any("uT" in w for w in warnings)
+
+    # Terrestrial satellite never gains an estimate (scaling domain).
+    nacrea = next(b for b in catalog["bodies"] if b["id"] == "satellite_nacrea")
+    assert "magnetic_field_estimate_ut" not in nacrea["derived"]
+
+
+def test_catalog_magnetic_estimate_gates_on_type_and_rotation(tmp_path: Path) -> None:
+    """Slow rotators and terrestrial bodies stay outside the scaling domain."""
+    catalog, _ = build_system_catalog(_mag_stub(tmp_path, _mag_planets(rotation_period_days=10.0)))
+    aegis = next(b for b in catalog["bodies"] if b["id"] == "planet_aegis")
+    assert "magnetic_field_estimate_ut" not in aegis.get("derived", {})
+
+    # planet_type gate: same body declared terrestrial -> no estimate.
+    catalog2, _ = build_system_catalog(_mag_stub(tmp_path, _mag_planets(planet_type="terrestrial")))
+    aegis2 = next(b for b in catalog2["bodies"] if b["id"] == "planet_aegis")
+    assert "magnetic_field_estimate_ut" not in aegis2.get("derived", {})
+
+
+def test_catalog_magnetic_estimate_uses_authored_luminosity(tmp_path: Path) -> None:
+    """An authored intrinsic luminosity replaces the COND03 track."""
+    from dreamulator.engine.planet_dynamo import estimate_magnetic_field_ut
+
+    lum_w = 3.0e17
+    catalog, _ = build_system_catalog(
+        _mag_stub(tmp_path, _mag_planets(intrinsic_luminosity_w=lum_w))
+    )
+    aegis = next(b for b in catalog["bodies"] if b["id"] == "planet_aegis")
+    assert aegis["physical"]["intrinsic_luminosity_w"] == pytest.approx(lum_w)
+    # Catalog output is rounded to 0.1 uT.
+    assert aegis["derived"]["magnetic_field_estimate_ut"] == pytest.approx(
+        estimate_magnetic_field_ut(508.5, 11.2 * 6371.0, 5.9, luminosity_w=lum_w),
+        abs=0.1,
+    )

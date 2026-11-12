@@ -4,6 +4,7 @@
 
 - `lagrange_points.md` — 特洛伊天体与拉格朗日点
 - `stellar_physics.md` — 质光关系、主序星演化、宜居带、SED 与维恩位移（谱型-峰值波长表）
+- `planetary-dynamo.md` — 气巨磁场发电机体标度律（Christensen 2009 能量通量式 + 木星单点锚定 + COND03 光度网格 + 适用域与横检）
 - `hz_inner_edge_cool_stars.md` — 晚型星宜居带内缘与失控温室（Kopparapu 官方系数表 + 各谱型 S_eff 阈值、NIR 高层吸收双通道机制、1D/3D 内缘之争与 moist greenhouse、复杂生命 HZ_CL 与「暖/可呼吸/安全余量」三难、火山脱气-风化稳态标度）
 - `sidereal_solar_day.md` — 恒星日 vs 太阳日（synodic day）换算、潮汐锁定特例、极昼/极夜时长公式、对引擎的启示
 - `orbital-stability.md` — 轨道稳定性 N-body 验证（REBOUND 脚本用法、共振链、希尔球稳定上限）

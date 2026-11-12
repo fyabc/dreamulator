@@ -1270,6 +1270,65 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
     return filled, dem, rec, acc, land, order, weight, inland_big
 
 
+@dataclass(frozen=True)
+class RiverClimateInputs:
+    """The climate basis of the rivers stage, read once for either chain.
+
+    ``has_basis`` is the region chain's rule: the water-balance verdict needs runoff weighting
+    AND a temperature basis, otherwise the routing degrades to the geometry lake with no
+    verdicts.  The grids stay COARSE and the balances look cells up per block, so this holds no
+    canvas-sized field.
+    """
+
+    precip: np.ndarray
+    temp_c: np.ndarray
+    open_water: np.ndarray | None
+    has_basis: bool
+    climate_block: int
+    weight_source: str
+    runoff_land_mean_mm: float
+    lake_evaporation_source: str
+
+
+def read_river_climate_inputs(store: CanvasStore) -> RiverClimateInputs:
+    """Load the rivers stage's climate basis from a canvas's ``climate/`` directory."""
+    from dreamulator.map.prog_erosion import RUNOFF_REFERENCE_MM
+
+    climate = store.root / "climate"
+    weight_source = "runoff.mm" if (climate / "runoff.mm.npy").exists() else "uniform"
+    temp_path = climate / "temperature.C.npy"
+    precip_path = climate / "precipitation.mm.npy"
+    has_basis = weight_source == "runoff.mm" and temp_path.exists() and precip_path.exists()
+    precip = np.zeros((1, 1), dtype=np.float32)
+    temp_c = np.zeros((1, 1), dtype=np.float32)
+    block = 1
+    if has_basis:
+        precip = np.nan_to_num(np.load(precip_path).astype(np.float32), nan=0.0)
+        temp_c = np.nan_to_num(np.load(temp_path).astype(np.float32), nan=0.0)
+        block = PX_PER_CELL  # one climate cell = PX_PER_CELL pixels
+    # Lake-surface demand: the energy-based open-water channel S1 writes
+    # (engine/lake_evaporation.py); canvases planned before it fall back to the Hamon demand,
+    # which underestimates cold clear plateaus severalfold.
+    open_water = None
+    lake_path = climate / "lake_evaporation.mm.npy"
+    if has_basis and lake_path.exists():
+        open_water = np.nan_to_num(np.load(lake_path).astype(np.float32), nan=0.0)
+    return RiverClimateInputs(
+        precip=precip,
+        temp_c=temp_c,
+        open_water=open_water,
+        has_basis=has_basis,
+        climate_block=block,
+        weight_source=weight_source,
+        runoff_land_mean_mm=RUNOFF_REFERENCE_MM if has_basis else 0.0,
+        lake_evaporation_source=(
+            "open-water energy balance"
+            if open_water is not None
+            else "Hamon fallback (no lake_evaporation.mm channel; re-plan the canvas)"
+        ),
+    )
+
+
 def run_canvas_rivers(
     store: CanvasStore,
     *,
@@ -1289,7 +1348,6 @@ def run_canvas_rivers(
     """
     from dreamulator.map.prog_erosion import (
         LAKE_MIN_WIDTH_KM,
-        RUNOFF_REFERENCE_MM,
         PassThroughLakes,
         lake_mmu_cells,
         lake_monthly_demand,
@@ -1312,42 +1370,20 @@ def run_canvas_rivers(
     km = store.geometry.px_km
     mmu = lake_mmu_cells(km)
     climate = store.root / "climate"
-    weight_source = "runoff.mm" if (climate / "runoff.mm.npy").exists() else "uniform"
-
+    inputs = read_river_climate_inputs(store)
+    weight_source = inputs.weight_source
     # Terminal-lake verdict chain: without a temperature/precipitation basis
     # (or without runoff weighting) the routing degrades to the geometry
     # lake with no verdicts — the region chain's same degenerate mode.
     lakes_draw0 = renderable_lakes(filled, dem, inland_big, mmu, km)
     del filled, inland_big
-    temp_path = climate / "temperature.C.npy"
-    precip_path = climate / "precipitation.mm.npy"
-    # The water-balance verdict needs runoff weighting AND a temperature
-    # basis (the region chain's rule: no temperature → balance off).  The
-    # climate grids stay COARSE and the balances look lake cells up per
-    # block — the values equal a full tiling without canvas-sized fields.
-    has_basis = weight_source == "runoff.mm" and temp_path.exists() and precip_path.exists()
-    run_norm = RUNOFF_REFERENCE_MM if has_basis else 0.0
-    precip = np.zeros((1, 1), dtype=np.float32)
-    temp_c = np.zeros((1, 1), dtype=np.float32)
-    climate_block = 1
-    if has_basis:
-        precip = np.nan_to_num(np.load(precip_path).astype(np.float32), nan=0.0)
-        temp_c = np.nan_to_num(np.load(temp_path).astype(np.float32), nan=0.0)
-        climate_block = PX_PER_CELL  # one climate cell = PX_PER_CELL pixels
-    # Lake-surface demand: the energy-based open-water channel S1 writes
-    # (engine/lake_evaporation.py); canvases planned before it fall back to
-    # the Hamon demand, which underestimates cold clear plateaus severalfold.
-    open_water = None
-    lake_path = climate / "lake_evaporation.mm.npy"
-    if has_basis and lake_path.exists():
-        open_water = np.nan_to_num(np.load(lake_path).astype(np.float32), nan=0.0)
+    has_basis = inputs.has_basis
+    run_norm = inputs.runoff_land_mean_mm
+    precip, temp_c = inputs.precip, inputs.temp_c
+    climate_block = inputs.climate_block
+    open_water = inputs.open_water
     if verbose and has_basis:
-        source = (
-            "open-water energy balance"
-            if open_water is not None
-            else ("Hamon fallback (no lake_evaporation.mm channel; re-plan the canvas)")
-        )
-        print(f"[hydrology] lake evaporation: {source}")
+        print(f"[hydrology] lake evaporation: {inputs.lake_evaporation_source}")
     pass_through: list[PassThroughLakes] = []
     (
         _h_rewritten,
@@ -1455,7 +1491,7 @@ def run_canvas_rivers(
         hydro / "rivers.png"
     )
 
-    _write_lake_tables(store, lakes_draw, lake_records, lake_stats, mmu, km)
+    _write_lake_tables(store, lakes_draw0, lakes_draw, lake_records, lake_stats, km)
 
     heal_path = store.work / "heal.npz"
     healed_cells = (
@@ -1497,47 +1533,23 @@ def run_canvas_rivers(
     }
 
 
-def _write_lake_tables(
+def write_lake_tables_from_counts(
     store: CanvasStore,
-    lakes_draw: np.ndarray,
+    counts: np.ndarray,
     lake_records: list[dict[str, object]],
     lake_stats: dict[str, int],
-    mmu: int,
     km: float,
 ) -> None:
-    """Write the lake products S3 windows consume: ``lakes.sparse/`` (per
-    chunk sparse pixels + lake ids), ``lakes.json`` (per-lake geometry and
-    verdict record), ``terminal_lakes.json`` (verdict statistics and the
-    method provenance).  The presence of these tables is the canvas's
-    "lake production done" signal (asset_status semantics) — their absence
-    is not a zero-lake claim."""
+    """``lakes.json`` and ``terminal_lakes.json`` from per-label cell counts.
+
+    The out-of-core chain (:mod:`dreamulator.media.canvas_rivers_tiled`) has the counts in its
+    component table and writes ``lakes.sparse/`` from the chunk labels, so it calls this
+    instead of :func:`_write_lake_tables`.
+    """
     import json
 
-    from scipy import ndimage
-
     hydro = store.root / "hydro"
-    sparse_dir = hydro / "lakes.sparse"
-    sparse_dir.mkdir(exist_ok=True)
-    t = store.tile
-    counts: np.ndarray
-    if lakes_draw.any():
-        lbl, _n = ndimage.label(lakes_draw)
-        counts = np.bincount(lbl.ravel(), minlength=_n + 1)
-    else:
-        lbl = np.zeros(lakes_draw.shape, dtype=np.int32)
-        counts = np.zeros(1, dtype=np.int64)
-    for ci, cj in store.chunks:
-        block = lbl[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t]
-        ids = [int(k) for k in np.unique(block) if k > 0]
-        if not ids:
-            continue
-        flat_block = block.ravel()
-        idx = np.flatnonzero(flat_block)
-        np.savez(
-            sparse_dir / f"lake.r{ci:03d}_c{cj:03d}.npz",
-            idx=idx.astype(np.uint32),
-            lake_id=flat_block[idx].astype(np.uint16),
-        )
+    hydro.mkdir(exist_ok=True)
     area_km2 = km * km
 
     def _record(rec: dict[str, object]) -> dict[str, object]:
@@ -1548,13 +1560,12 @@ def _write_lake_tables(
             **{k: v for k, v in rec.items() if k != "label"},
         }
 
-    records = [_record(rec) for rec in lake_records]
     (hydro / "lakes.json").write_text(
         json.dumps(
             {
                 "schema": "canvas-lakes-v1",
                 "pixel_area_km2": round(area_km2, 6),
-                "lakes": records,
+                "lakes": [_record(rec) for rec in lake_records],
             },
             indent=1,
             ensure_ascii=False,
@@ -1575,3 +1586,51 @@ def _write_lake_tables(
         + "\n",
         encoding="utf-8",
     )
+
+
+def _write_lake_tables(
+    store: CanvasStore,
+    lakes_drawn: np.ndarray,
+    lakes_render: np.ndarray,
+    lake_records: list[dict[str, object]],
+    lake_stats: dict[str, int],
+    km: float,
+) -> None:
+    """Write the lake products S3 windows consume: ``lakes.sparse/`` (per
+    chunk sparse pixels + lake ids), ``lakes.json`` (per-lake geometry and
+    verdict record), ``terminal_lakes.json`` (verdict statistics and the
+    method provenance).  The presence of these tables is the canvas's
+    "lake production done" signal (asset_status semantics) — their absence
+    is not a zero-lake claim."""
+
+    from scipy import ndimage
+
+    hydro = store.root / "hydro"
+    sparse_dir = hydro / "lakes.sparse"
+    sparse_dir.mkdir(exist_ok=True)
+    t = store.tile
+    # The ids are the DRAWN lakes' labels, the ones the records carry: the sparse pixels are
+    # the rendered water, but labelling that mask instead renumbers everything (a dry playa
+    # leaves the mask and shifts every later component), so the per-lake area then belonged to
+    # another lake.  The area is the rendered water's, which for a shrunk lake is its visible
+    # surface, not its pre-verdict basin.
+    counts: np.ndarray
+    if lakes_drawn.any():
+        lbl, n_lab = ndimage.label(lakes_drawn)
+        lbl[~lakes_render] = 0
+        counts = np.bincount(lbl.ravel(), minlength=n_lab + 1)
+    else:
+        lbl = np.zeros(lakes_drawn.shape, dtype=np.int32)
+        counts = np.zeros(1, dtype=np.int64)
+    for ci, cj in store.chunks:
+        block = lbl[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t]
+        flat_block = block.ravel()
+        idx = np.flatnonzero(flat_block)
+        if idx.size == 0:
+            continue
+        np.savez(
+            sparse_dir / f"lake.r{ci:03d}_c{cj:03d}.npz",
+            idx=idx.astype(np.uint32),
+            lake_id=flat_block[idx].astype(np.uint16),
+        )
+    write_lake_tables_from_counts(store, counts, lake_records, lake_stats, km)

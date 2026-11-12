@@ -279,4 +279,8 @@ def test_clouds_globe_uses_weather_frame(tmp_path: Path) -> None:
     assert meta["globe"]["sun_lon_deg"] == wf.subsolar_lon_deg
     assert meta["globe"]["sun_lat_deg"] == wf.subsolar_lat_deg
     assert (out / "globe.png").is_file()
-    assert (out / "clouds.png").is_file()
+    # The two shells are the product; the merged twin and the diagnostics are not written.
+    assert (out / "clouds_low.png").is_file()
+    assert (out / "clouds_cirrus.png").is_file()
+    assert not (out / "clouds.png").exists()
+    assert not (out / "cloud_cover.png").exists()
