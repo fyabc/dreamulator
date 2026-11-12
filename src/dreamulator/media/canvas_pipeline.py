@@ -1455,7 +1455,7 @@ def run_canvas_rivers(
         hydro / "rivers.png"
     )
 
-    _write_lake_tables(store, lakes_draw, lake_records, lake_stats, mmu, km)
+    _write_lake_tables(store, lakes_draw0, lakes_draw, lake_records, lake_stats, km)
 
     heal_path = store.work / "heal.npz"
     healed_cells = (
@@ -1497,47 +1497,23 @@ def run_canvas_rivers(
     }
 
 
-def _write_lake_tables(
+def write_lake_tables_from_counts(
     store: CanvasStore,
-    lakes_draw: np.ndarray,
+    counts: np.ndarray,
     lake_records: list[dict[str, object]],
     lake_stats: dict[str, int],
-    mmu: int,
     km: float,
 ) -> None:
-    """Write the lake products S3 windows consume: ``lakes.sparse/`` (per
-    chunk sparse pixels + lake ids), ``lakes.json`` (per-lake geometry and
-    verdict record), ``terminal_lakes.json`` (verdict statistics and the
-    method provenance).  The presence of these tables is the canvas's
-    "lake production done" signal (asset_status semantics) — their absence
-    is not a zero-lake claim."""
+    """``lakes.json`` and ``terminal_lakes.json`` from per-label cell counts.
+
+    The out-of-core chain (:mod:`dreamulator.media.canvas_rivers_tiled`) has the counts in its
+    component table and writes ``lakes.sparse/`` from the chunk labels, so it calls this
+    instead of :func:`_write_lake_tables`.
+    """
     import json
 
-    from scipy import ndimage
-
     hydro = store.root / "hydro"
-    sparse_dir = hydro / "lakes.sparse"
-    sparse_dir.mkdir(exist_ok=True)
-    t = store.tile
-    counts: np.ndarray
-    if lakes_draw.any():
-        lbl, _n = ndimage.label(lakes_draw)
-        counts = np.bincount(lbl.ravel(), minlength=_n + 1)
-    else:
-        lbl = np.zeros(lakes_draw.shape, dtype=np.int32)
-        counts = np.zeros(1, dtype=np.int64)
-    for ci, cj in store.chunks:
-        block = lbl[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t]
-        ids = [int(k) for k in np.unique(block) if k > 0]
-        if not ids:
-            continue
-        flat_block = block.ravel()
-        idx = np.flatnonzero(flat_block)
-        np.savez(
-            sparse_dir / f"lake.r{ci:03d}_c{cj:03d}.npz",
-            idx=idx.astype(np.uint32),
-            lake_id=flat_block[idx].astype(np.uint16),
-        )
+    hydro.mkdir(exist_ok=True)
     area_km2 = km * km
 
     def _record(rec: dict[str, object]) -> dict[str, object]:
@@ -1548,13 +1524,12 @@ def _write_lake_tables(
             **{k: v for k, v in rec.items() if k != "label"},
         }
 
-    records = [_record(rec) for rec in lake_records]
     (hydro / "lakes.json").write_text(
         json.dumps(
             {
                 "schema": "canvas-lakes-v1",
                 "pixel_area_km2": round(area_km2, 6),
-                "lakes": records,
+                "lakes": [_record(rec) for rec in lake_records],
             },
             indent=1,
             ensure_ascii=False,
@@ -1575,3 +1550,51 @@ def _write_lake_tables(
         + "\n",
         encoding="utf-8",
     )
+
+
+def _write_lake_tables(
+    store: CanvasStore,
+    lakes_drawn: np.ndarray,
+    lakes_render: np.ndarray,
+    lake_records: list[dict[str, object]],
+    lake_stats: dict[str, int],
+    km: float,
+) -> None:
+    """Write the lake products S3 windows consume: ``lakes.sparse/`` (per
+    chunk sparse pixels + lake ids), ``lakes.json`` (per-lake geometry and
+    verdict record), ``terminal_lakes.json`` (verdict statistics and the
+    method provenance).  The presence of these tables is the canvas's
+    "lake production done" signal (asset_status semantics) — their absence
+    is not a zero-lake claim."""
+
+    from scipy import ndimage
+
+    hydro = store.root / "hydro"
+    sparse_dir = hydro / "lakes.sparse"
+    sparse_dir.mkdir(exist_ok=True)
+    t = store.tile
+    # The ids are the DRAWN lakes' labels, the ones the records carry: the sparse pixels are
+    # the rendered water, but labelling that mask instead renumbers everything (a dry playa
+    # leaves the mask and shifts every later component), so the per-lake area then belonged to
+    # another lake.  The area is the rendered water's, which for a shrunk lake is its visible
+    # surface, not its pre-verdict basin.
+    counts: np.ndarray
+    if lakes_drawn.any():
+        lbl, n_lab = ndimage.label(lakes_drawn)
+        lbl[~lakes_render] = 0
+        counts = np.bincount(lbl.ravel(), minlength=n_lab + 1)
+    else:
+        lbl = np.zeros(lakes_drawn.shape, dtype=np.int32)
+        counts = np.zeros(1, dtype=np.int64)
+    for ci, cj in store.chunks:
+        block = lbl[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t]
+        flat_block = block.ravel()
+        idx = np.flatnonzero(flat_block)
+        if idx.size == 0:
+            continue
+        np.savez(
+            sparse_dir / f"lake.r{ci:03d}_c{cj:03d}.npz",
+            idx=idx.astype(np.uint32),
+            lake_id=flat_block[idx].astype(np.uint16),
+        )
+    write_lake_tables_from_counts(store, counts, lake_records, lake_stats, km)
