@@ -4,7 +4,7 @@
 模型生成（90 m 地貌），水系由本库的排水算法提取（树状河网 + 内流湖），
 渲染支持输出制图与 Blender 素材。**Gaea 2 手动 GUI 构建是本链第②步的
 手动替代**（见 [gaea-video-chain.md](gaea-video-chain.md)）；引擎 DEM
-的 SPL 程序化侵蚀（`region build --method spl`）是另一个替代，见 cli.md 与
+的 SPL 程序化侵蚀替代路径已退役（2026-11-08：平滑网格上 D8 接收器退化为平行梳齿河网、且无 90 m 地貌细节）；TD 为唯一构建方法，见 cli.md 与
 [knowledge/cartography/](../knowledge/cartography/README.md)。
 
 ## 准备
@@ -47,9 +47,7 @@ dreamulator build nacrea       # geological + climate 两层
 flowchart LR
     A[① region pack<br/>pack v4 数据包] --> B{② 地形来源}
     B -->|主方法| C[terrain-diffusion 细化<br/>90m 地貌重生成]
-    B -.->|替代| D[Gaea 手动构建 /<br/>region build --method spl SPL]
     C --> E[水文提取<br/>排水 · 河网 · 湖]
-    D --> E
     E --> F[③ render --style satellite<br/>卫星真彩]
     E --> G[③' render --style survey<br/>测绘/手绘/中世纪图]
     E --> H[④ blender region_still<br/>4K 渲染]
@@ -198,7 +196,7 @@ dreamulator region build data/worlds/nacrea/packs/nacrea-15_-100_550km \
   符号依据见
   [knowledge/cartography/river_symbolization.md](../knowledge/cartography/river_symbolization.md)。
 
-## 输出契约（refined-out/，与 prog-out/gaea-out 同词汇）
+## 输出契约（refined-out/，与 gaea-out 同词汇）
 
 | 文件 | 说明 |
 |------|------|
@@ -297,9 +295,8 @@ topo 成图的正文：默认底图是服务端实时合成的 **topo 合成图*
 1. **湖数量/面积的过程控制**：当前靠深度 + 面积双阈值（渲染/断链以
    MMU 为门槛，2026-10-16 起）；方向 = 沉积/
    切穿过程建模（Lindsay 2016 混合策略可参照）。
-2. **erode → refine 串行组合**：SPL 刻蚀后的场喂 TD 条件重采样（23 km）
-   会抹掉 1–2 km 宽的河谷——两替代法目前只能二选一；组合需要 TD
-   条件分辨率提升或流域形态尺度的侵蚀。
+2. **TD 条件分辨率**：1–2 km 宽河谷形态待条件场（23 km）分辨率提升后
+   复核（原 SPL 串行组合问题随 SPL 退役消解）。
 3. **相邻块边界对齐**：跨窗地形/河网接续——已定向为整块大陆画布
    方案（2026-10-18 裁决，窗口补绘/分面网格不再调研），画布裁窗路径
    落地前本差距仍在。

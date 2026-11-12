@@ -330,7 +330,7 @@ dreamulator guard archive nacrea --limit 20       # 归档最旧的 accepted，�
 | `map layers` | 整颗星球 | 地图图层烘焙为彩色 PNG，与前端逐字节同色 |
 | `map globe` | 整颗星球 | 太空俯瞰镜头：地表与云纹理、双层云、大气和圆盘静帧 |
 | `region pack` | 单个区域 | 从网格直接取样一个方形区域数据包 |
-| `region build` | 单个区域 | 数据包的高清地形：`--method td`（terrain-diffusion）或 `spl`（程序化侵蚀） |
+| `region build` | 单个区域 | 数据包的高清地形：terrain-diffusion 细化加水文（SPL 程序化侵蚀已于 2026-11-08 退役） |
 | `canvas …` | 全球画布 | 整块大陆的 90 m 画布链：规划、生成、侵蚀、水文、裁窗和总览图 |
 | `render` | 数据包 | 区域包与画布裁窗通用的出图：卫星真彩或制图风格 |
 
@@ -486,7 +486,7 @@ dreamulator canvas mosaic data/worlds/nacrea/canvases/gcm-t42-712 --step 2
 ```bash
 uv sync --extra media        # 首次需要（OpenEXR）
 dreamulator render data/worlds/nacrea/packs/nacrea-15_90_2350km --style satellite
-# 默认读 <pack>/gaea-out/，写 <pack>/color/{albedo.png, preview.png}
+# 默认读 <pack>/gaea-out/（有 refined-out 时优先），写 exports/canvas/<slug>/color/{albedo.png, preview.png}
 # --gaea / --output 可覆盖；--no-texture 关闭植被纹理（默认开）
 ```
 
@@ -506,20 +506,6 @@ Köppen 与群系各一份 uint8 类别码 `.npy` 加调色板配色 PNG。
 `climate.*.legend` 只列本窗口出现的类，`missing` 字段给出缺值像素数。所有通道与高度
 共用同一正方形输出网格，套准由构造保证。技术参考见
 [design/pipelines/region-pack.md](../design/pipelines/region-pack.md)。
-
-### 程序化侵蚀（region build --method spl）
-
-视频链第②步的程序化变体（一条命令替代 Gaea 手动构建）：
-
-```bash
-dreamulator region build data/worlds/nacrea/packs/nacrea-15_-100_2350km --method spl
-# 写 <pack>/prog-out/（gaea-out 文件词汇，渲染腿 --gaea 指向它即可）
-# --steps 30 / --dt 5e4 / --k 2e-7 / --river-threshold 3000（默认即定版）
-```
-
-Priority-Flood 排水（Barnes 2014）+ 隐式流水功率侵蚀（Braun & Willett
-2013），吃 pack 的降水场。参数语义见 [usage/terrain-chain.md](terrain-chain.md) 与
-[knowledge/cartography/](../knowledge/cartography/README.md)。
 
 ### terrain-diffusion 细化 + 水文（region build）
 
@@ -545,7 +531,7 @@ dreamulator render <pack> --style biome                 # 群系图 biome.png
 dreamulator render <pack> --style all                   # 一键出 topo + relief + biome 三张
 dreamulator render <pack> --style hand                  # 旧印刷质感 topo.hand.png
 dreamulator render <pack> --style medieval --title "珠母星 · 未知海域"
-# 读 <pack>/input + <pack>/gaea-out（或 --gaea 指向 refined-out/prog-out）
+# 读 <pack>/input + <pack>/gaea-out（或 --gaea 指向 refined-out）
 # survey → carto/{topo.svg, topo.png}；relief → carto/{relief.svg, relief.png}；
 # biome → carto/{biome.svg, biome.png}；hand → carto/topo.hand.png；medieval → carto/medieval.png
 # --title 自定义标题（默认「Nacrea —— 15°N 100°W 附近」式）

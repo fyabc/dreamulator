@@ -131,7 +131,6 @@ def test_list_packs_filters_and_reports_legs(client: TestClient) -> None:
         "refined": True,
         "carto": False,
         "renders": False,
-        "prog": False,
         "gaea": False,
     }
 

@@ -1,23 +1,24 @@
-"""prog_erosion — programmatic SPL erosion on a region-pack DEM.
+"""prog_erosion — region-pack / canvas hydrology primitives.
 
-Replaces the manual Gaea leg with a seeded, scriptable one: Priority-Flood
-drainage (Barnes et al. 2014) + implicit stream-power erosion (Braun &
-Willett 2013) on the regular pack grid.  Two water-weighting doctrines on
-purpose: the erosion physics runs on the pack's precipitation field (storm
-runoff is the erosion agent, same doctrine as the Gaea chain), while the
-channel extraction accumulates the pack's annual runoff field (the
-Turc–Pike water balance) so channels start where the water balance
-allows and endorheic lakes can be terminal.
+Priority-Flood drainage (Barnes et al. 2014) on the regular pack grid plus
+the lake/river semantics built on it: flow accumulation, river and lake
+masks, terminal-lake water-balance cascade, regime classification and
+vector river segments.  Channel extraction accumulates the pack's annual
+runoff field (Turc–Pike water balance) so channels start where the water
+balance allows and endorheic lakes can be terminal; the runoff weight is
+normalised by a fixed reference (``RUNOFF_REFERENCE_MM``) so the channel
+onset reads as an absolute minimum mean discharge in every window.
 
-    pack input (height + precipitation)  →  eroded height + tree-shaped
-    river network (flow accumulation)
+The programmatic SPL erosion path (implicit stream-power carving of the
+pack DEM, ``prog-out/``) was retired 2026-11-08: on smooth engine meshes
+its D8 receivers degenerate into parallel comb channels and it cannot
+produce the 90 m landform detail terrain-diffusion delivers; TD is the
+single build method (see docs/usage/terrain-chain.md).  The hydrology
+primitives below remain the shared foundation of the TD leg and the
+canvas S2/S3 chain.
 
-Outputs land in ``<pack>/prog-out/`` in the gaea-out file vocabulary
-(height PNG + mask PNGs) so the existing render legs can consume them
-unchanged.
-
-The algorithm follows the public papers (Barnes 2014; Braun & Willett
-2013); implementation is original (regular-grid, numba).
+Implementation is original (regular-grid, numba); routing follows Barnes
+2014.
 """
 
 from __future__ import annotations
@@ -35,21 +36,6 @@ if TYPE_CHECKING:
 #: epsilon gradient for Priority-Flood routing (metres per cell): small
 #: enough not to alter relief, large enough to break flat-lake ties.
 PF_EPS_M = 1e-4
-#: SPL exponents: m = 0.5, n = 1 is the classic steady-state channel
-#: geometry (whipple & tucker 1999); we solve n = 1 (linear in h, which
-#: the implicit scheme requires).
-SPL_M = 0.5
-#: Sub-metre deterministic roughness injected before routing: a smooth
-#: interpolated DEM makes D8 steepest descent run along grid/45° lines;
-#: ~1.5 m of fBm at ~12-cell wavelength breaks the symmetry without
-#: touching any contour interval (documented, far below data resolution).
-NOISE_AMPLITUDE_M = 1.5
-NOISE_WAVELENGTH_CELLS = 12.0
-NOISE_SEED = 42
-#: Hillslope transport as linear diffusion, applied as an equivalent
-#: Gaussian smoothing per step (σ² = 2·D·dt on the metre grid): rounds
-#: spl-etched channel walls into real valley sides.  Land only, sea fixed.
-HILLSLOPE_SIGMA_PX = 0.5
 #: Closed basins deeper than this fill become lakes (endorheic water
 #: bodies — the Barnes 2014 semantic: filled surface is the water level,
 #: the channel network enters the lake and resumes at its spill point).
@@ -138,28 +124,6 @@ RIVER_REGIME_NON_PERENNIAL = 1
 REGIME_ACTIVE_DISCHARGE_M3S = 0.001
 
 
-def _roughness(
-    n: int,
-    seed: int = NOISE_SEED,
-    amplitude: float = NOISE_AMPLITUDE_M,
-    wavelength: float = NOISE_WAVELENGTH_CELLS,
-) -> np.ndarray:
-    """Deterministic fBm roughness in ±amplitude (metres)."""
-    import opensimplex
-
-    rng = opensimplex.OpenSimplex(seed)
-    xs = np.arange(n) / wavelength
-    field = sum((0.5**o) * rng.noise2array(xs * (2.0**o), xs * (2.0**o)) for o in range(3))
-    return np.asarray(amplitude * field / np.abs(field).max(), dtype=np.float64)
-
-
-def apply_terrain_roughness(dem: np.ndarray, land: np.ndarray) -> np.ndarray:
-    """DEM plus deterministic sub-metre roughness (grid-anisotropy break for
-    interpolated engine DEMs; refined diffusion DEMs carry their own natural
-    roughness — measured σ 31 m on plains — and skip this)."""
-    return np.asarray(dem + _roughness(dem.shape[0]) * land, dtype=np.float64)
-
-
 def priority_flood(
     dem: np.ndarray,
     land: np.ndarray,
@@ -225,58 +189,6 @@ def flow_accumulation(order: np.ndarray, receiver: np.ndarray, weight: np.ndarra
         gc.collect()
         time.sleep(3.0)
         return _accumulate_numba(*args)
-
-
-def spl_erode(
-    dem: np.ndarray,
-    land: np.ndarray,
-    rain_m: np.ndarray,
-    *,
-    steps: int = 40,
-    dt_yr: float = 5e4,
-    k_spl: float = 2e-6,
-    uplift_m_yr: float = 0.0,
-    sea_level_m: float = 0.0,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Erode ``dem`` in place by implicit SPL; returns (dem, accumulation).
-
-    dh/dt = U − K·A^m·S with S solved linearly between a cell and its
-    receiver (n = 1): the Braun–Willett implicit update is unconditionally
-    stable and processes cells in drainage order.  Sea cells are fixed
-    (base level).  ``rain_m`` is each cell's own runoff weight (metres of
-    storm runoff per step scaling — only its relative pattern matters).
-    """
-    from ._erosion_kernels import _spl_step_numba
-
-    h = np.ascontiguousarray(dem, dtype=np.float64).copy()
-    # Break grid anisotropy before routing (see NOISE_*/PLAIN_* constants) —
-    # the noise rides the DEM through erosion, so the channels inherit it.
-    # Land only: sea cells stay exact (base level + clean depth masks).
-    h = apply_terrain_roughness(h, land)
-    land8 = np.ascontiguousarray(land, dtype=np.uint8)
-    rain = np.ascontiguousarray(rain_m, dtype=np.float64)
-    acc = np.zeros_like(h)
-    filled = np.empty_like(h)
-    order = np.empty(h.size, dtype=np.int64)
-    receiver = np.empty(h.size, dtype=np.int64)
-    for _ in range(steps):
-        _priority_flood_inplace(h, land8, PF_EPS_M, filled, order, receiver)
-        acc = flow_accumulation(order, receiver, rain)
-        _spl_step_numba(
-            h, land8, order, receiver, acc, dt_yr, k_spl, SPL_M, uplift_m_yr, sea_level_m
-        )
-        _hillslope_step(h, land8, HILLSLOPE_SIGMA_PX)
-    return h, acc
-
-
-def _hillslope_step(h: np.ndarray, land8: np.ndarray, sigma_px: float) -> None:
-    """Linear-diffusion hillslope pass (equivalent Gaussian, land only)."""
-    if sigma_px <= 0.0:
-        return
-    from scipy.ndimage import gaussian_filter
-
-    smoothed = gaussian_filter(h, sigma=sigma_px)
-    h[...] = np.where(land8.astype(bool), smoothed, h)
 
 
 def _priority_flood_inplace(
@@ -1962,172 +1874,3 @@ def river_segments_from_graph(
         np.asarray(flows, dtype=np.float64),
         np.asarray(regimes, dtype=np.uint8),
     )
-
-
-def erode_region_pack(
-    pack_dir: Path,
-    *,
-    steps: int = 30,
-    dt_yr: float = 5e4,
-    k_spl: float = 2e-7,
-    river_threshold: int = RIVER_THRESHOLD_CELLS,
-) -> dict[str, object]:
-    """CLI entry: erode a region pack's DEM, write ``prog-out/``.
-
-    Writes the gaea-out file vocabulary (height PNG plus ``rivers.png``/
-    ``sea-water.png`` masks and a float32 metres ``height.meters.npy``) so
-    the colorize/carto legs consume it without changes.  Erosion uses the
-    precipitation weight; channel extraction uses the runoff weight
-    (``hydrology_weight``), land-mean-normalised so the river threshold
-    reads in units of upstream cells.
-    """
-    import json
-
-    from PIL import Image
-
-    from .export import export_elevation_png
-
-    inp = pack_dir / "input"
-    meta = json.loads((inp / "meta.json").read_text(encoding="utf-8"))
-    dem = np.load(inp / "height.meters.npy").astype(np.float64)
-    rain = np.nan_to_num(np.load(inp / "precipitation.mm.npy").astype(np.float64), nan=0.0)
-    land = dem > float(meta["sea_level_m"])
-    km_pp = float(meta["extent_km"]["x"]) / dem.shape[0]
-    # Sub-MMU inland water bodies (h≤0, not connected to the ocean) are
-    # quantisation noise: heal to land so rivers continue through; larger
-    # ones stay water as endorheic terminal lakes.
-    dem, land, inland_big = heal_inland_water(
-        dem,
-        land,
-        lake_mmu_cells(km_pp),
-        float(meta["sea_level_m"]),
-        km_per_px=km_pp,
-        min_width_km=LAKE_MIN_WIDTH_KM,
-    )
-    # Two water-weighting doctrines on purpose (module docstring): erosion
-    # runs on the precipitation weight (storm runoff carves), extraction on
-    # the water balance (runoff) so the channel network obeys the climate.
-    rain_w = rain / rain[land].mean()
-    weight, run_norm_mm, weight_src = hydrology_weight(inp, dem.shape[0], land)
-
-    h, _acc_erosion = spl_erode(
-        dem,
-        land,
-        rain_w,
-        steps=steps,
-        dt_yr=dt_yr,
-        k_spl=k_spl,
-        sea_level_m=float(meta["sea_level_m"]),
-    )
-
-    out = pack_dir / "prog-out"
-    out.mkdir(exist_ok=True)
-    filled2, order2, receiver = priority_flood(h, land)
-    mmu = lake_mmu_cells(km_pp)
-    lakes_draw0 = renderable_lakes(filled2, h, inland_big, mmu, km_pp)
-    temp_c: np.ndarray | None = None
-    t_path = inp / "temperature.C.npy"
-    if t_path.exists():
-        temp_c = np.nan_to_num(np.load(t_path).astype(np.float64), nan=0.0)
-    else:
-        print(f"[erode] no temperature.C.npy under {inp}; terminal-lake balance off")
-    open_water: np.ndarray | None = None
-    lake_path = inp / "lake_evaporation.mm.npy"
-    if temp_c is not None and lake_path.exists():
-        lake_grid = np.nan_to_num(np.load(lake_path).astype(np.float64), nan=0.0)
-        open_water = (
-            tile_coarse_field(lake_grid, h.shape) if lake_grid.shape != h.shape else lake_grid
-        )
-    # Terminal-lake equilibrium with through-flow depletion (the shared
-    # helper): pass-through lakes deduct their net evaporation from the
-    # through-flow; routing stays on the pre-rewrite tree.
-    (
-        h_rw,
-        land,
-        lakes_draw,
-        chain_stop,
-        fringe_desc,
-        rec_route,
-        acc,
-        term_water,
-        lake_stats,
-        _lake_records,
-    ) = terminal_equilibrium_routing(
-        h,
-        land,
-        lakes_draw0,
-        order2,
-        receiver,
-        weight,
-        precip_mm=rain if temp_c is not None else np.zeros_like(land, dtype=np.float64),
-        temp_c=temp_c if temp_c is not None else np.zeros_like(land, dtype=np.float64),
-        runoff_land_mean_mm=run_norm_mm if (temp_c is not None and weight_src == "runoff") else 0.0,
-        mmu_cells=mmu,
-        km_per_px=km_pp,
-        sea_level_m=float(meta["sea_level_m"]),
-        open_water_mm=open_water,
-    )
-    assert h_rw is not None  # keep_rewritten_h defaults to True here
-    h = h_rw
-    lo, hi = float(h.min()), float(h.max())
-    span = hi - lo or 1.0
-    np.save(out / "height.meters.npy", h.astype(np.float32))
-    export_elevation_png(h, out / "height.gaea.png", min_m=lo, max_m=hi)
-    rivers = river_mask(acc, land, river_threshold)
-    segs, flows, _regimes = river_segments(
-        rivers, rec_route, acc, km_pp, lake=chain_stop, lake_descend=fringe_desc
-    )
-    np.save(out / "rivers.line.npy", segs)
-    np.save(out / "rivers.flow.npy", flows)
-    rivers = rivers & ~lakes_draw
-    Image.fromarray((rivers * 255).astype(np.uint8)).save(out / "rivers.png")
-    Image.fromarray((lakes_draw * 255).astype(np.uint8)).save(out / "lake.png")
-    not_sea = term_water  # equilibrium water (kept surfaces + playa sinks)
-    Image.fromarray(((~land & ~not_sea & ~lakes_draw) * 255).astype(np.uint8)).save(
-        out / "sea-water.png"
-    )
-    # True post-erosion depth (Gaea-mask vocabulary: 0..1 over the span) —
-    # without it render legs read zero depth and tint the sea at the
-    # shoreline band instead of the ocean ramp.
-    sea_depth = np.clip(float(meta["sea_level_m"]) - h, 0.0, None) / span
-    sea_depth[not_sea] = 0.0
-    Image.fromarray(np.clip(sea_depth * 65535.0, 0, 65535).astype(np.uint16)).save(
-        out / "sea-depth.png"
-    )
-    Image.fromarray(np.clip(acc / max(acc.max(), 1.0) * 65535.0).astype(np.uint16)).save(
-        out / "flow-accum.png"
-    )
-    (out / "meta.json").write_text(
-        json.dumps(
-            {
-                "height_gaea_png_range_m": [lo, hi],
-                "sea_level_m": meta["sea_level_m"],
-                "steps": steps,
-                "dt_yr": dt_yr,
-                "k_spl": k_spl,
-                "river_threshold": river_threshold,
-                "lake_mmu_cells": mmu,
-                "hydrology_weight": weight_src,
-                "runoff_normalizer_mm": round(run_norm_mm, 3),
-                "terminal_lakes": lake_stats["terminal"],
-                "dry_playas": lake_stats["dry_playas"],
-                "shrunk_lakes": lake_stats["shrunk"],
-                "lake_balance": (
-                    {"evaporation": "open-water energy balance (lake_evaporation.mm.npy)"}
-                    if open_water is not None
-                    else {"pet": "hamon-annual", "evaporation_factor": LAKE_EVAPORATION_FACTOR}
-                ),
-            },
-            ensure_ascii=False,
-            indent=1,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    return {
-        "steps": steps,
-        "river_cells": int(rivers.sum()),
-        "river_pct_of_land": round(float(rivers.sum() / land.sum() * 100), 2),
-        "height_range_m": [round(lo, 1), round(hi, 1)],
-        "sea_pct": round(float((~land).mean()) * 100, 2),
-    }

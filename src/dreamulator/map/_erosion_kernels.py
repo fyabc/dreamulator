@@ -1,9 +1,10 @@
-"""Numba kernels for the programmatic erosion solver (private module).
+"""Numba kernels for the hydrology primitives (private module).
 
 Everything here is the hot loop of :mod:`dreamulator.map.prog_erosion`:
-the heap-walk Priority-Flood, the downstream-first accumulation and the
-implicit SPL update.  Callers go through the public wrappers, which
-guarantee contiguous typed arrays before entering JIT land.
+the heap-walk Priority-Flood and the downstream-first accumulation.
+Callers go through the public wrappers, which guarantee contiguous
+typed arrays before entering JIT land.  (The implicit SPL update kernel
+was retired with the SPL erosion path, 2026-11-08.)
 """
 
 from __future__ import annotations
@@ -219,37 +220,6 @@ def _accumulate_into(order: np.ndarray, receiver: np.ndarray, out: np.ndarray) -
         r = receiver[i]
         if r >= 0:
             flat[r] += flat[i]
-
-
-@numba.njit(cache=True)
-def _spl_step_numba(
-    h: np.ndarray,
-    land: np.ndarray,
-    order: np.ndarray,
-    receiver: np.ndarray,
-    acc: np.ndarray,
-    dt: float,
-    k: float,
-    m: float,
-    uplift: float,
-    sea_level: float,
-) -> None:
-    """One implicit Braun–Willett SPL step over the drainage order."""
-    w = h.shape[1]
-    flat_h = h.reshape(-1)
-    for a in range(order.size):
-        i = order[a]
-        if i < 0:
-            continue
-        r = receiver[i]
-        if r < 0:
-            continue
-        hr = flat_h[r] if land.reshape(-1)[r] else sea_level
-        y0, x0 = i // w, i % w
-        yr, xr = r // w, r % w
-        dist = np.sqrt(float((yr - y0) ** 2 + (xr - x0) ** 2))
-        f_coef = k * dt * acc.reshape(-1)[i] ** m / dist
-        flat_h[i] = (flat_h[i] + dt * uplift + f_coef * hr) / (1.0 + f_coef)
 
 
 @numba.njit(cache=True)

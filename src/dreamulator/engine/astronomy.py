@@ -38,6 +38,10 @@ class AstronomyEngine(BaseEngine):
     layer = Layer.ASTRONOMY
     requires: list[str] = []
     input_files = ["stellar.yaml"]
+    # planets.yaml feeds the catalog join (authoritative physical parameters),
+    # so edits to it must mark this engine dirty too — without this the
+    # up-to-date check only watched stellar.yaml and kept a stale catalog.
+    optional_input_files: list[str] = ["planets.yaml"]
     output_files = [
         "stellar_derived.yaml",
         "habitable_zones.yaml",

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import functools
 import math
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -50,7 +51,6 @@ from dreamulator.map.palettes import (
     koppen_colors,
     whittaker_colors,
 )
-from dreamulator.map.prog_erosion import RIVER_THRESHOLD_CELLS
 from dreamulator.map.region_export import (
     RegionWindowError,
     export_region_pack,
@@ -610,9 +610,6 @@ def export_build(
         help="Region pack ROOT dir (with input/ subdir), e.g. "
         "data/worlds/nacrea/packs/nacrea-15_-100_550km"
     ),
-    method: str = typer.Option(
-        "td", "--method", help="Terrain build method: td (terrain-diffusion) | spl (programmatic)"
-    ),
     td: Path | None = typer.Option(
         None,
         "--td",
@@ -638,61 +635,55 @@ def export_build(
         help="Also write flow-accum.png, the accumulation field nothing downstream reads "
         "(20-35 MB a pack; for tuning the drainage)",
     ),
-    steps: int = typer.Option(30, "--steps", help="SPL method: time steps"),
-    dt_yr: float = typer.Option(5e4, "--dt", help="SPL method: step length (years)"),
-    k_spl: float = typer.Option(2e-7, "--k", help="SPL method: stream-power erodibility K"),
 ) -> None:
     """Build the high-resolution terrain of a region pack.
 
-    --method td  : terrain-diffusion refinement + hydrology -> <pack>/refined-out/
-    --method spl : programmatic SPL erosion -> <pack>/prog-out/ (same legend as gaea-out)
+    terrain-diffusion refinement + hydrology -> <pack>/refined-out/
+    (the single build method since the SPL path's retirement, 2026-11-08)
     """
     if not (pack / "input" / "meta.json").exists():
         console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
         raise typer.Exit(code=2) from None
-    if method == "td":
-        from dreamulator.media.terrain_refine import refine_region_pack
+    from dreamulator.media.terrain_refine import refine_region_pack
 
-        if td is None and not reuse_height:
-            console.print(
-                "[red]--td is required for --method td (or pass --reuse-height "
-                "to re-extract from the cached refined DEM)[/red]"
-            )
-            raise typer.Exit(code=2) from None
+    if td is None and not reuse_height:
         console.print(
-            f"Refining {pack} via terrain-diffusion ({td.name if td else 'cached height'})"
+            "[red]--td is required (or pass --reuse-height "
+            "to re-extract from the cached refined DEM)[/red]"
         )
-        td_info = refine_region_pack(
-            pack,
-            td,
-            river_threshold=river_threshold,
-            coast_warp=coast_warp,
-            reuse_height=reuse_height,
-            debug=debug,
-        )
-        console.print(
-            f"  refined-out/: res {td_info['res']}² · lakes {td_info['lakes_pct']}% of land · "
-            f"{td_info['river_segments']} river segments"
-        )
-        return
-    if method == "spl":
-        from typing import cast
+        raise typer.Exit(code=2) from None
+    console.print(f"Refining {pack} via terrain-diffusion ({td.name if td else 'cached height'})")
+    td_info = refine_region_pack(
+        pack,
+        td,
+        river_threshold=river_threshold,
+        coast_warp=coast_warp,
+        reuse_height=reuse_height,
+        debug=debug,
+    )
+    console.print(
+        f"  refined-out/: res {td_info['res']}² · lakes {td_info['lakes_pct']}% of land · "
+        f"{td_info['river_segments']} river segments"
+    )
 
-        from dreamulator.map.prog_erosion import erode_region_pack
 
-        threshold = river_threshold if river_threshold is not None else RIVER_THRESHOLD_CELLS
-        console.print(f"Eroding {pack} (steps={steps}, dt={dt_yr:.0e} yr, K={k_spl:.0e})")
-        info: dict[str, object] = erode_region_pack(
-            pack, steps=steps, dt_yr=dt_yr, k_spl=k_spl, river_threshold=threshold
-        )
-        rng = cast("list[float]", info["height_range_m"])
-        console.print(
-            f"  prog-out/: rivers {info['river_pct_of_land']}% of land · "
-            f"height [{rng[0]:.0f}, {rng[1]:.0f}] m"
-        )
-        return
-    console.print(f"[red]Unknown method '{method}' — use td | spl[/red]")
-    raise typer.Exit(code=2) from None
+def _canvas_sheet_home(pack: Path, kind: str) -> Path:
+    """Default output home for pack-derived images: ``exports/canvas/<slug>/<kind>``.
+
+    Canvas window packs land under ``<canvas>/<window>``, canvas roots under
+    ``<canvas>``, legacy region packs under their pack name.  Generated sheets
+    stay out of the canvas tree: that tree is transfer-owned chain data and is
+    gitignored, while images are export products (repo discipline puts them
+    under ``exports/``).
+    """
+    export_root = Path(os.environ.get("DREAMULATOR_EXPORT_DIR", "exports"))
+    parts = pack.parts
+    if "canvases" in parts:
+        canvas = parts[parts.index("canvases") + 2]
+        slug = f"{canvas}/{parts[-1]}" if "windows" in parts else canvas
+    else:
+        slug = pack.name
+    return export_root / "canvas" / slug / kind
 
 
 def export_render(
@@ -707,7 +698,7 @@ def export_render(
         "(all = the three user-facing HD sheets: survey topo + relief + biome)",
     ),
     gaea: Path | None = typer.Option(
-        None, "--gaea", "-g", help="Build dir (default: <pack>/gaea-out; also refined-out/prog-out)"
+        None, "--gaea", "-g", help="Build dir (default: <pack>/gaea-out; also refined-out)"
     ),
     output: Path | None = typer.Option(
         None, "--output", "-o", help="Output dir (default: <pack>/color or <pack>/carto)"
@@ -756,6 +747,7 @@ def export_render(
                 contour_labels=contour_labels,
                 contours=contours,
                 biome_legend=biome_legend,
+                vegetation_palette=vegetation_palette,
                 svg=svg,
             )
         return
@@ -763,7 +755,7 @@ def export_render(
         console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
         raise typer.Exit(code=2) from None
     build_dir = gaea or next(
-        (pack / cand for cand in ("gaea-out", "refined-out", "prog-out") if (pack / cand).is_dir()),
+        (pack / cand for cand in ("gaea-out", "refined-out") if (pack / cand).is_dir()),
         pack / "gaea-out",
     )
     if style == "satellite":
@@ -772,7 +764,7 @@ def export_render(
         if not build_dir.is_dir():
             console.print(f"[red]Build dir not found: {build_dir}[/red]")
             raise typer.Exit(code=2) from None
-        out_dir = output or (pack / "color")
+        out_dir = output or _canvas_sheet_home(pack, "color")
         console.print(f"Colorizing {pack}/input + {build_dir} → {out_dir}")
         try:
             paths = colorize_region(pack, build_dir, out_dir, texture=texture)
@@ -788,7 +780,7 @@ def export_render(
         from dreamulator.media.medieval_render import medieval_region
         from dreamulator.media.relief_render import relief_region
 
-        out_dir = output or (pack / "carto")
+        out_dir = output or _canvas_sheet_home(pack, "carto")
         if style in ("biome", "relief"):
             if style == "relief" and vegetation_palette is not None:
                 info = relief_region(
