@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- 导出产物精简：按「有没有消费方」清掉了几类写出但无人读的文件。区域数据包的标量通道只有降水与冰厚还写 16 位 PNG 孪生（手工 Gaea 工程里具名的 File 节点），温度、径流、NPP 与湖面蒸发四个通道只写 `.npy`（每包省 12–24 MB）；`region build` 的 `refined-out/height.gaea.png` 不再写（Gaea 读的是数据包 `input/` 那张，15–25 MB/包），汇流诊断图 `flow-accum.png` 改到 `--debug` 后（20–35 MB/包）。`map globe` 不再写把两层云壳合成好的 `clouds.png`（4K 30 MB、8K 约 120 MB，像素就是两层叠加的结果；脚本里读它的回退分支保留，旧导出照常可用），云量场与气旋模板、包络三张诊断图改到 `--debug` 后。画布窗口包不再写 `input/pet_hamon.mm.npy`（包这一侧无人读），`input/height.meters.npy` 改为硬链接到 `refined-out/` 那份而不是写第二遍（各省 16.8 MB/窗口）。静态导出不再写无人读的 `has_civmap.json`；`canvas generate --check` 的跨进程自检改为直接与邻居已写出的块比对并把最大差值记进日志，比完不留文件。
+
 - 河段游走提为共用的 `ChannelGraph` 与 `river_segments_from_graph`，整图路径改为装配同一张表后调用它。链头与溢口格的先后由集合遍历顺序改为按格下标，所以输出数组里少量河段的位置变了（一张试验画布 13.15 万段中 26 段换位），河段集合与总长度不变。
 
 - 命令行按对象重整：`dreamulator map`（`layers`、`globe`，`clouds` 并入 `globe`）、`dreamulator region`（`pack`、`build`）、`dreamulator canvas`（按流水线顺序列出，新增 `run` 一键完成侵蚀与 S2）与顶层 `dreamulator render`；逐张画布的命令接受画布目录或布局根（`--canvas` 选择）；`mesh-sea-lake` 并入 `canvas plan --backfill mesh-sea-lake`；河网阈值统一为 `--river-threshold`。旧的 `dreamulator export …` 路径保留一个版本，运行时提示新名字。

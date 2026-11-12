@@ -10,8 +10,10 @@ the manifest in ``canvas.json``: worker k of K takes the k-th contiguous slice o
 list, so neighbouring chunks reuse cached latents.  Each chunk is written as int16 metres to
 ``chunks/r<ci:03d>_c<cj:03d>.npy`` via a temporary file and a rename, then its SHA-256 is
 appended to ``chunks.sha256`` under an exclusive lock.  A chunk whose file exists and whose listed
-checksum matches is skipped (resume).  ``--check`` also regenerates the first chunk of the next
-worker's slice into ``chunks/check/`` (cross-process consistency; not listed).
+checksum matches is skipped (resume).  ``--check`` also regenerates the first chunk of
+the next worker's slice and compares it with that worker's own output, logging the largest
+difference; when the neighbour has not written it yet the regenerated chunk is left in
+``chunks/check/`` (not listed) for a later comparison.
 
 Usage: <td-venv>/python td_canvas_worker.py <canvas_dir> <worker> <n_workers> [--check]
        [--only chunks.json]
@@ -470,8 +472,21 @@ def main(argv: list[str]) -> None:  # pragma: no cover - needs the terrain-diffu
         if prefix:
             print(f"replayed {len(prefix)} reference prefix chunks", file=log, flush=True)
         if extra is not None:
-            (out / "check").mkdir(exist_ok=True)
-            np.save(out / "check" / f"{chunk_name(*extra)[:-4]}_w{k}.npy", gen(*extra))
+            # Cross-process consistency: regenerate the first chunk of the next worker's slice
+            # and compare it with that worker's own output.  When the neighbour has already
+            # written it, the verdict goes in the log and nothing is left on disk; only an
+            # unresolved comparison (the neighbour is still running) keeps a file.
+            mine = gen(*extra)
+            theirs = out / chunk_name(*extra)
+            if theirs.exists():
+                other = np.load(theirs)
+                diff = float(np.abs(other.astype(np.float64) - np.asarray(mine, np.float64)).max())
+                print(f"check {chunk_name(*extra)} max |diff| {diff:g} m", file=log, flush=True)
+            else:
+                (out / "check").mkdir(exist_ok=True)
+                np.save(out / "check" / f"{chunk_name(*extra)[:-4]}_w{k}.npy", mine)
+                print(f"check {chunk_name(*extra)} saved (neighbour not written yet)",
+                      file=log, flush=True)  # fmt: skip
     summary = {
         "worker": k,
         "generated": len(times),
