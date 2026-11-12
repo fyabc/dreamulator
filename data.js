@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794140786915,
+  "lastUpdate": 1794497436839,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2006,6 +2006,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00021369424880144248",
             "extra": "mean: 6.190232600005174 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "190eae0eaff5c71d774e043339bad5e242e3e3b5",
+          "message": "feat(astronomy): gas-giant dynamo field estimates via Christensen 2009 scaling\n\n新纯函数模块 engine/planet_dynamo.py：能量通量标度律（Nature 457:167）木星\n单点锚定比值式 + COND03 光度 5×5 网格插值；system_catalog 为气巨派生\nmagnetic_field_estimate_ut / magnetic_dipole_moment_am2、为卫星派生\nparent_magnetic_field_at_orbit_ut，手写值权威、偏差 >20% 警告（与恒星质光\n校验同纪律）；Planet 增可选自变量 intrinsic_luminosity_w；planets.yaml 入\nastronomy optional_input_files（修 dirty-check 盲区）。Aegis 正典磁场\n400→650 μT（标度律估算值，作者裁决采纳；磁矩/轨道背景场/主导权全库同步）。\n测试 +7；知识库 planetary-dynamo.md 入库；schemas 再生。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-09T03:46:17+08:00",
+          "tree_id": "276f1c7230da3e71af326b6303b1020305cc1773",
+          "url": "https://github.com/fyabc/dreamulator/commit/190eae0eaff5c71d774e043339bad5e242e3e3b5"
+        },
+        "date": 1794497435824,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.5715031780006986,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04542676910193072",
+            "extra": "mean: 1.749771547200001 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 6.167898010919824,
+            "unit": "iter/sec",
+            "range": "stddev: 0.042131848106460805",
+            "extra": "mean: 162.1297884999997 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.7132488541174578,
+            "unit": "iter/sec",
+            "range": "stddev: 0.5900661806118931",
+            "extra": "mean: 368.5618436666663 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1256.885533176549,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00012771373183913145",
+            "extra": "mean: 795.6173999971838 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 310.0622133630408,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008783139036584222",
+            "extra": "mean: 3.225159199999439 msec\nrounds: 5"
           }
         ]
       }
