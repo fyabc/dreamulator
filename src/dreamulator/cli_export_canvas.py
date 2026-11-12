@@ -692,6 +692,7 @@ def _erode_one(
     workers: int | None,
     data_dir: Path | None,
     cells_per_step: float = 5.0,
+    by_basin: bool = True,
 ) -> None:
     """Erosion and deposition of one canvas (TD surface -> surface_process/ increments)."""
     import numpy as np
@@ -766,6 +767,7 @@ def _erode_one(
             native=native,
             native_time_myr=native_time_myr,
             params=SurfaceProcessParams(max_cells_per_step=cells_per_step),
+            by_basin=by_basin,
         ),
         workers=workers,
         source={
@@ -918,13 +920,27 @@ def canvas_erode(
         help="Coarse time step as the knickpoint retreat per step in cells (5 calibrated; "
         "up to 20 converges and is 4x faster on large canvases)",
     ),
+    by_basin: bool = typer.Option(
+        True,
+        "--by-basin/--single-grid",
+        help="Coarse level basin by basin (default): each drainage basin its own time step, in "
+        "parallel, divides fixed for the run; --single-grid takes one step for the whole canvas",
+    ),
     workers: int | None = typer.Option(None, "--workers", help="Processes for the native pass"),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Erosion and deposition: TD surface -> surface_process/ increments (per canvas)."""
     for path in _targets(target, canvas):
         _erode_one(
-            path, block, t_max_myr, native, native_time_myr, workers, data_dir, cells_per_step
+            path,
+            block,
+            t_max_myr,
+            native,
+            native_time_myr,
+            workers,
+            data_dir,
+            cells_per_step,
+            by_basin,
         )
 
 
@@ -997,6 +1013,12 @@ def canvas_run(
         help="Coarse time step as the knickpoint retreat per step in cells (5 calibrated; "
         "up to 20 converges and is 4x faster on large canvases)",
     ),
+    by_basin: bool = typer.Option(
+        True,
+        "--by-basin/--single-grid",
+        help="Coarse level basin by basin (default): each drainage basin its own time step, in "
+        "parallel, divides fixed for the run; --single-grid takes one step for the whole canvas",
+    ),
     river_threshold: int = typer.Option(27000, "--river-threshold", help=_THRESHOLD_HELP),
     workers: int | None = typer.Option(None, "--workers", help="Processes per stage"),
     force: bool = typer.Option(False, "--force", help="Redo every step, finished or not"),
@@ -1008,7 +1030,9 @@ def canvas_run(
     for path in _targets(target, canvas):
         console.print(f"[bold]{path.name}[/bold]")
         if erode and (force or not surface_process_complete(path)):
-            _erode_one(path, block, t_max_myr, True, 4.0, workers, data_dir, cells_per_step)
+            _erode_one(
+                path, block, t_max_myr, True, 4.0, workers, data_dir, cells_per_step, by_basin
+            )
         elif erode:
             console.print("  erosion already complete")
         _run_hydrology(

@@ -531,10 +531,22 @@ Priority-Flood 与汇流（`route`，并行填洼），再做隐式河流功率�
 每格的下切时长取有效下切时间（`map/incision_time.py`：按造山契约把留存缩短量线性回放，重算引擎的
 `orogen_relief`，对 min(h(τ)/h(0), 1) 积分），平台格取上限 `t_max_myr`（缺省 50 Myr），并不低于
 `t_min_myr`（0.5 Myr）；半径、重力与陆壳基准高程取自世界的地质配置。湖面需求读画布气候通道
-`lake_evaporation.mm`，缺少时退回 Hamon。粗级增量按双线性升采样到原生像素后叠加到原生块上。原生级在每个
+`lake_evaporation.mm`，缺少时退回 Hamon。粗级缺省按流域求解（`map/surface_process_basins.py` 的
+`run_surface_process_by_basin`，`CanvasSurfaceConfig.by_basin`）：初始地表汇流一次后按出口标记流域，大流域
+（不少于 `BIG_BASIN_CELLS` 格）各取一个裁窗，小流域按区块打包；裁窗里其他流域的格是水流不能进入的墙，即一次运行内
+分水岭固定。每个裁窗调用同一个 `run_surface_process`，步长按本流域最大流量取，并受 `max_dt_yr` 约束（按流域求解时缺省
+80 kyr），时长取本流域最长的下切时长；裁窗在进程池里并行，缺省 4 个进程、按 CPU 配额均分线程，进程数同时受可用内存
+约束。`--single-grid` 回到全画布共用一个时间步的求解。只有可侵蚀格接收沉积（`_erodible_lake_lists`）：冰面洼地不被
+充填，部分在冰下的湖只充填无冰的湖底，整湖在冰上时泥沙过境计入输出。粗级增量按双线性升采样到原生像素后叠加到
+原生块上。原生级在每个
 2048² 分块外加 256 像素重叠边，在 90 m 上以固定 80 kyr 步长运行 4 Myr，不削坡，锚定到窗口自身在两倍粗网格间距
 上的低通，所以只清理粗级看不到的亚格子凹坑；各窗口的增量按线性权重融合。原生级各块在进程池里并行
-（Linux 用 fork，Windows 用 spawn），每个进程单线程，结果与进程数无关。
+（Linux 用 fork，Windows 用 spawn），每个进程单线程，结果与进程数无关。进程数由 `utils/resources.py` 的
+`worker_budget` 决定：取 CPU 配额（亲和掩码与 cgroup `cpu.max`）与「可用内存的一半 ÷ 单进程峰值」中的较小者，
+单进程峰值按每格 `SOLVER_BYTES_PER_CELL`（1400 字节，实测 2560² 窗口约 8.6 GB）估算；可用内存在 Linux 上取
+`/proc/meminfo` 与 cgroup 额度减去不可回收用量中的较小者，Windows 上取 `GlobalMemoryStatusEx`。这个单进程峰值取自进程的常驻内存，Linux 上 fork 出的进程与父进程共享的页面也计在内，
+world-west 59 进程实测的不可回收内存合计约 101 GB（每进程约 1.7 GB），所以估算偏保守；spawn 方式没有共享页，Windows 上的
+真实峰值待实测后再收紧。
 
 产品写在 `surface_process/`：`increments/rXXX_cYYY.npy` 是 int16 米值的逐块增量（最终地表减 TD 块，陆地
 保持不低于 1 m，海面像素不动），`manifest.json` 记录配置、粗级网格与下切时长统计、两级的账本残差、来源网格

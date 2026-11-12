@@ -46,6 +46,9 @@ MANIFEST = "manifest.json"
 PRODUCT_FORMAT = "canvas-surface-process-v1"
 #: Coarse ice thickness above which a cell is under ice and has no fluvial process (m).
 ICE_FREE_MAX_M = 1.0
+#: Peak memory of one solver process per grid cell of its window (measured: 8.6 GB for a
+#: 2560 x 2560 native window, 1.3 kB per cell; rounded up).  Sizes the process pools.
+SOLVER_BYTES_PER_CELL = 1400
 
 
 @dataclass(frozen=True)
@@ -62,6 +65,9 @@ class CanvasSurfaceConfig:
     native_time_myr: float = 4.0
     native_step_kyr: float = 80.0
     halo_px: int = 256
+    #: coarse level basin by basin (own time step per drainage basin, fixed divides, parallel);
+    #: False runs the single-grid solver (one time step for the whole canvas)
+    by_basin: bool = True
     params: SurfaceProcessParams = field(default_factory=SurfaceProcessParams)
 
 
@@ -417,7 +423,8 @@ def run_canvas_surface_process(
     """Run both levels on a canvas and write ``surface_process/``; returns the manifest."""
     import shutil
 
-    from dreamulator.media.canvas_pipeline import _start_method, default_workers
+    from dreamulator.media.canvas_pipeline import _start_method
+    from dreamulator.utils.resources import worker_budget
 
     cfg = config or CanvasSurfaceConfig()
     canvas = _Canvas.load(canvas_dir)
@@ -437,22 +444,43 @@ def run_canvas_surface_process(
         f"[erode] coarse grid {ci_.z.shape} at {ci_.px_m:.0f} m, land {ci_.info['land_cells']} "
         f"cells, T {t_yr / 1e6:.1f} Myr, lake evaporation: {ci_.info['lake_evaporation']}"
     )
-    coarse = run_surface_process(
-        ci_.z,
-        ci_.land,
-        ci_.runoff,
-        ci_.precip,
-        ci_.temp,
-        ci_.px_m,
-        t_yr,
-        cfg.params,
-        age_yr=ci_.age_myr * 1e6,
-        erodible=ci_.erodible,
-        anchor=ci_.z,
-        two_sided_mask=ci_.mesh_basin,
-        open_water_mm=ci_.open_water,
-        log=log,
-    )
+    basin_info: dict[str, Any] | None = None
+    if cfg.by_basin:
+        from dreamulator.map.surface_process_basins import run_surface_process_by_basin
+
+        coarse, basin_info = run_surface_process_by_basin(
+            ci_.z,
+            ci_.land,
+            ci_.runoff,
+            ci_.precip,
+            ci_.temp,
+            ci_.px_m,
+            cfg.params,
+            age_yr=ci_.age_myr * 1e6,
+            erodible=ci_.erodible,
+            anchor=ci_.z,
+            two_sided_mask=ci_.mesh_basin,
+            open_water_mm=ci_.open_water,
+            workers=workers,
+            log=log,
+        )
+    else:
+        coarse = run_surface_process(
+            ci_.z,
+            ci_.land,
+            ci_.runoff,
+            ci_.precip,
+            ci_.temp,
+            ci_.px_m,
+            t_yr,
+            cfg.params,
+            age_yr=ci_.age_myr * 1e6,
+            erodible=ci_.erodible,
+            anchor=ci_.z,
+            two_sided_mask=ci_.mesh_basin,
+            open_water_mm=ci_.open_water,
+            log=log,
+        )
     dh = np.where(ci_.land, coarse.h - ci_.z, 0.0).astype(np.float32)
     log(f"[erode] coarse level done in {time.time() - t0:.0f} s ({coarse.steps} steps)")
 
@@ -497,7 +525,9 @@ def run_canvas_surface_process(
             climate={k: np.nan_to_num(np.asarray(v, dtype=np.float64)) for k, v in climate.items()},
             ice=None if ice is None else np.nan_to_num(np.asarray(ice, dtype=np.float64)),
         )
-        n = default_workers() if workers is None else max(1, workers)
+        window = (canvas.tile + 2 * cfg.halo_px) ** 2
+        n = worker_budget(SOLVER_BYTES_PER_CELL * window) if workers is None else max(1, workers)
+        log(f"[erode] native level: {len(canvas.chunks)} chunks on {n} processes")
         worst = 0.0
         t1 = time.time()
         if n == 1 or len(canvas.chunks) < 2:
@@ -544,7 +574,13 @@ def run_canvas_surface_process(
         "status": "complete",
         "increments": "increments/rXXX_cYYY.npy, int16 metres, final surface minus the TD chunk",
         "config": {**asdict(cfg), "params": asdict(cfg.params)},
-        "coarse": {**ci_.info, "steps": coarse.steps, "t_myr": t_yr / 1e6, "ledger": coarse.ledger},
+        "coarse": {
+            **ci_.info,
+            "steps": coarse.steps,
+            "t_myr": t_yr / 1e6,
+            "ledger": coarse.ledger,
+            "by_basin": basin_info,
+        },
         "native": native_info,
         "changed_pixels": changed,
         "source": source or {},

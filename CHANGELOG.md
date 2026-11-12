@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- 二次侵蚀粗级按流域求解（`map/surface_process_basins.py`，`canvas erode`/`canvas run` 缺省 `--by-basin`，`--single-grid` 保留旧求解）：初始地表汇流一次后按出口划分流域，每个流域在自己的裁窗里用同一求解器运行，步长按本流域最大流量、时长按本流域最长下切时长，流域间并行；一次运行内分水岭固定，步长上限 80 kyr（`SurfaceProcessParams.max_dt_yr`）。以全画布单一时间步为参照，永耀岛与 land_-12p2_-137p4 的湖面、湖数与 10 km 起伏差异在 6% 以内，快 11.6 与 31 倍。原生级进程数改由 `utils/resources.py` 的 `worker_budget` 按 CPU 配额（亲和掩码与 cgroup）和可用内存的一半确定，不再写死 16。world-west 在缺省设置（每步 5 格、50 Myr、粗块 16）下整跑由估计 14 小时以上降到 2 h 5 min（粗级 43 min，原生级 59 进程 73 min，内存峰值 101 GB）。冰面格不再接收湖盆充填的泥沙（`_erodible_lake_lists`），无冰画布结果逐位不变。
 - 过路湖的逐月收支：月度情相不再假定湖面不耗水。S1 新写出 `lake_evaporation_monthly.mm`（年通道为其十二个月之和），旧画布用 `canvas plan --backfill lake-evaporation` 补写；S2 由 `terminal_equilibrium_routing` 交出过路湖的格、出口与湖图（`PassThroughLakes`），`lake_monthly_demand` 给出逐月净需水，`lake_monthly_outflow` 按出口以下的蓄水亏缺取周期稳态月出流（一年出流之和等于年度盈余），再从出口注入第二组月累积。两张干旱画布的非常流河长占比由 6.2% 升到 16.0%、由 29.1% 升到 40.0%，湿润的永耀岛基本不变；S2 多用约 0.3 到 1.7 分钟。缺月度通道时退回旧做法，水文元数据 `regime_lakes` 记录所用方式。
 - `canvas erode` 与 `canvas run` 新增 `--cells-per-step`（缺省 5）：粗级时间步按最大河流裂点每步后退的格数取，20 仍收敛，world-west 上粗级约快 4 倍。
 - 画布二次侵蚀与沉积产品化：`map/surface_process.py`（隐式河流功率下切、阈值坡度、泥沙搬运与湖盆充填、单向锚定与网格盆地双向锚定，与原型逐位相同）、`map/incision_time.py`（由造山契约回放有效下切时间）、`media/canvas_surface_process.py`（粗网格加 90 m 分块两级求解，原生级进程池并行），新命令 `export canvas erode` 写出 `surface_process/` 逐块增量；S2、S3 裁窗、接缝检查与总览图经 `resolve_increments` 统一选择「安装地表」（产品完整时读「TD 块 + 增量」），`hydro-work/` 与 `hydro/` 记录所用地表，地表变了自动整体重算。

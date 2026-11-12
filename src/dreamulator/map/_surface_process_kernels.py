@@ -223,11 +223,13 @@ def _route_sediment(
                 left = _fill_lake(hflat, cells, lake_level[lab - 1], v)
                 dep_lake += v - left
                 if terminal_lake[lab - 1] or r < 0:
-                    if left > 0.0:  # closed basin over-full: aggrade the whole floor evenly
+                    if left > 0.0 and cells.size > 0:  # closed basin over-full: aggrade the floor
                         add = left / cells.size
                         for j in range(cells.size):
                             hflat[cells[j]] += add
                         playa += left
+                    elif left > 0.0:  # a lake wholly on ice keeps no sediment
+                        exported += left
                     continue
                 v = left
             if r >= 0 and routed[r]:
@@ -465,3 +467,39 @@ def _upsample(
                 (1 - tx) * c[y1, x0] + tx * c[y1, x1]
             )
     return out
+
+
+@numba.njit(cache=True)
+def _outlet_labels(order: np.ndarray, rec: np.ndarray) -> np.ndarray:  # pragma: no cover - numba
+    """Index of the outlet each cell drains to (downstream-first ``order``, padded with -1)."""
+    lab = np.arange(rec.size)
+    for a in range(order.size):
+        i = order[a]
+        if i < 0:
+            break
+        r = rec[i]
+        lab[i] = i if r < 0 else lab[r]
+    return lab
+
+
+@numba.njit(cache=True)
+def _erodible_lake_lists(
+    cells: np.ndarray, ptr: np.ndarray, mutable: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:  # pragma: no cover - numba
+    """Lake member lists restricted to mutable cells, order and segments kept.
+
+    Non-erodible (ice-surface) cells take no sediment: a depression of an ice surface is
+    not a basin rivers fill, and a lake partly under ice fills only its ice-free floor.
+    """
+    nl = ptr.size - 1
+    out_ptr = np.zeros(nl + 1, np.int64)
+    out = np.empty(cells.size, np.int64)
+    k = 0
+    for lk in range(nl):
+        for j in range(ptr[lk], ptr[lk + 1]):
+            c = cells[j]
+            if mutable[c]:
+                out[k] = c
+                k += 1
+        out_ptr[lk + 1] = k
+    return out[:k], out_ptr
