@@ -154,7 +154,11 @@ class _Ctx:
     healed: dict[tuple[int, int], np.ndarray] | None = None
     runoff: np.ndarray | None = None  # coarse runoff (mm/yr), already cropped to the bbox cells
     weight_kind: str = ""
+    dir_kind: str = "dir"
+    acc_kind: str = ""
+    acc_f64: bool = False
     increments: Path | None = None  # installed-surface increments (erosion product) or None
+    extra: dict[str, Any] | None = None  # stage-specific shared inputs (small or shared by fork)
 
 
 _CTX: _Ctx | None = None
@@ -575,8 +579,10 @@ def _exit_of(order: np.ndarray, rec: np.ndarray, out: np.ndarray) -> np.ndarray:
     return ex
 
 
-def _local(st: CanvasStore, key: tuple[int, int]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    code = load_chunk(st, "dir", key)
+def _local(
+    st: CanvasStore, key: tuple[int, int], dir_kind: str = "dir"
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    code = load_chunk(st, dir_kind, key)
     g = load_chunk(st, "graded", key).ravel()
     order = np.argsort(np.where(np.isfinite(g), g, np.inf), kind="stable")
     rec, out = _local_receivers(code)
@@ -594,10 +600,10 @@ def _acc_stage1(key: tuple[int, int]) -> tuple[Any, ...]:
     st = _store_of(ctx)
     t = ctx.tile
     keys = frozenset(ctx.keys)
-    order, rec, out = _local(st, key)
+    order, rec, out = _local(st, key, ctx.dir_kind)
     w = load_chunk(st, ctx.weight_kind, key).astype(np.float64).ravel()
     acc1 = _accumulate(order, rec, w)
-    _atomic_save(flow_path(st, f"acc_{ctx.weight_kind}", key, "stage1.npy"), acc1)
+    _atomic_save(flow_path(st, ctx.acc_kind, key, "stage1.npy"), acc1)
     g = load_chunk(st, "graded", key).ravel()
     src, tgt_key, tgt_idx, amount, level = [], [], [], [], []
     for i in np.flatnonzero(out >= 0):
@@ -624,14 +630,15 @@ def _acc_stage3(task: tuple[Any, ...]) -> None:
     assert ctx is not None
     st = _store_of(ctx)
     t = ctx.tile
-    p1 = flow_path(st, f"acc_{ctx.weight_kind}", key, "stage1.npy")
+    p1 = flow_path(st, ctx.acc_kind, key, "stage1.npy")
     acc = np.asarray(np.load(p1))
     if len(idx):
-        order, rec, _out = _local(st, key)
+        order, rec, _out = _local(st, key, ctx.dir_kind)
         inflow = np.zeros(t * t, dtype=np.float64)
         np.add.at(inflow, np.asarray(idx, dtype=np.int64), np.asarray(val, dtype=np.float64))
         acc = acc + _accumulate(order, rec, inflow)
-    save_chunk(st, f"acc_{ctx.weight_kind}", key, acc.reshape(t, t).astype(np.float32))
+    out_arr = acc.reshape(t, t)
+    save_chunk(st, ctx.acc_kind, key, out_arr if ctx.acc_f64 else out_arr.astype(np.float32))
     p1.unlink()
 
 
@@ -639,17 +646,23 @@ def tiled_accumulation(
     store: CanvasStore,
     weight_kind: str,
     *,
+    dir_kind: str = "dir",
+    out_kind: str | None = None,
+    float64: bool = False,
     workers: int | None = None,
     log: Callable[[str], None] | None = None,
 ) -> None:
-    """Write ``flow/acc_<weight_kind>``: float64 upstream sums of the ``flow/<weight_kind>``
-    chunks along ``flow/dir`` (stored float32)."""
+    """Write ``flow/<out_kind>`` (default ``acc_<weight_kind>``): float64 upstream sums of the
+    ``flow/<weight_kind>`` chunks along ``flow/<dir_kind>``, stored float32 unless ``float64``."""
     ctx = _ctx_of(store)
     ctx.weight_kind = weight_kind
+    ctx.dir_kind = dir_kind
+    ctx.acc_kind = out_kind or f"acc_{weight_kind}"
+    ctx.acc_f64 = float64
     t = ctx.tile
     n = _default_workers(t) if workers is None else max(1, workers)
     t0 = time.time()
-    (store.work / "flow" / f"acc_{weight_kind}").mkdir(parents=True, exist_ok=True)
+    (store.work / "flow" / ctx.acc_kind).mkdir(parents=True, exist_ok=True)
     res = _pool_map(_acc_stage1, list(ctx.keys), ctx, n)
     ring = _ring_index(t)
     ring_pos = {int(c): p for p, c in enumerate(ring)}  # first position of each ring cell
