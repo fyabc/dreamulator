@@ -1,0 +1,24 @@
+# 项目用法指南
+
+本目录存放 dreamulator 工具本身的使用说明（面向最终用户的操作指南）。
+架构设计、算法技术参考等面向开发者的文档位于 [`../design/`](../design/)
+（2026-07-29 文档整理时迁入）。
+
+## 文档列表
+
+- `getting-started.md` — 新手教程（零基础完整链路：创建世界 → 设参数 → 构建 → 查看 → 出图）
+- `cli.md` — CLI 命令参考（init、list、info、validate、schema、delete、branch、conlang、terrain、build、climate、data、narrate、guard、export、explore-seeds、serve）
+- `skills.md` — 项目技能速查（Claude Code 与 Codex 共用）（/grill-world 拷问、/read-map 读图、/narrate 叙述、/audit-doc 文档审计、/diagnose-climate 气候诊断）
+- `map-workflow.md` — 地图工作流指南（CVT 网格地形生成 → 查看器检查 → 可选 Gaea 精细化的完整流程）
+- `terrain-chain.md` — 地形视频链主手册（region pack → terrain-diffusion 细化 + 水文提取 → colorize/carto/blender 渲染腿）
+- `gaea-video-chain.md` — Gaea 2 手动链手册和踩坑记录（第②步的手动替代；其第③③'④步渲染腿为主链共用）
+- `climate-validation-workflow.md` — 气候验证工作流（真实高程导入、参考数据下载、运行验证、保存报告）
+- `exoplasim-gcm.md` — ExoPlaSim GCM 参照臂运行指南与踩坑记录（环境引导、地表文件、对齐配置、运行与续算、输出口径、已知问题）
+- `civmap-guide.md` — 文明地图使用指南（真实地球底图、架空国家涂色、时间快照）
+- `video-samples.md` — 样片复现手册（静帧、云流、自转、掩食、板块运动五条链的一条命令重跑配方）
+- `frontend-3d-viewer.md` — 3D 恒星系可视化器操作（架构说明在 [design/frontend-3d-viewer.md](../design/frontend-3d-viewer.md)）
+- `sky-viewer.md` — 天球视图操作（星空观察者视角：沉浸环视 + 全天概览圆盘、时间滑块、相位与升落；架构说明在 [design/pipelines/sky-ephemeris.md](../design/pipelines/sky-ephemeris.md)）
+
+## 相关设计文档
+
+架构设计、管线技术参考与提案见 [`../design/AGENTS.md`](../design/AGENTS.md)。

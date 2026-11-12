@@ -1,7 +1,7 @@
 """carto_render — survey-style topographic sheet from a region pack.
 
 Fourth leg of the video-material chain, sharing steps ①② with the satellite
-chain (``dreamulator export region`` → Gaea build) and swapping the Blender
+chain (``dreamulator region pack`` → Gaea build) and swapping the Blender
 renderer for a fully vector cartographic compositor:
 
     pack + gaea-out  →  carto/{topo.svg, topo.png}

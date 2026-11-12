@@ -86,7 +86,7 @@ class ClimateEngine(BaseEngine):
         """
         warnings: list[str] = []
 
-        # Model-state vs obs-state separation (CLAUDE.md「核心设计原则」): the
+        # Model-state vs obs-state separation (AGENTS.md「核心设计原则」): the
         # earth root is a real-data reference anchor — the climate engine never
         # writes model fields to it.  Model output lives on branches; the root's
         # climate fields come from import_earth_climate (real observation).
@@ -445,7 +445,7 @@ def _is_reference_anchor(world_dir: Path) -> bool:
     Such worlds are never built through the simulation pipeline for the model
     (climate + downstream) layers — their fields come from real observation
     (``import_earth_climate``), and model output lives on branches only.
-    (CLAUDE.md「模型态 vs obs 态分离」)
+    (AGENTS.md「模型态 vs obs 态分离」)
     """
     try:
         data = yaml.safe_load((world_dir / "world.yaml").read_text(encoding="utf-8"))

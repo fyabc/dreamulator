@@ -1,0 +1,4 @@
+# Project-scoped Codex settings (loaded only when the project is trusted).
+# The root AGENTS.md is kept below Codex's 32 KiB default; this raises the
+# limit so nested AGENTS.md files still fit when Codex starts in a subdirectory.
+project_doc_max_bytes = 65536

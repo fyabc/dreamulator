@@ -1,8 +1,8 @@
 """region_still — build (and optionally render) a Blender scene from a region pack.
 
 Script-rebuild workflow: the ``.blend`` is a disposable artifact, always
-rebuildable from the data pack produced by ``dreamulator export region``
-(see docs/design/proposals/blender-render-pipeline.md).  Scene units are
+rebuildable from the data pack produced by ``dreamulator region pack``
+(see docs/design/pipelines/region-pack.md).  Scene units are
 kilometres (1 unit = 1 km) with a physically correct vertical scale by
 default (``--zscale`` exaggerates if a shot needs it).
 

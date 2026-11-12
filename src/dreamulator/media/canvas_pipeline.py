@@ -29,7 +29,7 @@ import heapq
 import json
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -37,7 +37,7 @@ from dreamulator.map.td_canvas import PX_PER_CELL, CanvasGeometry
 from dreamulator.media.canvas_hydrology_tiled import _local_flood
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
     from pathlib import Path
 
     from dreamulator.map.canvas_marine import SeaConnectivity
@@ -58,9 +58,25 @@ class CanvasStore:
     tile: int
     work: Path
     _checked: dict[str, str] = field(default_factory=dict)
+    #: ``surface_process/increments`` when S2 runs on the eroded surface
+    increments: Path | None = None
+    #: label of the installed surface, recorded in ``hydro-work/`` and ``hydro/``
+    surface: str = "td"
 
     @classmethod
-    def load(cls, root: Path, *, work: Path | None = None) -> CanvasStore:
+    def load(cls, root: Path, *, work: Path | None = None, surface: str = "auto") -> CanvasStore:
+        """Open a canvas for S2.
+
+        ``surface`` picks the installed surface: ``"td"`` the TD chunks,
+        ``"surface-process"`` chunks plus the erosion-deposition increments
+        (``media.canvas_surface_process``), ``"auto"`` the latter when that
+        product is complete.  The work directory and ``hydro/`` keep their
+        names; both record the surface they were built on (``surface.json``)
+        and the fill refuses to resume on a different surface.
+        """
+        from dreamulator.media.canvas_surface_process import resolve_increments, surface_tag
+
+        increments = resolve_increments(root, surface)
         meta = json.loads((root / "canvas.json").read_text(encoding="utf-8"))
         geom = meta["geometry"]
         geometry = CanvasGeometry(
@@ -83,7 +99,15 @@ class CanvasStore:
         work = work or (root / "hydro-work")
         for sub in ("fill", "labels", "summary", "final"):
             (work / sub).mkdir(parents=True, exist_ok=True)
-        store = cls(root=root, geometry=geometry, chunks=chunks, tile=tile, work=work)
+        store = cls(
+            root=root,
+            geometry=geometry,
+            chunks=chunks,
+            tile=tile,
+            work=work,
+            increments=increments,
+            surface=surface_tag(root, increments),
+        )
         sums = work / "chunks.sha256"
         if sums.exists():
             for line in sums.read_text(encoding="utf-8").splitlines():
@@ -92,9 +116,11 @@ class CanvasStore:
         return store
 
     def raw(self, ci: int, cj: int) -> np.ndarray:
-        return np.asarray(
-            np.load(self.root / "chunks" / f"r{ci:03d}_c{cj:03d}.npy"), dtype=np.float64
-        )
+        name = f"r{ci:03d}_c{cj:03d}.npy"
+        dem = np.asarray(np.load(self.root / "chunks" / name), dtype=np.float64)
+        if self.increments is not None:
+            dem += np.load(self.increments / name)
+        return dem
 
     def path(self, sub: str, ci: int, cj: int, ext: str) -> Path:
         return self.work / sub / f"r{ci:03d}_c{cj:03d}.{ext}"
@@ -109,7 +135,9 @@ class CanvasStore:
         return expect is None or expect == digest
 
     def record(self, name: str, path: Path) -> None:
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        self.record_digest(name, hashlib.sha256(path.read_bytes()).hexdigest())
+
+    def record_digest(self, name: str, digest: str) -> None:
         self._checked[name] = digest
         sums = self.work / "chunks.sha256"
         with sums.open("a", encoding="utf-8") as fh:
@@ -132,23 +160,27 @@ def _declares_sea_mask(store: CanvasStore) -> bool:
 
 @dataclass(frozen=True)
 class AnchoredSea:
-    """Sea of the installed surface: boundary-linked and geologically oceanic.
+    """Sea of the installed surface: boundary-linked and geologically oceanic,
+    or inside a closed water body the mesh upgraded to sea class.
 
     ``boundary`` holds the water bodies that reach the canvas's open boundary,
     ``geological`` the bodies that contain a pixel inside a 23 km
-    geological-ocean cell.  Both passes run on the same water mask, so they
-    partition it into the same bodies and the intersection picks the bodies
-    that pass both tests.
+    geological-ocean cell, and ``mesh`` (when the canvas ships the mesh
+    sea-lake field) the bodies that contain a pixel inside the interior of a
+    mesh lake upgraded to ``water_class == "ocean"``.  All passes run on the same water mask, so
+    they partition it into the same bodies.
     """
 
     boundary: SeaConnectivity
     geological: SeaConnectivity
+    mesh: SeaConnectivity | None = None
 
     def mask(self, key: tuple[int, int], water: np.ndarray) -> np.ndarray:
         """Sea pixels of a chunk, from the same water mask used to connect it."""
-        return np.asarray(
-            self.boundary.mask(key, water) & self.geological.mask(key, water), dtype=bool
-        )
+        sea = self.boundary.mask(key, water) & self.geological.mask(key, water)
+        if self.mesh is not None:
+            sea = sea | self.mesh.mask(key, water)
+        return np.asarray(sea, dtype=bool)
 
 
 def _geological_ocean(root: Path, geometry: CanvasGeometry, sea_level: float) -> np.ndarray:
@@ -170,6 +202,36 @@ def _geological_ocean(root: Path, geometry: CanvasGeometry, sea_level: float) ->
     return grid <= sea_level
 
 
+#: Canvas field with the mesh's sea-class lakes (closed water upgraded to
+#: ``water_class == "ocean"``) on the 23 km grid; written by S1.
+MESH_SEA_LAKE_FILE = "geometry_fields/mesh_sea_lake.npy"
+
+
+def _mesh_sea_lake_interior(root: Path, geometry: CanvasGeometry) -> np.ndarray | None:
+    """23 km cells well inside the mesh's sea-class lakes, or None without the field.
+
+    The mesh treats the closed water bodies it upgraded to sea class
+    (``upgrade_large_endorheic_lakes``) as sea at sea level, and the GCM does
+    the same.  The global ocean is not in the field: there the boundary and
+    geological tests stay in charge, so closed shelf ponds and ice-dammed
+    hollows inside ocean cells remain inland lows.  One 3 x 3 erosion keeps the
+    coarse cells that the nearest-cell sampling put on a lake shore from
+    reaching across into a land hollow next to it.
+    """
+    from scipy.ndimage import binary_erosion
+
+    path = root / MESH_SEA_LAKE_FILE
+    if not path.exists():
+        return None
+    grid = np.asarray(np.load(path)).astype(bool)
+    ncell = geometry.ncell
+    if grid.shape != (ncell, ncell):
+        raise ValueError(
+            f"mesh sea-lake field {path} has shape {grid.shape}, expected {(ncell, ncell)}"
+        )
+    return np.asarray(binary_erosion(grid, np.ones((3, 3), bool), border_value=1))
+
+
 def _cell_span(start: int, stop: int) -> tuple[np.ndarray, np.ndarray]:
     """23 km cell indices covering pixels [start, stop) and their pixel counts."""
     ks = np.arange(start // PX_PER_CELL, -(-stop // PX_PER_CELL))
@@ -184,15 +246,17 @@ def _anchored_sea(
     geo: np.ndarray,
     sea_level: float,
     *,
+    mesh_interior: np.ndarray | None = None,
     workers: int = 8,
 ) -> AnchoredSea:
-    """Both connectivity passes of the anchored sea over one chunk list.
+    """The connectivity passes of the anchored sea over one chunk list.
 
     ``load`` returns a chunk's raw surface and is called once per pass.  The
     boundary pass seeds the open boundary the fill itself honours — the outer
     edges of the chunk grid and the edges facing a missing chunk; the
     geological pass seeds the pixels inside 23 km geological-ocean cells of
-    ``geo``, upsampled to native resolution.
+    ``geo``, upsampled to native resolution; with ``mesh_interior`` a third
+    pass seeds the pixels inside those 23 km cells the same way.
     """
     from dreamulator.map.canvas_marine import connect_sea
 
@@ -223,17 +287,47 @@ def _anchored_sea(
                 seed[sl] = True
         return water, water & seed
 
-    def read_geological(key: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
-        ci, cj = key
-        water = load(key) <= sea_level
-        rk, rcount = _cell_span(ci * tile, (ci + 1) * tile)
-        ck, ccount = _cell_span(cj * tile, (cj + 1) * tile)
-        geo_px = np.repeat(np.repeat(geo[np.ix_(rk, ck)], rcount, axis=0), ccount, axis=1)
-        return water, water & geo_px
+    def cell_seed(grid: np.ndarray) -> Callable[[tuple[int, int]], tuple[np.ndarray, np.ndarray]]:
+        def read(key: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
+            ci, cj = key
+            water = load(key) <= sea_level
+            rk, rcount = _cell_span(ci * tile, (ci + 1) * tile)
+            ck, ccount = _cell_span(cj * tile, (cj + 1) * tile)
+            px = np.repeat(np.repeat(grid[np.ix_(rk, ck)], rcount, axis=0), ccount, axis=1)
+            return water, water & px
 
+        return read
+
+    mesh = None
+    if mesh_interior is not None and mesh_interior.any():
+        mesh = connect_sea(keys, cell_seed(mesh_interior), workers=workers)
     return AnchoredSea(
         boundary=connect_sea(keys, read_boundary, workers=workers),
-        geological=connect_sea(keys, read_geological, workers=workers),
+        geological=connect_sea(keys, cell_seed(geo), workers=workers),
+        mesh=mesh,
+    )
+
+
+def canvas_anchored_sea(
+    root: Path,
+    geometry: CanvasGeometry,
+    keys: list[tuple[int, int]],
+    load: Callable[[tuple[int, int]], np.ndarray],
+    tile: int,
+    sea_level: float,
+    *,
+    workers: int = 8,
+) -> AnchoredSea:
+    """The anchored sea of a canvas directory — the one rule S2, the seam check
+    and the window renderer share."""
+    return _anchored_sea(
+        keys,
+        load,
+        tile,
+        _geological_ocean(root, geometry, sea_level),
+        sea_level,
+        mesh_interior=_mesh_sea_lake_interior(root, geometry),
+        workers=workers,
     )
 
 
@@ -249,22 +343,30 @@ def surface_sea(store: CanvasStore, sea_level: float, *, workers: int = 8) -> An
       (``conditioning/heightmap.npy`` at or below sea level, upsampled to native
       resolution).
 
-    A water body is sea when it passes both tests.  Boundary reach alone would
+    A water body is sea when it passes both tests, or when it contains a pixel
+    inside a closed water body the mesh upgraded to sea class
+    (``geometry_fields/mesh_sea_lake.npy``, 3 x 3-eroded).  Boundary reach alone would
     make a sea out of an inland closed basin that happens to touch the canvas's
     artificial edge — canvases overlap, so one canvas's boundary runs through
     another's interior.  Geological contact alone is the coarse-seed rule,
     which misjudges ice-dammed hollows and ponds inside shallow shelf cells.
     Each condition closes the other's failure mode, with no new parameter.
+    The mesh rule follows the long-wavelength canon: closed water bodies the
+    mesh upgraded to sea class share sea level with the global ocean there and
+    in the GCM, so S2 does not fill them to their sill.  A canvas planned
+    before the field existed keeps the two-test rule (``canvas mesh-sea-lake``
+    backfills it).
 
     The canvas's own water, not its bed: hydrology runs on the installed
     surface, where grounded ice can close a basin that the sub-ice bed links
     to the ocean.
     """
-    return _anchored_sea(
+    return canvas_anchored_sea(
+        store.root,
+        store.geometry,
         list(store.chunks),
         lambda key: store.raw(*key),
         store.tile,
-        _geological_ocean(store.root, store.geometry, sea_level),
         sea_level,
         workers=workers,
     )
@@ -424,92 +526,342 @@ def _ensure_heal_delta(
     return {"idx": idx, "h": flat_h, "inland_idx": inland_idx}, True
 
 
-def run_canvas_fill(
-    store: CanvasStore,
-    *,
-    sea_level: float = 0.0,
-    resume: bool = True,
-    verbose: bool = True,
-) -> dict[str, float]:
-    """Run the three-stage fill on disk; returns timing/statistics."""
-    t = store.tile
-    keys = store.chunks
-    ncol = (max(cj for _, cj in store.chunks) + 1) * t
-    pairs: dict[tuple[int, int], int] = {(ci, cj): i for i, (ci, cj) in enumerate(keys)}
-    stats = {"cells": 0.0, "watersheds": 0.0, "stages_seconds": 0.0}
-    t0 = time.time()
-    heal, heal_fresh = _ensure_heal_delta(store, sea_level, verbose=verbose)
-    if heal_fresh and any((store.work / "fill").glob("r*_c*.i16.npy")):
-        # Fill caches predating the heal generation treat pit cells as flood
-        # seeds; a first-time heal next to surviving caches means heal.npz
-        # was removed by hand — refuse rather than resume stale semantics.
-        raise RuntimeError(
-            "heal.npz was rebuilt but pre-heal fill caches remain — clear hydro-work and rerun"
-        )
-    healed_idx, healed_h = heal["idx"], heal["h"]
-    # Canvases that ship the connected-sea product determine the sea on the
-    # installed surface: water that reaches the canvas's open boundary.  One
-    # out-of-core pass over the chunks, reused by every stage-1 chunk.
-    sea = None
-    if _declares_sea_mask(store):
-        sea = surface_sea(store, sea_level)
-        if verbose:
-            print("[hydrology] sea: boundary connectivity anchored to the geological ocean")
+#: Watershed node ids: chunk index times this stride plus the local label
+#: (label 0 is the tile's external basin, merged into node 0).
+_NODE_STRIDE = 1_000_000
 
-    # Stage 1: local flood per chunk; summaries on disk.
-    summaries: dict[tuple[int, int], dict[str, np.ndarray]] = {}
-    for ci, cj in keys:
-        key = (ci, cj)
-        fill_path = store.path("fill", ci, cj, "i16.npy")
-        label_path = store.path("labels", ci, cj, "i32.npy")
-        sum_path = store.path("summary", ci, cj, "npz")
-        if resume and store.done(f"fill/{ci:03d}_{cj:03d}", fill_path) and sum_path.exists():
-            data = np.load(sum_path)
-            summaries[key] = {name: data[name] for name in data.files}
-            continue
-        dem = store.raw(ci, cj)
-        healed_mask = np.zeros(dem.shape, dtype=bool)
-        if healed_idx.size:
-            r = healed_idx // ncol
-            c = healed_idx % ncol
-            sel = (r >= ci * t) & (r < (ci + 1) * t) & (c >= cj * t) & (c < (cj + 1) * t)
-            rr, cc = r[sel] - ci * t, c[sel] - cj * t
-            dem[rr, cc] = healed_h[sel]
-            healed_mask[rr, cc] = True
-        ext = _external_mask(store, key, dem, sea_level, healed=healed_mask, sea=sea)
-        labels, filled, spill = _local_flood(dem, ext)
-        np.save(fill_path, np.rint(filled).astype(np.int16))
-        np.save(label_path, labels.astype(np.int32))
-        edge = {
-            "top_lab": labels[0, :].astype(np.int32),
-            "top_z": np.rint(dem[0, :]).astype(np.int16),
-            "bottom_lab": labels[-1, :].astype(np.int32),
-            "bottom_z": np.rint(dem[-1, :]).astype(np.int16),
-            "left_lab": labels[:, 0].astype(np.int32),
-            "left_z": np.rint(dem[:, 0]).astype(np.int16),
-            "right_lab": labels[:, -1].astype(np.int32),
-            "right_z": np.rint(dem[:, -1]).astype(np.int16),
-        }
-        if spill:
-            spill_ab = np.array(list(spill.keys()), dtype=np.int64)
-            spill_levels = np.array(list(spill.values()), dtype=np.float64)
-        else:
-            spill_ab = np.zeros((0, 2), dtype=np.int64)
-            spill_levels = np.zeros(0, dtype=np.float64)
-        np.savez(sum_path, spill_ab=spill_ab, spill_level=spill_levels, **edge)
-        store.record(f"fill/{ci:03d}_{cj:03d}", fill_path)
-        summaries[key] = {
-            "spill_ab": spill_ab,
-            "spill_level": spill_levels,
-            **edge,
-        }
-        stats["cells"] += float(t * t)
-    if verbose:
-        print(f"[hydrology] stage 1 (local floods): {len(keys)} chunks")
 
-    # Stage 2: global watershed spillover graph.
+def _node_id(chunk_index: int, lab: int) -> int:
+    return chunk_index * _NODE_STRIDE + lab
+
+
+def default_workers(cap: int = 16) -> int:
+    """Worker processes for per-chunk stages: the CPUs this process may use, capped.
+
+    Each stage-1 worker holds a few float64 copies of one chunk (about 0.3 GB
+    for 2048 x 2048 tiles), so the cap bounds memory as well as contention.
+    """
+    import os
+
+    try:
+        n = len(os.sched_getaffinity(0))
+    except AttributeError:  # not on Linux
+        n = os.cpu_count() or 1
+    return max(1, min(cap, n))
+
+
+@dataclass
+class _FillContext:
+    """Read-only state every per-chunk worker gets once at start-up.
+
+    Inherited through fork, pickled once per worker under spawn (Windows), so
+    it holds only per-canvas state; per-chunk data travels with each task.
+    """
+
+    store: CanvasStore
+    sea_level: float
+    sea: AnchoredSea | None
+    healed: dict[tuple[int, int], tuple[np.ndarray, np.ndarray, np.ndarray]]
+
+
+_WORKER_CTX: _FillContext | None = None
+
+
+def _bucket_healed(
+    idx: np.ndarray,
+    h: np.ndarray,
+    ncol: int,
+    tile: int,
+    keys: list[tuple[int, int]],
+) -> dict[tuple[int, int], tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Healed pit cells grouped by chunk: (local rows, local cols, heights)."""
+    out: dict[tuple[int, int], tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+    if not idx.size or not keys:
+        return out
+    r = idx // ncol
+    c = idx % ncol
+    ci, cj = r // tile, c // tile
+    wanted = set(keys)
+    order = np.lexsort((cj, ci))
+    ci, cj, r, c, hh = ci[order], cj[order], r[order], c[order], h[order]
+    breaks = np.flatnonzero((np.diff(ci) != 0) | (np.diff(cj) != 0)) + 1
+    for lo, hi in zip(np.r_[0, breaks], np.r_[breaks, ci.size], strict=True):
+        key = (int(ci[lo]), int(cj[lo]))
+        if key in wanted:
+            out[key] = (r[lo:hi] - key[0] * tile, c[lo:hi] - key[1] * tile, hh[lo:hi])
+    return out
+
+
+def _init_worker(ctx: _FillContext) -> None:
+    global _WORKER_CTX
+    _WORKER_CTX = ctx
+
+
+def _stage1_chunk(task: Any) -> tuple[tuple[int, int], dict[str, np.ndarray], str]:
+    """Local flood of one chunk; writes fill, labels and summary, returns the summary."""
+    key: tuple[int, int] = task
+    ctx = _WORKER_CTX
+    assert ctx is not None
+    store, sea_level = ctx.store, ctx.sea_level
+    ci, cj = key
+    fill_path = store.path("fill", ci, cj, "i16.npy")
+    dem = store.raw(ci, cj)
+    healed_mask = np.zeros(dem.shape, dtype=bool)
+    if key in ctx.healed:
+        rr, cc, hh = ctx.healed[key]
+        dem[rr, cc] = hh
+        healed_mask[rr, cc] = True
+    ext = _external_mask(store, key, dem, sea_level, healed=healed_mask, sea=ctx.sea)
+    labels, filled, spill = _local_flood(dem, ext)
+    np.save(fill_path, np.rint(filled).astype(np.int16))
+    np.save(store.path("labels", ci, cj, "i32.npy"), labels.astype(np.int32))
+    edge = {
+        "top_lab": labels[0, :].astype(np.int32),
+        "top_z": np.rint(dem[0, :]).astype(np.int16),
+        "bottom_lab": labels[-1, :].astype(np.int32),
+        "bottom_z": np.rint(dem[-1, :]).astype(np.int16),
+        "left_lab": labels[:, 0].astype(np.int32),
+        "left_z": np.rint(dem[:, 0]).astype(np.int16),
+        "right_lab": labels[:, -1].astype(np.int32),
+        "right_z": np.rint(dem[:, -1]).astype(np.int16),
+    }
+    if spill:
+        spill_ab = np.array(list(spill.keys()), dtype=np.int64)
+        spill_levels = np.array(list(spill.values()), dtype=np.float64)
+    else:
+        spill_ab = np.zeros((0, 2), dtype=np.int64)
+        spill_levels = np.zeros(0, dtype=np.float64)
+    np.savez(
+        store.path("summary", ci, cj, "npz"),
+        spill_ab=spill_ab,
+        spill_level=spill_levels,
+        **edge,
+    )
+    summary = {"spill_ab": spill_ab, "spill_level": spill_levels, **edge}
+    return key, summary, hashlib.sha256(fill_path.read_bytes()).hexdigest()
+
+
+def _level_table(
+    level: dict[int, float], chunk_index: int, summary: dict[str, np.ndarray]
+) -> np.ndarray:
+    """Global water level of each local label of one chunk (-inf: keep the fill).
+
+    Local labels start only at tile-edge cells, so the edge arrays bound them;
+    label 0 (the external basin) keeps its fill.
+    """
+    top = max(
+        int(summary[name].max(initial=0))
+        for name in ("top_lab", "bottom_lab", "left_lab", "right_lab")
+    )
+    table = np.full(top + 1, -np.inf)
+    for lab in range(1, top + 1):
+        lv = level.get(_node_id(chunk_index, lab))
+        if lv is not None:
+            table[lab] = lv
+    return table
+
+
+def _stage3_chunk(task: Any) -> tuple[tuple[int, int], dict[str, np.ndarray], str]:
+    """Raise one chunk's cells to their watershed level (one table lookup per pixel)."""
+    key, table = task
+    ctx = _WORKER_CTX
+    assert ctx is not None
+    store = ctx.store
+    ci, cj = key
+    labels = np.load(store.path("labels", ci, cj, "i32.npy"))
+    filled = np.load(store.path("fill", ci, cj, "i16.npy")).astype(np.float64)
+    top = int(labels.max())
+    if top >= table.size:  # defensive: a label beyond the edge bound has no level
+        table = np.concatenate([table, np.full(top + 1 - table.size, -np.inf)])
+    out = np.maximum(filled, table[labels])
+    final_path = store.path("final", ci, cj, "i16.npy")
+    np.save(final_path, np.rint(out).astype(np.int16))
+    return key, {}, hashlib.sha256(final_path.read_bytes()).hexdigest()
+
+
+def _start_method() -> str:
+    """fork where available (Linux), else spawn (Windows, macOS default).
+
+    ``DREAMULATOR_START_METHOD`` overrides it, so the spawn path can be
+    exercised on Linux too.
+    """
+    import multiprocessing as mp
+    import os
+
+    wanted = os.environ.get("DREAMULATOR_START_METHOD")
+    methods = mp.get_all_start_methods()
+    if wanted:
+        if wanted not in methods:
+            raise ValueError(f"start method {wanted!r} is not available here ({methods})")
+        return wanted
+    return "fork" if "fork" in methods else "spawn"
+
+
+def _map_chunks(
+    fn: Callable[[Any], tuple[tuple[int, int], dict[str, np.ndarray], str]],
+    ctx: _FillContext,
+    tasks: list[Any],
+    workers: int | None,
+) -> Iterator[tuple[tuple[int, int], dict[str, np.ndarray], str]]:
+    """Run ``fn`` over per-chunk tasks in a process pool (results in task order).
+
+    Each worker receives ``ctx`` once through its initializer — inherited under
+    fork, pickled under spawn — and per-chunk data with each task.
+    """
+    n = default_workers() if workers is None else max(1, workers)
+    if n == 1 or len(tasks) < 2:
+        _init_worker(ctx)
+        try:
+            for task in tasks:
+                yield fn(task)
+        finally:
+            _init_worker_clear()
+        return
+    import multiprocessing as mp
+    from concurrent.futures import ProcessPoolExecutor
+
+    with ProcessPoolExecutor(
+        max_workers=min(n, len(tasks)),
+        mp_context=mp.get_context(_start_method()),
+        initializer=_init_worker,
+        initargs=(ctx,),
+    ) as pool:
+        yield from pool.map(fn, tasks, chunksize=1)
+
+
+def _init_worker_clear() -> None:
+    global _WORKER_CTX
+    _WORKER_CTX = None
+
+
+def _chunk_max_label(summary: dict[str, np.ndarray]) -> int:
+    top = max(
+        int(summary[name].max(initial=0))
+        for name in ("top_lab", "bottom_lab", "left_lab", "right_lab")
+    )
+    ab = summary["spill_ab"]
+    return max(top, int(ab.max(initial=0)) if ab.size else 0)
+
+
+def _seam_edges(
+    lab_a: np.ndarray,
+    z_a: np.ndarray,
+    lab_b: np.ndarray,
+    z_b: np.ndarray,
+    off_a: int,
+    off_b: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Edges between two facing chunk edges (8-neighbourhood across the seam)."""
+    n = lab_a.size
+    ea, eb, ew = [], [], []
+    for d in (-1, 0, 1):
+        i = np.arange(max(0, -d), min(n, n - d))
+        j = i + d
+        la, lb = lab_a[i].astype(np.int64), lab_b[j].astype(np.int64)
+        ea.append(np.where(la > 0, la + off_a, 0))
+        eb.append(np.where(lb > 0, lb + off_b, 0))
+        ew.append(np.maximum(z_a[i], z_b[j]).astype(np.float64))
+    return np.concatenate(ea), np.concatenate(eb), np.concatenate(ew)
+
+
+def _watershed_levels(
+    keys: list[tuple[int, int]],
+    summaries: dict[tuple[int, int], dict[str, np.ndarray]],
+    t: int,
+) -> tuple[dict[tuple[int, int], np.ndarray], int]:
+    """Stage 2: per-chunk water-level tables and the number of watersheds that drain.
+
+    Local labels get compact global node ids (node 0 = every chunk's external
+    basin).  Edges are the chunks' spill pairs plus the seams between
+    neighbouring chunks, built per seam with numpy: the right and bottom
+    neighbours and the two diagonal corners, each unordered pair once.  The
+    minimax Priority-Flood over that graph runs in numba
+    (:func:`dreamulator.map._parallel_flood.minimax_levels`).  Levels are the
+    unique minimax spill heights, so the tables equal the dict-and-heapq
+    reference bit for bit.
+    """
+    from dreamulator.map._parallel_flood import minimax_levels
+
+    tops = {key: _chunk_max_label(summaries[key]) for key in keys}
+    off: dict[tuple[int, int], int] = {}
+    nn = 1
+    for key in keys:
+        off[key] = nn - 1  # node = off + lab for lab >= 1
+        nn += tops[key]
+    ea: list[np.ndarray] = []
+    eb: list[np.ndarray] = []
+    ew: list[np.ndarray] = []
+    for key in keys:
+        s = summaries[key]
+        ab = s["spill_ab"].astype(np.int64).reshape(-1, 2)
+        if ab.size:
+            ea.append(np.where(ab[:, 0] > 0, ab[:, 0] + off[key], 0))
+            eb.append(np.where(ab[:, 1] > 0, ab[:, 1] + off[key], 0))
+            ew.append(s["spill_level"].astype(np.float64))
+        ci, cj = key
+        right, down = (ci, cj + 1), (ci + 1, cj)
+        if right in summaries:
+            r = summaries[right]
+            e = _seam_edges(
+                s["right_lab"], s["right_z"], r["left_lab"], r["left_z"], off[key], off[right]
+            )
+            ea.append(e[0])
+            eb.append(e[1])
+            ew.append(e[2])
+        if down in summaries:
+            d = summaries[down]
+            e = _seam_edges(
+                s["bottom_lab"], s["bottom_z"], d["top_lab"], d["top_z"], off[key], off[down]
+            )
+            ea.append(e[0])
+            eb.append(e[1])
+            ew.append(e[2])
+        for corner, (ya, xa), (yb, xb) in (
+            ((ci + 1, cj + 1), (t - 1, t - 1), (0, 0)),
+            ((ci + 1, cj - 1), (t - 1, 0), (0, t - 1)),
+        ):
+            if corner not in summaries:
+                continue
+            la, za = _edge_cell(s, ya, xa, t)
+            lb, zb = _edge_cell(summaries[corner], yb, xb, t)
+            ea.append(np.array([la + off[key] if la else 0], np.int64))
+            eb.append(np.array([lb + off[corner] if lb else 0], np.int64))
+            ew.append(np.array([max(za, zb)], np.float64))
+    a = np.concatenate(ea) if ea else np.zeros(0, np.int64)
+    b = np.concatenate(eb) if eb else np.zeros(0, np.int64)
+    w = np.concatenate(ew) if ew else np.zeros(0, np.float64)
+    keep = a != b
+    level = minimax_levels(nn, a[keep], b[keep], w[keep])
+    drained = int(np.count_nonzero(np.isfinite(level[1:])))
+    level = np.where(np.isfinite(level), level, -np.inf)  # unreached labels keep their fill
+    tables = {}
+    for key in keys:
+        table = np.full(tops[key] + 1, -np.inf)
+        table[1:] = level[off[key] + 1 : off[key] + tops[key] + 1]
+        tables[key] = table
+    return tables, drained
+
+
+def _edge_cell(summary: dict[str, np.ndarray], y: int, x: int, t: int) -> tuple[int, float]:
+    if y == 0:
+        return int(summary["top_lab"][x]), float(summary["top_z"][x])
+    if y == t - 1:
+        return int(summary["bottom_lab"][x]), float(summary["bottom_z"][x])
+    if x == 0:
+        return int(summary["left_lab"][y]), float(summary["left_z"][y])
+    return int(summary["right_lab"][y]), float(summary["right_z"][y])
+
+
+def _watershed_levels_reference(
+    keys: list[tuple[int, int]],
+    summaries: dict[tuple[int, int], dict[str, np.ndarray]],
+    t: int,
+) -> tuple[dict[tuple[int, int], np.ndarray], int]:
+    """Pure-Python stage 2 (dict graph and heapq), the oracle for :func:`_watershed_levels`."""
+    pairs = {key: i for i, key in enumerate(keys)}
+
     def node_id(key: tuple[int, int], lab: int) -> int:
-        return pairs[key] * 1_000_000 + lab  # 0 = external per tile
+        return _node_id(pairs[key], lab)
 
     edges: dict[int, dict[int, float]] = {}
 
@@ -587,29 +939,114 @@ def run_canvas_fill(
             if nb not in level or cand < level[nb]:
                 level[nb] = cand
                 heapq.heappush(heap, (cand, nb))
-    stats["watersheds"] = float(len(level) - 1)
-    if verbose:
-        print(f"[hydrology] stage 2 (watershed graph): {len(level) - 1} watersheds")
 
-    # Stage 3: raise each chunk's cells to its watershed level.
+    tables = {key: _level_table(level, pairs[key], summaries[key]) for key in keys}
+    return tables, len(level) - 1
+
+
+def run_canvas_fill(
+    store: CanvasStore,
+    *,
+    sea_level: float = 0.0,
+    resume: bool = True,
+    verbose: bool = True,
+    workers: int | None = None,
+) -> dict[str, float]:
+    """Run the three-stage fill on disk; returns timing/statistics.
+
+    Stages 1 and 3 are per chunk and run on ``workers`` processes (default:
+    :func:`default_workers`); the result does not depend on the worker count.
+    """
+    t = store.tile
+    keys = store.chunks
+    ncol = (max(cj for _, cj in store.chunks) + 1) * t
+    stats = {"cells": 0.0, "watersheds": 0.0, "stages_seconds": 0.0}
+    t0 = time.time()
+    from dreamulator.media.canvas_surface_process import read_surface_tag, write_surface_tag
+
+    done_on = read_surface_tag(store.work)
+    if done_on is not None and done_on != store.surface:
+        if resume:
+            raise RuntimeError(
+                f"{store.work} was filled on surface {done_on!r}, not {store.surface!r}: "
+                "rerun without resume (canvas hydrology --force)"
+            )
+        for sub in ("fill", "labels", "summary", "final"):
+            for stale in (store.work / sub).glob("r*_c*.*"):
+                stale.unlink()
+        (store.work / "chunks.sha256").unlink(missing_ok=True)
+        (store.work / "heal.npz").unlink(missing_ok=True)
+        store._checked.clear()
+    write_surface_tag(store.work, store.surface)
+    heal, heal_fresh = _ensure_heal_delta(store, sea_level, verbose=verbose)
+    if heal_fresh and any((store.work / "fill").glob("r*_c*.i16.npy")):
+        # Fill caches predating the heal generation treat pit cells as flood
+        # seeds; a first-time heal next to surviving caches means heal.npz
+        # was removed by hand — refuse rather than resume stale semantics.
+        raise RuntimeError(
+            "heal.npz was rebuilt but pre-heal fill caches remain — clear hydro-work and rerun"
+        )
+    healed_idx, healed_h = heal["idx"], heal["h"]
+    # Canvases that ship the connected-sea product determine the sea on the
+    # installed surface: water that reaches the canvas's open boundary.  One
+    # out-of-core pass over the chunks, reused by every stage-1 chunk.
+    sea = None
+    if _declares_sea_mask(store):
+        sea = surface_sea(store, sea_level)
+        if verbose:
+            rule = "boundary connectivity anchored to the geological ocean"
+            if sea.mesh is not None:
+                rule += ", plus the mesh's sea-class lakes"
+            elif not (store.root / MESH_SEA_LAKE_FILE).exists():
+                rule += f" ({MESH_SEA_LAKE_FILE} missing: mesh sea-class lakes not applied)"
+            print(f"[hydrology] sea: {rule}")
+    if verbose:
+        surface = "TD chunks + surface_process increments" if store.increments else "TD chunks"
+        print(f"[hydrology] surface: {surface} ({store.surface})")
+
+    # Stage 1: local flood per chunk; summaries on disk.  Chunks are
+    # independent, so they run in a process pool; the parent alone appends to
+    # the checksum ledger.
+    summaries: dict[tuple[int, int], dict[str, np.ndarray]] = {}
+    todo: list[tuple[int, int]] = []
     for ci, cj in keys:
-        key = (ci, cj)
-        final_path = store.path("final", ci, cj, "i16.npy")
-        if resume and store.done(f"final/{ci:03d}_{cj:03d}", final_path):
-            continue
-        labels = np.load(store.path("labels", ci, cj, "i32.npy"))
-        filled = np.load(store.path("fill", ci, cj, "i16.npy")).astype(np.float64)
-        out = filled.copy()
-        for lab in np.unique(labels):
-            if int(lab) == 0:
-                continue
-            lv = level.get(node_id(key, int(lab)))
-            if lv is None or lv == float("-inf"):
-                continue
-            mask = labels == lab
-            out[mask] = np.maximum(out[mask], lv)
-        np.save(final_path, np.rint(out).astype(np.int16))
-        store.record(f"final/{ci:03d}_{cj:03d}", final_path)
+        fill_path = store.path("fill", ci, cj, "i16.npy")
+        sum_path = store.path("summary", ci, cj, "npz")
+        if resume and store.done(f"fill/{ci:03d}_{cj:03d}", fill_path) and sum_path.exists():
+            data = np.load(sum_path)
+            summaries[(ci, cj)] = {name: data[name] for name in data.files}
+        else:
+            todo.append((ci, cj))
+    healed_by_chunk = _bucket_healed(healed_idx, healed_h, ncol, t, todo)
+    ctx = _FillContext(store, sea_level, sea, healed_by_chunk)
+    for key, summary, digest in _map_chunks(_stage1_chunk, ctx, todo, workers):
+        ci, cj = key
+        store.record_digest(f"fill/{ci:03d}_{cj:03d}", digest)
+        summaries[key] = summary
+        stats["cells"] += float(t * t)
+    if verbose:
+        print(f"[hydrology] stage 1 (local floods): {len(keys)} chunks")
+
+    # Stage 2: global watershed spillover graph.
+    tables, drained = _watershed_levels(list(keys), summaries, t)
+    stats["watersheds"] = float(drained)
+    if verbose:
+        print(f"[hydrology] stage 2 (watershed graph): {drained} watersheds")
+
+    # Stage 3: raise each chunk's cells to its watershed level.  Stage 2
+    # already cut the levels into per-chunk tables; the workers get one each.
+    tasks = [
+        ((ci, cj), tables[(ci, cj)])
+        for ci, cj in keys
+        if not (
+            resume
+            and store.done(f"final/{ci:03d}_{cj:03d}", store.path("final", ci, cj, "i16.npy"))
+        )
+    ]
+    del tables, summaries
+    ctx = _FillContext(store, sea_level, None, {})
+    for (ci, cj), _summary, digest in _map_chunks(_stage3_chunk, ctx, tasks, workers):
+        store.record_digest(f"final/{ci:03d}_{cj:03d}", digest)
     stats["stages_seconds"] = time.time() - t0
     if verbose:
         print(f"[hydrology] done in {stats['stages_seconds']:.1f} s")
@@ -837,7 +1274,7 @@ def run_canvas_rivers(
     store: CanvasStore,
     *,
     sea_level: float = 0.0,
-    threshold_cells: int = 7000,
+    threshold_cells: int = 27000,  # same onset as the CLI default (about 2.1 m3/s at 90 m)
     verbose: bool = True,
 ) -> dict[str, object]:
     """Extract channel mask and vector river segments from the final fill.
@@ -853,7 +1290,9 @@ def run_canvas_rivers(
     from dreamulator.map.prog_erosion import (
         LAKE_MIN_WIDTH_KM,
         RUNOFF_REFERENCE_MM,
+        PassThroughLakes,
         lake_mmu_cells,
+        lake_monthly_demand,
         month_active_counts,
         regime_active_cells,
         renderable_lakes,
@@ -895,6 +1334,21 @@ def run_canvas_rivers(
         precip = np.nan_to_num(np.load(precip_path).astype(np.float32), nan=0.0)
         temp_c = np.nan_to_num(np.load(temp_path).astype(np.float32), nan=0.0)
         climate_block = PX_PER_CELL  # one climate cell = PX_PER_CELL pixels
+    # Lake-surface demand: the energy-based open-water channel S1 writes
+    # (engine/lake_evaporation.py); canvases planned before it fall back to
+    # the Hamon demand, which underestimates cold clear plateaus severalfold.
+    open_water = None
+    lake_path = climate / "lake_evaporation.mm.npy"
+    if has_basis and lake_path.exists():
+        open_water = np.nan_to_num(np.load(lake_path).astype(np.float32), nan=0.0)
+    if verbose and has_basis:
+        source = (
+            "open-water energy balance"
+            if open_water is not None
+            else ("Hamon fallback (no lake_evaporation.mm channel; re-plan the canvas)")
+        )
+        print(f"[hydrology] lake evaporation: {source}")
+    pass_through: list[PassThroughLakes] = []
     (
         _h_rewritten,
         land,
@@ -920,17 +1374,22 @@ def run_canvas_rivers(
         km_per_px=km,
         sea_level_m=sea_level,
         climate_block=climate_block,
+        open_water_mm=open_water,
         consume_receiver=True,
         keep_rewritten_h=False,
+        pass_through_out=pass_through,
     )
     # Routing consumed them; the regime pass and segment extraction below
     # work from order/rec_route/acc (and the monthly pack's own weights).
     del dem, weight
     rivers = river_mask(acc, land, threshold_cells)
 
-    # Monthly regime on the FINAL routing (terminal footprints cut; the
-    # demand verdict is annual, see month_active_counts).
+    # Monthly regime on the FINAL routing (terminal footprints cut by the
+    # annual verdict); pass-through lakes run their monthly balance when the
+    # monthly evaporation channel exists (see month_active_counts).
     month_active = None
+    monthly_lakes = "no monthly runoff"
+    monthly_lake_stats: dict[str, int] = {}
     monthly_path = climate / "runoff_monthly.mm.npy"
     if monthly_path.exists():
         monthly = np.load(monthly_path).astype(np.float32)
@@ -938,9 +1397,39 @@ def run_canvas_rivers(
             monthly = np.moveaxis(monthly, 0, -1)  # (12,n,n) -> (n,n,12)
             active = regime_active_cells(km)
             factor = PX_PER_CELL
+            lakes_arg = None
+            evap_m_path = climate / "lake_evaporation_monthly.mm.npy"
+            precip_m_path = climate / "precipitation_monthly.mm.npy"
+            if not pass_through or pass_through[0].count == 0:
+                monthly_lakes = "no pass-through lakes"
+            elif evap_m_path.exists() and precip_m_path.exists():
+                demand = lake_monthly_demand(
+                    pass_through[0],
+                    np.load(evap_m_path),
+                    np.load(precip_m_path),
+                    w,
+                    climate_block=PX_PER_CELL,
+                )
+                lakes_arg = (pass_through[0], demand)
+                monthly_lakes = "monthly balance with storage below the sill"
+            else:
+                monthly_lakes = (
+                    "no monthly depletion (no lake_evaporation_monthly.mm channel; "
+                    "plan --backfill lake-evaporation)"
+                )
+            if verbose:
+                print(f"[hydrology] monthly lakes: {monthly_lakes}")
             month_active = month_active_counts(
-                order, rec_route, monthly, land, active, factor=factor
+                order,
+                rec_route,
+                monthly,
+                land,
+                active,
+                factor=factor,
+                lakes=lakes_arg,
+                lake_stats_out=monthly_lake_stats,
             )
+    del pass_through
 
     segs, flows, regimes = river_segments(
         rivers,
@@ -954,6 +1443,9 @@ def run_canvas_rivers(
     )
     hydro = store.root / "hydro"
     hydro.mkdir(exist_ok=True)
+    from dreamulator.media.canvas_surface_process import write_surface_tag
+
+    write_surface_tag(hydro, store.surface)
     np.save(hydro / "rivers.line.npy", segs.astype(np.float32))
     np.save(hydro / "rivers.flow.npy", flows.astype(np.float32))
     np.save(hydro / "rivers.regime.npy", regimes.astype(np.uint8))
@@ -979,6 +1471,7 @@ def run_canvas_rivers(
         "perennial": int((regimes == 0).sum()),
         "non_perennial": int((regimes == 1).sum()),
         "regime_source": "monthly-runoff" if month_active is not None else "annual-default",
+        "regime_lakes": {"method": monthly_lakes, **monthly_lake_stats},
         "terminal_lakes": lake_stats,
         "sea_source": (
             "surface-boundary-connectivity" if _declares_sea_mask(store) else "sea-level"

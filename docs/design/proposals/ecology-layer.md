@@ -59,7 +59,7 @@ P0 已全链路闭环（v0.20.0）：`EcologyEngine` 读气候数据，逐 cell 
    │  映射为：derived 层（类地球/异星实例化器推导），或 input 层（奇幻硬设定）
 ```
 
-这符合 CLAUDE.md 既有约定："LLM 只改 input，引擎负责 derived——防止 LLM 幻想物理结果"。**结构骨架是 input/derived 皆可，物种实例是 derived（奇幻除外）。**
+这符合 AGENTS.md 既有约定："LLM 只改 input，引擎负责 derived——防止 LLM 幻想物理结果"。**结构骨架是 input/derived 皆可，物种实例是 derived（奇幻除外）。**
 
 ### 1.4 三种风格 = 同一种骨架下的三种实例化器
 
@@ -345,10 +345,9 @@ Rodin/Hunyuan3D 几何质量更高，Hunyuan3D 开源可自部署；业界共识
 基底 → Blender 修拓扑、UV、PBR 纹理」）；纹理贴图同样 AI 生成后进 Blender。推导
 层（物理约束 → body plan）始终是引擎的纯函数，AI 不介入。
 
-**渲染与本机硬件适配**：当前开发机是 AMD 集成显卡，Blender 视口重雕刻和 Cycles
-的 GPU 渲染都会很吃力。对策按优先级：EEVEE 优先（1080p 目标下足以出电影感，渲染
-比 Cycles 快一个量级）；静帧需要物理光栅时用 Cycles 走 CPU 夜间渲染；动画镜头上
-云渲染农场（按帧计费，便宜）；文生 3D 基底本来就在云端跑，不受本机限制。
+**渲染与资源适配**：集成显卡环境应先测量 Blender 视口雕刻与 Cycles 渲染的开销。1080p
+预览优先使用 EEVEE；需要物理光照的静帧可用 Cycles，GPU 不满足要求时走 CPU；长动画可
+使用按帧计费的渲染服务。文生 3D 基底在远程服务中生成，不占用离线渲染的 GPU。
 
 **视频管线（B 站 1080p、目标「大片感」）**：Blender 负责动画与渲染，DaVinci
 Resolve（免费版够用）负责剪辑与调色——调色是「大片感」最大的单一杠杆。画面上

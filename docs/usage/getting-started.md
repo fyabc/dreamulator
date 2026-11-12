@@ -234,7 +234,7 @@ uv run dreamulator serve --open
 无需打开浏览器，直接把地图图层导出成 PNG（配色与前端完全同源）：
 
 ```bash
-uv run dreamulator export layers myworld --layers terrain,koppen --output export/
+uv run dreamulator map layers myworld --layers terrain,koppen --output export/
 ```
 
 预期输出：
@@ -261,7 +261,7 @@ uv run dreamulator export layers myworld --layers terrain,koppen --output export
   （[CLI 参考](cli.md) 分支节）。
 - **精细地形与高清渲染**：区域裁剪 + 外部渲染器出影视级图像，见
   [CLI 参考](cli.md)「区域数据包」一节与
-  [Blender 渲染管线设计](../design/proposals/blender-render-pipeline.md)。
+  [区域数据包与 Blender 静帧](../design/pipelines/region-pack.md)。
 - **地图迭代与地理锚定**：手绘大陆形状引导地形生成，见
   [地图工作流](map-workflow.md)。
 - **AI 叙述**：`uv run dreamulator narrate myworld` 让世界自己开口

@@ -1,0 +1,55 @@
+# 气候学知识库
+
+## 已有文档
+
+- `precipitation.md` 同时说明地形暴露的经验参数化、原生降水分量的面积守恒及线性地形雨的适用范围。
+
+- `energy_balance.md` — 能量平衡模型（EBM）、温室效应、1D EBM 经向温度分布、大陆度、副热带下沉增温及其干燥度门控（Hamon PET + UNEP AI）、季节 EBM、质量守恒水汽收支（完整方程：地形凝结 φ 衰减 + 冷阱上风路由 + 收敛哨兵）、土壤水桶（Manabe 1969，周期稳态）
+- `ocean_provinces.md` — Longhurst 海洋生物地球化学省份（海洋版 Köppen）
+- `atmospheric_circulation.md` — 科里奥利、三胞环流、地转风、温度-气压耦合（位温 θ）、季风边界层风 + 标定锚点、跨赤道季风西风带（2026-08 自实现反写 + 季风 f→0 教训）
+- `polar_pressure_regimes.md` — 极地高/低压的热力 vs 动力机制、两圈/三圈体制的联动指纹（纬向平均极地 SLP 符号、极地东/西风、ψ 翻转次数、极地降水体制）、GCM 对照证据（2026-10）
+- `koppen_classification.md` — Köppen 五主群 + 亚型阈值表（2026-08 自实现反写）
+- `climate_classification_comparison.md` — 四大分类体系比较（Köppen / Trewartha / Thornthwaite / Holdridge）与 dreamulator 适配建议（2026-08）
+- 统一气候描述（UCC）→ **已迁至专门目录 `docs/ucc/`**（主文档 `docs/ucc/specification.md`：时间基准契约、连续描述量、Hamon-1961 需求模型声明与有效域、分类 profile v1 与 L2 实验冻结依据）
+- `ocean_currents.md` — 风生/热盐环流、海峡闸门动力学（水力控制公式、门槛水深标度与自转速率的影响、地球海平面门控案例、海平面敏感海峡诊断工具）、ENSO 类振荡（3A.3 科学底座）
+- `sea_level.md` — 海平面与气候：冰量与热膨胀两个来源（冰盖剖面与平均厚度、热膨胀系数）、地球数值与时间尺度、海平面变化对气候的反作用、在 GCM 中只作边界条件的处理与估算方法
+- `precipitation.md` — 水汽输送、降水相态（雨/雪 + Clausius–Clapeyron）、地形降水与雨影（CC 抬升凝结 H_cc、LCL、降水效率，Smith 1979 / Houze 2012）、液水气块的虚温导数和线性地形雨适用范围、原生高斯父格的完整面积预算与目标球面交叠积分、ICAR 时变后端的物理输入、海岸辐合、SST 对流门（WTG）、对流临界雨出门（Neelin-Peters-Hales）
+- `obliquity_ice_albedo.md` — 轴倾角只重新分配日照（全球年平均恒为 S/4，极点年平均 S·sin ε/π），冰反照率把高纬夏季的增量整流成全球净增温；在 GCM 中检验时的注意事项（必须固定轨道）；EBM 为什么复现不了（全球均温锚定、冰反照率只做局地降温）
+- `day_length_effects.md` — 日长（太阳日数天）对天气与气候的影响：日较差、对流与海陆风日循环、惯性-周日共振纬度、天气系统尺度、硅酸盐风化随自转的极大、同步卫星特有的巨行星食与巨行星辐射（含 Nacrea 量级粗估与现有模型的处理）、极端天气（温带风暴与热带气旋的自转标度律、寒潮与热浪、夜间强对流，含 Nacrea 与地球的 GCM 对照）；§3.1 对流云量按太阳日累计降水（ExoPlaSim 的一处自转依赖，作者裁决为刻意的物理读法；nacrea 干预实测净效应为云量 −4.8 个百分点、反照率 −2.2、平衡温度约 +1.2 K，理论截距平移 14.4 点被 0.80 上限吃掉大半；地球是 k=1 情形因而无观测可判，慢自转世界的云量按构造偏高、不能直接与地球观测比）
+- `cloud_field_statistics.md` — 云场两条统计律：单点光学厚度近似指数分布（薄云主导，Marchand 2010 直方图评审）+ 空间功率谱一维 −5/3 幂律（Cahalan & Joseph 1989 / Davis 1997 转引）；对程序化云纹理的参数映射（指数逆 CDF + fBm persistence ≈ 0.7）；竞品工程实现调研见 `cloud_generation_competitors.md`
+- `atmospheric_scattering.md` — 行星圆盘 L5 大气渲染：单次散射方程与球壳几何、瑞利/米氏/臭氧系数与柱质量缩放、标高与大气顶、恒星光谱到 sRGB 白点与有效瑞利系数（Wyman CIE 拟合）、透射率查找表、分层云壳与云影、已知限制（无多次散射/偏振/光谱相关）与参考文献
+- `atmospheric_co2_ch4_history.md` — 地球大气 CO2/CH4 历史、火山与风化预算，以及热流驱动的约化碳库存响应和世界构建锚点。
+
+- `gcm_climate_statistics.md` 说明 GCM 的高斯面积、近地面气温、轨道季节统计、实际数值扩散、晴空辐射分解和更换步长的重启时钟。
+
+## 规划中的文档
+
+## 关键参考
+
+- Hartmann, D.L. (2016). *Global Physical Climatology* (2nd ed.). Elsevier.
+- Peixoto, J.P., & Oort, A.H. (1992). *Physics of Climate*. Springer.
+- Koppen, W. (1936). "Das geographische System der Klimate." *Handbuch der Klimatologie*.
+- Pierrehumbert, R.T. (2010). *Principles of Planetary Climate*. Cambridge.
+
+## 与引擎实现的对应关系
+
+| 知识文档 | 引擎模块 | 输出 |
+|---------|---------|------|
+| `energy_balance.md` | `climate_physics.py:equilibrium_temperature()` | 全球平均温度 |
+| `energy_balance.md` §3 | `climate_seasonality.py:solve_1d_ebm_temperature()` | 纬向年均温（1D EBM 谱解） |
+| `energy_balance.md` §4 | `climate_simulator.py`（`ebm_diffusion_land_wm2k`） | 大陆度（海陆年均对比） |
+| `energy_balance.md` §4.5 | `climate_simulator.py`（`subsidence_warming_c`，Stage 1） | 副热带下沉增温（等面积均质化） |
+| `energy_balance.md` §4.6 | `climate_physics.py:subsidence_aridity_gate()`（Stage 3.5） | 下沉增温的干燥度门控释放 |
+| `energy_balance.md` §6 | `climate_seasonality.py:compute_seasonal_climate()` | 月度温度/降水（显式热输送 + 冰反照率） |
+| `obliquity_ice_albedo.md` §4 | `climate_seasonality.py:solve_1d_ebm_temperature()`、`climate_physics.py:ice_albedo_feedback()` | 倾角的纬向重新分配（全球冰反照率耦合未实现） |
+| `energy_balance.md` §8 | `climate_simulator.py:_solve_moisture_budget()` | 质量守恒水汽收支 |
+| `atmospheric_circulation.md` | `climate_physics.py:hadley_cell_wind()` | 风场矢量 |
+| `cloud_field_statistics.md` | `media/cloud_render.py`（L2 程序化云纹理） | alpha 分布与谱斜率参数 |
+| `cloud_generation_competitors.md` | `media/cloud_render.py`（L2/L5 路线取舍） | 形状/侵蚀分离、weather map 契约、locality 尺度多变、球面采样 |
+| `atmospheric_scattering.md` | `media/atmosphere_render.py`（L5 大气渲染） | 单次散射大气、透射率查找表、恒星光谱颜色、分层云壳 |
+| `polar_pressure_regimes.md` | `climate_simulator.py`（`hadley_extent_deg`/`polar_cell_start_deg` 体制切换） | 两圈/三圈体制与极地气压/降水体制 |
+| `precipitation.md` | `climate_simulator.py:_compute_precipitation_monthly_budget()` | 年/月降水量 |
+| `ocean_currents.md` | `map/ocean_circulation.py`（`solve_ocean_gyre` 等） | 洋流矢量 |
+| `ocean_currents.md` §3.3 | `scripts/climate/diagnose_ocean_gateways.py` | 海平面敏感海峡（诊断，非引擎） |
+| `koppen_classification.md` | `climate_physics.py:koppen_classify()` | 气候类型 |
+| `docs/ucc/specification.md` | `map/ucc.py:compute_descriptors()` / `classify_v1()` | 气候描述量 / UCC 分类 |

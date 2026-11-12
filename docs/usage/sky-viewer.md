@@ -8,7 +8,7 @@
 
 > 引擎设计（参考系、自转轴阶梯、升落语义）见
 > [knowledge/astrophysics/observer_sky_frames.md](../knowledge/astrophysics/observer_sky_frames.md)
-> 与 [design/proposals/sky-ephemeris.md](../design/proposals/sky-ephemeris.md)；
+> 与 [design/pipelines/sky-ephemeris.md](../design/pipelines/sky-ephemeris.md)；
 > CLI 侧命令（`dreamulator sky`）见 [cli.md](cli.md) 的 sky 一节。
 
 ## 功能概览

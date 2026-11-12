@@ -250,3 +250,43 @@ def _spl_step_numba(
         dist = np.sqrt(float((yr - y0) ** 2 + (xr - x0) ** 2))
         f_coef = k * dt * acc.reshape(-1)[i] ** m / dist
         flat_h[i] = (flat_h[i] + dt * uplift + f_coef * hr) / (1.0 + f_coef)
+
+
+@numba.njit(cache=True)
+def _lake_inflow_numba(
+    rec_flat: np.ndarray, lake_flat: np.ndarray, acc_flat: np.ndarray, n: int
+) -> np.ndarray:
+    """Accumulation entering each lake from cells outside it, in one pass.
+
+    Cell-id order and float64 sums, as ``np.bincount`` over the donor list
+    does, so the result is bit-identical to that formulation; float32
+    accumulations are read in place without a whole-grid copy.
+    """
+    inflow = np.zeros(n + 1)
+    for i in range(rec_flat.size):
+        r = rec_flat[i]
+        if r < 0:
+            continue
+        lab = lake_flat[r]
+        if lab > 0 and lab != lake_flat[i]:
+            inflow[lab] += np.float64(acc_flat[i])
+    return inflow
+
+
+@numba.njit(cache=True)
+def _exit_targets_numba(
+    receiver: np.ndarray, lake_label: np.ndarray, exits: np.ndarray
+) -> np.ndarray:
+    """Lake label each exit cell's drainage path reaches next (0 = sea or frame).
+
+    The walk starts at the exit's receiver and follows the receivers over
+    non-lake cells; a dendritic arm that re-enters its own lake returns that
+    lake's label, which callers treat as internal.
+    """
+    out = np.zeros(exits.size, dtype=np.int64)
+    for k in range(exits.size):
+        t = receiver[exits[k]]
+        while t >= 0 and lake_label[t] == 0:
+            t = receiver[t]
+        out[k] = lake_label[t] if t >= 0 else 0
+    return out

@@ -16,7 +16,7 @@ status: accepted
 > 推演使用地球参照时的落点。`climate_portrait.md` 的「实际地球」对比列属
 > Phase 2 气候叙事重生成范围，重生成时一并迁入本笔记。
 
-对外设定与设计笔记的划分规范见根 CLAUDE.md「对外设定 vs 设计笔记的划分」；
+对外设定与设计笔记的划分规范见根 AGENTS.md「对外设定 vs 设计笔记的划分」；
 执行台账见 `docs/design/audit/wave5-external-canon-audit.md`。
 
 ## 1. 太空时代科技树分歧总表（自 space_age.md）

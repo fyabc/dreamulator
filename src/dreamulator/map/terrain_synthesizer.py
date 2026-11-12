@@ -1208,7 +1208,36 @@ def _synthesize_asymmetric(
     capture_source_field(source_fields, "orogen_cap_m", orogen_cap)
     elevation = apply_orogen_cap(elevation, orogen_cap, sea_level)
     capture_source_field(source_fields, "after_orogen_cap_m", elevation)
-    elevation, clamped = _apply_interior_lowlands(mesh, elevation, config)
+    if config.orogen_mesoscale_relief_m_per_km > 0.0:
+        from .orogen_mesoscale_relief import (
+            apply_orogen_mesoscale_relief,
+            mesoscale_relief_field,
+            orogen_strike_frame,
+        )
+
+        support = orogen > 0.0
+        meso_strike: np.ndarray | None = None
+        meso_coherence: np.ndarray | None = None
+        if config.orogen_mesoscale_anisotropy > 1.0:
+            meso_strike, meso_coherence = orogen_strike_frame(
+                mesh.cell_xyz, orogen, support, config.radius_km
+            )
+        field = mesoscale_relief_field(
+            mesh.cell_xyz,
+            support,
+            config.radius_km,
+            config.seed + 800,
+            strike=meso_strike,
+            coherence=meso_coherence,
+            anisotropy=config.orogen_mesoscale_anisotropy,
+        )
+        elevation, meso_delta = apply_orogen_mesoscale_relief(
+            elevation, orogen, field, config.orogen_mesoscale_relief_m_per_km, sea_level
+        )
+        capture_source_field(source_fields, "orogen_mesoscale_relief_m", meso_delta)
+    elevation, clamped = _apply_interior_lowlands(
+        mesh, elevation, config, orogen_support=orogen > 0.0
+    )
     capture_source_field(source_fields, "after_interior_lowlands_m", elevation)
     capture_source_field(source_fields, "interior_lowland_clamped_mask", clamped)
     elevation = _apply_deposition_fill(mesh, elevation, config, clamped)
@@ -2315,6 +2344,7 @@ def _apply_interior_lowlands(
     mesh: CVTMesh,
     elevation: np.ndarray,
     config: TerrainPipelineConfig,
+    orogen_support: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Lower deep continental interiors toward cratonic lowland elevation.
 
@@ -2326,8 +2356,8 @@ def _apply_interior_lowlands(
     at active convergent margins, and the deep interior subsides back toward sea
     level.
 
-    Lowering is a smoothstep ramp from 0 at the nearest convergent (orogenic)
-    boundary to full ``interior_lowland_depth_m`` at
+    Lowering is a smoothstep ramp from 0 at the nearest orogen to full
+    ``interior_lowland_depth_m`` at
     ``interior_lowland_distance_scale_km`` beyond it, soft-clamped above
     ``interior_lowland_floor_m`` (smooth maximum) so the calibrated coastline
     (and target land fraction) is never crossed.  Runs before the island-arc /
@@ -2339,6 +2369,13 @@ def _apply_interior_lowlands(
         the continents." *Reviews of Geophysics*, 22(2), 101–122. — cratonic
         interiors are systematically lower than active margins.
       * ETOPO1 Global Relief Model — Earth median land elevation ≈ 350–500 m.
+
+    The ramp origin follows ``interior_lowland_origin``.  With ``"orogen"`` (default) it is
+    the union of convergent boundary cells and the cells in ``orogen_support`` (cells with
+    active or old orogen relief): an orogen is not a craton interior, and a plateau whose
+    mean elevation is set by the collision or Andean force-balance cap must not be lowered
+    below it because it widened far from the plate edge.  ``"boundary"`` seeds from the
+    convergent boundary cells only (legacy behaviour).
 
     Modifies *elevation* in-place.
 
@@ -2364,6 +2401,14 @@ def _apply_interior_lowlands(
         d = cell.distance_to_boundary_km
         if cell.boundary_type == "convergent" and d is not None and d <= 1.0:
             sources.append(i)
+    origin = config.interior_lowland_origin
+    if origin not in ("orogen", "boundary"):
+        raise ValueError(f"interior_lowland_origin must be 'orogen' or 'boundary', got {origin!r}")
+    if origin == "orogen" and orogen_support is not None:
+        support = np.asarray(orogen_support, dtype=bool)
+        if support.shape != (n,):
+            raise ValueError("orogen_support must be one boolean per mesh cell")
+        sources = sorted(set(sources).union(np.flatnonzero(support).tolist()))
     if not sources:
         logger.info("  Interior lowlands: no convergent boundaries, skipping")
         return elevation, empty

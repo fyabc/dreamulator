@@ -10,6 +10,10 @@ ice-dammed hollows and shelf-cell ponds.  A sub-sea-level hollow failing either
 test is an inland low: it takes part in the fill as a closed basin and the lake
 criteria decide whether water stands in it.  Canvases that do not declare the
 connected-sea product keep the legacy "at or below sea level drains" rule.
+
+Closed water bodies the mesh upgraded to sea class are sea as well: a water
+body holding a pixel inside the 3 x 3-eroded ``geometry_fields/mesh_sea_lake.npy``
+shares sea level with the ocean.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ import pytest
 
 from dreamulator.map.td_canvas import CanvasGeometry
 from dreamulator.media.canvas_pipeline import (
+    MESH_SEA_LAKE_FILE,
     SEA_MASK_VERSION,
     CanvasStore,
     _external_mask,
@@ -52,6 +57,7 @@ def _make_store(
     dem: np.ndarray | None = None,
     conditioning_height: np.ndarray | None = None,
     with_conditioning: bool = True,
+    mesh_sea_lake: np.ndarray | None = None,
 ) -> CanvasStore:
     (root / "chunks").mkdir(parents=True)
     if dem is None:
@@ -82,6 +88,9 @@ def _make_store(
         cond_dir = root / "conditioning"
         cond_dir.mkdir(parents=True)
         np.save(cond_dir / "heightmap.npy", height)
+    if mesh_sea_lake is not None:
+        (root / MESH_SEA_LAKE_FILE).parent.mkdir(parents=True, exist_ok=True)
+        np.save(root / MESH_SEA_LAKE_FILE, mesh_sea_lake.astype(np.uint8))
     (root / "canvas.json").write_text(json.dumps(meta), encoding="utf-8")
     return CanvasStore.load(root)
 
@@ -150,3 +159,81 @@ def test_missing_conditioning_heightmap_is_an_error(tmp_path: Path) -> None:
     )
     with pytest.raises(FileNotFoundError, match="conditioning"):
         surface_sea(store, 0.0)
+
+
+def _rift_dem() -> np.ndarray:
+    """Four 23 km cells per side: a western edge sea and a deep closed basin in the middle."""
+    tile = 1024
+    dem = np.full((tile, tile), 300.0, dtype=np.int16)
+    dem[:, :2] = -50  # edge sea inside the geological-ocean column
+    dem[300:700, 300:700] = -1400  # closed basin behind a sill, below sea level
+    return dem
+
+
+def _rift_conditioning() -> np.ndarray:
+    height = _default_conditioning()
+    height[1:3, 1:3] = -1400.0  # the basin is geologically oceanic on the mesh, too
+    return height
+
+
+def test_mesh_sea_class_basin_is_sea(tmp_path: Path) -> None:
+    # A closed basin the mesh upgraded to sea class shares sea level with the
+    # ocean: S2 must not fill it to its sill.
+    mesh = np.zeros((NCELL, NCELL), bool)
+    mesh[:, :6] = True  # a sea-class lake covering the basin and its surroundings
+    ocean, store = _ocean(
+        tmp_path / "canvas",
+        dem=_rift_dem(),
+        conditioning_height=_rift_conditioning(),
+        mesh_sea_lake=mesh,
+    )
+    assert ocean[300:700, 300:700].all()
+    assert ocean[:, :2].all()
+    assert not ocean[100, 900]  # land stays land
+    assert surface_sea(store, 0.0).mesh is not None
+
+
+def test_mesh_coastal_cells_do_not_seed_the_sea(tmp_path: Path) -> None:
+    # A lone sea-class cell vanishes under the 3 x 3 erosion, so a land hollow
+    # next to a mesh coastline is not pulled into the sea.
+    mesh = np.zeros((NCELL, NCELL), bool)
+    mesh[1:3, 1:3] = True
+    ocean, _ = _ocean(
+        tmp_path / "canvas",
+        dem=_rift_dem(),
+        conditioning_height=_rift_conditioning(),
+        mesh_sea_lake=mesh,
+    )
+    assert not ocean[300:700, 300:700].any()
+
+
+def test_without_the_mesh_field_the_basin_stays_closed(tmp_path: Path) -> None:
+    ocean, store = _ocean(
+        tmp_path / "canvas", dem=_rift_dem(), conditioning_height=_rift_conditioning()
+    )
+    assert not ocean[300:700, 300:700].any()
+    assert surface_sea(store, 0.0).mesh is None
+
+
+def test_mesh_sea_lake_field_has_the_canvas_grid_shape(tmp_path: Path) -> None:
+    store = _make_store(
+        tmp_path / "canvas",
+        sea_mask={"version": SEA_MASK_VERSION},
+        mesh_sea_lake=np.ones((NCELL // 2, NCELL // 2), bool),
+    )
+    with pytest.raises(ValueError, match="mesh sea-lake"):
+        surface_sea(store, 0.0)
+
+
+def test_write_mesh_sea_lake_samples_the_nearest_cell(tmp_path: Path) -> None:
+    from dreamulator.map import td_canvas as tc
+    from dreamulator.map.td_canvas_build import MESH_SEA_LAKE_PATH, write_mesh_sea_lake
+
+    geom = CanvasGeometry(0.0, 0.0, 6371.0, NCELL)
+    lat = np.array([0.0, 0.0])
+    lon = np.array([-30.0, 30.0])  # western cell a sea-class lake, eastern cell land
+    meta = write_mesh_sea_lake(tmp_path, geom, np.array([True, False]), tc.unit_vectors(lat, lon))
+    grid = np.load(tmp_path / MESH_SEA_LAKE_PATH)
+    assert meta["path"] == MESH_SEA_LAKE_PATH
+    assert grid.shape == (NCELL, NCELL) and grid.dtype == np.uint8
+    assert grid[:, 0].all() and not grid[:, -1].any()

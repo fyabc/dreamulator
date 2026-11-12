@@ -62,10 +62,10 @@ Hadley」的物理特征，可用来丰富环流/气候纹理。
 ## 决策
 
 暂不实现，两条都留作「看情况」的丰富设定源。当前引擎的弱斜压带已足够体现「临界」。
-GCM offline-oracle 已上线（`src/dreamulator/gcm/`，ExoPlaSim T21 harness；nacrea
-定标判决见 `docs/design/proposals/nacrea-insolation-recalibration.md` 与
-`climate-gcm-plan.md`）——未来若需更精细的环流纹理，实现前先用 GCM 输出仲裁
-参数带（本轮 hadley_extent_deg 47→52 即为 GCM 仲裁的实例）。
+GCM 离线参照臂已上线，适配层位于 `src/dreamulator/gcm/`。辐照裁决见
+[0022](0022-insolation-recalibration.md)，现行定标与 Hadley 环流边界见
+[0012](0012-climate-gcm-calibration.md)，对外气候来源见
+[0013](0013-climate-canon-source.md)。未来若需更精细的环流纹理，实现前先用 GCM 输出仲裁参数范围。
 
 ## 参考
 

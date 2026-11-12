@@ -342,7 +342,7 @@ def get_sky(
     include_events: bool = True,
     branch: str | None = None,
 ) -> dict[str, Any]:
-    """The observer's sky above one surface point (sky-ephemeris proposal §3).
+    """The observer's sky above one surface point (``docs/design/pipelines/sky-ephemeris.md`` §3).
 
     Serves ``engine.ephemeris.sky_ephemeris`` (its result verbatim, no
     envelope).  ``include_events=false`` is the slider fast path (~1 ms vs

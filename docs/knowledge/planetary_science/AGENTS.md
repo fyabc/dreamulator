@@ -1,0 +1,25 @@
+# 行星科学知识库
+
+## 已有文档
+
+- `planet_models.md` — 行星类型、大气层、水圈、岩石圈参数模型
+- `solar_system_data_sources.md` — 太阳系天体数据源指南（物理/轨道参数、DEM、
+  气候产品的权威来源层级 + 实测 URL + 抓取坑；2026-09-21 参照天体导入沉淀）
+- `planetary_climate_taxonomy.md` — 无生命天体的气候划分：学界实践（Mars/Titan/
+  Venus/Moon 各自区划语言 + 四类通用框架）与 UCC 三层分工含义（2026-09-21
+  文献调研沉淀）
+- `tidal_heating.md` — 潮汐加热的热流尺度（地球、Io）、文献宜居界限（h_max 约 2 W/m²、
+  h_min 约 0.04 W/m²）、生物影响 0–4 级定性分级、大火成岩省与大灭绝的地球类比，以及用
+  极值统计从有限模拟估计事件频率的方法，以及加热的空间图样（倾角潮在软流圈薄层的四个极大）与
+  以木卫一标定的热管火山
+- `giant_planet_colors.md` — 巨行星的颜色：Sudarsky 温度—云层分类、木星/土星/天王星/海王星与褐矮星 L/T/Y 参照、HD 189733b 的蓝色实测，以及 Aegis 的具体颜色判断
+
+## 规划中的文档
+
+- `equilibrium_temperature.md` — 平衡温度与温室效应
+- `magnetic_field.md` — 行星磁场与发电机理论
+
+## 关键参考
+
+- Seager, S. (2010). *Exoplanet Atmospheres*. Princeton University Press.
+- Kopparapu, R. K., et al. (2013). *ApJ*, 765(2), 131.

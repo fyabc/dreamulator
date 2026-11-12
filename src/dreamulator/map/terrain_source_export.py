@@ -36,6 +36,10 @@ _FIELD_BASIS = {
         "active mountain owner's mean-elevation cap above the sea-level reference; "
         "infinity where no active profile owns the cell"
     ),
+    "orogen_mesoscale_relief_m": (
+        "zero-mean mesoscale relief added after the cap on orogen-supported land cells: "
+        "observation-fit amplitude per km of orogen relief times a band-passed seeded field"
+    ),
     "interior_lowland_clamped_mask": (
         "actual interior lowland floor activation supplied to deposition fill"
     ),

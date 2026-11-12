@@ -128,8 +128,8 @@ OPENBLAS_NUM_THREADS=4 OMP_NUM_THREADS=4 uv run dreamulator build ...
 > **排序复用（2026-11-02）**：一次构建 100 次预算分解共用同一稀疏结构，现行排序
 > 改为网格上算一次的几何嵌套剖分（`map/sparse_ordering.py`），矩阵按消元顺序直接
 > 装配、`splu` 用 `NATURAL`。单次分解 1.70 → 1.11 秒，填充多 7% 但超节点更大；
-> 存储层逐位不变。100 次的构成与湿槽迭代不收敛的实测见
-> `proposals/climate-engine-round.md` 5.7。
+> 存储层逐位不变。预算求解与缓存的当前定义见[气候管线](pipelines/climate-pipeline.md#71-求解与缓存)，
+> 湿槽停止点的限制见[收口结论](proposals/climate-engine-round.md#33-湿槽迭代)。
 >
 > **内存画像**（进程树 RSS 轮询）：
 > 健康构建峰值 **3.3 GB**（降水 Picard 段，含单次 LU 因子 ~0.5 GB 瞬态）；

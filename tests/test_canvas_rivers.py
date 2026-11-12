@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pytest
 
 from dreamulator.map.td_canvas import CanvasGeometry
 from dreamulator.media.canvas_pipeline import (
@@ -83,3 +84,64 @@ def test_canvas_rivers(tmp_path: Path) -> None:
     assert (root / "hydro-work" / "heal.npz").exists()
     # The pit on the tilted slope is a lake with a verdict.
     assert len(lakes["lakes"]) > 0 and all("verdict" in lk for lk in lakes["lakes"])
+
+
+@pytest.mark.parametrize("start_method", ["fork", "spawn"])
+def test_fill_is_independent_of_the_worker_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, start_method: str
+) -> None:
+    # Stages 1 and 3 run per chunk in a process pool (fork on Linux, spawn on
+    # Windows); the files and the checksum ledger must match the serial run
+    # byte for byte.
+    monkeypatch.setenv("DREAMULATOR_START_METHOD", start_method)
+    outputs = []
+    for workers in (1, 3):
+        root = tmp_path / f"canvas{workers}"
+        root.mkdir()
+        _make_canvas(root)
+        store = CanvasStore.load(root)
+        stats = run_canvas_fill(store, verbose=False, workers=workers)
+        files = {
+            p.relative_to(store.work).as_posix(): p.read_bytes()
+            for sub in ("fill", "labels", "final", "summary")
+            for p in sorted((store.work / sub).glob("*"))
+        }
+        ledger = sorted((store.work / "chunks.sha256").read_text(encoding="utf-8").splitlines())
+        outputs.append((stats["watersheds"], files, ledger))
+    (w1, f1, l1), (w3, f3, l3) = outputs
+    assert w1 == w3
+    assert len(f1) == 4 * 16
+    assert f1.keys() == f3.keys()
+    assert all(f1[k] == f3[k] for k in f1 if not k.startswith("summary/"))
+    assert l1 == l3
+
+
+@pytest.mark.parametrize("missing", [None, (1, 2), (0, 0)])
+def test_watershed_levels_match_the_reference(
+    tmp_path: Path, missing: tuple[int, int] | None
+) -> None:
+    # Stage 2 (numpy seams + numba minimax) against the dict-and-heapq oracle,
+    # on a full canvas and on canvases with a missing chunk.
+    from dreamulator.media.canvas_pipeline import _watershed_levels, _watershed_levels_reference
+
+    root = tmp_path / "canvas"
+    root.mkdir()
+    _make_canvas(root)
+    if missing is not None:
+        meta = json.loads((root / "canvas.json").read_text(encoding="utf-8"))
+        meta["chunks"] = [c for c in meta["chunks"] if tuple(c) != missing]
+        (root / "canvas.json").write_text(json.dumps(meta), encoding="utf-8")
+        (root / "chunks" / f"r{missing[0]:03d}_c{missing[1]:03d}.npy").unlink()
+    store = CanvasStore.load(root)
+    run_canvas_fill(store, verbose=False, workers=1)
+    keys = list(store.chunks)
+    summaries = {}
+    for ci, cj in keys:
+        with np.load(store.path("summary", ci, cj, "npz")) as data:
+            summaries[(ci, cj)] = {name: data[name] for name in data.files}
+    new, n_new = _watershed_levels(keys, summaries, T)
+    ref, n_ref = _watershed_levels_reference(keys, summaries, T)
+    assert n_new == n_ref > 0
+    assert new.keys() == ref.keys()
+    for key in keys:
+        assert np.array_equal(new[key], ref[key]), key

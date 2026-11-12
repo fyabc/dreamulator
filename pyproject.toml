@@ -120,7 +120,7 @@ line-length = 100
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH"]
 
 [tool.ruff.lint.per-file-ignores]
-# Unit-suffixed names (_K/_C, per CLAUDE.md convention "units in field names")
+# Unit-suffixed names (_K/_C, per AGENTS.md convention "units in field names")
 # and physics symbols (L, T, R, M, …) are deliberate; N rules would fight them.
 "src/dreamulator/engine/climate_physics.py" = ["N803", "N806"]
 "src/dreamulator/map/climate_simulator.py" = ["N806"]

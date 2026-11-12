@@ -1,0 +1,23 @@
+# 天体物理知识库
+
+## 已有文档
+
+- `lagrange_points.md` — 特洛伊天体与拉格朗日点
+- `stellar_physics.md` — 质光关系、主序星演化、宜居带、SED 与维恩位移（谱型-峰值波长表）
+- `hz_inner_edge_cool_stars.md` — 晚型星宜居带内缘与失控温室（Kopparapu 官方系数表 + 各谱型 S_eff 阈值、NIR 高层吸收双通道机制、1D/3D 内缘之争与 moist greenhouse、复杂生命 HZ_CL 与「暖/可呼吸/安全余量」三难、火山脱气-风化稳态标度）
+- `sidereal_solar_day.md` — 恒星日 vs 太阳日（synodic day）换算、潮汐锁定特例、极昼/极夜时长公式、对引擎的启示
+- `orbital-stability.md` — 轨道稳定性 N-body 验证（REBOUND 脚本用法、共振链、希尔球稳定上限）
+- `observer_sky_frames.md` — 观测者天球框架（黄道/本体赤道/站心 ENU、自转轴阶梯与 Cassini 态 1、历元与自转相位零约定、两体传播、相位与照度双口径、升落窗口规则）
+- `satellite_system_stability.md` — 卫星系统稳定性（互希尔间距判据、顺/逆行恒星潮汐极限、共振链冷启动陷阱、J2/Laplace 面、常数 Q 潮汐自洽核算、混沌散射区与瞬态架构四条约束、宜居带表面成分约束、REBOUND 工程教训、近恒星巨行星外卫的工程 κ 边界与静楔/振荡族分类、拉普拉斯面完整算子与 RK4 校验协议、近共振链 ϖ₀ 模态选择与纪元平移红线、共振链行星无特洛伊判据、近同步卫星自转-轨道失配的受迫响应 ν/(α−ν) 与潮汐热流、季节角摆幅）
+
+## 规划中的文档
+
+- `orbital_mechanics.md` — 开普勒轨道、轨道根数、长期摄动
+- `star_classification.md` — 光谱类型、光度等级、赫罗图
+- `binary_stars.md` — 双星系统、质心轨道、环双星宜居带
+
+## 关键参考
+
+- Kippenhahn, R., Weigert, A., & Weiss, A. (2012). *Stellar Structure and Evolution*. Springer.
+- Prša, A., et al. (2016). IAU 2015 Resolution B3 — Nominal Solar Constants. *AJ*, 151(5), 123.
+- Kopparapu, R. K., et al. (2013). Habitable Zones Around Main-Sequence Stars. *ApJ*, 765(2), 131.

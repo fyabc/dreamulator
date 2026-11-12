@@ -1,10 +1,11 @@
 ---
-description: 诊断气候引擎结果异常（Köppen 群系偏多/偏少、某区域降水/温度异常），区分 Earth（纯引擎）vs 架空世界（引擎+超参），第一性定位根因并产出修复方案。当需要解释某气候现象或某 world 的气候指标时使用（如 /diagnose-climate earth/climate-dev）。
+name: diagnose-climate
+description: 诊断气候引擎结果异常（Köppen 群系偏多/偏少、某区域降水/温度异常），区分 Earth（纯引擎）vs 架空世界（引擎+超参），第一性定位根因并产出修复方案。当需要解释某气候现象或某 world 的气候指标时使用（如 diagnose-climate earth/climate-dev）。
 ---
 
 # diagnose-climate — 气候引擎诊断
 
-> 与 `/audit-doc`（审文档）不同：本 skill 审「气候引擎输出」。纪律依据 CLAUDE.md「引擎设计
+> 与 `audit-doc` 技能（审文档）不同：本 skill 审「气候引擎输出」。纪律依据 AGENTS.md「引擎设计
 > 纪律」+ memory [[physical-grounding-principle]] / [[shared-physics-principle]]。
 
 ## 角色
@@ -22,14 +23,14 @@ description: 诊断气候引擎结果异常（Köppen 群系偏多/偏少、某�
 
 ① 问题定义（Earth vs 架空 + 明确症状）→ ② 复现 + 精确 cell 定位（cell id / 值 / 坐标 /
 `distance_to_coast_km`，不只靠肉眼）→ ③ 第一性根因假设（水汽输送 / 辐合 / 海陆热力对比…）
-→ ④ 交叉验证（诊断脚本 + `/read-map` + `validate_climate` 数据）→ ⑤ 竞品/论文参照
+→ ④ 交叉验证（诊断脚本 + `read-map` 技能 + `validate_climate` 数据）→ ⑤ 竞品/论文参照
 → ⑥ 修复（第一性优先，改完 nacrea 回归）→ ⑦ 记录（memory + docs 同步）。
 
 ## 工具
 
 - **诊断脚本** `scripts/climate/diagnose_*.py`：koppen_confusion / koppen_spatial / latitudinal_profile /
   wind_divergence / detect_ocean_bottlenecks
-- **数据交叉** `/read-map`（视觉 + 数据）+ `scripts/climate/validate_climate.py`（zonal / 逐 cell vs 观测）
+- **数据交叉** `read-map` 技能（视觉 + 数据）+ `scripts/climate/validate_climate.py`（zonal / 逐 cell vs 观测）
 - **cell 取证** `map/query.py::cell_facts(mesh, tree, lon, lat)`（koppen / 离岸距离 / 温 / 降水）
 - **竞品参照** `docs/design/competitor-analysis.md`（climlab / ExoPlaSim / Landlab 等）
 

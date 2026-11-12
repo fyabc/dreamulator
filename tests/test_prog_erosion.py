@@ -10,6 +10,7 @@ from scipy.ndimage import binary_erosion
 
 from dreamulator.map.prog_erosion import (
     SPL_M,
+    PassThroughLakes,
     apply_terminal_equilibrium,
     flow_accumulation,
     heal_inland_water,
@@ -17,6 +18,8 @@ from dreamulator.map.prog_erosion import (
     keep_large_lakes,
     lake_mask,
     lake_mmu_cells,
+    lake_monthly_demand,
+    lake_monthly_outflow,
     month_active_counts,
     priority_flood,
     regime_active_cells,
@@ -896,6 +899,57 @@ def test_terminal_routing_emits_lake_records() -> None:
             assert r["kept_water_cells"] <= cap, (r["label"], r["kept_water_cells"], cap)
 
 
+def test_terminal_verdict_uses_the_cascaded_inflow() -> None:
+    """A lake fed by an upstream lake's overflow is judged on its total inflow.
+
+    Two closed basins in series on an eastward ramp: the western bowl sits in a
+    wet, cool climate and overflows; the eastern bowl's own catchment is dry and
+    its lake surface is hot, so its own runoff cannot meet the evaporation demand,
+    but the upstream overflow can.  The verdict must be taken after the cascade
+    has delivered that overflow (topological order, predecessors first), so the
+    eastern bowl passes water on instead of being cut as terminal.
+    """
+    n = 96
+    _y, x = np.mgrid[0:n, 0:n]
+    dem = (n - 1 - x).astype(np.float64) * 5.0
+    dem[30:50, 20:34] -= 60.0  # upstream bowl (west)
+    dem[30:50, 56:70] -= 60.0  # downstream bowl (east)
+    land = dem > 0.0
+    runoff = np.where(x < 20, 1000.0, 0.0)  # mm/yr: only the far west generates water
+    rbar = float(runoff[land].mean())
+    filled, order, rec = priority_flood(dem, land)
+    lakes_draw = keep_large_lakes(lake_mask(filled, dem), lake_mmu_cells(1.0))
+    wet_west = x < 45
+    *_rest, records = terminal_equilibrium_routing(
+        dem,
+        land,
+        lakes_draw,
+        order,
+        rec,
+        weight=np.array(runoff / rbar, copy=True),
+        precip_mm=np.where(wet_west, 2100.0, 50.0),
+        temp_c=np.where(wet_west, 10.0, 30.0),
+        runoff_land_mean_mm=rbar,
+        mmu_cells=lake_mmu_cells(1.0),
+        km_per_px=1.0,
+        sea_level_m=0.0,
+    )
+    east = [
+        r
+        for r in records
+        if r["spill_cell"] and 30 <= r["spill_cell"][0] <= 50 and r["spill_cell"][1] >= 56
+    ]
+    west = [
+        r
+        for r in records
+        if r["spill_cell"] and 30 <= r["spill_cell"][0] <= 50 and r["spill_cell"][1] < 45
+    ]
+    assert east and west, "fixture must record both bowls"
+    assert west[0]["verdict"] == "passthrough"
+    assert east[0]["demand_mm"] > 0.0  # its own climate is a net evaporation sink
+    assert east[0]["verdict"] == "passthrough", east[0]
+
+
 def test_river_segment_y_uses_the_canvas_height() -> None:
     """A shorter chunk box must not shift reaches toward the canvas bottom.
 
@@ -926,3 +980,117 @@ def test_river_segment_y_uses_the_canvas_height() -> None:
     segs_tall, _, _ = river_segments(rivers, rec, acc, km, pixel_rows=12)
     # Same rows, canvas four rows taller: every y moves up by 4 km.
     assert np.allclose(segs_tall[:, :, 1] - segs[:, :, 1], 4.0)
+
+
+# ---------------------------------------------------------------------------
+# monthly balance of pass-through lakes
+# ---------------------------------------------------------------------------
+
+
+def _one_lake(n_cells: int = 6) -> PassThroughLakes:
+    """A row draining west to the mouth at cell 0; cells 3 and 4 are one lake exiting at 3."""
+    del n_cells
+    return PassThroughLakes(
+        labels=np.array([1]),
+        cells=np.array([3, 4]),
+        cell_lake=np.array([0, 0]),
+        exits=np.array([3]),
+        exit_lake=np.array([0]),
+        exit_target=np.array([2]),
+        downstream=np.array([-1]),
+        topo=np.array([0]),
+    )
+
+
+def test_lake_monthly_outflow_refills_the_deficit_before_spilling() -> None:
+    lakes = _one_lake()
+    inflow = np.full((1, 12), 2.0)
+    demand = np.array([[3.0] * 6 + [0.5] * 6])  # net -1 for six months, then +1.5
+    out, stats = lake_monthly_outflow(lakes, inflow, demand)
+    # The six-month deficit of 6 refills over four months; only the last two spill.
+    assert out[0].tolist() == pytest.approx([0.0] * 10 + [1.5, 1.5])
+    assert out.sum() == pytest.approx((inflow - demand).sum())  # the annual surplus
+    assert stats == {"lakes": 1, "seasonal_outflow": 1, "no_outflow": 0}
+
+
+def test_lake_monthly_outflow_cascades_and_flags_short_lakes() -> None:
+    lakes = PassThroughLakes(
+        labels=np.array([1, 2, 3]),
+        cells=np.array([0, 1, 2]),
+        cell_lake=np.array([0, 1, 2]),
+        exits=np.array([0, 1, 2]),
+        exit_lake=np.array([0, 1, 2]),
+        exit_target=np.array([5, 6, 7]),
+        downstream=np.array([1, -1, -1]),
+        topo=np.array([0, 2, 1]),
+    )
+    inflow = np.array([[1.0] * 12, [0.0] * 12, [0.1] * 12])
+    demand = np.array([[0.0] * 12, [0.25] * 12, [0.2] * 12])
+    out, stats = lake_monthly_outflow(lakes, inflow, demand)
+    assert out[0].tolist() == pytest.approx([1.0] * 12)
+    assert out[1].tolist() == pytest.approx([0.75] * 12)  # fed by lake 0 month by month
+    assert not out[2].any()  # its monthly totals cannot meet its demand
+    assert stats["no_outflow"] == 1 and stats["seasonal_outflow"] == 0
+
+
+def test_lake_monthly_demand_sums_surface_terms() -> None:
+    lakes = _one_lake()
+    evap = np.full((12, 1, 6), 10.0)
+    precip = np.full((12, 1, 6), 4.0)
+    demand = lake_monthly_demand(lakes, evap, precip, 6, reference_mm=3.0)
+    assert demand.shape == (1, 12)
+    assert demand[0].tolist() == pytest.approx([4.0] * 12)  # 2 cells x (10 - 4) / 3
+
+
+def test_month_active_counts_routes_the_monthly_lake_outflow() -> None:
+    land = np.ones((1, 6), dtype=bool)
+    rec = np.array([-1, 0, 1, 2, 3, 4], dtype=np.int64)
+    order = np.arange(6, dtype=np.int64)  # downstream first
+    runoff = np.ones((1, 6, 12), dtype=np.float64)
+    lakes = _one_lake()
+    demand = np.array([[1.5] * 6 + [0.0] * 6])  # lake inflow is cell 5's 1 per month
+    plain = month_active_counts(order, rec, runoff, land, 1.5, reference_mm=1.0)
+    assert plain[0, 2] == 12
+    stats: dict[str, int] = {}
+    counts = month_active_counts(
+        order, rec, runoff, land, 1.5, reference_mm=1.0, lakes=(lakes, demand),
+        lake_stats_out=stats,
+    )  # fmt: skip
+    # The deficit of 3 refills in months 6-8; cell 2 carries its own 1 plus the
+    # lake's outflow of 1 in months 9-11 only (cell 1 adds cell 2's own water
+    # and stays active all year).
+    assert counts[0, 2] == 3 and counts[0, 1] == 12
+    assert counts[0, 5] == 0
+    assert rec.tolist() == [-1, 0, 1, 2, 3, 4]  # receivers restored
+    assert stats["seasonal_outflow"] == 1
+
+
+def test_terminal_routing_hands_the_pass_through_graph_on() -> None:
+    n = 96
+    _y, x = np.mgrid[0:n, 0:n]
+    dem = (n - 1 - x).astype(np.float64) * 5.0
+    dem[30:50, 20:34] -= 60.0
+    dem[30:50, 56:70] -= 60.0
+    land = dem > 0.0
+    runoff = np.where(x < 20, 1000.0, 0.0)
+    rbar = float(runoff[land].mean())
+    filled, order, rec = priority_flood(dem, land)
+    lakes_draw = keep_large_lakes(lake_mask(filled, dem), lake_mmu_cells(1.0))
+    graph: list[PassThroughLakes] = []
+    *_rest, rec_route, _acc, _tw, _st, records = terminal_equilibrium_routing(
+        dem, land, lakes_draw, order, rec,
+        weight=np.array(runoff / rbar, copy=True),
+        precip_mm=np.full((n, n), 2100.0), temp_c=np.full((n, n), 10.0),
+        runoff_land_mean_mm=rbar, mmu_cells=lake_mmu_cells(1.0), km_per_px=1.0,
+        sea_level_m=0.0, pass_through_out=graph,
+    )  # fmt: skip
+    (pt,) = graph
+    passing = {r["label"] for r in records if r["verdict"] == "passthrough"}
+    assert set(pt.labels.tolist()) == passing
+    west, east = (int(np.flatnonzero(pt.labels == r["label"])[0]) for r in sorted(
+        (r for r in records if r["verdict"] == "passthrough" and r["spill_cell"]
+         and 30 <= r["spill_cell"][0] < 50), key=lambda r: r["spill_cell"][1]))  # fmt: skip
+    assert pt.downstream[west] == east
+    assert list(pt.topo).index(west) < list(pt.topo).index(east)
+    rf = rec_route.reshape(-1)
+    assert (rf[pt.exits] >= 0).all() and (pt.exit_target == rf[pt.exits]).all()

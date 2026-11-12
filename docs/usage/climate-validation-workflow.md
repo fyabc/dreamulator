@@ -302,3 +302,22 @@ uv run python scripts/climate/diagnose_precip_budget.py              # 始终重
 > `maps/planet_earth/`（与 mesh 并排）。cell-by-cell 准确率（31.8%）低于分布匹配
 > （59.2%）——这是两个不同指标，空间准确率天然更低。诊断结论以**相对对比**
 > （调参前后、地球 vs nacrea）为准。
+
+## 7. 两次构建的差异对比
+
+改气候引擎后，用小差异难以在前端看出效果。使用 `scripts/climate/climate_diff.py` 对比两次构建：
+
+```bash
+# 改前保存基线
+cp -r data/worlds/nacrea/maps/satellite_nacrea data/worlds/nacrea/maps/_baseline
+
+# 改代码 → 构建
+uv run dreamulator build nacrea --only climate --force
+
+# 对比
+uv run python scripts/climate/climate_diff.py \
+    data/worlds/nacrea/maps/_baseline \
+    data/worlds/nacrea/maps/satellite_nacrea
+```
+
+输出：全局摘要（T/P/Köppen/biome）、纬度带平均差异、Top-N 变化最大的细胞。

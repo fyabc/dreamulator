@@ -8,7 +8,7 @@
 > （总览图）；S2 与 S3 在 `src/dreamulator/media/canvas_hydrology.py`（全局前沿参照实现）、
 > `canvas_hydrology_tiled.py`（三段式填平与分块汇流）、`canvas_lakes.py`（洼地层级与湖级联）、
 > `canvas_pipeline.py`（磁盘驱动与矢量河段）、`canvas_window.py`（裁窗）与 `lake_masks.py`（湖面足迹）。
-> 命令行是 `export canvas` 子命令组（`cli_export_canvas.py`）。湖与河道判定的制图背景见
+> 命令行是 `canvas` 子命令组（`cli_export_canvas.py`）。湖与河道判定的制图背景见
 > [drainage_cartography.md](../../knowledge/cartography/drainage_cartography.md)，TD 模型本身的能力边界见
 > [terrain_diffusion.md](../../knowledge/cartography/terrain_diffusion.md)。
 
@@ -16,24 +16,30 @@
 
 ```bash
 # S1：布局与输入（读世界目录下的 canvas_layout.yaml），然后逐张画布生成分块
-dreamulator export canvas plan nacrea                     # 默认写到 <世界>/canvases/<分支>/
-dreamulator export canvas generate data/worlds/nacrea/canvases/gcm-t42-712 \
+dreamulator canvas plan nacrea                     # 默认写到 <世界>/canvases/<分支>/
+dreamulator canvas generate data/worlds/nacrea/canvases/gcm-t42-712 \
     --td <terrain-diffusion 克隆> --gpus 0-7
-dreamulator export canvas status data/worlds/nacrea/canvases/gcm-t42-712 --verify
+dreamulator canvas status data/worlds/nacrea/canvases/gcm-t42-712 --verify
 
-# S2 与 S3：外存水文，然后裁出区域窗口包（水文没做完时 window 先补跑）
-dreamulator export canvas hydrology <canvas_dir>
-dreamulator export canvas window <canvas_dir> --lat 15 --lon -100 --span-km 550
-dreamulator export render <窗口包> --style all
+# 生成之后：二次侵蚀与沉积（写 surface_process/ 增量）再做 S2 外存水文，已完成的步骤跳过；
+# 单步命令是 canvas erode 与 canvas hydrology
+dreamulator canvas run data/worlds/nacrea/canvases/gcm-t42-712
+
+# S3：裁出区域窗口包（水文没做完或所用地表不一致时先补跑 S2）
+dreamulator canvas window <canvas_dir> --lat 15 --lon -100 --span-km 550
+dreamulator render <窗口包> --style all
 
 # 整张画布的超高清总览图（默认每 4 像素取平均，约 360 m 一像素）
-dreamulator export canvas mosaic <canvas_dir> --step 2
+dreamulator canvas mosaic <canvas_dir> --step 2
 ```
+
+`erode`、`hydrology`、`run` 与 `mosaic` 接受单张画布目录或布局根，给布局根时处理全部画布（`--canvas` 选择其中
+几张）。各命令的选项见[命令行参考](../../usage/cli.md#全球画布链canvas)。
 
 一张画布由 `ncell × ncell` 个粗格组成，粗格边长 23 km，每个粗格含 256 × 256 个像素，像素边长约
 89.84 m。画布按 8 × 8 粗格分块，每块 2048 × 2048 像素，存成 int16 米值的 `.npy`，并以 `canvas.json`
-记录几何、分块清单、生成参数与气候编码表。海平面固定为 0 m。裁出的窗口包使用与 `export region`
-完全相同的 `input/` 与 `refined-out/` 词汇，可以直接交给 `export render` 出图。
+记录几何、分块清单、生成参数与气候编码表。海平面固定为 0 m。裁出的窗口包使用与 `region pack`
+完全相同的 `input/` 与 `refined-out/` 词汇，可以直接交给 `render` 出图。
 
 ## 2. S1：画布生成
 
@@ -115,7 +121,7 @@ nacrea 当前是 19 张画布、9259 个分块、约 388 亿像素，int16 存�
 
 #### 气候通道
 
-年均与月均气温、年降水与月降水、年径流（Turc–Pike，n = 2）、Hamon 年潜在蒸散、月径流（土壤水桶加基流给出月形状，乘以年径流）、冰厚、NPP、柯本与群系编码。公式派生的量先在 CVT 格上算好再取样，不在粗格上重算非线性量；连续场用 Clough–Tocher 插值（`clough_tocher`）并截断到所在三角形的顶点取值范围，月径流与类别编码用 `sample_mesh_field`。海洋粗格上的陆地专属量记为 NaN；编码通道取粗格中心的最近格，在海岸会与高程判定的海陆不一致——消费者判定海陆一律以高程是否大于 0 m 为准。
+年均与月均气温、年降水与月降水、年径流（Turc–Pike，n = 2）、Hamon 年潜在蒸散、湖面年蒸发、月径流（土壤水桶加基流给出月形状，乘以年径流）、冰厚、NPP、柯本与群系编码。湖面年蒸发 `lake_evaporation.mm`（mm/yr，仅陆地）在粗格上由画布自己的月均气温通道、粗格平均高程、云量与逐月大气顶日照算出（`lake_evaporation_channel`，Priestley–Taylor 开阔水面蒸发，物理与地球检验见知识库 hydrology.md §7）：日照用粗格中心纬度与气候元数据 `climate_metadata.json` 里的轨道参数，经气候引擎同一个 `monthly_insolation` 计算（`load_astronomy` 读取，旧气候构建缺 `perihelion_day` 时按近日点在春分处理并在元数据中注明）；云量取网格的 GCM 年均总云量，没有时取地球陆地平均 0.43；元数据记录方法、云量来源、太阳常数与轨道参数。同一计算的逐月值另存为 `lake_evaporation_monthly.mm`（12 个月，mm/月，`lake_evaporation_monthly_channel`），年通道等于它的十二个月之和，S2 的过路湖逐月收支读它；规划早于该通道的画布用 `canvas plan --backfill lake-evaporation` 从网格补写两个通道（`write_lake_evaporation`）。气候元数据缺轨道参数时不写这个通道。公式派生的量先在 CVT 格上算好再取样，不在粗格上重算非线性量；连续场用 Clough–Tocher 插值（`clough_tocher`）并截断到所在三角形的顶点取值范围，月径流与类别编码用 `sample_mesh_field`。海洋粗格上的陆地专属量记为 NaN；编码通道取粗格中心的最近格，在海岸会与高程判定的海陆不一致——消费者判定海陆一律以高程是否大于 0 m 为准。
 
 #### 原生降水覆盖
 
@@ -139,7 +145,12 @@ GCM 到 CVT 的降水面积输出由 `gcm/cvt_area.py` 提供：接口从有序�
 
 ### 2.5.2 连续地形来源
 
-常规布局的高程底场用上节的抗混叠取样；连续来源入口则让每个 23 km 条件格独立积分一份显式来源。`write_canvas_inputs` 接收 `height_source`，经 `terrain_source.sample_canvas` 对各条件格求值；来源实现 `TerrainSource.evaluate` 按经纬度返回高程和海陆指示值。积分采用 Gauss–Legendre 求积并用方位等距投影的球面面积因子修正权重，高程均值与陆地覆盖率分别累计；求积阶数通过逐级加密（8、16、32、64、128）比较确定，相邻阶差的第 95 百分位 ≤ 2 m、最大 ≤ 10 m，源函数覆盖不足时报错、由调用者补齐来源范围（`FootprintTerrainSource` 提供匹配目标形状的布尔支持范围）。采用该入口时 `canvas.json` 的 `height_sampling` 为 `continuous-source-v1`，`height_source` 记录来源、求积阶数和覆盖率文件校验和；`geometry_fields/land_fraction.npy` 保存结构增量叠加前的陆地覆盖率，下游海陆判定继续使用最终高程。当前常规布局沿用抗混叠入口，连续来源由显式传入的局部试验使用。
+常规布局的高程底场用上节的抗混叠取样。连续来源有两种消费方式，两者共用同一积分器 `terrain_source.average_rectangles`：每个 23 km 条件格的方形足迹用 Gauss–Legendre 求积，权重乘以方位等距投影的球面面积因子，高程均值与陆地覆盖率分别累计。来源实现 `TerrainSource.evaluate` 按经纬度返回高程和海陆指示值。
+
+- **整高程来源**：`write_canvas_inputs` 接收 `height_source`，由 `sample_canvas` 以调用者给定的固定阶数 `height_quadrature`（缺省 8）求出全部条件格，结果替换抗混叠底场。`canvas.json` 的 `height_sampling` 为 `continuous-source-v1`，`height_source` 记录来源、求积阶数和覆盖率文件校验和；`geometry_fields/land_fraction.npy` 保存结构增量叠加前的陆地覆盖率，下游海陆判定继续使用最终高程。这一入口是诊断臂，没有进入生产布局。
+- **来源差额**：`integrate_source_correction` 只积分替换类来源返回的高程差额，结果加到参考 S3 的高程条件上（2.5.3 节）。来源须实现 `FootprintTerrainSource.footprint_support`，返回与条件格形状相同的布尔支持范围；支持范围之外差额为零。阶数按给定序列逐级加密（缺省 8、16、32、64、128），相邻两阶在支持格上的差的第 95 百分位不超过 2 m 且最大值不超过 10 m 时采用较高一阶；整个序列都未达标时报错，不写出部分结果。回执记录采用的阶数、支持格数、每级误差和准备耗时。生产所选山带均走这一入口。
+
+造山替换来源的支持范围按保守上界取：足迹半对角线约束了方位等距平面内的测地位移，因此一个旧来源格只有在其格心距离不超过「到最近参考格心的距离加两倍半对角线」时，才可能成为足迹内某点的最近格；新剖面再按其物理作用距离加入支持。窄于条件格的剖面因而不会漏积分。`ContinuousOrogenReplacement` 的重建依赖三角形顶点，支持范围再放宽一个源三角形最大边长；未知剖面实现保留全部请求足迹。
 
 来源对象分六族。全部对象的支持范围和参数在取样前确定，裁窗使用相同的来源；替换类来源只返回高程差额，对应下游过程的实际响应由相应算子另行验收，调用方在来源记录中保存端点哈希。
 
@@ -152,13 +163,15 @@ GCM 到 CVT 的降水面积输出由 `gcm/cvt_area.py` 提供：接口从有序�
 | 造山剖面与包络 | `ConservativeArcField`、`orogen_source.CollisionProfileField`、`collision_source_from_contract`、`orogen_source_from_native`、`OrogenEnvelopeProfileField`、`with_continuous_arc_envelope`（诊断用 `with_continuous_endcaps`） | 沿弧保守场按弧长测度映射到共享节点、隐式图扩散平滑（零端点通量）；碰撞剖面接入现有 Airy 截面、地球粗格翼坡标定与力平衡高程上限；组合来源按显式分段/缝合带编号准备，所选剖面先取包络最大值再与其余冻结贡献合成、最后减去旧包络（保留重叠山带的主导关系），准备接口检查来源唯一性与完整参考场重放。连续弧包络为每条有限弧准备方向距离剖面，端部策略与连接度随来源元数据记录，几何定义见 [造山剖面 4.1](../../knowledge/geology/orogen_topography.md#41-有限山带端部的数值延拓)。 |
 | 岸坡与陆架 | `coastal_source_from_native`、`CoastalPlainDifferenceSource`（`footprint_support`）、`ShelfEnvelopeDifferenceSource`、`ShelfCoastalDifferenceSource`、`shelf_source_from_native` | 从 `terrain_sources.npz` 的实际陆架输出与冻结低地目标准备连续岸坡差额（入口核对档案类型、格数、地形指纹与阶段连接；宽度、平原高程分界、山岸比例由调用方显式提供）。`footprint_support` 合并新剖面宽度与旧阶段改变顶点的实际岸距，覆盖旧端点重建的全部可能差额；`protection_policy="source-weight"` 将原生资格放入同一三角网按正权重组合。这些入口供连续地物试点显式使用，生产布局的采用范围另行验收。 |
 
+`surface_transport.hillslope_transport` 是供地表过程试点调用的线性坡面输运接口，没有接入画布生成。它在均匀物理网格上用成对有限体积通量求解 dh/dt = D∇²h：扩散系数以 m²/yr 给出，时段以年给出，子步数保证 D·dt/dx² ≤ 1/4；陆面之间交换等量反向的体积，邻海面以海面为固定基准并记录输出体积，外框零通量。回执 `TransportBudget` 记录陆地初末体积、输出体积、残差与子步数，相对残差超过 5×10⁻¹² 时报错。物理尺度见 [坡面输运](../../knowledge/geology/surface_transport.md)。
+
 `FrozenOrogenReplacement.continuous_reconstruction` 为连续背景组合准备独立的 `ContinuousOrogenReplacement`：所选来源、其余活动山带、古山带和冻结地壳指示量共用正权球面三角形重建，地壳覆盖作为原指示量的连续数值比例，两份最大值包络在贡献重建后分别求值再作差，原阶段的包络重建残差保持冻结；来源记录保存独立重建哈希、覆盖策略与源三角形最大边长支持范围。
 
 **原生来源档案**（`terrain-source-fields-v1`）保留地形组合至作者高程约束之间的实际表面，连续来源从中读取原山带包络、地壳覆盖及岸坡阶段端点；档案的地形指纹与生成参考态共同核对，实际亚格子精度按原来源登记，导出入口和缓存规则见 [地质管线 7.6](geological-pipeline.md#76-参数表)。关键字段：`cell_area_km2`（与 `xyz` 同源格的实际球面面积，供体积账本与保守传递）；`shelf_continental_crust_mask` / `land_crust_mask`（陆架入口实际 `crust_type == "continental"` 的指示量 / 造山来源 `crust_type != "oceanic"` 资格，两项判据及地表海陆分类分别使用，构造阶段快照标签按实际年代读取）；高程阶段端点 `combined_elevation_m`、`after_initial_sea_level_m`、`orogen_cap_m`、`after_orogen_cap_m`、`after_interior_lowlands_m`、`interior_lowland_clamped_mask`、`after_deposition_fill_m`、`final_forearc_surface_m`、`after_forearc_m`、`after_deep_ocean_clamp_m`、`after_final_sea_level_m`、`after_overlay_archipelago_m` 依次记录初次海面校准、高程上限、内部低地、沉积、前弧、限深、末次海面校准与岛群纹理，`final_elevation_m` 为作者高程约束后的表面。各字段保持原生地质网格精度，单位与参考基准随档案记录；连续来源按同一阶段顺序消费这些约束。
 
 ### 2.5.3 来源细化工作流
 
-`export canvas refine` 通过 `canvas_orogen_refinement.refine_canvas_layout` 完成来源选择、条件积分和共享统计场的整批准备；`canvas_refinement.prepare_refined_canvas` 将已积分的来源差额加到参考 S3 高程条件，写入独立输入批次并保留参考结构、生成参数及气候通道（元数据保存来源、参考端点哈希与求积阶数）。`CanvasRefinementConfig` 按画布声明唯一的活动分段和古缝合带编号；`load_native_inputs` 按分支解析作者配置、来源档案和造山契约，核对物理半径并记录输入哈希。整批在临时目录准备并核对条件和统计回执，完成后安装新目录；布局与归属表保持，未选输入按原值复制，原高清块保留在原批次。每张所选画布的 `preparation/statistics.json` 保存准备时间和文件哈希，根 `layout.json.height_refinement` 保存选择、来源指纹及积分收敛记录；`integrate_source_correction`（原 `integrate_orogen_correction` 是其别名，岸坡同规则）执行上述求积与收敛检查。
+`canvas refine` 通过 `canvas_orogen_refinement.refine_canvas_layout` 完成来源选择、条件积分和共享统计场的整批准备；`canvas_refinement.prepare_refined_canvas` 将已积分的来源差额加到参考 S3 高程条件，写入独立输入批次并保留参考结构、生成参数及气候通道（元数据保存来源、参考端点哈希与求积阶数）。`CanvasRefinementConfig` 按画布声明唯一的活动分段和古缝合带编号；`load_native_inputs` 按分支解析作者配置、来源档案和造山契约，核对物理半径并记录输入哈希。整批在临时目录准备并核对条件和统计回执，完成后安装新目录；布局与归属表保持，未选输入按原值复制，原高清块保留在原批次。每张所选画布的 `preparation/statistics.json` 保存准备时间和文件哈希，根 `layout.json.height_refinement` 保存选择、来源指纹及积分收敛记录；`integrate_source_correction`（原 `integrate_orogen_correction` 是其别名，岸坡同规则）执行上述求积与收敛检查。
 
 **统计参照**：`coarse_source` 按 `fixed-coarse-statistics-v1` 保存新条件与已接受统计参照的相对路径、哈希和形状——统计采用参考的均值减第五百分位之差，四个气候编码通道逐值保留；`td_canvas_worker.translate_coarse_mean` 按编码均值差同步平移低分位，均值响应为零的格点逐字节保留参考通道（低尾差按现有 TD 编码保留符号，float32 差额重算误差容限 8×10⁻⁶ 个编码单位）；`td_canvas_worker.prepare_coarse_statistics` 在同一固定模型、种子和条件 SNR 下生成候选均值，读取参考批次的冻结共享场或从所声明的原 S3 条件生成参照（准备时核对两批的几何、生成配置、结构声明与五个条件文件的哈希，四个气候条件输入逐字节相同；每次安装条件后重建 tile 缓存，查询完整含边界的六通道编码场）。这项固定气候政策用于地质来源实验；明确刷新气候的批次按 2.5 节更新四个气候输入及共享场的气候编码。所选来源可通过 `statistics_reference` 指定已接受的统计参照画布目录（其画布编号、几何、模型、结构声明和四个气候条件须与本次 S3 参考一致；条件高程与参照逐字节相同时直接复用其六通道场；参照路径、画布哈希与共享场哈希保存在来源及整批回执，查询前缀传入高清阶段；省略时用原始 S3 的统计政策）。
 
@@ -181,11 +194,21 @@ orogens:
 ```
 
 ```bash
-dreamulator export canvas refine nacrea ORIGINAL_S3 NEW_LAYOUT \
+dreamulator canvas refine nacrea ORIGINAL_S3 NEW_LAYOUT \
   --config selections.yaml --td /path/to/terrain-diffusion --gpu 0
 ```
 
 默认来源 map 按地质层继承分支解析，独立重算的来源可由 `--source-map` 指定。所选碰撞来源可声明 `collision_parameter_policy`：默认 `conservative_arc` 用完整有效接触的沿弧保守场；`known_contact_vertices` 沿用已接受的正贡献接触平滑、共享顶点均值和反距离平方延拓（重建使用完整界线计算横向距离与侧别，历史缺值仅提供界线几何），该策略在所选画布配置中显式记录，来源元数据保存缺史格、参数顶点与几何的独立哈希；两种剖面共用现行 Airy 截面、翼坡与高程上限，分别按原接受范围验收。板块对的明确极性与年代来源由地质契约保存，海沟、岛弧和陆架作用域使用地壳准备完成后的共同快照；接口时点、默认近似和缓存恢复见 [地质管线 6.1](geological-pipeline.md#61-历史契约汇聚边界段orogen_contractpy)。沿轴保守传递、西岸连续岸坡与暮光实际阶段响应已获局部效果接受（固定 S3 统计幅度及方向），常规非对称地质合成已将已有挠曲作用域传入陆架阶段，连续岸坡与沿轴来源的常规画布接入分别推进。
+
+**生产采用范围。** 现装 nacrea 画布树中，只有下表三张画布用原生来源替换了所选山带，其余十六张沿用 S3 的高程条件。三张画布都以各自已接受批次的冻结共享场作统计参照，参照目录记录在 `layout.json.height_refinement.config`。
+
+| 画布 | 所选来源 | 碰撞参数策略 | 达标求积阶数 | 支持条件格 |
+|---|---|---|---:|---:|
+| `aurora`（曙光） | 活动分段 seg_064 | `conservative_arc` | 128 | 2688 |
+| `land_-24p4_+132p6`（南方大陆） | 古缝合带 suture_p4 | 不适用 | 32 | 1159 |
+| `world-southeast`（世界岛东南） | 活动分段 seg_068 | `known_contact_vertices` | 128 | 7542 |
+
+表中采用依据是局部窗口的创作接受、来源重放和积分收敛，不是地球科学验收。两种碰撞参数策略的来源口径不同，按画布分别声明，不能互相代替。原生替换之后，全部画布又经过同源地质增量刷新，含参考冰的画布再换为冰下岩石条件（2.5.11 节）。每张画布的 `canvas.json.height_refinement` 保存最近一次来源更新，`reference_canvas_sha256` 记录它所基于的上一批画布描述；整批的山带选择与收敛回执保存在根 `layout.json.height_refinement`。
 
 高程来源更新时，先核对生成批次与目标地质网格的格心、高程和地形指纹。
 生成高程条件、附带月气候和渲染图各自保存来源版本；附带气候刷新与重新渲染分别消费现有地形块。
@@ -366,6 +389,49 @@ EF分类与永久覆冰仍分别判断。
 低于海面的受载基岩洼地在冰下是接地冰床，冰外是冰前湖或洼地；外海种子仍取原含冰地表的海面格，
 以免冰下洼地被当作海洋。
 
+### 2.5.12 冰缘的塑性锥度
+
+覆冰更新按 `marine`、`seed`、`fine`、`taper` 四段依次运行，最后一段处理冰缘。每个求解格的像素共用一个冰面水平面，
+这在冰盖内部成立，在冰缘却会在裸地上方留下一堵冰墙；真实接地冰崖只有几十米高。锥度把冰缘一带的冰厚压到完全塑性
+冰盖的剖面上：基底剪应力取屈服值 τ₀ 时，距冰缘 x 处可维持的冰厚为 h = √(2τ₀x/(ρg))（`plastic_margin_thickness`）。
+τ₀ 取 80 kPa（`BASAL_SHEAR_STRESS_PA`，地球冰盖观测范围 50–100 kPa 的中值，Nye 1951 与 Vialov 1958），跨世界只随 ρg 变化。
+
+**带限锥度。** 剖面只描述达到流动平衡的冰缘；它到 12 km 才长到约 450 m、到 240 km 才长到约 2000 m，
+当成全场上限会换掉整个冰盖的形状。`margin_taper` 因此取
+
+h ← min(h, max(plastic(d), h·√(min(d/L, 1))))，
+
+其中 d 为到冰缘的距离，L 为带宽。薄于 √(2τ₀L/(ρg)) 的冰由第一支给出，结果就是塑性剖面；更厚的冰由第二支把锥度
+限制在宽 L 的带内。带外表达式化为 min(h, h) = h，所以内陆像素逐位不变。L 取 12 km（`MARGIN_BAND_LIMIT_M`）：
+它是剖面长到实测最外一圈平均冰厚 451 m 的距离，使带内等效屈服应力等于 τ₀；取 5 km 相当于 187 kPa，超出观测范围。
+认识论类别为数值形状闭合加一个物理自洽锚点，标定域是 90 m 像素上的接地大陆冰。
+
+**哪些无冰像素算冰缘。** 距离只从两条判据都满足的无冰像素量起：
+
+- `descending_margin_mask` 只保留地面低于相邻冰面的无冰像素。山峰穿出冰盖处，冰厚等于水平面减床面，
+  会随床面升高自然归零，不需要收口；只有海岸、低地和湖泊处冰面必须下降。这条判据不需要阈值。
+- `enclosed_ice_free_mask` 去掉被冰包围、不与数组外部连通的无冰区域。冰盖绕过它包围的山峰、填满其中的洼地，
+  这些区域不是边缘；与外海相连的海岸入口保留冰缘。
+
+连通性判定在整张画布上按 8 倍降采样（约 719 m）一次完成，每个分块再用 160 像素（约 14 km，宽于带宽）的外环
+计算到冰缘的欧氏距离，因此带内距离跨分块精确。画布未覆盖的分块按地表无穷高填充，既不是冰也不是冰缘，
+锥度不会在画布边缘刻出破坏接缝的沟。
+
+**输出与记账。** 锥度只改冰厚；裸地像素保持受载基岩的编码高程，含冰像素的地表按新冰厚重写，`climate/ice.m.npy`
+同步更新 23 km 格内均值。锥度对厚于 √(2τ₀L/(ρg)) 的冰不是幂等的，该段拒绝清单中已记录锥度的画布。
+冰量不守恒，移走的冰视为冰缘的崩解与消融，作者裁决接受这一点。`surface/manifest.json` 的 `margin_taper` 记录方法，
+清单字段 margin_taper_stats 记录带宽、τ₀、输出体积及其占比、最外一圈锥度前后的平均冰厚与第 95 百分位、带外像素的
+总数与未变数，以及被包围无冰区的比例。输出体积只作定性读法，不是标定过的崩解通量。
+
+现装 v7（`climate-grounded-ice-surface-20261105-v7-margin-taper`）的 19 张画布合计减少全球冰量约 0.55%，冰的范围不变，
+带外约 87 亿个内陆像素全部逐位不变。各画布的最外一圈平均冰厚降到约 5–27 m。整段对每张画布的耗时为数秒到约 6 分钟。
+只有几十个含冰块的山地冰原整体落在带内，按塑性剖面被削掉较大比例，但冰范围不变、有冰像素地表下降的中位数为 0 m。
+
+**已知局限。** 薄的山地冰原靠床面坡度与谷壁支撑，平床塑性剖面低估其可承载冰量，根因在共享水平面对粗糙床上小冰体
+的重建。少数真实的海相冰缘上，水平面在海岸处仍有数千米厚，锥度在 12 km 内把它降到数百米，平均坡度仍远陡于真实冰盖
+边缘的 1–2°，并在窄海湾留下圆弧状足迹；修正属于水平面重建本身。锥度阶段目前由生产批次调用上述库函数运行，
+尚未作为包内命令行入口提供。
+
 ### 2.6 生成、续算与校验
 
 
@@ -373,10 +439,10 @@ TD 在一张画布上是无缝的：上游的 InfiniteDiffusion 把画布当作�
 所以逐块取出的分块之间没有接缝，生成顺序与进程划分也不影响结果；原理与实测见
 [terrain_diffusion.md](../../knowledge/cartography/terrain_diffusion.md) 的「大画布上的无缝分块生成」。
 
-`export canvas generate` 为每张 GPU 启动一个 `td_canvas_worker.py` 进程，用 TD 虚拟环境的解释器运行，
+`canvas generate` 为每张 GPU 启动一个 `td_canvas_worker.py` 进程，用 TD 虚拟环境的解释器运行，
 工作目录是 TD 克隆；这个进程不导入本库。worker k 取分块清单（行优先）的第 k 段连续切片，使相邻分块
 共享缓存的隐变量（`worker_slice`）。每个分块先写临时文件再改名，然后把 sha256 加锁追加到
-`chunks.sha256`；重启时文件存在且校验和匹配的分块直接跳过。`export canvas plan` 先在独立临时目录生成
+`chunks.sha256`；重启时文件存在且校验和匹配的分块直接跳过。`canvas plan` 先在独立临时目录生成
 所选画布的布局与输入，再检查已有分块的几何、条件场、生成参数、结构及 `coarse_source` 共享场描述。
 输入生成或复用检查失败时，原布局、输入、高清块和校验清单保持原值。全部检查通过后，
 `td_canvas_build.install_planned_inputs` 按文件替换输入，并保留已有分块与其他资产。
@@ -407,14 +473,14 @@ TD 代码提交号、种子 42、条件信噪比（0.2, 0.2, 1.0, 0.2, 1.0）、
 
 ### 2.8 总览图
 
-`export canvas mosaic` 把一张画布的原始分块拼成一张图（`render_mosaic`），裁到实际生成的范围。画法、陆地颜色与
+`canvas mosaic` 把一张画布的原始分块拼成一张图（`render_mosaic`），裁到实际生成的范围。画法、陆地颜色与
 海洋颜色是三个独立的选项：
 
-- `--style` 选画法，缺省 `relief`。`carto` 与 `export render` 的地形图相同，是只乘在陆地上的双尺度晕渲加饱和度提升；`relief`
+- `--style` 选画法，缺省 `relief`。`carto` 与 `render` 的地形图相同，是只乘在陆地上的双尺度晕渲加饱和度提升；`relief`
   是印刷用的立体晕渲，把高程放大后用四个方向的光照合成，海岸外加一圈柔和的阴影。命令的放大倍数缺省为 4，
   各档步长相同，所以同一画布的 180 m 图与 359 m 图明暗一致；`--exaggeration` 可改。直接调用 `render_mosaic`
   而不给倍数时，倍数取像素边长除以 90 m。
-- `--palette` 选陆地颜色：`adaptive` 是 `export render` 的自适应地形色表（锚定在固定的 ±9000 m，`carto` 的缺省），
+- `--palette` 选陆地颜色：`adaptive` 是 `render` 的自适应地形色表（锚定在固定的 ±9000 m，`carto` 的缺省），
   其余取自 `map/hypsometric_palettes.json`：`pastel`（本项目的浅色分层，`relief` 的缺省）、`gmt-etopo1`、
   `gmt-globe`、`gmt-relief`（GMT 的原始色表）、`wikipedia`（维基百科地形图规范）与 `cross-blended`。每套色表
   记录来源与许可，断点是绝对高程，各大陆的图可以直接并排比较。
@@ -448,6 +514,50 @@ TD 代码提交号、种子 42、条件信噪比（0.2, 0.2, 1.0, 0.2, 1.0）、
 每对图从同一批原生块取样，范围、配色和高程放大倍数保持一致。
 批次清单记录画布元数据、原图哈希、尺寸及来源版本，预览与原图分别保存。
 
+### 2.9 二次侵蚀与沉积（surface_process）
+
+`canvas erode` 在 TD 生成之后、S2 之前，给画布补上河流下切、谷坡后退、泥沙搬运与湖盆充填
+（物理依据、标定与验收见[二次侵蚀与沉积提案](../proposals/canvas-erosion-deposition.md)，湖面蒸发见知识库
+hydrology.md §7）。求解器是 `map/surface_process.py` 的 `run_surface_process`：每步先做带终端湖判定的
+Priority-Flood 与汇流（`route`，并行填洼），再做隐式河流功率下切（n = 1，K = 7×10⁻⁷，m = 0.5）、阈值坡度
+33° 的谷坡削减、按 D = λ·Qs/Q（λ = 0.4 m/yr）的河道沉积与湖盆自下而上充填，最后把 25 km 低通平均拉回锚定
+面。锚定是单向的，只补侵蚀亏损，亚格子凹坑的充填得以保留；在网格自身的封闭盆地里双向锚定，保持网格给定的
+深度；陆地不会被压到初始海平面以下。泥沙账与地形账每次运行都返回残差，在舍入误差量级。数值内核在
+`map/_surface_process_kernels.py`，逐元素复刻原型的数组表达式，与原型的结果逐位相同。
+
+画布驱动 `media/canvas_surface_process.py` 分两级求解。粗级把原生块按 `block`（缺省 8，约 720 m；大画布可用
+16，约 1.44 km）求块平均，海陆按 S2 同一规则在粗网格上判定：连通开放边界并含地质海洋格的水体是海，网格类海
+湖内部的水体也是海，其余地质海洋格构成网格封闭盆地，即双向锚定的范围。粗格冰厚超过 1 m 的格不参与侵蚀。
+每格的下切时长取有效下切时间（`map/incision_time.py`：按造山契约把留存缩短量线性回放，重算引擎的
+`orogen_relief`，对 min(h(τ)/h(0), 1) 积分），平台格取上限 `t_max_myr`（缺省 50 Myr），并不低于
+`t_min_myr`（0.5 Myr）；半径、重力与陆壳基准高程取自世界的地质配置。湖面需求读画布气候通道
+`lake_evaporation.mm`，缺少时退回 Hamon。粗级缺省按流域求解（`map/surface_process_basins.py` 的
+`run_surface_process_by_basin`，`CanvasSurfaceConfig.by_basin`）：初始地表汇流一次后按出口标记流域，大流域
+（不少于 `BIG_BASIN_CELLS` 格）各取一个裁窗，小流域按区块打包；裁窗里其他流域的格是水流不能进入的墙，即一次运行内
+分水岭固定。每个裁窗调用同一个 `run_surface_process`，步长按本流域最大流量取，并受 `max_dt_yr` 约束（按流域求解时缺省
+80 kyr），时长取本流域最长的下切时长；裁窗在进程池里并行，缺省 4 个进程、按 CPU 配额均分线程，进程数同时受可用内存
+约束。`--single-grid` 回到全画布共用一个时间步的求解。只有可侵蚀格接收沉积（`_erodible_lake_lists`）：冰面洼地不被
+充填，部分在冰下的湖只充填无冰的湖底，整湖在冰上时泥沙过境计入输出。粗级增量按双线性升采样到原生像素后叠加到
+原生块上。原生级在每个
+2048² 分块外加 256 像素重叠边，在 90 m 上以固定 80 kyr 步长运行 4 Myr，不削坡，锚定到窗口自身在两倍粗网格间距
+上的低通，所以只清理粗级看不到的亚格子凹坑；各窗口的增量按线性权重融合。原生级各块在进程池里并行
+（Linux 用 fork，Windows 用 spawn），每个进程单线程，结果与进程数无关。进程数由 `utils/resources.py` 的
+`worker_budget` 决定：取 CPU 配额（亲和掩码与 cgroup `cpu.max`）与「可用内存的一半 ÷ 单进程峰值」中的较小者，
+单进程峰值按每格 `SOLVER_BYTES_PER_CELL`（1400 字节，实测 2560² 窗口约 8.6 GB）估算；可用内存在 Linux 上取
+`/proc/meminfo` 与 cgroup 额度减去不可回收用量中的较小者，Windows 上取 `GlobalMemoryStatusEx`。这个单进程峰值取自进程的常驻内存，Linux 上 fork 出的进程与父进程共享的页面也计在内，
+world-west 59 进程实测的不可回收内存合计约 101 GB（每进程约 1.7 GB），所以估算偏保守；spawn 方式没有共享页，Windows 上的
+真实峰值待实测后再收紧。
+
+产品写在 `surface_process/`：`increments/rXXX_cYYY.npy` 是 int16 米值的逐块增量（最终地表减 TD 块，陆地
+保持不低于 1 m，海面像素不动），`manifest.json` 记录配置、粗级网格与下切时长统计、两级的账本残差、来源网格
+与造山契约的校验和。运行开始时先删除旧清单，中断的运行不会留下「完成」状态。TD 原生块不被修改。S2 的
+读取侧统一经 `resolve_increments` 决定「安装地表」：`auto`（缺省）在产品完整时取「原生块 + 增量」，否则取原生块；
+`td` 强制原生块；`surface-process` 要求产品完整。S2 的 `CanvasStore`、S3 裁窗的 `CanvasSource`、跨画布接缝检查与
+总览图都调用它，所以河湖与出图始终来自同一地表。S2 的工作目录 `hydro-work/` 与产品目录 `hydro/` 名称不变，各自
+在 `surface.json` 记录所用地表（`td`，或 `surface-process` 加侵蚀清单的校验和，重跑侵蚀会使旧结果失效）；续跑时
+发现地表不一致，`run_canvas_fill` 拒绝混用缓存，命令行入口则自动整体重算，S3 裁窗在 `hydro/` 的地表与自己不一致时
+先补跑 S2。
+
 ## 3. S2：外存水文
 
 ### 3.1 边界
@@ -472,7 +582,18 @@ Priority-Flood 的算法本体、物理判据与文献讲解在知识库
 填平不 breach。画布外存版本由 `run_canvas_fill` 驱动：阶段一逐块写 `fill/`、`labels/`、
 `summary/`，阶段二只读摘要构建全局图，阶段三逐块写 `final/`；内存占用与分块大小同阶，
 与画布总像素数无关。时间上三阶段共 O(N log N)（N 为画布像素数）：阶段一与阶段二的堆
-操作每格常数次，阶段三是单遍改写。`canvas_hydrology.py` 另有一套全局前沿 Dijkstra 实现
+操作每格常数次，阶段三按「标签到水位」的查表单遍改写。阶段一与阶段三各块互不依赖，
+在进程池里并行（`workers`，缺省取可用核数与 16 的较小者）。Linux 用 fork，Windows 与 macOS
+用 spawn（环境变量 `DREAMULATOR_START_METHOD` 可强制指定）；每个子进程启动时只收到一份画布级
+上下文，阶段三的流域水位由父进程按块切成小表随任务下发，父进程在启动阶段三之前释放全局流域图。
+子进程只写本块文件并返回校验和，校验账本由父进程统一追加，结果与进程数和启动方式无关。spawn
+会在子进程里重新导入主模块，自写脚本调用 `run_canvas_fill` 时必须放在
+`if __name__ == "__main__":` 之下；命令行入口不受影响。world-west
+（1588 块、67 亿像素）在 16 个进程下整个填平不到 3 分钟。阶段二把各块局部标签编成紧凑的全局
+节点号，接缝边按右邻块、下邻块与两个斜对角块成批生成，在压缩邻接表上用 numba 跑最小化路径最大值的
+Priority-Flood（`_watershed_levels`，复用 `minimax_levels`），world-west 的 750 万个流域约 6 秒；
+流域水位取值唯一，结果与字典加堆的参照实现 `_watershed_levels_reference` 逐位相同。
+`canvas_hydrology.py` 另有一套全局前沿 Dijkstra 实现
 （`flood_canvas`），作为正确性参照（oracle）：两者在合成 DEM 上逐位一致，包括带海与
 多分块的情形。
 
@@ -491,6 +612,23 @@ Priority-Flood 的算法本体、物理判据与文献讲解在知识库
 画布上这类面积占判海面积的 0.03%–0.30%，最大单体约 600 km²）；只看边界连通会把
 恰好触到画布边界的内陆封闭盆判成海——画布互相重叠，一张的边界在另一张的内部，
 不是物理海岸线。合用不引入新参数。同一判定也用于 oracle 的 `CanvasTiles.ocean`。
+
+**网格的类海湖也是海。** 地质网格把面积不小于 6 万 km² 的封闭水体升级为类海水体
+（`upgrade_large_endorheic_lakes`，保留 `is_lake` 并把 `water_class` 设为 `ocean`），网格与
+GCM 都把它们当作水面 0 m 的海。S2 跟随这一长波长正典：S1 的 `write_mesh_sea_lake` 在每个
+23 km 粗格取最近网格格是否为类海湖，写成 `geometry_fields/mesh_sea_lake.npy`（`canvas.json`
+的 `mesh_sea_lake` 记录
+路径与校验和；TD 不读取它，所以不放在 `conditioning/` 里）。`surface_sea` 先对这张粗格图
+做一次 3 × 3 腐蚀，去掉最近格取样落在网格海岸线上的粗格，再按 256 像素/格升采样作为第三
+类种子；水体只要含一个这样的像素就判为海，不再要求连通画布边界。否则 S2 会把这些水体当作
+封闭盆地，按溢口水位灌满，画成湖面高出海平面数十米的巨型湖。字段只含类海湖、不含全球
+海洋：全球海洋仍由前两个条件判定，海洋粗格内在地表上封闭的浅海小水体与冰封盆地继续按
+内陆低地处理（world-west 上若把整个网格海洋都作为种子，会多判约 5 万 km² 这类水体）。
+网格只标为湖、未升级为类海水体的封闭水体也按原规则处理。在字段出现之前规划的画布没有这张图，判定退回上面两条
+件的交集，水文日志会注明缺失；`dreamulator canvas plan <世界> --backfill mesh-sea-lake` 可以为
+它们补写，前提是网格指纹仍与规划时一致，否则须重新规划。三处消费方（S2 水文、接缝检查
+与高清窗口）共用 `canvas_anchored_sea` 这一入口。更换判定后，已有的 S2 工作目录须用
+`--force` 重跑，续跑会混用新旧两种出口。
 
 阶段一的逐块洪水自 2026-10-30 起走 numba 内核（`_hydrology_kernels` 模块的
 `_local_flood_kernel`）：平坦数组二叉堆按（水位，格号）字典序弹出，复刻纯 Python 参照
@@ -541,10 +679,12 @@ Dijkstra，时间 O(M log M)、空间 O(M)，M 为平区格数，通常远小于
 
 湖的收支沿用区域链的年度水量平衡级联（`terminal_equilibrium_routing`，物理与判据见
 知识库 hydrology.md §7）：全部湖先当汇做首触累积，湖图（receiver 森林按湖收缩）沿
-拓扑序传递总入流与需求，过路湖在溢出口扣减净蒸散（负点权重），装不满的湖判终点并
+拓扑序传递总入流与需求，每个湖在全部上游湖都交出出流之后才判定，所以由上游溢流补足的湖仍是过路湖；
+过路湖在溢出口扣减净蒸散（负点权重），装不满的湖判终点并
 改写到平衡水位——缩水湖保留可见水面、干盐滩整片成陆；河链的终点掩膜含干滩足印，
-缩水湖干床由改写前湖底地形的下降树续走。画布气候通道提供判据所需的年降水与年均温
-（粗格直传，湖格按块索引取值，与全图平铺逐位相同）；缺温度或径流通道时判据关闭，
+缩水湖干床由改写前湖底地形的下降树续走。画布气候通道提供判据所需的年降水与湖面年蒸发
+（`lake_evaporation.mm`；粗格直传，湖格按块索引取值，与全图平铺逐位相同）；在这个通道出现
+之前规划的画布退回 0.9 × Hamon（年均温代入），水文日志注明所用来源；缺温度或径流通道时判据关闭，
 退化为几何湖。永耀岛全常流气候下 191 个过路湖无一终端，湖图瀑布最深 9 级、全部
 通海。
 
@@ -560,11 +700,16 @@ Dijkstra，时间 O(M log M)、空间 O(M)，M 为平区格数，通常远小于
 河道提取复用区域链的 `river_segments`：D8 最陡下降、Chaikin 平滑、湖岸停步与溢出口
 续走、短链保留。河段以画布 SW 原点 km 输出，与区域链 `refined-out` 的坐标约定一致。
 常流与非常流按 12 个月的累积流量判定：任一月低于 1 L/s 的活动门槛即记为非常流，连续
-同类格合成一个情相段。
+同类格合成一个情相段。年度判为过路的湖在月度累积里逐月记账（`month_active_counts` 的
+`lakes` 参数）：`terminal_equilibrium_routing` 交出过路湖的格、出口与湖图（`PassThroughLakes`），
+`lake_monthly_demand` 由月度湖面蒸发与月降水给出各湖逐月净需水，`lake_monthly_outflow` 按出口
+以下的蓄水亏缺算出周期稳态的月出流，再从出口注入第二组月累积。物理与近似见知识库
+hydrology.md 的月度情相一节。缺 `lake_evaporation_monthly.mm` 时不扣湖面月收支；所用方式与湖数
+写进水文元数据的 `regime_lakes`。
 
 河道起始门槛采用“物理起始流量不变”原则：区域链的基数是 3000 个 2048/550 km 包格，
 细化时按像素数平方换算到 4096²（12000 格），对应约 2.1 m³/s 的平均流量起点。画布
-90 m 像素的同一起点约 27000 格，因此 `--threshold-cells` 默认 27000；需要更密的小溪网
+90 m 像素的同一起点约 27000 格，因此 `--river-threshold` 默认 27000；需要更密的小溪网
 时下调。
 
 ### 3.7 最终产品目录约定
@@ -653,7 +798,7 @@ S4 按这些配对点对同一地点取样，检查接缝高程、湖、河与�
    海平面、气候图例与来源画布。
 
 输出目录是 `input/`（区域数据包通道与 meta）与 `refined-out/`（高程、水体掩膜、河段矢量
-与 meta），与 `export region` 加 `export build` 的产物同构，所以 colorize、carto、relief、
+与 meta），与 `region pack` 加 `region build` 的产物同构，所以 colorize、carto、relief、
 biome、Blender 各腿无需改动。
 
 **渲染侧的河湖衔接**：河链会刻意把最后一段画进湖内一格，作为河与湖的可见连接。渲染载入
@@ -687,6 +832,10 @@ biome、Blender 各腿无需改动。
   `land_-66p5_-018p3` ↔ `land_-62p9_-050p8` 给出高程差 266 m 与 254 m、湖判定 1 处分歧、
   河段存在性一致；接缝点附近没有河段，流量比无从比较。高程差里海陆不一致的那一点按既定
   方案走 92 km 整体混合。其余 5 对配对画布尚未接入地形块，校验器对它们报「未验证」。
+- 高程条件的编码顺序与 TD 训练预处理不同。画布接口先求米制高程的足迹面积均值，TD 导入再对这个均值做一次
+  带符号平方根变换；训练数据则先对高清高程做变换，再按约 720 m 取中位数，最后在约 23 km 范围内求均值与
+  第 5 百分位。两种顺序的差异尚未用固定来源单独检验，物理高程均值与模型条件统计因此分别记录；
+  候选与检验方案见提案 4.2 节。
 - S5 目前只有单张画布的总览图（2.8 节），跨画布拼合的大陆与全球概览尚未实现；计划见 6.1 节。
 - 细尺度浅冰响应在 5750 m 网格上求解。流动把冰量推进平坦低地时，冰量增量回到像素的插值在陡坡上
   仍沿求解格留下折线台阶（暮光中部低地边缘）。台阶幅度很小，作为已知限制保留；更细网格上的显式求解
@@ -713,7 +862,7 @@ S5 把多张画布拼成大陆级与全球级的概览图。拼图所需的部�
 4. **分级分辨率与内存。** 全球 90 m 分辨率约 388 亿像素，不现实；计划大陆级约
    1 km、全球 4–8 km。实现沿用单画布总览的分带写法：每次只装一条分块带，带与带
    之间留出晕渲所需的上下文，内存随单带而不是全图增长。
-5. **命令与输出。** 新增 `export canvas overview`（或在 mosaic 上增加多画布模式），
+5. **命令与输出。** 新增 `canvas overview`（或在 mosaic 上增加多画布模式），
    沿用 `--style`、`--palette`、`--sea` 与 `--intertidal` 四个选项；输出大陆图与
    全球图，供发布页与视频素材使用，画法参数与单画布总览保持一致，便于并排比较。
 6. **验收。** 以 S4 的接缝指标作为合入门槛；接缝处目视河湖连续、海陆判定一致、

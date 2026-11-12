@@ -204,7 +204,7 @@ $$
 | 恒星光谱到 RGB 系数 | `atmosphere_render.py:star_optics` |
 | 世界输入读取（恒星温度、气压、组成） | `src/dreamulator/cli_export.py:_atmosphere_from_world` |
 | 单元测试 | `tests/test_atmosphere_render.py` |
-| 出图入口 | `dreamulator export globe`（`--atmosphere/--no-atmosphere`） |
+| 出图入口 | `dreamulator map globe`（`--atmosphere/--no-atmosphere`） |
 
 验收判据：地表天顶透射率随气压与重力按柱质量缩放；太阳在地平线下时透射率为零；
 圆盘外的太阳侧大气晕亮度非零、太空背景为零；两种曝光模式下 `physical` 的

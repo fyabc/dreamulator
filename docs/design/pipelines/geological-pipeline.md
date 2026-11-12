@@ -953,6 +953,16 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
    以免相邻格子取到不同接触格而切出悬崖。地形合成在海平面校准之后，用 `apply_orogen_cap` 把造山带格子的
    最终平均高程软压在各自的上限附近（超出部分按 300 m·tanh 压缩，青藏高原面格子平均的离散约 ±0.3 km），
    纹理噪声不能把高原推过上限。
+   **造山带中尺度起伏**（`orogen_mesoscale_relief.py`）：上限之后、内陆低地之前，带造山带起伏的陆地格子叠加
+   零均值的中尺度起伏 δ = k·(h_orogen / 1 km)·f。h_orogen 是活动与老造山带组合后的起伏，f 是带种子（`seed + 800`）
+   的白噪声经差分高斯带通（σ 40 km 与 120 km，约 100–400 km 波长）并在支撑格上归一到单位标准差的场。
+   场为零均值，所以上限给出的高原平均高程不变；陆地格不会被压到海面以下。k 由
+   `orogen_mesoscale_relief_m_per_km` 给出，缺省 75（观测拟合，范围 50–100），使高原内部 150 km 尺度起伏达到
+   青藏 240 m、阿尔蒂普拉诺 304 m 的水平；在网格尺度上青藏内部山脉遍布高原面、并不集中在古缝合带，所以场是
+   分布式的。带通核沿造山带走向拉长（`orogen_strike_frame` 给出走向与一致度：造山带起伏先做 150 km 平滑，再取等高线方向，
+   结构张量在 300 km 范围内平均，所以高原内部继承翼部的走向）；沿走向核宽为横向的 1 到 `orogen_mesoscale_anisotropy`
+   倍（缺省 3，数值闭合），按一致度过渡，走向不明确处退回各向同性。拉长后 nacrea 两块高原内部 150 km 尺度起伏为 265 m 与
+   257 m。nacrea 的现装地形不含此阶段，在其 `terrain_config.yaml` 中设为 0，全层重生成时切换。
    **亚格子起伏与峰顶**（阶段 C，`subgrid_relief.py`）：地形阶段之后，陆地格子写入 `relief_std_m`（格内
    高程标准差）与 `peak_elevation_m`（格内最高点）。μ = c·Δx·S / (1 + c·Δx·S / μ_sat)，S 为与陆地邻格平均
    高程差的平均坡度，Δx 为格距，c ≈ 0.97、μ_sat ≈ 2.9 km；峰顶 = 平均 + 3.5μ。标定用地球 2722 个被 Copernicus
@@ -1048,9 +1058,13 @@ omega_global / tide_stress / sea_level）、半拉格朗日属性平流（Thickn
 > 科学依据：`knowledge/geology/terrain_synthesis.md` §4.4（Cogley 1984；ETOPO1）
 
 双峰基准（大陆 850 m）+ 汇聚边界隆起后，板块内部残留为均匀高原——纯过程合成会把
-近半陆地堆到 >1000 m，而地球陆均高 ~350–500 m。`_apply_interior_lowlands` 以汇聚
-边界 cell（`boundary_type == "convergent"` 且 `distance_to_boundary_km == 0`）为源
-做多源 BFS，得每个陆壳 cell 到最近汇聚边界的距离 `d`，再按 Hermite smoothstep 下压：
+近半陆地堆到 >1000 m，而地球陆均高 ~350–500 m。`_apply_interior_lowlands` 做多源 BFS，
+得每个陆壳 cell 到最近源的距离 `d`，再按 Hermite smoothstep 下压。源由 `interior_lowland_origin` 决定：
+缺省 `orogen` 取汇聚边界 cell（`boundary_type == "convergent"` 且 `distance_to_boundary_km == 0`）与全部带造山带
+起伏的 cell（活动与老造山带组合后大于 0，由调用方以 `orogen_support` 传入）的并集；`boundary` 只取汇聚边界 cell。
+造山带不是克拉通内部：宽高原从边界向内展宽数百千米，只按边界起算会把高原内部压到力平衡上限以下（nacrea 两块
+主要高原约 460 m），所以缺省从造山带覆盖范围的外缘起算。nacrea 的现装地形按 `boundary` 生成，在其
+`terrain_config.yaml` 中显式保留，计划中的全层重生成时切换。
 
 ```
 lowering = depth × smoothstep(d / scale)
@@ -1073,6 +1087,7 @@ elev     = softmax(elev − lowering, sea_level + floor)   # 软钳制，只降�
 | `interior_lowland_depth_m` | 600 | 200–1200 | 深部最大下压量（m） |
 | `interior_lowland_distance_scale_km` | 1500 | 500–3000 | 下压 0→满深的距离（km） |
 | `interior_lowland_floor_m` | 0 | 0–200 | 下压后离海平面最低高度（m，0=海平面） |
+| `interior_lowland_origin` | `orogen` | `orogen` / `boundary` | 下压坡度的起点：造山带覆盖范围并汇聚边界，或只用汇聚边界（旧行为） |
 
 **沉积填充**（`_apply_deposition_fill`，紧接内部低地之后）：内部低地把深部压到海平面
 以下后，`floor` 软钳制把它们钳到 ~0m（先保住海岸线），并返回**被钳制的 cell 掩码**。

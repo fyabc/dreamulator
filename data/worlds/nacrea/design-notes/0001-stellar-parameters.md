@@ -20,7 +20,7 @@ checked_against:
 > 取代。2026-10-07 路线 1 辐照重标定：[Fe/H]=−0.19 + 年长锁定轨道 →
 > Ignis 终参数 0.65 M☉ / 0.1227 L☉ / 4365 K。正文收敛为「现行决策点 +
 > 参数快照」，历史推理由 0007（调参档案）与
-> `docs/design/proposals/nacrea-insolation-recalibration.md`（路线 1 终裁）承载。
+> [0022](0022-insolation-recalibration.md)（路线 1 终裁）承载。
 
 本文是恒星 Ignis 与行星系参数的最早决策记录，具体方案已被 0007/0009 取代。
 仍然有效的决策点：

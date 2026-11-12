@@ -58,6 +58,12 @@ terrain:
   interior_lowland_depth_m: 500.0        # 深部最大下压量（m）
   interior_lowland_distance_scale_km: 600.0   # 下压从 0 → 满深的距离（km，≈1.5× boundary_influence）
   interior_lowland_floor_m: 0.0          # 软钳制到海平面（先保住海岸线，28% 陆地）
+  # 下压的起点：boundary 只从汇聚边界起算，会把向内展宽的高原内部也压低约 460 m；
+  # 引擎缺省 orogen 从造山带覆盖范围起算，高原保持力平衡上限给出的高度。nacrea 的现装地形按 boundary 生成，
+  # 计划中的全层重生成时改为 orogen 并删除本行（docs/design/proposals/terrain-morphology-gap.md 第 5 节）。
+  interior_lowland_origin: boundary
+  # 造山带中尺度起伏（引擎缺省 75 m/km）：nacrea 现装地形不含此阶段，全层重生成时删除本行。
+  orogen_mesoscale_relief_m_per_km: 0.0
   # ── 沉积填充（2026-08）──────────────────────────────────────────────
   # 内部低地把深部压到海平面以下，floor 软钳制把它们钳到 ~0m（保住海岸线）。
   # 沉积填充接着把「被钳平的孤立盆地」填到溢流点（通往海洋的最低出口），

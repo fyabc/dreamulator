@@ -470,6 +470,23 @@ class TerrainPipelineConfig:
     # Distance (km) from the nearest convergent boundary over which the
     # lowering ramps from 0 to full depth (smoothstep).
     interior_lowland_distance_scale_km: float = 1500.0
+    # Where the ramp starts.  "orogen" (default): convergent boundary cells plus every
+    # cell carrying orogen relief (active or old), so a plateau that widened hundreds of
+    # km inland is an orogen and keeps the mean elevation its force-balance cap allows;
+    # the craton begins where the orogen footprint ends.  "boundary": convergent boundary
+    # cells only, which lowers wide plateau interiors by up to the full depth (legacy;
+    # kept for worlds whose accepted terrain predates the fix).
+    interior_lowland_origin: str = "orogen"
+    # Zero-mean mesoscale relief on orogen-supported cells, metres of 150 km-scale relief
+    # amplitude per km of orogen relief (orogen_mesoscale_relief.py).  Observation fit:
+    # 75 brings plateau interiors to Tibet/Altiplano levels (240–304 m); range 50–100.
+    # 0 disables (legacy, for worlds whose accepted terrain predates the stage).
+    orogen_mesoscale_relief_m_per_km: float = 75.0
+    # Along/cross-strike kernel width ratio of that relief at full strike coherence: ranges and
+    # basins run parallel to the belt (Earth's 25–150 km band is strike-parallel, parallel
+    # share 0.65). Numerical closure informed by internal ranges ~3–5x longer than wide;
+    # 1 = isotropic.
+    orogen_mesoscale_anisotropy: float = 3.0
     # Minimum post-lowering elevation above the calibrated sea surface (m).
     # 0 = sea level (the natural limit); cells below it are soft-clamped back so
     # the 0–100 m lowland band emerges naturally instead of piling at one value.
@@ -645,7 +662,7 @@ class TerrainPipelineConfig:
     # fit, calibration domain Earth).  Two passes scored κ −4.3 pp; ten passes
     # lower the equal-weight Köppen class agreement from 26.0% to 18.3% and the
     # wet-season phase match from 48.7% to 37.6%, so three sits near the best
-    # stopping point (2026-11-02, climate-engine-round.md 5.7).  nacrea
+    # stopping point (2026-11-02, climate-engine-round.md §3.3).  nacrea
     # same-physics regression PASS (island/mountains/ledger all held).  Known
     # accepted residual: the West-Africa corridor family (Sahara/Sahel
     # overshoot, spurious wet-trough over the Sahara, Guinea overshoot) is

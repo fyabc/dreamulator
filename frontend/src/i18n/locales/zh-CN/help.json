@@ -356,7 +356,7 @@
         },
         {
           "title": "验收工作流",
-          "content": "排查渲染问题时：在子地图页找到异常位置 → 点击 → 复制 `--lat … --lon …` 参数 → 直接粘贴到 `dreamulator export region/refine/carto` 命令重导出对应窗口。经纬网线与印刷 topo 图同款墨色，可与成图对照定位。"
+          "content": "排查渲染问题时：在子地图页找到异常位置 → 点击 → 复制 `--lat … --lon …` 参数 → 直接粘贴到 `dreamulator region pack/refine/carto` 命令重导出对应窗口。经纬网线与印刷 topo 图同款墨色，可与成图对照定位。"
         },
         {
           "title": "数据与口径",

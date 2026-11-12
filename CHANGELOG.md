@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- S2 河网阶段外存化的前两步（技术债 54，尚未接入 `canvas run`）：`media/canvas_flow_tiled.py` 逐块做平地坡化（接缝间迭代交换平地步数，坡化值与整图核心逐位相同）、D8 方向码（每格 1 字节）与 Barnes 2017 三段分块汇流（float64 求和）；`media/canvas_lakes_tiled.py` 做跨接缝并查集的分块连通区标记（编号与 scipy 整图标记一致）与几何湖。land_-12p2_-137p4 上与整图实现逐位一致，第 1 步 53 s / 12 GB（整图 1092 s / 67 GB），第 2 步 39 s / 3.6 GB（整图 1170 s / 53 GB）。
+- 二次侵蚀粗级按流域求解（`map/surface_process_basins.py`，`canvas erode`/`canvas run` 缺省 `--by-basin`，`--single-grid` 保留旧求解）：初始地表汇流一次后按出口划分流域，每个流域在自己的裁窗里用同一求解器运行，步长按本流域最大流量、时长按本流域最长下切时长，流域间并行；一次运行内分水岭固定，步长上限 80 kyr（`SurfaceProcessParams.max_dt_yr`）。以全画布单一时间步为参照，永耀岛与 land_-12p2_-137p4 的湖面、湖数与 10 km 起伏差异在 6% 以内，快 11.6 与 31 倍。原生级进程数改由 `utils/resources.py` 的 `worker_budget` 按 CPU 配额（亲和掩码与 cgroup）和可用内存的一半确定，不再写死 16。world-west 在缺省设置（每步 5 格、50 Myr、粗块 16）下整跑由估计 14 小时以上降到 2 h 5 min（粗级 43 min，原生级 59 进程 73 min，内存峰值 101 GB）。冰面格不再接收湖盆充填的泥沙（`_erodible_lake_lists`），无冰画布结果逐位不变。
+- 过路湖的逐月收支：月度情相不再假定湖面不耗水。S1 新写出 `lake_evaporation_monthly.mm`（年通道为其十二个月之和），旧画布用 `canvas plan --backfill lake-evaporation` 补写；S2 由 `terminal_equilibrium_routing` 交出过路湖的格、出口与湖图（`PassThroughLakes`），`lake_monthly_demand` 给出逐月净需水，`lake_monthly_outflow` 按出口以下的蓄水亏缺取周期稳态月出流（一年出流之和等于年度盈余），再从出口注入第二组月累积。两张干旱画布的非常流河长占比由 6.2% 升到 16.0%、由 29.1% 升到 40.0%，湿润的永耀岛基本不变；S2 多用约 0.3 到 1.7 分钟。缺月度通道时退回旧做法，水文元数据 `regime_lakes` 记录所用方式。
+- `canvas erode` 与 `canvas run` 新增 `--cells-per-step`（缺省 5）：粗级时间步按最大河流裂点每步后退的格数取，20 仍收敛，world-west 上粗级约快 4 倍。
+- 画布二次侵蚀与沉积产品化：`map/surface_process.py`（隐式河流功率下切、阈值坡度、泥沙搬运与湖盆充填、单向锚定与网格盆地双向锚定，与原型逐位相同）、`map/incision_time.py`（由造山契约回放有效下切时间）、`media/canvas_surface_process.py`（粗网格加 90 m 分块两级求解，原生级进程池并行），新命令 `export canvas erode` 写出 `surface_process/` 逐块增量；S2、S3 裁窗、接缝检查与总览图经 `resolve_increments` 统一选择「安装地表」（产品完整时读「TD 块 + 增量」），`hydro-work/` 与 `hydro/` 记录所用地表，地表变了自动整体重算。
+- 能量型湖面蒸发（`engine/lake_evaporation.py`）：Priestley–Taylor 开阔水面蒸发，净辐射由逐月大气顶日照、云量与气温按 FAO-56 关系式推出，气压随海拔变化，月均温低于 0 °C 按封冻计。地球 14 个湖（−210 m 到 4724 m）与观测之比的中位数为 1.06、相关 0.94，原 Hamon 乘湖面系数为 0.60，纳木错低估约三倍。S1 新写出画布气候通道 `lake_evaporation.mm`（云量取 GCM 年均总云量，引擎世界取地球陆地平均 0.43），S2 的终端湖判据优先使用它，旧画布退回 Hamon；气候元数据补写 `perihelion_day`。`prog_erosion._lake_balances` 改为返回湖面蒸发需求（已含湖面系数）。区域数据包同样写出 `lake_evaporation.mm`，区域构建的两条路径（TD 与程序化侵蚀）都改读它；轨道参数读取与逐月日照移到 `map/astronomy_inputs.py`，画布与区域共用。
+- 项目规则与技能改为多 agent 共用：根目录与各文档子目录的规则改写在 `AGENTS.md`，同目录 `CLAUDE.md` 只做 `@AGENTS.md` 导入；前端专属规则移到 `frontend/AGENTS.md`，根文件保持在 Codex 32 KiB 缺省上限以内；技能按 Agent Skills 格式移到 `.agents/skills/`，由 `scripts/dev/sync_agent_skills.py` 生成 `.claude/skills/` 真实文件副本；不使用符号链接，`.gitattributes` 固定 LF，`tests/test_agent_instructions.py` 检查成对导入、体积、无符号链接与技能同步。
+- 新增山系形态改进提案，区分地质引擎的平均场与画布的中尺度结构，并登记下一次全层重建的验收方案。
+
+### Changed
+
+- 命令行按对象重整：`dreamulator map`（`layers`、`globe`，`clouds` 并入 `globe`）、`dreamulator region`（`pack`、`build`）、`dreamulator canvas`（按流水线顺序列出，新增 `run` 一键完成侵蚀与 S2）与顶层 `dreamulator render`；逐张画布的命令接受画布目录或布局根（`--canvas` 选择）；`mesh-sea-lake` 并入 `canvas plan --backfill mesh-sea-lake`；河网阈值统一为 `--river-threshold`。旧的 `dreamulator export …` 路径保留一个版本，运行时提示新名字。
+- S2 外存填平的阶段二（全局流域图）改为 numpy 成批生成接缝边、numba 求最小化路径最大值水位，world-west 上由约 2 分钟降到约 6 秒，父进程内存峰值由约 8 GB 降到约 4 GB；整个填平约 2.7 分钟，最终面与串行结果逐位相同。原字典实现保留为测试参照。
+- `prog_erosion.priority_flood` 新增 `parallel` 选项（缺省关闭，现有产品逐位不变）：按分块多线程填平（Barnes 2016 的分块加流域图方案，填平面与串行版逐位相同），平地按广度优先从出口排水，下游顺序与 ε 坡道用指针倍增并行计算。world-west 全画布 1.44 km（7350 万格）上 11.6 秒降到 1.6 秒，永耀岛 720 m 上 1.0 秒降到 0.08 秒；完全并列的坡向按扫描顺序取舍，与串行版不同，永耀岛 20 Myr 侵蚀回归的湖面份额、洼地份额、起伏与平底份额与串行版一致。
+- S2 外存填平的阶段一（逐块局部填平）与阶段三（抬升到流域水位）改为按块在进程池中并行，阶段三由逐标签全块比较改为查表；Linux 用 fork、Windows 用 spawn，`export canvas hydrology` 新增 `--workers`。world-west 上整个填平由约 4.5 小时降到约 5 分钟（16 进程），1588 块最终面与串行结果逐位相同。湖水量平衡的入湖流量改为单遍 numba 累加，结果逐位不变，并省去两块整网格临时数组。
+- S2 水文的海陆判定跟随地质网格：网格升级为类海水体（`water_class` 为 `ocean`）的封闭水体，其内部粗格成为第三类海种子，水体与全球海洋共用 0 m 海平面，不再被灌满到溢口画成高出海平面的巨型湖。S1 新写出 `geometry_fields/mesh_sea_lake.npy`，旧画布可用 `export canvas mesh-sea-lake` 补写；没有该字段时退回原有两条件规则。S2、接缝检查与高清窗口改用同一入口 `canvas_anchored_sea`。
+- 造山带中尺度起伏的带通核沿造山带走向拉长（`orogen_strike_frame`，`orogen_mesoscale_anisotropy` 缺省 3）；画布结构场新增顺走向方向选项（缺省仍为横向）。三次私有 TD 试验使画布 25–150 km 波段的平行份额累计提高约 0.1–0.2，但未达验收门，一致度不受条件场方向影响。
+- 地形合成新增造山带中尺度起伏阶段（`orogen_mesoscale_relief.py`，`orogen_mesoscale_relief_m_per_km` 缺省 75）：带造山带起伏的陆地格子在上限之后叠加零均值的 100–400 km 起伏，幅度随造山带起伏增长，用青藏与阿尔蒂普拉诺标定；nacrea 钉为 0。地球对照否证了「高原内部山脉只沿古缝合带」。
+- 内陆低地的下压坡度改为从造山带覆盖范围起算（`interior_lowland_origin`，缺省 `orogen`），宽高原不再被压到力平衡上限以下；nacrea 钉在旧行为 `boundary`，现装地形逐值不变，全层重生成时切换。山系形态提案补充地球对照：高原平板源于 3000 m 以上缺少中尺度结构来源，上限逐格截断与格平均镶边两条假设已否证，老造山带在网格尺度上已与乌拉尔相当。
+- 整理[气候层改进提案](docs/design/proposals/climate-layer-improvement.md)：六个要素节改为现行指针、设计依据、残余、候选与否证，执行日志与逐轮验收数字移出，全文由 1117 行减到约 410 行；气候管线补齐直减率、距离季、海冰面温度、边界层投影因子与洋流消费年风的说明。
+- 画布链新增[冰缘塑性锥度](docs/design/pipelines/canvas-chain.md#2512-冰缘的塑性锥度)技术参考；[冰川地貌提案](docs/design/proposals/canvas-glacial-landforms.md)第 6.1 节压缩为归因、裁决与已知瑕疵，逐轮实施记录移出，错误的冰缘定义进入已否证方向。
+- 整理[亚格子岛屿目录提案](docs/design/proposals/island-catalog.md)：已实现的阶段 A–C 指向地质管线，参数表改为实现值，过时的问题描述与已被取代的裁决删去，nacrea 的背星点裁决迁入设计笔记 0017。
+- 新增[区域数据包管线参考](docs/design/pipelines/region-pack.md)，按现行代码补齐数据包文件与元数据契约；[Blender 渲染链提案](docs/design/proposals/blender-render-pipeline.md)只保留定位、设计选择与路线，相关引用改指管线参考。
+- 新增[天球星历管线参考](docs/design/pipelines/sky-ephemeris.md)，[星历提案](docs/design/proposals/sky-ephemeris.md)只保留设计选择、未实现的事件搜索与 N 体及开放问题，用法文档和代码注释改指向管线参考。
+- 将[画布条件场提案](docs/design/proposals/canvas-conditioning-structure.md)第 4.2 节压缩为来源状态表、归因结论、候选与否证结论；画布链补齐三张画布的生产采用表、来源差额的覆盖与收敛门、坡面输运接口和 TD 条件编码限制，并修正两处失效的目录锚点。
+- 将[季节热容量提案](docs/design/proposals/seasonal-heat-capacity-closure.md)整理为结构问题、候选与验收边界，现行参数和公式归入气候管线，保留海冰方案否证结论，并同步索引与验证指南回链。
+- 将[柱辐射场提案](docs/design/proposals/column-radiation-field.md)整理为物理依据、输入限制与验收，统一云诊断方案和否证结论，明确云顶结构复用仍是未决候选，并同步索引和引用。
+- 将[湿静力能辐合闭合提案](docs/design/proposals/moist-static-energy-convergence.md)压缩为阶段 0 终止说明，保留否证依据、再分析数据限制与补充候选的适用边界，并同步设计索引和跨文档引用。
+- 将[地面风提案](docs/design/proposals/surface-wind-from-pressure.md)整理为物理依据、分阶段验收与路线判决，绝对气压实现并入气候管线，明确背景风替换尚未通过前置检验，并同步相关引用。
+- 将[气候引擎迭代提案](docs/design/proposals/climate-engine-round.md)整理为收口结论，已实现机制由气候管线维护，首份评分卡保存在验证指南的文首历史块，并同步路线图与跨文档引用。
+- 明确公开设计提案的内容、私有信息与状态头要求，并新增第七波审计台账。
+- 清理 11 份设计提案中的私有路径和机器分工，性能测量保留配置，平台依赖保留技术要求。
+- 为 8 份设计提案补齐状态与立项时间；状态依据正文与实现，日期精度沿用原始记录。
+- 将 Nacrea 辐照重标定裁决迁入[设计笔记 0022](data/worlds/nacrea/design-notes/0022-insolation-recalibration.md)，更新相关引用，并将裁决前的候选方案与实施预案归入文首历史块。
+
+### Fixed
+
+- **终端湖判定改用级联后的总入流（2026-11-10）**：`terminal_equilibrium_routing` 原先在湖图拓扑传递之前，只按每个湖自身的
+  首触外入一次性判定终端，上游溢流补足需求的湖仍被截成终端，不向下游放水。现在每个湖在全部上游湖交出出流之后判定，
+  与知识库 hydrology.md §7 的记账一致。两张干旱画布上，「判为终端却满水」的湖由 21 个与 35 个降为 0，过路湖面积
+  增加 67% 与 21%，河段增加 2.1% 与 7.7%；湿润画布不受影响。下一批画布的 S2 须用修复后的代码重算。同时把
+  `run_canvas_rivers` 的河道起点默认值由 7000 改为 27000，与命令行和文档一致（生产调用一直显式传 27000）。
+
 ## [1.2.0] — 2026-11-06
 
 ### Added
@@ -1234,8 +1281,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **pytest 并行化（xdist）**：`-n auto --maxprocesses 8 --dist worksteal` 进
   默认 addopts，全量测试 344 s → 52 s（6.6×）。单测迭代用 `-n 0` 关并行；
   `benchmarks.yml` 显式 `-n 0`（pytest-benchmark 在 xdist 下会静默自禁）。
-- **nacrea 路线 1 辐照重标定（作者终裁 2026-10-07）**：提案
-  `docs/design/proposals/nacrea-insolation-recalibration.md`（Ts-pCO2-RG
+- **nacrea 路线 1 辐照重标定（作者终裁 2026-10-07）**：设计记录见
+  [Nacrea 设计笔记 0022](data/worlds/nacrea/design-notes/0022-insolation-recalibration.md)（Ts-pCO2-RG
   三难结构 + 候选参数组 + GCM 定标判决 + 连锁清单）。终案「年长锁定 +
   [Fe/H]=−0.19 + pCO2=712 ppm」：M 0.59→0.65 M☉、L 0.0761→0.1227 L☉
   （MLR+Z 自然值）、T_eff 4055→4365 K（作者光谱钉值，较 SB 自然值低 0.5%、

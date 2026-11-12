@@ -3,7 +3,7 @@
 > 适用对象：用 `blender -b -P` 无界面重建「地表仰望行星」「行星盘面」「星空」这类
 > 天文镜头的脚本。本文只记录与具体世界无关的工程知识与踩坑，不绑定某一集的分镜。
 > 本机实测环境：Blender 5.2.2 LTS、Cycles、RTX 3060 Laptop 6 GB、Windows 11。
-> 通用的区域地形渲染链见 `docs/design/proposals/blender-render-pipeline.md` 与
+> 通用的区域地形渲染链见 `docs/design/pipelines/region-pack.md` 与
 > `scripts/media/blender/region_still.py`；本文补充的是天空、行星盘面与相机运动。
 
 ## 1. 场景尺度与渲染器
@@ -117,7 +117,7 @@ img.pack()
 
 ## 5. 大地形网格（从 `.npy` 高度场）
 
-区域包（`export region` / S3 窗口）给出 `height.meters.npy` 与 `meta.json`。
+区域包（`region pack` / S3 窗口）给出 `height.meters.npy` 与 `meta.json`。
 一千个格点的边长会产生百万顶点，逐点 `from_pydata` 很慢；用 `foreach_set`
 批量写顶点、循环与面：
 
@@ -263,6 +263,5 @@ Creative Work）让 Claude Code 驱动活 Blender 场景做目检精修；社区
   [astronomical 扩展](https://github.com/synapticore-studio/astronomical)、
   [Nebula Generator Python 支持帖](https://blenderartists.org/t/nebula-generator/347516)
 - 本仓库区域地形渲染：`scripts/media/blender/region_still.py`、
-  `docs/design/proposals/blender-render-pipeline.md`
-- Cycles 设备与硬件基线：`docs/design/proposals/blender-render-pipeline.md`
-  「硬件与渲染参数基线」节
+  `docs/design/pipelines/region-pack.md`
+- Cycles 设备与硬件基线：`docs/design/pipelines/region-pack.md` 第 5 节

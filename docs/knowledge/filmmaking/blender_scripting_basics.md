@@ -3,7 +3,7 @@
 > 面向第一次写 Blender 脚本的人：怎么调用、脚本长什么样、`bpy` 的几个核心入口，
 > 以及无界面运行（`-b`）时的坑。天空/行星渲染的具体做法见
 > [`blender_sky_rendering.md`](blender_sky_rendering.md)；区域地形链见
-> `docs/design/proposals/blender-render-pipeline.md`。
+> `docs/design/pipelines/region-pack.md`。
 > 本机实测：Blender 5.2.2 LTS，Windows 11。
 
 ## 1. 调用方式

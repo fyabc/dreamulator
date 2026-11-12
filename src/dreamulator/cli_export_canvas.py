@@ -1,14 +1,19 @@
-"""``export canvas`` command group — the global terrain-diffusion canvas chain.
+"""``dreamulator canvas`` — the global terrain-diffusion canvas chain.
 
-One subcommand per stage, in chain order:
+One subcommand per stage, in chain order; per-canvas commands take a canvas
+directory or a layout root (every canvas, or those ``--canvas`` names):
 
-* ``plan``      S1 layout, ownership tables and per-canvas inputs (``canvas_layout.yaml``)
+* ``plan``      S1 layout, ownership tables and per-canvas inputs (``canvas_layout.yaml``);
+                ``--backfill mesh-sea-lake|lake-evaporation`` adds that field to planned
+                canvases instead
 * ``refine``    S1 native mountain-source selection, integration and accepted reference statistics
 * ``generate``  S1 chunk generation with terrain-diffusion, one worker per GPU, resumable
 * ``status``    per-canvas progress and checksums
-* ``hydrology`` S2 out-of-core fill, accumulation and river segments
-* ``window``    S3 region window pack for ``export render`` (runs hydrology first if needed)
-* ``mosaic``    full-resolution overview image of one canvas
+* ``erode``     erosion and deposition, written as ``surface_process/`` increments
+* ``hydrology`` S2 out-of-core fill, lakes and river segments on the installed surface
+* ``run``       erode (optional) then hydrology, skipping finished steps
+* ``window``    S3 region window pack for ``dreamulator render`` (runs hydrology first if needed)
+* ``mosaic``    full-resolution overview image
 
 Library code lives in ``map/td_canvas*.py`` (S1) and ``media/canvas_*.py`` (S2, S3); this module
 only parses options and reports.
@@ -32,7 +37,8 @@ if TYPE_CHECKING:
     from dreamulator.map.td_canvas_build import CanvasLayoutConfig
 
 canvas_app = typer.Typer(
-    help="Global canvas chain: plan → generate → hydrology → window, plus status and mosaic.",
+    help="Global canvas chain: plan → generate → erode → hydrology → window, "
+    "plus status, run (erode + hydrology) and mosaic.",
     no_args_is_help=True,
 )
 console = Console()
@@ -59,6 +65,32 @@ def _select(root: Path, canvas: str) -> list[str]:
         console.print(f"[red]Unknown canvas id(s): {', '.join(unknown)}[/red]")
         raise typer.Exit(code=2) from None
     return wanted
+
+
+def _targets(path: Path, canvas: str = "all") -> list[Path]:
+    """Canvas directories a per-canvas command runs on.
+
+    ``path`` is one canvas (``canvas.json``) or a layout root (``layout.json``);
+    a root expands to its canvases, filtered by ``canvas`` (``all`` or ids).
+    """
+    if (path / "canvas.json").is_file():
+        if canvas != "all":
+            console.print("[red]--canvas selects within a layout root, not a canvas dir[/red]")
+            raise typer.Exit(code=2) from None
+        return [path]
+    if (path / "layout.json").is_file():
+        out = [path / cid for cid in _select(path, canvas)]
+        missing = [p.name for p in out if not (p / "canvas.json").is_file()]
+        if missing:
+            console.print(f"[red]Canvas inputs missing for {', '.join(missing)}[/red]")
+            raise typer.Exit(code=2) from None
+        return out
+    console.print(f"[red]{path} is neither a canvas dir (canvas.json) nor a layout root[/red]")
+    raise typer.Exit(code=2) from None
+
+
+_TARGET_HELP = "A canvas dir, or a layout root (all its canvases, or those --canvas names)"
+_CANVAS_SELECT_HELP = "With a layout root: all, or comma-separated canvas ids"
 
 
 def _require_canvas_dir(canvas: Path) -> None:
@@ -131,7 +163,6 @@ def _plan_world(
     return mesh, layout, radius, map_dir, world_dir, source
 
 
-@canvas_app.command("plan")
 def canvas_plan(
     world: str = typer.Argument(help="World name"),
     branch: str | None = typer.Option(
@@ -153,9 +184,16 @@ def canvas_plan(
     precipitation_field: Path | None = typer.Option(
         None, "--precipitation-field", help="Complete native Gaussian monthly precipitation archive"
     ),
+    backfill: str | None = typer.Option(
+        None,
+        "--backfill",
+        help="Only add a field to the planned canvases under the root instead of planning: "
+        "mesh-sea-lake (the mesh's sea-class lakes S2 reads as sea) or lake-evaporation "
+        "(annual and monthly open-water evaporation)",
+    ),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
-    """S1: canvas layout, ownership tables and per-canvas TD inputs."""
+    """S1 plan: canvas layout, ownership tables and per-canvas TD inputs."""
     from dreamulator.map import td_canvas_build as tb
     from dreamulator.map.export import load_climate_monthly
     from dreamulator.world_manager import WorldManager
@@ -174,6 +212,21 @@ def canvas_plan(
 
         native_precipitation = NativePrecipitationField.load(precipitation_field)
     branch = branch or cfg.branch
+    if backfill is not None:
+        fill = {
+            "mesh-sea-lake": backfill_mesh_sea_lake,
+            "lake-evaporation": backfill_lake_evaporation,
+        }
+        if backfill not in fill:
+            console.print(
+                f"[red]Unknown --backfill {backfill!r}; use mesh-sea-lake or lake-evaporation[/red]"
+            )
+            raise typer.Exit(code=2) from None
+        layout_root = root or world_dir / "canvases" / (branch or "root")
+        for path in _targets(layout_root, canvas):
+            console.print(f"[bold]{path.name}[/bold]")
+            fill[backfill](path, data_dir)
+        return
     mesh, layout, _r, map_dir, world_dir, source = _plan_world(world, branch, planet, cfg)
     root = root or world_dir / "canvases" / (branch or "root")
     total = sum(len(p.chunks) for p in layout.plans)
@@ -189,6 +242,12 @@ def canvas_plan(
         ids = _select(staged, canvas)
         t_m, p_m = load_climate_monthly(map_dir)
         cols = tb.MeshColumns.from_mesh(mesh, t_m, p_m)
+        astronomy = tb.load_astronomy(map_dir)
+        if astronomy is None:
+            console.print(
+                "[yellow]climate_metadata.json lacks the orbit: no lake_evaporation channel; "
+                "S2 falls back to the Hamon lake demand[/yellow]"
+            )
         stale = []
         for plan in layout.plans:
             if plan.canvas_id not in ids:
@@ -204,6 +263,7 @@ def canvas_plan(
                 source,
                 structure=cfg.structure,
                 precipitation_field=native_precipitation,
+                astronomy=astronomy,
             )
             if old is not None:
                 new = json.loads((planned / "canvas.json").read_text(encoding="utf-8"))
@@ -255,7 +315,6 @@ def _parse_gpus(gpus: str) -> list[str]:
     return out
 
 
-@canvas_app.command("refine")
 def canvas_refine(
     world: str = typer.Argument(help="World whose geological sources to use"),
     reference: Path = typer.Argument(help="Original S3 layout root"),
@@ -277,7 +336,7 @@ def canvas_refine(
     gpu: str = typer.Option("0", "--gpu", help="GPU used once for each shared statistics batch"),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
-    """S1: prepare native continuous mountain sources with their accepted reference statistics."""
+    """S1 refine: native continuous mountain sources with accepted reference statistics."""
     from dreamulator.map import td_canvas_worker
     from dreamulator.map.canvas_orogen_refinement import (
         CanvasRefinementConfig,
@@ -352,9 +411,8 @@ def canvas_refine(
     console.print(f"Prepared native mountain inputs: {result}")
 
 
-@canvas_app.command("generate")
 def canvas_generate(
-    root: Path = typer.Argument(help="Layout root written by `export canvas plan`"),
+    root: Path = typer.Argument(help="Layout root written by `canvas plan`"),
     td: Path = typer.Option(..., "--td", help="terrain-diffusion clone (with its .venv)"),
     canvas: str = typer.Option("all", "--canvas", help="all, or comma-separated canvas ids"),
     gpus: str = typer.Option("0", "--gpus", help="GPU ids, e.g. 0-7 or 0,2,3 (one worker each)"),
@@ -362,13 +420,13 @@ def canvas_generate(
         False, "--check", help="Also regenerate one chunk per worker boundary into chunks/check/"
     ),
 ) -> None:
-    """S1: generate the canvases' chunks with terrain-diffusion (resumable)."""
+    """S1 generate: the canvases' chunks with terrain-diffusion (resumable)."""
     from dreamulator.map import td_canvas_build as tb
     from dreamulator.map import td_canvas_worker
     from dreamulator.media.terrain_refine import _td_python
 
     if not (root / "layout.json").is_file():
-        console.print(f"[red]No layout.json in {root} — run `export canvas plan` first[/red]")
+        console.print(f"[red]No layout.json in {root} — run `canvas plan` first[/red]")
         raise typer.Exit(code=2) from None
     td = td.resolve()  # the workers run with cwd = td, so every path must be absolute
     py = _td_python(td)
@@ -423,7 +481,6 @@ def canvas_generate(
         raise typer.Exit(code=1) from None
 
 
-@canvas_app.command("status")
 def canvas_status_cmd(
     root: Path = typer.Argument(help="Layout root"),
     verify: bool = typer.Option(False, "--verify", help="Recompute every chunk's SHA-256"),
@@ -450,20 +507,46 @@ def canvas_status_cmd(
     console.print(table)
 
 
-def _run_hydrology(canvas: Path, *, resume: bool, force: bool, threshold_cells: int) -> None:
+def _run_hydrology(
+    canvas: Path,
+    *,
+    resume: bool,
+    force: bool,
+    threshold_cells: int,
+    workers: int | None = None,
+    surface: str = "auto",
+) -> None:
     from dreamulator.media.canvas_pipeline import CanvasStore, run_canvas_fill, run_canvas_rivers
+    from dreamulator.media.canvas_surface_process import read_surface_tag
 
-    store = CanvasStore.load(canvas)
+    store = CanvasStore.load(canvas, surface=surface)
+    filled_on = read_surface_tag(store.work)
+    if filled_on is not None and filled_on != store.surface:
+        console.print(
+            f"[yellow]{store.work.name} was built on {filled_on}; recomputing on "
+            f"{store.surface}[/yellow]"
+        )
+        force, resume = True, False
     finals = list((store.work / "final").glob("r*_c*.npy"))
     if force or len(finals) < len(store.chunks):
         console.print(f"Running hydrology on {canvas.name} ({len(store.chunks)} chunks)")
-        stats = run_canvas_fill(store, resume=resume)
+        stats = run_canvas_fill(store, resume=resume, workers=workers)
         console.print(f"  {int(stats['watersheds'])} watersheds · {stats['stages_seconds']:.1f} s")
     else:
         console.print(f"Hydrology already complete under {store.work}")
-    if force or not (canvas / "hydro" / "rivers.line.npy").exists():
+    hydro = canvas / "hydro"
+    if (
+        force
+        or not (hydro / "rivers.line.npy").exists()
+        or read_surface_tag(hydro) != store.surface
+    ):
         run_canvas_rivers(store, threshold_cells=threshold_cells)
 
+
+_SURFACE_HELP = (
+    "Installed surface: auto (TD chunks + surface_process increments when that product is "
+    "complete), td, or surface-process"
+)
 
 _THRESHOLD_HELP = (
     "Channel onset in runoff-weighted cells (27000 ≈ 2.1 m³/s mean discharge at 90 m — the "
@@ -471,21 +554,240 @@ _THRESHOLD_HELP = (
 )
 
 
-@canvas_app.command("hydrology")
 def canvas_hydrology(
-    canvas: Path = typer.Argument(help="Canvas directory (canvas.json + chunks/ + climate/)"),
+    target: Path = typer.Argument(help=_TARGET_HELP),
+    canvas: str = typer.Option("all", "--canvas", help=_CANVAS_SELECT_HELP),
     resume: bool = typer.Option(
         True, "--resume/--no-resume", help="Resume from checksummed work files"
     ),
     force: bool = typer.Option(False, "--force", help="Re-run even when work files are complete"),
-    threshold_cells: int = typer.Option(27000, "--threshold-cells", help=_THRESHOLD_HELP),
+    river_threshold: int = typer.Option(
+        27000, "--river-threshold", "--threshold-cells", help=_THRESHOLD_HELP
+    ),
+    workers: int | None = typer.Option(
+        None, "--workers", help="Processes for the per-chunk fill stages (default: CPUs, max 16)"
+    ),
+    surface: str = typer.Option("auto", "--surface", help=_SURFACE_HELP),
 ) -> None:
-    """S2: out-of-core fill, flow accumulation and river segments of one canvas."""
+    """S2 hydrology: out-of-core fill, lakes and river segments (per canvas)."""
+    for path in _targets(target, canvas):
+        _run_hydrology(
+            path,
+            resume=resume,
+            force=force,
+            threshold_cells=river_threshold,
+            workers=workers,
+            surface=surface,
+        )
+
+
+def _planned_mesh(canvas: Path, data_dir: Path | None) -> tuple[Any, dict[str, Any], Any, Path]:
+    """The mesh a planned canvas came from, with canvas.json, its geometry and the map dir.
+
+    The mesh is located from canvas.json's source and must still carry the
+    fingerprint the canvas was planned from.
+    """
+    from dreamulator.gcm.fields import mesh_fingerprint
+    from dreamulator.map import td_canvas as tc
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
+    from dreamulator.map.manager import MapManager
+    from dreamulator.world_manager import WorldManager
+
     _require_canvas_dir(canvas)
-    _run_hydrology(canvas, resume=resume, force=force, threshold_cells=threshold_cells)
+    _set_data_dir(data_dir)
+    meta_path = canvas / "canvas.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    source = meta.get("source", {})
+    try:
+        world_dir = WorldManager().world_dir(source["world"])
+        map_dir = MapManager(world_dir, source.get("branch"))._maps_dir(source["planet"])
+    except (KeyError, FileNotFoundError):
+        console.print("[red]canvas.json source does not name an existing world and planet[/red]")
+        raise typer.Exit(code=1) from None
+    mesh_file = find_mesh_file(map_dir) if map_dir is not None else None
+    if map_dir is None or mesh_file is None:
+        console.print(f"[red]No mesh file for planet '{source['planet']}'[/red]")
+        raise typer.Exit(code=1) from None
+    mesh = load_cvt_mesh_model(mesh_file)
+    fingerprint = mesh_fingerprint(mesh)[:12]
+    if source.get("mesh_fingerprint") not in (None, fingerprint):
+        console.print(
+            f"[red]Mesh fingerprint {fingerprint} differs from the planned "
+            f"{source['mesh_fingerprint']}: re-plan the canvas instead[/red]"
+        )
+        raise typer.Exit(code=1) from None
+    g = meta["geometry"]
+    geom = tc.CanvasGeometry(
+        float(g["center_lat"]), float(g["center_lon"]), float(g["radius_km"]), int(g["ncell"])
+    )
+    return mesh, meta, geom, map_dir
 
 
-@canvas_app.command("window")
+def backfill_mesh_sea_lake(canvas: Path, data_dir: Path | None = None) -> None:
+    """Backfill geometry_fields/mesh_sea_lake.npy (mesh sea-class lakes) on a planned canvas.
+
+    S1 writes the field for new canvases.
+    """
+    import numpy as np
+
+    from dreamulator.map import td_canvas as tc
+    from dreamulator.map import td_canvas_build as tb
+
+    mesh, meta, geom, _map_dir = _planned_mesh(canvas, data_dir)
+    meta_path = canvas / "canvas.json"
+    cells = mesh.cells
+    lat = np.array([c.lat for c in cells])
+    lon = np.array([c.lon for c in cells])
+    sea_lake = np.array([bool(c.is_lake) and c.water_class == "ocean" for c in cells])
+    meta["mesh_sea_lake"] = tb.write_mesh_sea_lake(
+        canvas, geom, sea_lake, tc.unit_vectors(lat, lon)
+    )
+    meta_path.write_text(json.dumps(meta, indent=1, ensure_ascii=False), encoding="utf-8")
+    grid = np.load(canvas / tb.MESH_SEA_LAKE_PATH)
+    console.print(
+        f"Wrote {tb.MESH_SEA_LAKE_PATH}: {int(grid.sum())} of {grid.size} cells sea-class lake"
+    )
+
+
+def backfill_lake_evaporation(canvas: Path, data_dir: Path | None = None) -> None:
+    """Rewrite the annual and monthly open-water evaporation channels of a planned canvas.
+
+    S1 writes both for new canvases; S2 reads the monthly one for the
+    pass-through lakes' monthly balance.  Rerun S2 afterwards.
+    """
+    import numpy as np
+
+    from dreamulator.map import td_canvas_build as tb
+    from dreamulator.map.export import load_climate_monthly
+
+    mesh, meta, geom, map_dir = _planned_mesh(canvas, data_dir)
+    astronomy = tb.load_astronomy(map_dir)
+    if astronomy is None:
+        console.print(f"[red]No climate_metadata.json orbit under {map_dir}[/red]")
+        raise typer.Exit(code=1) from None
+    try:
+        monthly = load_climate_monthly(map_dir)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    cols = tb.MeshColumns.from_mesh(mesh, *monthly)
+    entries = tb.write_lake_evaporation(canvas, geom, cols, astronomy)
+    meta.setdefault("climate", {}).update(entries)
+    (canvas / "canvas.json").write_text(
+        json.dumps(meta, indent=1, ensure_ascii=False), encoding="utf-8"
+    )
+    annual = np.load(canvas / "climate" / "lake_evaporation.mm.npy")
+    console.print(
+        "Wrote lake_evaporation.mm and lake_evaporation_monthly.mm: "
+        f"land median {float(np.nanmedian(annual)):.0f} mm/yr"
+    )
+
+
+def _erode_one(
+    canvas: Path,
+    block: int,
+    t_max_myr: float,
+    native: bool,
+    native_time_myr: float,
+    workers: int | None,
+    data_dir: Path | None,
+    cells_per_step: float = 5.0,
+    by_basin: bool = True,
+) -> None:
+    """Erosion and deposition of one canvas (TD surface -> surface_process/ increments)."""
+    import numpy as np
+
+    from dreamulator.engine.geological import GeologicalEngine
+    from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model
+    from dreamulator.map.incision_time import effective_incision_time_myr
+    from dreamulator.map.manager import MapManager
+    from dreamulator.map.orogen_contract import load_orogen_contract
+    from dreamulator.map.surface_process import SurfaceProcessParams
+    from dreamulator.map.td_canvas import unit_vectors
+    from dreamulator.media.canvas_surface_process import (
+        CanvasSurfaceConfig,
+        run_canvas_surface_process,
+    )
+    from dreamulator.models.layers import LAYER_ORDER
+    from dreamulator.resolver import LayerResolver
+    from dreamulator.world_manager import WorldManager
+
+    _require_canvas_dir(canvas)
+    _set_data_dir(data_dir)
+    meta = json.loads((canvas / "canvas.json").read_text(encoding="utf-8"))
+    source = meta.get("source", {})
+    try:
+        world_dir = WorldManager().world_dir(source["world"])
+    except (KeyError, FileNotFoundError):
+        console.print("[red]canvas.json source does not name an existing world[/red]")
+        raise typer.Exit(code=1) from None
+    branch, planet = source.get("branch"), source.get("planet")
+    map_dir = MapManager(world_dir, branch)._maps_dir(planet) if planet else None
+    mesh_file = find_mesh_file(map_dir) if map_dir is not None else None
+    if map_dir is None or mesh_file is None:
+        console.print(f"[red]No mesh for planet '{planet}'[/red]")
+        raise typer.Exit(code=1) from None
+    contract_path = canvas / "orogen_contract.json"
+    if not contract_path.exists():
+        contract_path = map_dir / "orogen_contract.json"
+    if not contract_path.exists():
+        console.print("[red]No orogen_contract.json in the canvas or the map directory[/red]")
+        raise typer.Exit(code=1) from None
+    resolver = LayerResolver(world_dir, branch)
+    inputs, derived = {}, {}
+    for layer in LAYER_ORDER:
+        if (directory := resolver.get_input_dir(layer)) is not None:
+            inputs[layer.value] = directory
+        if (directory := resolver.get_derived_dir(layer)) is not None:
+            derived[layer.value] = directory
+    geo, warnings = GeologicalEngine(
+        world_dir, 42, layer_input_dirs=inputs, layer_derived_dirs=derived
+    )._load_config({"planet_id": planet})
+    if geo is None:
+        console.print(f"[red]Geological configuration could not be loaded: {warnings}[/red]")
+        raise typer.Exit(code=1) from None
+    mesh = load_cvt_mesh_model(mesh_file)
+    console.print(f"Effective incision time from {contract_path.name} ...")
+    teff = effective_incision_time_myr(
+        mesh,
+        load_orogen_contract(contract_path),
+        geo.radius_km,
+        geo.gravity_m_s2,
+        geo.continental_elevation_m,
+    )
+    lat = np.array([c.lat for c in mesh.cells])
+    lon = np.array([c.lon for c in mesh.cells])
+    run_canvas_surface_process(
+        canvas,
+        teff,
+        unit_vectors(lat, lon),
+        CanvasSurfaceConfig(
+            block=block,
+            t_max_myr=t_max_myr,
+            native=native,
+            native_time_myr=native_time_myr,
+            params=SurfaceProcessParams(max_cells_per_step=cells_per_step),
+            by_basin=by_basin,
+        ),
+        workers=workers,
+        source={
+            "world": source.get("world"),
+            "branch": branch,
+            "planet": planet,
+            "mesh_sha256": _short_sha(mesh_file),
+            "orogen_contract": str(contract_path.name),
+            "orogen_contract_sha256": _short_sha(contract_path),
+        },
+        log=lambda m: console.print(m),
+    )
+
+
+def _short_sha(path: Path) -> str:
+    from dreamulator.map.td_canvas_build import sha256_file
+
+    return sha256_file(path)[:12]
+
+
 def canvas_window(
     canvas: Path = typer.Argument(help="Canvas directory (canvas.json + chunks/ + climate/)"),
     lat: float = typer.Option(..., "--lat", help="Window centre latitude (degrees)"),
@@ -498,16 +800,21 @@ def canvas_window(
         "-o",
         help="Output pack dir (default: <canvas>/windows/<canvas>-<lat>_<lon>_<span>km)",
     ),
-    threshold_cells: int = typer.Option(27000, "--threshold-cells", help=_THRESHOLD_HELP),
+    river_threshold: int = typer.Option(
+        27000, "--river-threshold", "--threshold-cells", help=_THRESHOLD_HELP
+    ),
+    surface: str = typer.Option("auto", "--surface", help=_SURFACE_HELP),
 ) -> None:
-    """S3: crop a region window pack for `export render` (runs S2 first when unfinished)."""
+    """S3 window: crop a region pack for `dreamulator render` (runs S2 first if unfinished)."""
     from dreamulator.media.canvas_window import CanvasSource, crop_canvas_window
 
     _require_canvas_dir(canvas)
-    _run_hydrology(canvas, resume=True, force=False, threshold_cells=threshold_cells)
+    _run_hydrology(
+        canvas, resume=True, force=False, threshold_cells=river_threshold, surface=surface
+    )
     out_dir = output or (canvas / "windows" / f"{canvas.name}-{lat:g}_{lon:g}_{span_km:g}km")
     meta = crop_canvas_window(
-        CanvasSource.load(canvas),
+        CanvasSource.load(canvas, surface=surface),
         center_lat=lat,
         center_lon=lon,
         span_km=span_km,
@@ -523,47 +830,19 @@ def canvas_window(
     )
 
 
-@canvas_app.command("mosaic")
-def canvas_mosaic(
-    canvas: Path = typer.Argument(help="Canvas directory with generated chunks"),
-    output: Path | None = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Image (.jpg/.png/.tif; default: <export-dir>/mosaic/<layout root name>/"
-        "<canvas>_<metres>m.jpg, export-dir = $DREAMULATOR_EXPORT_DIR or ./exports)",
-    ),
-    step: int = typer.Option(
-        4, "--step", help="Block-average N×N pixels (1 = native 90 m; must divide 2048)"
-    ),
-    style: str = typer.Option(
-        "relief", "--style", help="Shading: relief (shaded relief, default) | carto (export-carto)"
-    ),
-    palette: str | None = typer.Option(
-        None,
-        "--palette",
-        help="Land colours (default: pastel for relief, adaptive for carto): adaptive, pastel, "
-        "gmt-etopo1, gmt-globe, gmt-relief, wikipedia, cross-blended",
-    ),
-    sea: str | None = typer.Option(
-        None,
-        "--sea",
-        help="Ocean: carto (depth blues, default) | palette (palette colours) "
-        "| flat (constant blue) | grey",
-    ),
-    exaggeration: float | None = typer.Option(
-        None, "--exaggeration", help="relief: vertical exaggeration (default 4 at every step)"
-    ),
-    intertidal: str = typer.Option(
-        "-2,2",
-        "--intertidal",
-        help="Height band LO,HI (m) in the intertidal colour (IHO S-52 DEPIT); 'off' disables",
-    ),
-    ice: bool = typer.Option(
-        True, "--ice/--no-ice", help="Overlay ice cover from surface/ice_chunks where present"
-    ),
-    quality: int | None = typer.Option(None, "--quality", help="JPEG quality (default 95)"),
-    workers: int = typer.Option(16, "--workers", help="Parallel band workers"),
+def _mosaic_one(
+    canvas: Path,
+    output: Path | None,
+    step: int,
+    style: str,
+    palette: str | None,
+    sea: str | None,
+    exaggeration: float | None,
+    intertidal: str,
+    ice: bool,
+    quality: int | None,
+    workers: int,
+    surface: str,
 ) -> None:
     """Full-resolution overview image of one canvas in the shared print look."""
     from dreamulator.map.td_canvas_mosaic import (
@@ -612,6 +891,7 @@ def canvas_mosaic(
             quality=PRINT_QUALITY if quality is None else quality,
             workers=workers,
             ice_overlay=ice,
+            surface=surface,
         )
     except ValueError as exc:
         console.print(f"[red]{exc}[/red]")
@@ -620,3 +900,161 @@ def canvas_mosaic(
         f"{meta['id']}: {side['width_px']} × {side['height_px']} px at {side['pixel_m']} m/px "
         f"→ {output} ({output.stat().st_size / 1e6:.0f} MB, {time.time() - t0:.0f} s)"
     )
+
+
+_EROSION_OPTIONS_DOC = "see `dreamulator canvas erode --help`"
+
+
+def canvas_erode(
+    target: Path = typer.Argument(help=_TARGET_HELP),
+    canvas: str = typer.Option("all", "--canvas", help=_CANVAS_SELECT_HELP),
+    block: int = typer.Option(8, "--block", help="Coarse block (8: about 720 m; 16: 1.44 km)"),
+    t_max_myr: float = typer.Option(50.0, "--t-max-myr", help="Incision time of platforms (Myr)"),
+    native: bool = typer.Option(
+        True, "--native/--no-native", help="Run the 90 m chunk pass after the coarse level"
+    ),
+    native_time_myr: float = typer.Option(4.0, "--native-time-myr", help="Native pass time"),
+    cells_per_step: float = typer.Option(
+        5.0,
+        "--cells-per-step",
+        help="Coarse time step as the knickpoint retreat per step in cells (5 calibrated; "
+        "up to 20 converges and is 4x faster on large canvases)",
+    ),
+    by_basin: bool = typer.Option(
+        True,
+        "--by-basin/--single-grid",
+        help="Coarse level basin by basin (default): each drainage basin its own time step, in "
+        "parallel, divides fixed for the run; --single-grid takes one step for the whole canvas",
+    ),
+    workers: int | None = typer.Option(None, "--workers", help="Processes for the native pass"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """Erosion and deposition: TD surface -> surface_process/ increments (per canvas)."""
+    for path in _targets(target, canvas):
+        _erode_one(
+            path,
+            block,
+            t_max_myr,
+            native,
+            native_time_myr,
+            workers,
+            data_dir,
+            cells_per_step,
+            by_basin,
+        )
+
+
+def canvas_mosaic(
+    target: Path = typer.Argument(help=_TARGET_HELP),
+    canvas: str = typer.Option("all", "--canvas", help=_CANVAS_SELECT_HELP),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Image path (one canvas only; default: <export-dir>/mosaic/<layout root name>/"
+        "<canvas>_<metres>m.jpg, export-dir = $DREAMULATOR_EXPORT_DIR or ./exports)",
+    ),
+    step: int = typer.Option(
+        4, "--step", help="Block-average N×N pixels (1 = native 90 m; must divide 2048)"
+    ),
+    style: str = typer.Option(
+        "relief", "--style", help="Shading: relief (shaded relief, default) | carto (export-carto)"
+    ),
+    palette: str | None = typer.Option(
+        None,
+        "--palette",
+        help="Land colours (default: pastel for relief, adaptive for carto): adaptive, pastel, "
+        "gmt-etopo1, gmt-globe, gmt-relief, wikipedia, cross-blended",
+    ),
+    sea: str | None = typer.Option(
+        None,
+        "--sea",
+        help="Ocean: carto (depth blues, default) | palette (palette colours) "
+        "| flat (constant blue) | grey",
+    ),
+    exaggeration: float | None = typer.Option(
+        None, "--exaggeration", help="relief: vertical exaggeration (default 4 at every step)"
+    ),
+    intertidal: str = typer.Option(
+        "-2,2",
+        "--intertidal",
+        help="Height band LO,HI (m) in the intertidal colour (IHO S-52 DEPIT); 'off' disables",
+    ),
+    ice: bool = typer.Option(
+        True, "--ice/--no-ice", help="Overlay ice cover from surface/ice_chunks where present"
+    ),
+    quality: int | None = typer.Option(None, "--quality", help="JPEG quality (default 95)"),
+    workers: int = typer.Option(16, "--workers", help="Parallel band workers"),
+    surface: str = typer.Option("auto", "--surface", help=_SURFACE_HELP),
+) -> None:
+    """Full-resolution overview image in the shared print look (per canvas)."""
+    paths = _targets(target, canvas)
+    if output is not None and len(paths) > 1:
+        console.print("[red]--output names one image; give a single canvas[/red]")
+        raise typer.Exit(code=2) from None
+    for path in paths:
+        _mosaic_one(
+            path, output, step, style, palette, sea, exaggeration, intertidal, ice, quality,
+            workers, surface,
+        )  # fmt: skip
+
+
+def canvas_run(
+    target: Path = typer.Argument(help=_TARGET_HELP),
+    canvas: str = typer.Option("all", "--canvas", help=_CANVAS_SELECT_HELP),
+    erode: bool = typer.Option(
+        True, "--erode/--no-erode", help="Erosion and deposition before S2 (skipped when done)"
+    ),
+    block: int = typer.Option(8, "--block", help="Erosion coarse block (8: 720 m; 16: 1.44 km)"),
+    t_max_myr: float = typer.Option(50.0, "--t-max-myr", help="Incision time of platforms"),
+    cells_per_step: float = typer.Option(
+        5.0,
+        "--cells-per-step",
+        help="Coarse time step as the knickpoint retreat per step in cells (5 calibrated; "
+        "up to 20 converges and is 4x faster on large canvases)",
+    ),
+    by_basin: bool = typer.Option(
+        True,
+        "--by-basin/--single-grid",
+        help="Coarse level basin by basin (default): each drainage basin its own time step, in "
+        "parallel, divides fixed for the run; --single-grid takes one step for the whole canvas",
+    ),
+    river_threshold: int = typer.Option(27000, "--river-threshold", help=_THRESHOLD_HELP),
+    workers: int | None = typer.Option(None, "--workers", help="Processes per stage"),
+    force: bool = typer.Option(False, "--force", help="Redo every step, finished or not"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """Post-generation chain of each canvas: erode (optional) then S2; finished steps skip."""
+    from dreamulator.media.canvas_surface_process import surface_process_complete
+
+    for path in _targets(target, canvas):
+        console.print(f"[bold]{path.name}[/bold]")
+        if erode and (force or not surface_process_complete(path)):
+            _erode_one(
+                path, block, t_max_myr, True, 4.0, workers, data_dir, cells_per_step, by_basin
+            )
+        elif erode:
+            console.print("  erosion already complete")
+        _run_hydrology(
+            path,
+            resume=not force,
+            force=force,
+            threshold_cells=river_threshold,
+            workers=workers,
+            surface="surface-process" if erode else "td",
+        )
+
+
+#: Pipeline order: the help lists the commands as they run.
+for _name, _command in (
+    ("plan", canvas_plan),
+    ("refine", canvas_refine),
+    ("generate", canvas_generate),
+    ("status", canvas_status_cmd),
+    ("erode", canvas_erode),
+    ("hydrology", canvas_hydrology),
+    ("run", canvas_run),
+    ("window", canvas_window),
+    ("mosaic", canvas_mosaic),
+):
+    canvas_app.command(_name)(_command)

@@ -121,10 +121,16 @@ def structure_anomaly(
     relief_std_m: np.ndarray,
     *,
     oversample: int = tc.OVERSAMPLE,
+    orientation: str = "transverse",
 ) -> tuple[np.ndarray, dict[str, float]]:
     """Height anomaly (m) on the coarse grid (ncell, ncell), zero-mean per mesh cell, and stats.
 
     ``relief_std_m`` is NaN or 0 off land / on flat land (no structure there).
+    ``orientation`` sets the crest direction: ``"transverse"`` puts the wave vector along the
+    contours, so spurs and valleys run down the flanks (the original design); ``"strike"``
+    puts it along the gradient, so ridges and longitudinal valleys run parallel to the belt,
+    which is how Earth's orogens are organised in the 25–150 km band (ridges parallel to
+    strike carry a median 0.65 of the coherent structure in seven Earth windows).
     """
     from scipy import ndimage as ndi
     from scipy.spatial import cKDTree
@@ -146,7 +152,12 @@ def structure_anomaly(
     s = ORIENT_SMOOTH_KM / px_km / 2
     jxx, jyy, jxy = (ndi.gaussian_filter(a, s) for a in (gx * gx, gy * gy, gx * gy))
     grad_axis = 0.5 * np.arctan2(2 * jxy, jxx - jyy)  # dominant gradient direction
-    theta = grad_axis + math.pi / 2  # rows run south, so this is the contour direction
+    if orientation == "transverse":
+        theta = grad_axis + math.pi / 2  # rows run south, so this is the contour direction
+    elif orientation == "strike":
+        theta = grad_axis  # wave vector down the gradient: crests follow the contours
+    else:
+        raise ValueError(f"orientation must be 'transverse' or 'strike', got {orientation!r}")
 
     # belt half-width and Hovius wavelength
     belt = mu >= BELT_MU_M

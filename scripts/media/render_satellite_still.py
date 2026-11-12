@@ -47,7 +47,7 @@ def main() -> None:
     if not (export_dir / "meta.json").exists():
         raise SystemExit(
             f"{export_dir} has no meta.json; run\n"
-            "  uv run dreamulator export globe nacrea "
+            "  uv run dreamulator map globe nacrea "
             "--config private/video/satellite/cloud_trio_final.yaml "
             "-o exports/globe/nacrea\n"
             "first."
