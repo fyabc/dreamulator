@@ -32,6 +32,7 @@ from dreamulator.media.canvas_flow_tiled import (
     _store_of,
     flow_path,
     load_chunk,
+    load_npy,
     save_chunk,
 )
 
@@ -132,7 +133,7 @@ def _relabel_chunk(task: tuple[Any, ...]) -> None:
     assert ctx is not None
     st = _store_of(ctx)
     p = flow_path(st, f"lbl_{kind}", key, "local.npy")
-    local = np.load(p)
+    local = load_npy(p)
     save_chunk(st, f"lbl_{kind}", key, np.asarray(table, dtype=np.int32)[local])
     p.unlink()
 

@@ -24,6 +24,7 @@ Files live under ``<work>/flow/``: ``graded`` (float32), ``dir`` (uint8), ``acc_
 
 from __future__ import annotations
 
+import errno
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -101,8 +102,37 @@ def save_chunk(store: CanvasStore, kind: str, key: tuple[int, int], a: np.ndarra
     _atomic_save(flow_path(store, kind, key, "ring.npy"), _ring(a))
 
 
+#: Retries for a chunk read that hits a stale handle, and the backoff between them.
+_LOAD_RETRIES = 8
+_LOAD_BACKOFF_S = 0.05
+
+
+def load_npy(path: Path) -> np.ndarray:
+    """Load a chunk file, retrying while a network filesystem reports a stale handle.
+
+    Chunk files are published by writing a temporary and renaming it, which is atomic on a
+    local filesystem: a concurrent reader gets either the old inode or the new one.  On a
+    network filesystem (the shared CPFS mount these canvases live on) a client whose cached
+    directory entry still points at the replaced inode gets ESTALE instead, and the whole
+    stage died on it after an hour of a world-sized run.  The rename has already happened, so
+    re-resolving the path and reading again returns the new file; the backoff doubles.
+    """
+    import time
+
+    delay = _LOAD_BACKOFF_S
+    for attempt in range(_LOAD_RETRIES):
+        try:
+            return np.asarray(np.load(path))
+        except OSError as exc:  # ESTALE, and the ENOENT a rename can show on the same mount
+            if exc.errno not in (errno.ESTALE, errno.ENOENT) or attempt == _LOAD_RETRIES - 1:
+                raise
+            time.sleep(delay)
+            delay *= 2
+    raise AssertionError("unreachable")
+
+
 def load_chunk(store: CanvasStore, kind: str, key: tuple[int, int]) -> np.ndarray:
-    return np.asarray(np.load(flow_path(store, kind, key)))
+    return load_npy(flow_path(store, kind, key))
 
 
 def halo(
@@ -125,7 +155,7 @@ def halo(
             nk = (ci + di, cj + dj)
             if (di == 0 and dj == 0) or nk not in keys:
                 continue
-            ring = np.load(flow_path(store, kind, nk, "ring.npy"))
+            ring = load_npy(flow_path(store, kind, nk, "ring.npy"))
             top, bottom = ring[:t], ring[t : 2 * t]
             left, right = ring[2 * t : 3 * t], ring[3 * t :]
             if di == -1 and dj == 0:
@@ -336,7 +366,7 @@ def _levels(v: np.ndarray, d: np.ndarray, eps: float) -> np.ndarray:  # pragma: 
 def _final_rings(key: tuple[int, int]) -> None:
     ctx = _CTX
     assert ctx is not None
-    v = np.asarray(np.load(_final_path(ctx, key)), np.float32)
+    v = np.asarray(load_npy(_final_path(ctx, key)), np.float32)
     _atomic_save(flow_path(_store_of(ctx), "final", key, "ring.npy"), _ring(v))
 
 
@@ -345,7 +375,7 @@ def _final_path(ctx: _Ctx, key: tuple[int, int]) -> Path:
 
 
 def _final(ctx: _Ctx, key: tuple[int, int]) -> np.ndarray:
-    return np.asarray(np.load(_final_path(ctx, key)), np.float32)
+    return np.asarray(load_npy(_final_path(ctx, key)), np.float32)
 
 
 def _graded_seed(key: tuple[int, int]) -> None:
@@ -589,7 +619,7 @@ def chunk_order(st: CanvasStore, key: tuple[int, int]) -> np.ndarray:
     """
     p = flow_path(st, "order", key)
     if p.exists():
-        return np.asarray(np.load(p)).astype(np.int64)
+        return load_npy(p).astype(np.int64)
     g = load_chunk(st, "graded", key).ravel()
     order = np.argsort(np.where(np.isfinite(g), g, np.inf), kind="stable")
     _atomic_save(p, order.astype(np.int32))
@@ -647,7 +677,7 @@ def _acc_stage3(task: tuple[Any, ...]) -> None:
     st = _store_of(ctx)
     t = ctx.tile
     p1 = flow_path(st, ctx.acc_kind, key, "stage1.npy")
-    acc = np.asarray(np.load(p1))
+    acc = load_npy(p1)
     if len(idx):
         order, rec, _out = _local(st, key, ctx.dir_kind)
         inflow = np.zeros(t * t, dtype=np.float64)

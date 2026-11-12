@@ -498,3 +498,34 @@ def test_out_of_core_rivers_driver_writes_the_same_products(tmp_path: Path) -> N
         assert q.exists(), p.name
         assert np.array_equal(np.load(p)["idx"], np.load(q)["idx"])
         assert np.array_equal(np.load(p)["lake_id"], np.load(q)["lake_id"])
+
+def test_chunk_reads_retry_a_stale_handle(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """A network filesystem's ESTALE on a just-renamed chunk file is retried, not raised."""
+    import errno
+
+    from dreamulator.media import canvas_flow_tiled as cft
+
+    path = tmp_path / "chunk.npy"
+    np.save(path, np.arange(4, dtype=np.int32))
+    real = np.load
+    calls = {"n": 0}
+
+    def flaky(p, *a, **k):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise OSError(errno.ESTALE, "Stale file handle")
+        return real(p, *a, **k)
+
+    monkeypatch.setattr(cft.np, "load", flaky)
+    monkeypatch.setattr(cft, "_LOAD_BACKOFF_S", 0.001)
+    assert np.array_equal(cft.load_npy(path), np.arange(4))
+    assert calls["n"] == 3
+    # a different OSError is not a stale handle and must surface
+    calls["n"] = 0
+
+    def denied(p, *a, **k):  # type: ignore[no-untyped-def]
+        raise OSError(errno.EACCES, "denied")
+
+    monkeypatch.setattr(cft.np, "load", denied)
+    with pytest.raises(OSError, match="denied"):
+        cft.load_npy(path)
