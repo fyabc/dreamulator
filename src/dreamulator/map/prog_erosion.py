@@ -1767,105 +1767,167 @@ def river_segments(
     h, w = rivers.shape
     riv_flat = rivers.reshape(-1)
     riv_cells = np.nonzero(riv_flat)[0]
-    riv_set = set(riv_cells.tolist())
     if lake is not None:
         lake_big = keep_large_lakes(lake, lake_mmu_cells(km_per_px), LAKE_MIN_WIDTH_KM, km_per_px)
     else:
         lake_big = np.zeros(h * w, dtype=bool)
-    lake_flat = lake_big.reshape(-1)
-    lake_set = {int(c) for c in np.nonzero(lake_flat)[0]}
-    # Spill points: lake cells draining into a non-lake cell — the outlet
-    # chain resumes just downstream of them, PREPENDED with the spill lake
-    # cell itself so the line starts one cell INTO the water (the twin of
-    # the end-of-chain shore append: without it the resumed reach began a
-    # cell or two off the rendered shore and read as a river starting from
-    # bare ground).  (Terminal lakes carry no spill cell: their equilibrium
-    # water is non-land and receiver-less, so nothing resumes below them
-    # by construction.)
+    lake_cells = np.nonzero(lake_big.reshape(-1))[0]
+    rec_flat = np.asarray(receiver).reshape(-1)
+    # Every cell a chain can visit: the channel cells, the cell each of them drains into (the
+    # junction, mouth or shore the chain is always extended to) and the dried-fringe descent.
+    extra = [rec_flat[riv_cells]]
+    if lake_descend is not None:
+        d = np.asarray(lake_descend).reshape(-1)
+        extra.append(np.nonzero(d >= 0)[0])
+        extra.append(d[extra[-1]])
+    cells = np.unique(np.concatenate([riv_cells, lake_cells, *extra]))
+    cells = cells[cells >= 0]
+    desc = np.full(cells.size, -1, dtype=np.int64)
+    if lake_descend is not None:
+        desc = np.asarray(lake_descend).reshape(-1)[cells].astype(np.int64)
+    graph = ChannelGraph(
+        cells=cells,
+        is_river=riv_flat[cells].astype(bool),
+        is_lake=lake_big.reshape(-1)[cells],
+        receiver=rec_flat[cells].astype(np.int64),
+        acc=np.asarray(accumulation).reshape(-1)[cells].astype(np.float64),
+        month=(
+            np.full(cells.size, 12, dtype=np.uint8)
+            if month_active is None
+            else np.asarray(month_active).reshape(-1)[cells].astype(np.uint8)
+        ),
+        descend=desc,
+        width=w,
+        rows=h if pixel_rows is None else int(pixel_rows),
+        km_per_px=km_per_px,
+    )
+    return river_segments_from_graph(graph)
+
+
+@dataclass(frozen=True)
+class ChannelGraph:
+    """Every cell a river chain can visit, in one sorted sparse table.
+
+    ``cells`` are the global cell indices (row-major, row 0 north), sorted; every other field
+    is indexed the same way.  ``receiver`` and ``descend`` are global indices (-1 for none),
+    looked up inside the table with ``searchsorted``.  The whole-grid caller
+    (:func:`river_segments`) gathers the table from its arrays; the out-of-core chain
+    (:mod:`dreamulator.media.canvas_rivers_tiled`) gathers it chunk by chunk, which is what
+    keeps the stage off the whole-canvas fields — the chains themselves are sparse.
+    """
+
+    cells: np.ndarray
+    is_river: np.ndarray
+    is_lake: np.ndarray
+    receiver: np.ndarray
+    acc: np.ndarray
+    month: np.ndarray
+    descend: np.ndarray
+    width: int
+    rows: int
+    km_per_px: float
+
+    def index_of(self, global_cells: np.ndarray) -> np.ndarray:
+        """Row of each global cell index in the table, -1 when it is not in it."""
+        g = np.asarray(global_cells, dtype=np.int64)
+        pos = np.searchsorted(self.cells, g)
+        ok = (g >= 0) & (pos < self.cells.size)
+        out = np.where(
+            ok, np.where(self.cells[np.minimum(pos, self.cells.size - 1)] == g, pos, -1), -1
+        )
+        return out.astype(np.int64)
+
+
+def river_segments_from_graph(
+    graph: ChannelGraph,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The chain walk of :func:`river_segments` on a :class:`ChannelGraph`.
+
+    Chains are walked in compact table indices, so the cost is the channel cells and the lake
+    cells, not the grid.  See :func:`river_segments` for the lake and regime semantics.
+    """
+    rec = graph.index_of(graph.receiver)
+    desc = graph.index_of(graph.descend)
+    is_river, is_lake, acc, month = graph.is_river, graph.is_lake, graph.acc, graph.month
+    w, rows, km_per_px = graph.width, graph.rows, graph.km_per_px
+    riv_idx = np.flatnonzero(is_river)
+    # Spill points: a lake cell draining into a non-lake cell — the outlet chain resumes just
+    # downstream of it, PREPENDED with the spill lake cell itself so the line starts one cell
+    # INTO the water (the twin of the end-of-chain shore append: without it the resumed reach
+    # began a cell or two off the rendered shore and read as a river starting from bare
+    # ground).  Terminal lakes carry no spill cell: their equilibrium water is non-land and
+    # receiver-less, so nothing resumes below them by construction.
     spill_pre: dict[int, int] = {}
-    for c in lake_set:
-        r = int(receiver[c])
-        if r >= 0 and r not in lake_set:
+    for c in np.flatnonzero(is_lake).tolist():
+        r = int(rec[c])
+        if r >= 0 and not is_lake[r]:
             spill_pre.setdefault(r, c)
-
     # Channel heads: no other channel cell drains into them.
-    has_upstream = set()
-    for c in riv_cells.tolist():
-        r = int(receiver[c])
-        if r in riv_set:
-            has_upstream.add(r)
-    heads = [c for c in riv_cells.tolist() if c not in has_upstream]
-    # Downstream resumptions at lake spill points (their receiver leads out).
-    heads += [c for c in spill_pre if c in riv_set]
-
-    acc_flat = accumulation.reshape(-1)
+    down = rec[riv_idx]
+    has_upstream = np.zeros(graph.cells.size, dtype=bool)
+    has_upstream[down[(down >= 0) & is_river[np.maximum(down, 0)]]] = True
+    heads = [int(c) for c in riv_idx if not has_upstream[c]]
+    heads += [c for c in spill_pre if is_river[c]]
 
     def cell_xyz_km(c: int) -> tuple[float, float, float]:
-        # Row 0 is the NORTH edge of the canvas.  The array may be shorter
-        # than the canvas square (only the chunks near land exist), so the
-        # y origin is the canvas's bottom edge, not the array's: using the
-        # array height shifted every reach south by the empty rows
-        # (184 km on a 104x96-cell box of a 112-cell canvas).
-        y, x = c // w, c % w
-        rows = h if pixel_rows is None else int(pixel_rows)
-        return (x * km_per_px, (rows - 1 - y) * km_per_px, float(acc_flat[c]))
+        # Row 0 is the NORTH edge of the canvas.  The array may be shorter than the canvas
+        # square (only the chunks near land exist), so the y origin is the canvas's bottom
+        # edge, not the array's: using the array height shifted every reach south by the empty
+        # rows (184 km on a 104x96-cell box of a 112-cell canvas).
+        g = int(graph.cells[c])
+        y, x = g // w, g % w
+        return (x * km_per_px, (rows - 1 - y) * km_per_px, float(acc[c]))
 
     segs: list[tuple[tuple[float, float], tuple[float, float]]] = []
     flows: list[float] = []
     regimes: list[int] = []
-    month_flat = None if month_active is None else month_active.reshape(-1)
-    visited: set[int] = set()
+    visited = np.zeros(graph.cells.size, dtype=bool)
     for head in heads:
         chain = []
         c = head
-        while c in riv_set and c not in visited and c not in lake_set:
-            visited.add(c)
+        while c >= 0 and is_river[c] and not visited[c] and not is_lake[c]:
+            visited[c] = True
             chain.append(c)
-            c = int(receiver[c])
+            c = int(rec[c])
         n_channel = len(chain)  # channel cells only — appended cells never gate
         if head in spill_pre:
             # Resumed reach: start one cell into the lake (shore symmetry).
             chain.insert(0, spill_pre[head])
             n_channel += 1  # the spill cell is a channel-side cell, not appended
-        # Always connect the chain's end to its downstream cell: the
-        # junction when a tributary meets an already-traced trunk (missing
-        # this link left every tributary one segment short: "broken
-        # rivers"), the sea/frame outlet, or the shore cell of the lake it
-        # ends in (drawn one cell into the water so the line touches it).
+        # Always connect the chain's end to its downstream cell: the junction when a tributary
+        # meets an already-traced trunk (missing this link left every tributary one segment
+        # short: "broken rivers"), the sea/frame outlet, or the shore cell of the lake it ends
+        # in (drawn one cell into the water so the line touches it).
         if c >= 0 and len(chain) >= 1:
             chain.append(c)
-        # Terminal footprint entered: descend the pre-rewrite bathymetry
-        # across a shrunk lake's dried fringe to the visible water (the
-        # cut receiver ends the walk at the basin's outer edge, which read
-        # as a broken river when the water sits kilometres inside).  Dry
+        # Terminal footprint entered: descend the pre-rewrite bathymetry across a shrunk lake's
+        # dried fringe to the visible water (the cut receiver ends the walk at the basin's
+        # outer edge, which read as a broken river when the water sits kilometres inside).  Dry
         # playas descend nowhere (-1) and keep the outer-edge semantics.
-        if lake_descend is not None and chain and chain[-1] in lake_set:
+        if chain and is_lake[chain[-1]]:
             c = chain[-1]
             while True:
-                dn = int(lake_descend[c])
+                dn = int(desc[c])
                 if dn < 0 or dn == c:
                     break
                 chain.append(dn)
                 c = dn
-        # Two cells = a legal short reach (e.g. a trunk's final step into
-        # the sea); only a genuinely empty chain is dropped.
+        # Two cells = a legal short reach (e.g. a trunk's final step into the sea); only a
+        # genuinely empty chain is dropped.
         if len(chain) < 2:
             continue
-        if month_flat is None:
-            active_chain = np.full(len(chain), 12, dtype=np.uint8)
-        else:
-            active_chain = np.empty(len(chain), dtype=np.uint8)
-            for i, cell in enumerate(chain):
-                # Appended outlet/fringe cells are not new channel reaches;
-                # inherit the last real channel cell's active-month count.
-                active_chain[i] = month_flat[cell] if i < n_channel else active_chain[i - 1]
+        active_chain = np.empty(len(chain), dtype=np.uint8)
+        for i, cell in enumerate(chain):
+            # Appended outlet/fringe cells are not new channel reaches; inherit the last real
+            # channel cell's active-month count.
+            active_chain[i] = month[cell] if i < n_channel else active_chain[i - 1]
         pts = np.asarray([cell_xyz_km(c) for c in chain], dtype=np.float64)
-        # The appended outlet can be a sea cell (accumulation ≈ 0) or a
-        # lake shore — its flow coordinate must not sag at the mouth, or
-        # the final reach renders thinner than the channel above it.
+        # The appended outlet can be a sea cell (accumulation ~ 0) or a lake shore — its flow
+        # coordinate must not sag at the mouth, or the final reach renders thinner than the
+        # channel above it.
         np.maximum.accumulate(pts[:, 2], out=pts[:, 2])
-        # One regime per inter-point reach, labelled by its upstream cell.
-        # Adjacent runs share exactly one boundary point, never a segment.
+        # One regime per inter-point reach, labelled by its upstream cell.  Adjacent runs share
+        # exactly one boundary point, never a segment.
         labels = np.where(
             active_chain[:-1] >= 12,
             RIVER_REGIME_PERENNIAL,
@@ -1886,9 +1948,8 @@ def river_segments(
                 if abs(cross) < 1e-9:
                     keep[i] = False
             reach = reach[keep]
-            # Two points after the merge = one long straight run — a legal
-            # channel (dropping <3-point chains erased whole straight rivers
-            # and left region-scale gaps).
+            # Two points after the merge = one long straight run — a legal channel (dropping
+            # <3-point chains erased whole straight rivers and left region-scale gaps).
             smooth = _chaikin(reach) if len(reach) >= 3 else reach
             for a, b in zip(smooth[:-1], smooth[1:], strict=True):
                 segs.append(((a[0], a[1]), (b[0], b[1])))

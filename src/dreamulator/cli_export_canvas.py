@@ -515,8 +515,10 @@ def _run_hydrology(
     threshold_cells: int,
     workers: int | None = None,
     surface: str = "auto",
+    out_of_core: bool | None = None,
 ) -> None:
     from dreamulator.media.canvas_pipeline import CanvasStore, run_canvas_fill, run_canvas_rivers
+    from dreamulator.media.canvas_rivers_tiled import prefer_out_of_core, run_canvas_rivers_tiled
     from dreamulator.media.canvas_surface_process import read_surface_tag
 
     store = CanvasStore.load(canvas, surface=surface)
@@ -540,7 +542,12 @@ def _run_hydrology(
         or not (hydro / "rivers.line.npy").exists()
         or read_surface_tag(hydro) != store.surface
     ):
-        run_canvas_rivers(store, threshold_cells=threshold_cells)
+        ooc = prefer_out_of_core(store) if out_of_core is None else out_of_core
+        console.print(f"  rivers: {'out-of-core' if ooc else 'in-memory'} solver")
+        if ooc:
+            run_canvas_rivers_tiled(store, threshold_cells=threshold_cells, workers=workers)
+        else:
+            run_canvas_rivers(store, threshold_cells=threshold_cells)
 
 
 _SURFACE_HELP = (
@@ -568,6 +575,12 @@ def canvas_hydrology(
         None, "--workers", help="Processes for the per-chunk fill stages (default: CPUs, max 16)"
     ),
     surface: str = typer.Option("auto", "--surface", help=_SURFACE_HELP),
+    out_of_core: bool | None = typer.Option(
+        None,
+        "--out-of-core/--in-memory",
+        help="River stage solver (default: out-of-core when the whole-grid chain would not fit "
+        "in half the free memory)",
+    ),
 ) -> None:
     """S2 hydrology: out-of-core fill, lakes and river segments (per canvas)."""
     for path in _targets(target, canvas):
@@ -578,6 +591,7 @@ def canvas_hydrology(
             threshold_cells=river_threshold,
             workers=workers,
             surface=surface,
+            out_of_core=out_of_core,
         )
 
 

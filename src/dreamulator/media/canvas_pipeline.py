@@ -1270,6 +1270,65 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
     return filled, dem, rec, acc, land, order, weight, inland_big
 
 
+@dataclass(frozen=True)
+class RiverClimateInputs:
+    """The climate basis of the rivers stage, read once for either chain.
+
+    ``has_basis`` is the region chain's rule: the water-balance verdict needs runoff weighting
+    AND a temperature basis, otherwise the routing degrades to the geometry lake with no
+    verdicts.  The grids stay COARSE and the balances look cells up per block, so this holds no
+    canvas-sized field.
+    """
+
+    precip: np.ndarray
+    temp_c: np.ndarray
+    open_water: np.ndarray | None
+    has_basis: bool
+    climate_block: int
+    weight_source: str
+    runoff_land_mean_mm: float
+    lake_evaporation_source: str
+
+
+def read_river_climate_inputs(store: CanvasStore) -> RiverClimateInputs:
+    """Load the rivers stage's climate basis from a canvas's ``climate/`` directory."""
+    from dreamulator.map.prog_erosion import RUNOFF_REFERENCE_MM
+
+    climate = store.root / "climate"
+    weight_source = "runoff.mm" if (climate / "runoff.mm.npy").exists() else "uniform"
+    temp_path = climate / "temperature.C.npy"
+    precip_path = climate / "precipitation.mm.npy"
+    has_basis = weight_source == "runoff.mm" and temp_path.exists() and precip_path.exists()
+    precip = np.zeros((1, 1), dtype=np.float32)
+    temp_c = np.zeros((1, 1), dtype=np.float32)
+    block = 1
+    if has_basis:
+        precip = np.nan_to_num(np.load(precip_path).astype(np.float32), nan=0.0)
+        temp_c = np.nan_to_num(np.load(temp_path).astype(np.float32), nan=0.0)
+        block = PX_PER_CELL  # one climate cell = PX_PER_CELL pixels
+    # Lake-surface demand: the energy-based open-water channel S1 writes
+    # (engine/lake_evaporation.py); canvases planned before it fall back to the Hamon demand,
+    # which underestimates cold clear plateaus severalfold.
+    open_water = None
+    lake_path = climate / "lake_evaporation.mm.npy"
+    if has_basis and lake_path.exists():
+        open_water = np.nan_to_num(np.load(lake_path).astype(np.float32), nan=0.0)
+    return RiverClimateInputs(
+        precip=precip,
+        temp_c=temp_c,
+        open_water=open_water,
+        has_basis=has_basis,
+        climate_block=block,
+        weight_source=weight_source,
+        runoff_land_mean_mm=RUNOFF_REFERENCE_MM if has_basis else 0.0,
+        lake_evaporation_source=(
+            "open-water energy balance"
+            if open_water is not None
+            else "Hamon fallback (no lake_evaporation.mm channel; re-plan the canvas)"
+        ),
+    )
+
+
 def run_canvas_rivers(
     store: CanvasStore,
     *,
@@ -1289,7 +1348,6 @@ def run_canvas_rivers(
     """
     from dreamulator.map.prog_erosion import (
         LAKE_MIN_WIDTH_KM,
-        RUNOFF_REFERENCE_MM,
         PassThroughLakes,
         lake_mmu_cells,
         lake_monthly_demand,
@@ -1312,42 +1370,20 @@ def run_canvas_rivers(
     km = store.geometry.px_km
     mmu = lake_mmu_cells(km)
     climate = store.root / "climate"
-    weight_source = "runoff.mm" if (climate / "runoff.mm.npy").exists() else "uniform"
-
+    inputs = read_river_climate_inputs(store)
+    weight_source = inputs.weight_source
     # Terminal-lake verdict chain: without a temperature/precipitation basis
     # (or without runoff weighting) the routing degrades to the geometry
     # lake with no verdicts — the region chain's same degenerate mode.
     lakes_draw0 = renderable_lakes(filled, dem, inland_big, mmu, km)
     del filled, inland_big
-    temp_path = climate / "temperature.C.npy"
-    precip_path = climate / "precipitation.mm.npy"
-    # The water-balance verdict needs runoff weighting AND a temperature
-    # basis (the region chain's rule: no temperature → balance off).  The
-    # climate grids stay COARSE and the balances look lake cells up per
-    # block — the values equal a full tiling without canvas-sized fields.
-    has_basis = weight_source == "runoff.mm" and temp_path.exists() and precip_path.exists()
-    run_norm = RUNOFF_REFERENCE_MM if has_basis else 0.0
-    precip = np.zeros((1, 1), dtype=np.float32)
-    temp_c = np.zeros((1, 1), dtype=np.float32)
-    climate_block = 1
-    if has_basis:
-        precip = np.nan_to_num(np.load(precip_path).astype(np.float32), nan=0.0)
-        temp_c = np.nan_to_num(np.load(temp_path).astype(np.float32), nan=0.0)
-        climate_block = PX_PER_CELL  # one climate cell = PX_PER_CELL pixels
-    # Lake-surface demand: the energy-based open-water channel S1 writes
-    # (engine/lake_evaporation.py); canvases planned before it fall back to
-    # the Hamon demand, which underestimates cold clear plateaus severalfold.
-    open_water = None
-    lake_path = climate / "lake_evaporation.mm.npy"
-    if has_basis and lake_path.exists():
-        open_water = np.nan_to_num(np.load(lake_path).astype(np.float32), nan=0.0)
+    has_basis = inputs.has_basis
+    run_norm = inputs.runoff_land_mean_mm
+    precip, temp_c = inputs.precip, inputs.temp_c
+    climate_block = inputs.climate_block
+    open_water = inputs.open_water
     if verbose and has_basis:
-        source = (
-            "open-water energy balance"
-            if open_water is not None
-            else ("Hamon fallback (no lake_evaporation.mm channel; re-plan the canvas)")
-        )
-        print(f"[hydrology] lake evaporation: {source}")
+        print(f"[hydrology] lake evaporation: {inputs.lake_evaporation_source}")
     pass_through: list[PassThroughLakes] = []
     (
         _h_rewritten,

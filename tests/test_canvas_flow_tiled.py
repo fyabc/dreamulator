@@ -371,3 +371,130 @@ def test_tiled_month_active_matches_the_in_memory_oracle(tmp_path: Path) -> None
     for key in store.chunks:
         sl = np.s_[key[0] * T : (key[0] + 1) * T, key[1] * T : (key[1] + 1) * T]
         assert np.array_equal(load_chunk(store, "month_active", key), plain[sl])
+
+
+def test_tiled_channel_graph_matches_the_in_memory_segments(tmp_path: Path) -> None:
+    """The chain table gathered per chunk gives the same rivers as the whole-grid gather."""
+    from dreamulator.map.prog_erosion import (
+        RUNOFF_REFERENCE_MM,
+        lake_mmu_cells,
+        renderable_lakes,
+        river_mask,
+        river_segments,
+        river_segments_from_graph,
+        terminal_equilibrium_routing,
+    )
+    from dreamulator.map.td_canvas import PX_PER_CELL
+    from dreamulator.media.canvas_flow_tiled import (
+        load_chunk,
+        tiled_accumulation,
+        tiled_directions,
+        tiled_graded,
+    )
+    from dreamulator.media.canvas_lakes_tiled import tiled_geometry_lakes
+    from dreamulator.media.canvas_rivers_tiled import tiled_channel_graph
+    from dreamulator.media.canvas_terminal_tiled import tiled_terminal_routing
+
+    root = tmp_path / "canvas"
+    root.mkdir()
+    precip, temp, ow = _make_lakes_canvas(root, 100.0, 4000.0)  # the "shrunk" case: dried fringes
+    store = CanvasStore.load(root)
+    run_canvas_fill(store, verbose=False, workers=1)
+    graded, dem, rec, _acc0, land, order, weight, inland = canvas_flow_fields(store)
+    km = store.geometry.px_km
+    mmu = lake_mmu_cells(km)
+    lakes0 = renderable_lakes(graded, dem, inland, mmu, km)
+    w = weight.ravel().copy()
+    out = terminal_equilibrium_routing(
+        dem, land, lakes0, order, rec.copy(), w,
+        precip_mm=precip, temp_c=temp, runoff_land_mean_mm=RUNOFF_REFERENCE_MM,
+        mmu_cells=mmu, km_per_px=km, sea_level_m=0.0, climate_block=PX_PER_CELL,
+        open_water_mm=ow, keep_rewritten_h=False,
+    )  # fmt: skip
+    _h, land2, render, chain_stop, desc, rec_route, acc, _water, _stats, _records = out
+    threshold = 8
+
+    tiled_graded(store, workers=1)
+    tiled_directions(store, workers=1)
+    comps = tiled_geometry_lakes(store, mmu, km, workers=1)
+    tiled_terminal_routing(
+        store, comps, precip_mm=precip, temp_c=temp, open_water_mm=ow,
+        runoff_land_mean_mm=RUNOFF_REFERENCE_MM, mmu_cells=mmu, km_per_px=km,
+        climate_block=PX_PER_CELL, workers=1,
+    )  # fmt: skip
+    tiled_accumulation(store, "w_depleted", dir_kind="dir_route", workers=1)
+    # Both paths read the SAME accumulation: the tiled sums are float64 and the whole-grid ones
+    # float32, which moves a couple of hundred cells across the channel threshold (step 1
+    # covers that difference).  What is under test here is the sparse gather.
+    acc_t = np.zeros(land.shape, dtype=np.float32)
+    for key in store.chunks:
+        sl = np.s_[key[0] * T : (key[0] + 1) * T, key[1] * T : (key[1] + 1) * T]
+        acc_t[sl] = load_chunk(store, "acc_w_depleted", key)
+    rivers = river_mask(acc_t, land2, threshold)
+    assert rivers.sum() > 100
+    segs, flows, regimes = river_segments(
+        rivers, rec_route, acc_t, km, lake=chain_stop,
+        lake_descend=desc, pixel_rows=store.geometry.size_px,
+    )  # fmt: skip
+    assert len(segs) > 50
+    graph = tiled_channel_graph(
+        store, comps, threshold_cells=threshold, mmu_cells=mmu, km_per_px=km,
+        pixel_rows=store.geometry.size_px, month_kind=None, workers=1,
+    )  # fmt: skip
+    segs2, flows2, regimes2 = river_segments_from_graph(graph)
+    assert np.array_equal(segs, segs2)
+    assert np.array_equal(flows, flows2)
+    assert np.array_equal(regimes, regimes2)
+    for key in store.chunks:
+        sl = np.s_[key[0] * T : (key[0] + 1) * T, key[1] * T : (key[1] + 1) * T]
+        assert np.array_equal(load_chunk(store, "rivers", key).astype(bool), rivers[sl])
+
+
+def test_out_of_core_rivers_driver_writes_the_same_products(tmp_path: Path) -> None:
+    """The chunked driver's rivers, lakes and metadata match the whole-grid driver's."""
+    import json
+
+    from dreamulator.media.canvas_pipeline import run_canvas_rivers
+    from dreamulator.media.canvas_rivers_tiled import run_canvas_rivers_tiled
+
+    def build(root: Path) -> CanvasStore:
+        root.mkdir()
+        _make_lakes_canvas(root, 100.0, 4000.0)
+        store = CanvasStore.load(root)
+        run_canvas_fill(store, verbose=False, workers=1)
+        return store
+
+    a = build(tmp_path / "memory")
+    b = build(tmp_path / "chunks")
+    stats_a = run_canvas_rivers(a, threshold_cells=8, verbose=False)
+    stats_b = run_canvas_rivers_tiled(b, threshold_cells=8, workers=1, verbose=False)
+    # The two accumulations differ in the last float32 digits (step 1), which moves a few cells
+    # across the channel threshold, so the segment counts agree to a fraction of a percent.
+    assert stats_b["segments"] == pytest.approx(stats_a["segments"], rel=0.01)
+    assert stats_b["non_perennial"] == stats_a["non_perennial"] == 0.0  # no monthly channel
+
+    ha, hb = a.root / "hydro", b.root / "hydro"
+    for name in ("rivers.line.npy", "rivers.flow.npy", "rivers.regime.npy", "rivers.png"):
+        assert (hb / name).exists(), name
+    meta_a = json.loads((ha / "rivers.meta.json").read_text(encoding="utf-8"))
+    meta_b = json.loads((hb / "rivers.meta.json").read_text(encoding="utf-8"))
+    for k in ("threshold_cells", "weight_source", "km_per_px", "regime_source", "sea_source",
+              "healed_pit_cells", "lake_mmu_cells", "terminal_lakes"):  # fmt: skip
+        assert meta_a[k] == meta_b[k], k
+    assert meta_b["solver"] == "out-of-core"
+    lakes_a = json.loads((ha / "lakes.json").read_text(encoding="utf-8"))["lakes"]
+    lakes_b = json.loads((hb / "lakes.json").read_text(encoding="utf-8"))["lakes"]
+    assert len(lakes_a) == len(lakes_b) >= 3
+    for la, lb in zip(lakes_a, lakes_b, strict=True):
+        for k in ("id", "verdict", "draw_cells", "kept_water_cells", "area_km2"):
+            assert la[k] == lb[k], (k, la, lb)
+    # the sparse pixels carry the lakes.json ids, so the two products join
+    ids_b: set[int] = set()
+    for p in sorted((hb / "lakes.sparse").glob("*.npz")):
+        ids_b |= {int(v) for v in np.unique(np.load(p)["lake_id"])}
+    assert ids_b and ids_b <= {int(r["id"]) for r in lakes_b}
+    for p in sorted((ha / "lakes.sparse").glob("*.npz")):
+        q = hb / "lakes.sparse" / p.name
+        assert q.exists(), p.name
+        assert np.array_equal(np.load(p)["idx"], np.load(q)["idx"])
+        assert np.array_equal(np.load(p)["lake_id"], np.load(q)["lake_id"])
