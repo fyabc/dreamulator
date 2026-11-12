@@ -459,9 +459,11 @@ dreamulator canvas mosaic data/worlds/nacrea/canvases/gcm-t42-712 --step 2
   [knowledge/cartography/terrain_diffusion.md](../knowledge/cartography/terrain_diffusion.md)）；中断后重跑即续算，
   `--canvas` 可只跑指定的画布。
 - `erode` 先在约 720 m 粗网格上做下切、谷坡与沉积（大画布用 `--block 16`，即 1.44 km），再在 90 m 分块上清理
-  亚格子凹坑（`--no-native` 跳过）；平台与岛屿的下切时长取 `--t-max-myr`（缺省 50 Myr）。粗级时间步按「最大河流的
-  裂点每步后退 `--cells-per-step` 格」取（缺省 5，地球标定值；20 仍收敛，world-west 这样的大画布约快 4 倍）。结果写成
-  `surface_process/` 下的逐块增量，不改 TD 块。
+  亚格子凹坑（`--no-native` 跳过）；平台与岛屿的下切时长取 `--t-max-myr`（缺省 50 Myr）。粗级缺省按流域求解
+  （`--by-basin`）：每个流域按自己的最大河流取时间步、各流域并行，一次运行内分水岭固定；`--single-grid` 回到全画布
+  共用一个时间步。时间步按「裂点每步后退 `--cells-per-step` 格」取（缺省 5，地球标定值）。原生级的进程数缺省按 CPU
+  配额与可用内存的一半自动确定（每进程约 9 GB），`--workers` 可指定。结果写成 `surface_process/` 下的逐块增量，
+  不改 TD 块。
 - `hydrology` 读「安装地表」：缺省 `--surface auto` 在侵蚀产品完整时读「TD 块加增量」，否则读 TD 块；`--surface td`
   强制用 TD 块。结果在 `hydro-work/`（每个分块带校验和，可续算）与 `hydro/`，两处都记录所用地表；地表变了会
   自动整体重算。河网起始阈值 `--river-threshold` 缺省 27000，对应约 2.1 m³/s 的平均流量；要更密的小溪网时调低。

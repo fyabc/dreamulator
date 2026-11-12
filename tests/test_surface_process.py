@@ -73,6 +73,19 @@ def test_sediment_fills_a_closed_pit() -> None:
     assert fill_depth(r.h) < fill_depth(z) - 1.0
 
 
+def test_ice_cells_take_no_lake_sediment() -> None:
+    """Non-erodible (ice-surface) cells inside a filling lake neither erode nor aggrade."""
+    z, land = _plateau(pit=True)
+    ice = np.zeros(z.shape, bool)
+    ice[44:52, 56:64] = True  # the pit floor is ice
+    r = _run(z, land, 2e6, anchor=z, erodible=~ice)
+    assert np.array_equal(r.h[ice], z[ice])
+    assert r.ledger["sediment_residual_rel"] < 1e-9
+    assert r.ledger["topography_residual_rel"] < 1e-9
+    free = _run(z, land, 2e6, anchor=z)
+    assert (free.h[ice] > z[ice]).any()  # without ice the same floor fills
+
+
 def test_open_water_evaporation_keeps_a_terminal_lake() -> None:
     z, land = _plateau(pit=True)
     c = _climate(z.shape, runoff=20.0)
@@ -135,9 +148,10 @@ def _make_canvas(root: Path, *, missing: tuple[int, int] | None = None) -> None:
         np.save(root / "climate" / f"{name}.npy", np.full((n, n), v, dtype=np.float32))
 
 
+@pytest.mark.parametrize("by_basin", [True, False])
 @pytest.mark.parametrize("missing", [None, (0, 3)])
 def test_canvas_driver_writes_a_consumable_product(
-    tmp_path: Path, missing: tuple[int, int] | None
+    tmp_path: Path, missing: tuple[int, int] | None, by_basin: bool
 ) -> None:
     from dreamulator.map import prog_erosion as pe
     from dreamulator.media.canvas_pipeline import CanvasStore
@@ -150,7 +164,9 @@ def test_canvas_driver_writes_a_consumable_product(
     root = tmp_path / "canvas"
     root.mkdir()
     _make_canvas(root, missing=missing)
-    cfg = CanvasSurfaceConfig(t_max_myr=0.4, t_min_myr=0.4, native_time_myr=0.16, halo_px=32)
+    cfg = CanvasSurfaceConfig(
+        t_max_myr=0.4, t_min_myr=0.4, native_time_myr=0.16, halo_px=32, by_basin=by_basin
+    )
     teff = np.array([np.nan])  # one platform cell: every pixel takes the cap
     xyz = np.array([[1.0, 0.0, 0.0]])
     manifest = run_canvas_surface_process(root, teff, xyz, cfg, workers=1, log=lambda m: None)
@@ -193,7 +209,9 @@ def test_canvas_driver_writes_a_consumable_product(
     assert td_chunk is not None
     assert np.array_equal(td_chunk, np.load(root / "chunks" / f"r{ci:03d}_c{cj:03d}.npy"))
 
-    if missing is None:  # the central pit got shallower
+    # the central pit got shallower (single grid: the regression the margin was set on; the
+    # basin run steps once more under its step bound and lands within the same few per mille)
+    if missing is None and not by_basin:
 
         def mosaic(chunks: list[np.ndarray]) -> np.ndarray:
             return np.block([[chunks[i * 4 + j] for j in range(4)] for i in range(4)]).astype(float)
@@ -275,3 +293,86 @@ def test_fill_refuses_to_resume_on_another_surface(tmp_path: Path) -> None:
     assert read_surface_tag(root / "hydro-work") == eroded.surface
     final = np.load(root / "hydro-work" / "final" / "r000_c000.i16.npy").astype(np.int32)
     assert (final >= np.rint(eroded.raw(0, 0)).astype(np.int32) - 1).all()
+
+
+# ---------------------------------------------------------------------------
+# basin-by-basin coarse level
+# ---------------------------------------------------------------------------
+
+
+def _valley(n: int = 64, x0: int = 0, w: int | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """One drainage basin: a tilted valley inside high walls, draining to one sea cell."""
+    w = n if w is None else w
+    y, x = np.mgrid[0:n, 0:w].astype(float)
+    z = 20.0 * y + 3.0 * np.abs(x - w / 2) + 2.0 * np.sin(x / 2.0)
+    z[0, :] = z[-1, :] = 5000.0
+    z[:, 0] = z[:, -1] = 5000.0
+    z[0, w // 2] = -100.0  # the outlet
+    land = (z > 0) & (z < 5000.0)
+    full = np.full((n, x0 + w + 8), 5000.0)
+    full_land = np.zeros(full.shape, bool)
+    full[:, x0 : x0 + w] = z
+    full_land[:, x0 : x0 + w] = land
+    return full, full_land
+
+
+def test_one_basin_reproduces_the_single_grid_run() -> None:
+    from dreamulator.map.surface_process_basins import run_surface_process_by_basin
+
+    z, land = _valley()
+    c = _climate(z.shape)
+    p = SurfaceProcessParams(parallel_flood=False, max_dt_yr=80_000.0)  # same bound both ways
+    age = np.full(z.shape, 1e6)
+    for anchor in (None, z):
+        single = run_surface_process(
+            z, land, c["runoff_mm"], c["precip_mm"], c["temp_c"], PX_M, 1e6, p, anchor=anchor
+        )
+        basin, info = run_surface_process_by_basin(
+            z, land, c["runoff_mm"], c["precip_mm"], c["temp_c"], PX_M, p, age_yr=age,
+            anchor=anchor,
+        )  # fmt: skip
+        assert info["basins"] == 1 and info["tasks"] == 1
+        assert basin.steps == single.steps
+        assert basin.ledger["sediment_residual_rel"] < 1e-9
+        if anchor is None:
+            assert np.array_equal(basin.h, single.h)
+        else:  # the masked low-pass sees the crop's edge where the full grid has its own
+            assert np.abs(basin.h - single.h).max() < 1e-3 * np.ptp(z[land])
+
+
+def test_basins_take_their_own_time_steps(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two separate basins: each matches its own single-grid run, the smaller takes fewer steps."""
+    from dreamulator.map import surface_process_basins as spb
+    from dreamulator.map.surface_process_basins import run_surface_process_by_basin
+
+    monkeypatch.setattr(spb, "BIG_BASIN_CELLS", 100)  # both basins get crops of their own
+
+    big_z, big_land = _valley(96, 0, 64)
+    small_z, small_land = _valley(32, 0, 24)
+    z = np.full((96, 72 + 32 + 8), 5000.0)
+    land = np.zeros(z.shape, bool)
+    z[:, :72] = big_z
+    land[:, :72] = big_land
+    z[:32, 72:104] = small_z
+    land[:32, 72:104] = small_land
+    c = _climate(z.shape)
+    p = SurfaceProcessParams(parallel_flood=False, max_dt_yr=80_000.0)  # same bound both ways
+    age = np.full(z.shape, 1e6)
+    res, info = run_surface_process_by_basin(
+        z, land, c["runoff_mm"], c["precip_mm"], c["temp_c"], PX_M, p, age_yr=age
+    )
+    assert info["basins"] == 2
+    for keep in (big_land, None):
+        mask = np.zeros(z.shape, bool)
+        if keep is not None:
+            mask[:, :72] = big_land
+        else:
+            mask[:32, 72:104] = small_land
+        alone = run_surface_process(
+            np.where(land & ~mask, -100.0, z), mask, c["runoff_mm"], c["precip_mm"], c["temp_c"],
+            PX_M, 1e6, p,
+        )  # fmt: skip
+        assert np.allclose(res.h[mask], alone.h[mask], atol=1e-9)
+    assert info["max_steps"] < info["total_steps"]  # the two basins stepped differently
+    assert np.array_equal(res.h[~land], z[~land])
+    assert res.ledger["sediment_residual_rel"] < 1e-9

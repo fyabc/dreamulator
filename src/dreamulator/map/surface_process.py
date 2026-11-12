@@ -19,7 +19,9 @@ The physics of the canvas erosion-deposition stage (design and calibration in
    downstream; river cells deposit D = λ · Qs / Q (Davy & Lague 2009), never
    above the lowest donor; a lake traps everything that reaches it, filling
    bottom-up towards its spill from the outlet cell, the excess moving on (a
-   terminal lake keeps it as an aggrading playa).  Spillways breach by
+   terminal lake keeps it as an aggrading playa).  Only erodible cells take
+   sediment: an ice-surface depression is no basin rivers fill, and a lake
+   partly under ice fills its ice-free floor only.  Spillways breach by
    themselves: the rim below an outlet carries the whole lake discharge.
 5. **Anchoring.**  The long-wavelength mean is the mesh's canon: a Gaussian
    low-pass of the surface (σ ``anchor_sigma_km``) is pulled back to that of
@@ -61,6 +63,10 @@ class SurfaceProcessParams:
     * ``slope_deg``: observational (active ranges 30–35°).
     * ``max_cells_per_step`` / ``fixed_steps``: numerical stabilisation (the
       implicit step is stable; the cap keeps knickpoints from jumping cells).
+    * ``max_dt_yr``: numerical stabilisation, an upper bound on the time step
+      (0 = none).  Small basins run on their own would otherwise take steps far
+      beyond the range the hillslope, infill and anchoring splitting was
+      checked on.
     * ``anchor_sigma_km``: the mesh's resolution scale (long-wavelength canon).
     * ``lake_eps_m``: numerical (separates lake water from the ε ramp).
     """
@@ -70,6 +76,7 @@ class SurfaceProcessParams:
     lambda_m_yr: float = 0.4
     slope_deg: float = 33.0
     max_cells_per_step: float = 5.0
+    max_dt_yr: float = 0.0
     fixed_steps: int = 0
     anchor_sigma_km: float = 25.0
     one_sided: bool = True
@@ -256,6 +263,7 @@ def run_surface_process(
     t, step, t0, u_last = 0.0, 0, time.time(), 0.0
     snaps: list[tuple[float, np.ndarray]] = []
     active = np.empty(h.shape, bool)
+    mutable_flat = np.ascontiguousarray(mutable.ravel())
     a_km3 = area / 1e9
     while t < t_yr - 1e-6 and step < max_steps:
         r = route(h, land, runoff_m3, pr, tc, rbar, area, p, open_water_mm)
@@ -265,6 +273,8 @@ def run_surface_process(
             dt = t_yr / p.fixed_steps
         else:
             dt = p.max_cells_per_step * px_m / (p.k * max(qmax, 1e-12) ** p.m_exp)
+            if p.max_dt_yr > 0:
+                dt = min(dt, p.max_dt_yr)
         dt = min(dt, t_yr - t)
         kern._active_mask(mutable, age, t + dt, t_yr, active)
         hf = r["filled"].astype(np.float64).copy()
@@ -289,6 +299,7 @@ def run_surface_process(
         led["eroded"] += float(src.sum())
         hflat = h.ravel()  # view: the kernel deposits in place
         min_donor = kern._min_donor(hflat, r["rec"])
+        lake_cells, lake_ptr = kern._erodible_lake_lists(r["cells"], r["ptr"], mutable_flat)
         dr, dl, ex, pl = kern._route_sediment(
             hflat,
             r["order"],
@@ -296,8 +307,8 @@ def run_surface_process(
             q.ravel(),
             src.ravel(),
             r["lbl"],
-            r["ptr"],
-            r["cells"],
+            lake_ptr,
+            lake_cells,
             r["level"],
             r["outlet"],
             r["term_lake"],
