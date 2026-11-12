@@ -30,8 +30,10 @@ from dreamulator.media.canvas_flow_tiled import (
     _default_workers,
     _pool_map,
     _store_of,
+    drop_kinds,
     flow_path,
     load_chunk,
+    load_npy,
     save_chunk,
 )
 
@@ -132,7 +134,7 @@ def _relabel_chunk(task: tuple[Any, ...]) -> None:
     assert ctx is not None
     st = _store_of(ctx)
     p = flow_path(st, f"lbl_{kind}", key, "local.npy")
-    local = np.load(p)
+    local = load_npy(p)
     save_chunk(st, f"lbl_{kind}", key, np.asarray(table, dtype=np.int32)[local])
     p.unlink()
 
@@ -318,6 +320,8 @@ def tiled_geometry_lakes(
     inland = inland_by_chunk(store)
     _pool_map(_lake_mask_chunk, [(k, keep_ids, inland.get(k)) for k in keys], ctx, n)
     lakes = tiled_components(store, "lakes0", workers=n, ctx=ctx)
+    # The depth masks and their labels only served the lake seeding above.
+    drop_kinds(store, "wet", "deep", "lbl_wet", "lbl_deep")
     if log is not None:
         log(
             f"[lakes] cores {core_ids.size}, wet components {wet.count}, kept {keep_ids.size}, "

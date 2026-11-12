@@ -620,13 +620,17 @@ dreamulator map globe nacrea --branch gcm-t42-712 \
 | 文件 | 内容 |
 |---|---|
 | `surface.png` | 等距圆柱地表底图（sRGB） |
-| `clouds.png` | 合并云不透明度（RGBA straight alpha，兼容旧调用） |
 | `clouds_low.png` | 低/中云壳 + 薄霾（4 km 层） |
 | `clouds_cirrus.png` | 高壳卷云（9 km 层，带对比曲线） |
-| `cloud_cover.png` | 大尺度云量场（GCM 总云量，年均或 `--weather-pack` 逐帧；引擎世界为降水 + SLP 占位） |
-| `cyclone_template.png` / `cyclone_envelope.png` | L3 模板与包络（仅 `--cyclones`） |
+| `cloud_cover.png` | 大尺度云量场（GCM 总云量，年均或 `--weather-pack` 逐帧；引擎世界为降水 + SLP 占位）。仅 `--debug` |
+| `cyclone_template.png` / `cyclone_envelope.png` | L3 模板与包络。仅 `--cyclones --debug` |
 | `globe.png` | 正交圆盘静帧（地表 + 双层云 + 大气 + 高光） |
 | `meta.json` | 网格、种子、机位、云量来源与图层包参数、气旋轨迹、大气参数、食影参数与 provenance |
+
+两层云壳是消费方读的产物；过去还会写一张把两层合成好的 `clouds.png`（4K 档 30 MB、8K 档约
+120 MB），它的像素就是两层叠加的结果，现已不再写出。视频脚本仍保留读它的回退分支，旧导出
+目录照常可用。`--debug` 另写两类诊断图（云量场与气旋的模板和包络），它们没有下游消费方，
+只在调云或调气旋参数时看。
 
 #### 2. YAML 配置
 

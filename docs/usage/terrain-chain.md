@@ -202,14 +202,13 @@ dreamulator region build data/worlds/nacrea/packs/nacrea-15_-100_550km \
 
 | 文件 | 说明 |
 |------|------|
-| `height.meters.npy` | 高度 f32 米（pack 网格的整数倍） |
-| `height.gaea.png` | 16-bit 高度孪生（量程在本目录 meta.json） |
+| `height.meters.npy` | 高度 f32 米（pack 网格的整数倍）。下游消费方一律读它；手工 Gaea 工程读的是数据包 `input/height.gaea.png`，不是本目录 |
 | `rivers.line.npy` + `rivers.flow.npy` | 平滑矢量河段 (M, 2, 2) km + 流量 (M,) |
 | `rivers.regime.npy` | 逐河段情相 uint8 (M,)：0 常流、1 非常流；缺月度气候或年径流通道时不写 |
 | `rivers.png` | 河道掩膜（8-bit，已排湖） |
 | `sea-water.png` / `sea-depth.png` | 海掩膜 / 真实水深 |
 | `lake.png` | 内流湖掩膜 |
-| `flow-accum.png` | 汇流累积（16-bit 归一，诊断用） |
+| `flow-accum.png` | 汇流累积（16-bit 归一）。没有下游消费方，只在调排水时看，仅 `--debug` 写出 |
 | `meta.json` | 量程 / 海平面 / 参数记录 |
 
 `satellite_color.load_inputs` 自动识别构建目录：有 `rivers-h.exr` 走

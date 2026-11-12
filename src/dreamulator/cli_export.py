@@ -632,6 +632,12 @@ def export_build(
         "--reuse-height",
         help="TD method only: skip inference and re-extract hydrology from the cached refined DEM",
     ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        help="Also write flow-accum.png, the accumulation field nothing downstream reads "
+        "(20-35 MB a pack; for tuning the drainage)",
+    ),
     steps: int = typer.Option(30, "--steps", help="SPL method: time steps"),
     dt_yr: float = typer.Option(5e4, "--dt", help="SPL method: step length (years)"),
     k_spl: float = typer.Option(2e-7, "--k", help="SPL method: stream-power erodibility K"),
@@ -662,6 +668,7 @@ def export_build(
             river_threshold=river_threshold,
             coast_warp=coast_warp,
             reuse_height=reuse_height,
+            debug=debug,
         )
         console.print(
             f"  refined-out/: res {td_info['res']}² · lakes {td_info['lakes_pct']}% of land · "
@@ -1016,6 +1023,12 @@ def export_clouds(
     cyclone_seed: int = typer.Option(
         31, "--cyclone-seed", help="Cyclone seed (synthetic set, or the tropical canon sampler)"
     ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        help="Also write the diagnostic images nothing else reads: the cloud cover field and "
+        "the two cyclone stages (tens of MB a run; for tuning the cloud or cyclone parameters)",
+    ),
     weather_pack: Path | None = typer.Option(
         None,
         "--weather-pack",
@@ -1275,6 +1288,7 @@ def export_clouds(
         water_roughness=cfg.atmosphere.water_roughness,
         multiple_scattering=cfg.atmosphere.multiple_scattering,
         atmosphere_exposure=cfg.atmosphere.exposure,
+        debug=debug,
         provenance={
             "world": world,
             "branch": branch or "root",

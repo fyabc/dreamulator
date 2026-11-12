@@ -24,6 +24,7 @@ Files live under ``<work>/flow/``: ``graded`` (float32), ``dir`` (uint8), ``acc_
 
 from __future__ import annotations
 
+import errno
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -101,8 +102,37 @@ def save_chunk(store: CanvasStore, kind: str, key: tuple[int, int], a: np.ndarra
     _atomic_save(flow_path(store, kind, key, "ring.npy"), _ring(a))
 
 
+#: Retries for a chunk read that hits a stale handle, and the backoff between them.
+_LOAD_RETRIES = 8
+_LOAD_BACKOFF_S = 0.05
+
+
+def load_npy(path: Path) -> np.ndarray:
+    """Load a chunk file, retrying while a network filesystem reports a stale handle.
+
+    Chunk files are published by writing a temporary and renaming it, which is atomic on a
+    local filesystem: a concurrent reader gets either the old inode or the new one.  On a
+    network filesystem (the shared CPFS mount these canvases live on) a client whose cached
+    directory entry still points at the replaced inode gets ESTALE instead, and the whole
+    stage died on it after an hour of a world-sized run.  The rename has already happened, so
+    re-resolving the path and reading again returns the new file; the backoff doubles.
+    """
+    import time
+
+    delay = _LOAD_BACKOFF_S
+    for attempt in range(_LOAD_RETRIES):
+        try:
+            return np.asarray(np.load(path))
+        except OSError as exc:  # ESTALE, and the ENOENT a rename can show on the same mount
+            if exc.errno not in (errno.ESTALE, errno.ENOENT) or attempt == _LOAD_RETRIES - 1:
+                raise
+            time.sleep(delay)
+            delay *= 2
+    raise AssertionError("unreachable")
+
+
 def load_chunk(store: CanvasStore, kind: str, key: tuple[int, int]) -> np.ndarray:
-    return np.asarray(np.load(flow_path(store, kind, key)))
+    return load_npy(flow_path(store, kind, key))
 
 
 def halo(
@@ -125,7 +155,7 @@ def halo(
             nk = (ci + di, cj + dj)
             if (di == 0 and dj == 0) or nk not in keys:
                 continue
-            ring = np.load(flow_path(store, kind, nk, "ring.npy"))
+            ring = load_npy(flow_path(store, kind, nk, "ring.npy"))
             top, bottom = ring[:t], ring[t : 2 * t]
             left, right = ring[2 * t : 3 * t], ring[3 * t :]
             if di == -1 and dj == 0:
@@ -154,7 +184,11 @@ class _Ctx:
     healed: dict[tuple[int, int], np.ndarray] | None = None
     runoff: np.ndarray | None = None  # coarse runoff (mm/yr), already cropped to the bbox cells
     weight_kind: str = ""
+    dir_kind: str = "dir"
+    acc_kind: str = ""
+    acc_f64: bool = False
     increments: Path | None = None  # installed-surface increments (erosion product) or None
+    extra: dict[str, Any] | None = None  # stage-specific shared inputs (small or shared by fork)
 
 
 _CTX: _Ctx | None = None
@@ -332,7 +366,7 @@ def _levels(v: np.ndarray, d: np.ndarray, eps: float) -> np.ndarray:  # pragma: 
 def _final_rings(key: tuple[int, int]) -> None:
     ctx = _CTX
     assert ctx is not None
-    v = np.asarray(np.load(_final_path(ctx, key)), np.float32)
+    v = np.asarray(load_npy(_final_path(ctx, key)), np.float32)
     _atomic_save(flow_path(_store_of(ctx), "final", key, "ring.npy"), _ring(v))
 
 
@@ -341,7 +375,7 @@ def _final_path(ctx: _Ctx, key: tuple[int, int]) -> Path:
 
 
 def _final(ctx: _Ctx, key: tuple[int, int]) -> np.ndarray:
-    return np.asarray(np.load(_final_path(ctx, key)), np.float32)
+    return np.asarray(load_npy(_final_path(ctx, key)), np.float32)
 
 
 def _graded_seed(key: tuple[int, int]) -> None:
@@ -427,6 +461,7 @@ def tiled_graded(
         if log is not None:
             log(f"[flow] graded flats: seam round {rounds}, {len(pending)} chunks to revisit")
     _pool_map(_graded_levels, keys, ctx, n)
+    drop_kinds(store, "dist")  # the flat distances are consumed by the levels pass
     return rounds
 
 
@@ -474,6 +509,23 @@ def _direction_chunk(key: tuple[int, int]) -> None:
     else:
         w = land.astype(np.float32)
     save_chunk(st, "w_runoff", key, w)
+
+
+def drop_kinds(store: CanvasStore, *kinds: str) -> None:
+    """Delete the chunk files of scratch kinds nothing reads once their stage is done.
+
+    The out-of-core chain writes about twenty kinds per chunk; most are a stage's own working
+    state (the flat distances, the wet/deep component labels, the cut routings).  On a
+    377M-cell canvas they come to several GB, and on a world-sized canvas to tens, so each
+    stage drops its own as soon as the last reader of it has run.
+    """
+    for kind in kinds:
+        d = store.work / "flow" / kind
+        if not d.is_dir():
+            continue
+        for path in sorted(d.glob("*")):
+            path.unlink()
+        d.rmdir()
 
 
 def healed_by_chunk(store: CanvasStore) -> dict[tuple[int, int], np.ndarray] | None:
@@ -575,10 +627,28 @@ def _exit_of(order: np.ndarray, rec: np.ndarray, out: np.ndarray) -> np.ndarray:
     return ex
 
 
-def _local(st: CanvasStore, key: tuple[int, int]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    code = load_chunk(st, "dir", key)
+def chunk_order(st: CanvasStore, key: tuple[int, int]) -> np.ndarray:
+    """Downstream-first order of a chunk's cells, memoised under ``flow/order``.
+
+    The order is the graded surface's stable argsort, so it depends on ``flow/graded`` alone and
+    is shared by every routing over the chunk.  The monthly regime accumulates twenty-four
+    times; recomputing the sort each time dominated that stage.  ``flow/order`` is a cache:
+    deleting it only costs the sorts again.
+    """
+    p = flow_path(st, "order", key)
+    if p.exists():
+        return load_npy(p).astype(np.int64)
     g = load_chunk(st, "graded", key).ravel()
     order = np.argsort(np.where(np.isfinite(g), g, np.inf), kind="stable")
+    _atomic_save(p, order.astype(np.int32))
+    return order
+
+
+def _local(
+    st: CanvasStore, key: tuple[int, int], dir_kind: str = "dir"
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    code = load_chunk(st, dir_kind, key)
+    order = chunk_order(st, key)
     rec, out = _local_receivers(code)
     return order, rec, out
 
@@ -594,10 +664,10 @@ def _acc_stage1(key: tuple[int, int]) -> tuple[Any, ...]:
     st = _store_of(ctx)
     t = ctx.tile
     keys = frozenset(ctx.keys)
-    order, rec, out = _local(st, key)
+    order, rec, out = _local(st, key, ctx.dir_kind)
     w = load_chunk(st, ctx.weight_kind, key).astype(np.float64).ravel()
     acc1 = _accumulate(order, rec, w)
-    _atomic_save(flow_path(st, f"acc_{ctx.weight_kind}", key, "stage1.npy"), acc1)
+    _atomic_save(flow_path(st, ctx.acc_kind, key, "stage1.npy"), acc1)
     g = load_chunk(st, "graded", key).ravel()
     src, tgt_key, tgt_idx, amount, level = [], [], [], [], []
     for i in np.flatnonzero(out >= 0):
@@ -624,14 +694,15 @@ def _acc_stage3(task: tuple[Any, ...]) -> None:
     assert ctx is not None
     st = _store_of(ctx)
     t = ctx.tile
-    p1 = flow_path(st, f"acc_{ctx.weight_kind}", key, "stage1.npy")
-    acc = np.asarray(np.load(p1))
+    p1 = flow_path(st, ctx.acc_kind, key, "stage1.npy")
+    acc = load_npy(p1)
     if len(idx):
-        order, rec, _out = _local(st, key)
+        order, rec, _out = _local(st, key, ctx.dir_kind)
         inflow = np.zeros(t * t, dtype=np.float64)
         np.add.at(inflow, np.asarray(idx, dtype=np.int64), np.asarray(val, dtype=np.float64))
         acc = acc + _accumulate(order, rec, inflow)
-    save_chunk(st, f"acc_{ctx.weight_kind}", key, acc.reshape(t, t).astype(np.float32))
+    out_arr = acc.reshape(t, t)
+    save_chunk(st, ctx.acc_kind, key, out_arr if ctx.acc_f64 else out_arr.astype(np.float32))
     p1.unlink()
 
 
@@ -639,17 +710,23 @@ def tiled_accumulation(
     store: CanvasStore,
     weight_kind: str,
     *,
+    dir_kind: str = "dir",
+    out_kind: str | None = None,
+    float64: bool = False,
     workers: int | None = None,
     log: Callable[[str], None] | None = None,
 ) -> None:
-    """Write ``flow/acc_<weight_kind>``: float64 upstream sums of the ``flow/<weight_kind>``
-    chunks along ``flow/dir`` (stored float32)."""
+    """Write ``flow/<out_kind>`` (default ``acc_<weight_kind>``): float64 upstream sums of the
+    ``flow/<weight_kind>`` chunks along ``flow/<dir_kind>``, stored float32 unless ``float64``."""
     ctx = _ctx_of(store)
     ctx.weight_kind = weight_kind
+    ctx.dir_kind = dir_kind
+    ctx.acc_kind = out_kind or f"acc_{weight_kind}"
+    ctx.acc_f64 = float64
     t = ctx.tile
     n = _default_workers(t) if workers is None else max(1, workers)
     t0 = time.time()
-    (store.work / "flow" / f"acc_{weight_kind}").mkdir(parents=True, exist_ok=True)
+    (store.work / "flow" / ctx.acc_kind).mkdir(parents=True, exist_ok=True)
     res = _pool_map(_acc_stage1, list(ctx.keys), ctx, n)
     ring = _ring_index(t)
     ring_pos = {int(c): p for p, c in enumerate(ring)}  # first position of each ring cell

@@ -28,6 +28,8 @@ loaded on demand), so memory scales with the *window*, not the canvas.
 from __future__ import annotations
 
 import json
+import os
+import shutil
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -438,7 +440,16 @@ def crop_canvas_window(
 
     height32 = height.astype(np.float32)
     np.save(refined / "height.meters.npy", height32)
-    np.save(inp / "height.meters.npy", height32)
+    # ``input/`` holds the pack's "engine height" slot, which the Gaea and Blender legs fall
+    # back to when a pack has no refined output.  A window always writes both, so the second
+    # copy is the same bytes twice (16.8 MB a window at the default resolution): link it, and
+    # copy only where the filesystem refuses a link.
+    twin = inp / "height.meters.npy"
+    twin.unlink(missing_ok=True)
+    try:
+        os.link(refined / "height.meters.npy", twin)
+    except OSError:
+        shutil.copyfile(refined / "height.meters.npy", twin)
     _write_mask(refined / "lake.png", lake)
     _write_mask(refined / "sea-water.png", sea)
     _write_mask(refined / "rivers.png", river)
@@ -468,7 +479,6 @@ def crop_canvas_window(
         "temperature.C",
         "precipitation.mm",
         "runoff.mm",
-        "pet_hamon.mm",
         "ice.m",
         "npp.gc_m2_yr",
     )
