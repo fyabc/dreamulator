@@ -146,7 +146,6 @@ def _lake_info(key: tuple[int, int]) -> tuple[Any, ...]:
     layout = ChunkLayout(ctx.tile, ctx.keys)
     t = ctx.tile
     w_bbox = layout.shape[1]
-    keys = layout.keyset
     assert ctx.extra is not None
     clim: _Climate = ctx.extra["climate"]
     lbl_h = halo(st, layout, "lbl_lakes0", key, 0, dtype=np.int32)
@@ -172,41 +171,47 @@ def _lake_info(key: tuple[int, int]) -> tuple[Any, ...]:
     ext_val = acc_cut[donors].astype(np.float64)
     # 2. lake exits: lake cells whose receiver leaves the component
     ex = np.flatnonzero(has & (lbl > 0) & (t_lbl != lbl))
+    kidx: dict[tuple[int, int], int] = ctx.extra["key_index"]
+
+    def chunk_of(gr: np.ndarray, gc: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Index into the key list of the chunk holding each global cell (-1: none), and the
+        cell's local index there."""
+        ok = (gr >= 0) & (gc >= 0)
+        ki = np.array(
+            [kidx.get((int(a) // t, int(b) // t), -1) if o else -1
+             for a, b, o in zip(gr.tolist(), gc.tolist(), ok.tolist(), strict=True)],
+            dtype=np.int64,
+        )  # fmt: skip
+        pos = np.where(ki >= 0, (gr % t) * t + gc % t, -1)
+        return ki, pos
+
+    tl = t_lbl[ex].astype(np.int64)
     inside = (tr[ex] >= 0) & (tr[ex] < t) & (tc[ex] >= 0) & (tc[ex] < t)
-    reach = np.zeros(ex.size, dtype=np.int64)
-    ref_key: list[tuple[int, int] | None] = [None] * ex.size
+    # the lake reached: the receiver's own label, else what its local chain reaches (a label,
+    # 0, or a negative local link), else (receiver in another chunk) resolved in the parent
+    reach = np.where(
+        tl > 0, tl, np.where(inside, res[np.where(inside, tr[ex] * t + tc[ex], 0)], 0)
+    ).astype(np.int64)
+    cross = (tl <= 0) & ~inside
+    ref_key = np.full(ex.size, -1, dtype=np.int64)
     ref_pos = np.full(ex.size, -1, dtype=np.int64)
-    for j, e in enumerate(ex.tolist()):
-        tl = int(t_lbl[e])
-        if tl > 0:
-            reach[j] = tl
-        elif inside[j]:
-            reach[j] = int(res[int(tr[e]) * t + int(tc[e])])  # label, 0 or a local link
-        else:
-            gr, gc = int(g_row[e] + _DY[k[e]]), int(g_col[e] + _DX[k[e]])
-            nk = (gr // t, gc // t)
-            if nk in keys:
-                ref_key[j] = nk
-                ref_pos[j] = (gr % t) * t + gc % t
+    if cross.any():
+        e = ex[cross]
+        ref_key[cross], ref_pos[cross] = chunk_of(g_row[e] + _DY[k[e]], g_col[e] + _DX[k[e]])
     # 3. link machinery: ring values and outgoing links of this chunk
     ring = _ring_index(t)
     ring_res = res[ring]
     out_cells = np.flatnonzero(out >= 0)
-    link_tk: list[tuple[int, int] | None] = []
-    link_ti = np.full(out_cells.size, -1, dtype=np.int64)
-    for j, x in enumerate(out_cells.tolist()):
-        kk = int(out[x])
-        gr, gc = int(g_row[x] + _DY[kk]), int(g_col[x] + _DX[kk])
-        nk2 = (gr // t, gc // t) if gr >= 0 and gc >= 0 else None
-        if nk2 is None or nk2 not in keys:
-            link_tk.append(None)
-        else:
-            link_tk.append(nk2)
-            link_ti[j] = (gr % t) * t + gc % t
-    # 4. surface sums
+    ko = out[out_cells].astype(np.int64)
+    link_tk, link_ti = chunk_of(g_row[out_cells] + _DY[ko], g_col[out_cells] + _DX[ko])
+    # 4. surface sums, per lake label present in this chunk.  Returning the per-cell values
+    # instead held three float64/int64 arrays per lake cell in the parent for the whole stage:
+    # 19 GB on world-west's 803M lake cells.
     cells = np.flatnonzero(lbl > 0)
     e_v, p_v = _climate_values(clim, gidx[cells])
-    sum_lab = lbl[cells].astype(np.int64)
+    sum_lab, inv = np.unique(lbl[cells].astype(np.int64), return_inverse=True)
+    e_v = np.bincount(inv, weights=e_v, minlength=sum_lab.size)
+    p_v = np.bincount(inv, weights=p_v, minlength=sum_lab.size)
     return (
         key,
         ext_lab,
@@ -345,6 +350,9 @@ def _deplete(task: tuple[Any, ...]) -> None:
 # fringe descent (sequential per terminal lake, in label order)
 # ---------------------------------------------------------------------------
 
+#: Chunks the fringe descent keeps in memory at once (about 70 MB each at 2048 px).
+_DESCENT_CACHE_CHUNKS = 48
+
 
 @numba.njit(cache=True)
 def _fringe_kernel(
@@ -407,15 +415,18 @@ def _fringe_descent(
     cache: dict[tuple[int, int], dict[str, np.ndarray]] = {}
 
     def get(key: tuple[int, int]) -> dict[str, np.ndarray]:
+        # The cache is the parent's working set here (about 70 MB a 2048-px chunk); 48 chunks
+        # keep a large lake's footprint resident, and an evicted chunk is written back first.
         if key not in cache:
-            if len(cache) > 96:
+            if len(cache) >= _DESCENT_CACHE_CHUNKS:
                 old = next(iter(cache))
                 save_chunk(store, "desc", old, cache[old]["desc"])
                 del cache[old]
             cache[key] = {
                 "lbl": load_chunk(store, "lbl_lakes0", key),
                 "render": load_chunk(store, "lakes_render", key).astype(bool),
-                "dem": load_chunk(store, "dem", key).astype(np.float64),
+                # integer metres on disk: float32 holds them exactly, so order and ties match
+                "dem": load_chunk(store, "dem", key).astype(np.float32),
                 "desc": load_chunk(store, "desc", key).copy(),
             }
         return cache[key]
@@ -424,11 +435,11 @@ def _fringe_descent(
         r0, r1 = int(comps.rmin[lab]) - 1, int(comps.rmax[lab]) + 2
         c0, c1 = int(comps.cmin[lab]) - 1, int(comps.cmax[lab]) + 2
         nr, nc = r1 - r0, c1 - c0
-        h = np.full((nr, nc), np.inf)
+        h = np.full((nr, nc), np.inf, dtype=np.float32)
         gid = np.full((nr, nc), -1, dtype=np.int64)
-        lbl = np.zeros((nr, nc), dtype=np.int64)
+        lbl = np.zeros((nr, nc), dtype=np.int32)
         render = np.zeros((nr, nc), bool)
-        dsc = np.full((nr, nc), -1, dtype=np.int64)
+        dsc_ok = np.zeros((nr, nc), bool)  # the neighbour cell already has a descent
         for ci in range(max(r0, 0) // t, (r1 - 1) // t + 1):
             for cj in range(max(c0, 0) // t, (c1 - 1) // t + 1):
                 if (ci, cj) not in keys:
@@ -443,11 +454,11 @@ def _fringe_descent(
                 h[dst] = ch["dem"][src]
                 lbl[dst] = ch["lbl"][src]
                 render[dst] = ch["render"][src]
-                dsc[dst] = ch["desc"][src]
+                dsc_ok[dst] = ch["desc"][src] >= 0
                 gr, gc = np.mgrid[a0:a1, b0:b1]
                 gid[dst] = gr * w_bbox + gc
         mine = lbl == lab
-        resolved_out = (~mine) & (lbl > 0) & (lbl < lab) & (dsc >= 0)
+        resolved_out = (~mine) & (lbl > 0) & (lbl < lab) & dsc_ok
         fr = np.flatnonzero((mine & ~render).ravel())
         fr = fr[np.argsort(gid.ravel()[fr], kind="stable")]  # ascending cell index
         fr = fr[np.argsort(h.ravel()[fr], kind="stable")]  # then by height, stable
@@ -490,6 +501,94 @@ def _desc_init(key: tuple[int, int]) -> None:
 # ---------------------------------------------------------------------------
 # driver
 # ---------------------------------------------------------------------------
+
+
+def _resolve_exits(
+    info: list[tuple[Any, ...]], n_keys: int, t: int, n: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, np.ndarray]]:
+    """Per-lake surface sums and the exit table, with the lake each exit reaches resolved.
+
+    ``info`` is the per-chunk output of :func:`_lake_info`, in key order.  Every table is an
+    array keyed by (chunk index, local index): the per-exit Python tuples and the link
+    dictionary this replaced held about 6 GB on world-west.  The exit columns are ``g``
+    (global index), ``lab``, ``ki`` (chunk index), ``loc`` (local index), ``tg`` (receiver
+    global index), ``th`` (receiver height) and ``reach`` (lake reached, 0 for sea or frame),
+    sorted by global index.
+    """
+    t2 = t * t
+    ring = _ring_index(t)
+    ring_pos = np.full(t2, -1, dtype=np.int64)
+    ring_pos[ring] = np.arange(ring.size)
+    ring_res = np.zeros((n_keys, ring.size), dtype=np.int64)
+    link_src_l, link_dk_l, link_dp_l = [], [], []
+    for i, r in enumerate(info):
+        ring_res[i] = r[11]
+        link_src_l.append(i * t2 + np.asarray(r[12], dtype=np.int64))
+        link_dk_l.append(np.asarray(r[13], dtype=np.int64))
+        link_dp_l.append(np.asarray(r[14], dtype=np.int64))
+    link_src = np.concatenate(link_src_l) if link_src_l else np.zeros(0, np.int64)
+    link_dk = np.concatenate(link_dk_l) if link_dk_l else np.zeros(0, np.int64)
+    link_dp = np.concatenate(link_dp_l) if link_dp_l else np.zeros(0, np.int64)
+    del link_src_l, link_dk_l, link_dp_l
+    srt = np.argsort(link_src, kind="stable")
+    link_src, link_dk, link_dp = link_src[srt], link_dk[srt], link_dp[srt]
+    memo: dict[int, int] = {}
+
+    def resolve(ki: int, loc: int) -> int:
+        """The lake (0: sea or frame) a local link of chunk ``ki`` reaches across borders."""
+        path = []
+        cur = ki * t2 + loc
+        while True:
+            if cur in memo:
+                val = memo[cur]
+                break
+            path.append(cur)
+            j = int(np.searchsorted(link_src, cur))
+            if j >= link_src.size or link_src[j] != cur or link_dk[j] < 0:
+                val = 0
+                break
+            tk, ti = int(link_dk[j]), int(link_dp[j])
+            v = int(ring_res[tk, ring_pos[ti]])
+            if v >= 0:
+                val = v
+                break
+            cur = tk * t2 + (-v - 1)
+        for q in path:
+            memo[q] = val
+        return val
+
+    external = np.zeros(n + 1)
+    evap = np.zeros(n + 1)
+    psum = np.zeros(n + 1)
+    cols: dict[str, list[np.ndarray]] = {
+        c: [] for c in ("g", "lab", "ki", "loc", "tg", "th", "reach")
+    }
+    for i, r in enumerate(info):
+        np.add.at(external, r[1], r[2])
+        np.add.at(evap, r[15], r[16])
+        np.add.at(psum, r[15], r[17])
+        reach = np.asarray(r[8], dtype=np.int64).copy()
+        ref_k, ref_p = np.asarray(r[9]), np.asarray(r[10])
+        for j in np.flatnonzero((reach < 0) | (ref_k >= 0)).tolist():
+            if reach[j] < 0:
+                reach[j] = resolve(i, int(-reach[j] - 1))
+            else:
+                v = int(ring_res[int(ref_k[j]), ring_pos[int(ref_p[j])]])
+                reach[j] = v if v >= 0 else resolve(int(ref_k[j]), -v - 1)
+        cols["g"].append(np.asarray(r[4], dtype=np.int64))
+        cols["lab"].append(np.asarray(r[3], dtype=np.int64))
+        cols["ki"].append(np.full(len(r[3]), i, dtype=np.int64))
+        cols["loc"].append(np.asarray(r[5], dtype=np.int64))
+        cols["tg"].append(np.asarray(r[6], dtype=np.int64))
+        cols["th"].append(np.asarray(r[7], dtype=np.float64))
+        cols["reach"].append(reach)
+    ex_cols = {
+        c: (np.concatenate(v) if v else np.zeros(0, np.float64 if c == "th" else np.int64))
+        for c, v in cols.items()
+    }
+    del cols
+    order_g = np.argsort(ex_cols["g"], kind="stable")  # exits in cell-index order
+    return external, evap, psum, {c: v[order_g] for c, v in ex_cols.items()}
 
 
 def tiled_terminal_routing(
@@ -547,67 +646,28 @@ def tiled_terminal_routing(
     _pool_map(_cut_lakes, keys, ctx, n_work)
     tiled_accumulation(store, "w_runoff", dir_kind="dir_cut", out_kind="acc_cut", float64=True,
                        workers=n_work)  # fmt: skip
+    ctx.extra["key_index"] = {kk: i for i, kk in enumerate(keys)}
     info = _pool_map(_lake_info, keys, ctx, n_work)
     # 2. resolve "first lake reached" across chunk borders
-    ring = _ring_index(t)
-    ring_pos = {int(c): p for p, c in enumerate(ring)}
-    ring_res = {r[0]: r[11] for r in info}
-    link_target: dict[tuple[tuple[int, int], int], tuple[tuple[int, int] | None, int]] = {}
-    for r in info:
-        for x, tk, ti in zip(r[12].tolist(), r[13], r[14].tolist(), strict=True):
-            link_target[(r[0], int(x))] = (tk, int(ti))
-    memo: dict[tuple[tuple[int, int], int], int] = {}
-
-    def resolve(node: tuple[tuple[int, int], int]) -> int:
-        path = []
-        cur = node
-        while True:
-            if cur in memo:
-                val = memo[cur]
-                break
-            path.append(cur)
-            tk, ti = link_target.get(cur, (None, -1))
-            if tk is None:
-                val = 0
-                break
-            v = int(ring_res[tk][ring_pos[ti]])
-            if v >= 0:
-                val = v
-                break
-            cur = (tk, -v - 1)
-        for p in path:
-            memo[p] = val
-        return val
-
-    external = np.zeros(n + 1)
-    evap = np.zeros(n + 1)
-    psum = np.zeros(n + 1)
-    # (global index, lake, chunk, local index, receiver global index, receiver height, lake reached)
-    exits: list[tuple[int, int, tuple[int, int], int, int, float, int]] = []
-    for r in info:
-        key = r[0]
-        np.add.at(external, r[1], r[2])
-        np.add.at(evap, r[15], r[16])
-        np.add.at(psum, r[15], r[17])
-        for j in range(r[3].size):
-            reach = int(r[8][j])
-            if reach < 0:
-                reach = resolve((key, -reach - 1))
-            elif r[9][j] is not None:
-                v = int(ring_res[r[9][j]][ring_pos[int(r[10][j])]])
-                reach = v if v >= 0 else resolve((r[9][j], -v - 1))
-            exits.append((int(r[4][j]), int(r[3][j]), key, int(r[5][j]), int(r[6][j]),
-                          float(r[7][j]), reach))  # fmt: skip
-    exits.sort(key=lambda e: e[0])
+    external, evap, psum, ex = _resolve_exits(info, len(keys), t, n)
+    del info
+    ex_g, ex_lab, ex_ki, ex_loc, ex_tg, ex_th, ex_reach = (
+        ex["g"],
+        ex["lab"],
+        ex["ki"],
+        ex["loc"],
+        ex["tg"],
+        ex["th"],
+        ex["reach"],
+    )
+    # downstream: the lake the first exit (in cell-index order) reaching another lake reaches
     downstream_of = np.zeros(n + 1, dtype=np.int64)
-    n_exits = np.zeros(n + 1, dtype=np.int64)
-    for _g, lab, _k, _loc, _tg, _th, reach in exits:
-        n_exits[lab] += 1
-        if downstream_of[lab] == 0 and reach != lab and reach != 0:
-            downstream_of[lab] = reach
+    n_exits = np.bincount(ex_lab, minlength=n + 1).astype(np.int64)
+    leaves = (ex_reach != ex_lab) & (ex_reach != 0)
+    first_lab, first_at = np.unique(ex_lab[leaves], return_index=True)
+    downstream_of[first_lab] = ex_reach[leaves][first_at]
     spill_h = np.full(n + 1, np.inf)
-    for _g, lab, _k, _loc, _tg, th, _reach in exits:
-        spill_h[lab] = min(spill_h[lab], th)
+    np.minimum.at(spill_h, ex_lab, ex_th)
     topo = lake_topological_order(downstream_of, spill_h)
     demand = (evap - psum) / runoff_land_mean_mm
     total = external.copy()
@@ -692,19 +752,29 @@ def tiled_terminal_routing(
     if term_ids.size:
         _fringe_descent(store, layout, terminal_kept, comps, log)
     # depletion at the exits of pass-through lakes
-    dep: dict[tuple[int, int], tuple[list[int], list[float]]] = {kk: ([], []) for kk in keys}
-    for _g, lab, key, loc, _tg, _th, _reach in exits:
-        if is_term[lab] or demand[lab] == 0.0:
-            continue
-        dep[key][0].append(loc)
-        dep[key][1].append(float(demand[lab] / n_exits[lab]))
-    _pool_map(_deplete, [(kk, *dep[kk]) for kk in keys], ctx, n_work)
+    take = ~is_term[ex_lab] & (demand[ex_lab] != 0.0)
+    d_ki, d_loc = ex_ki[take], ex_loc[take]
+    d_amt = demand[ex_lab[take]] / n_exits[ex_lab[take]]
+    by_k = np.argsort(d_ki, kind="stable")  # within a chunk, still in cell-index order
+    d_ki, d_loc, d_amt = d_ki[by_k], d_loc[by_k], d_amt[by_k]
+    bounds = np.searchsorted(d_ki, np.arange(len(keys) + 1))
+    _pool_map(
+        _deplete,
+        [(kk, d_loc[bounds[i] : bounds[i + 1]], d_amt[bounds[i] : bounds[i + 1]])
+         for i, kk in enumerate(keys)],
+        ctx,
+        n_work,
+    )  # fmt: skip
+    del d_ki, d_loc, d_amt, by_k, take
     # records
     w_bbox = layout.shape[1]
+    # the spill: the lowest receiver height, ties to the first exit in cell-index order
     first_spill: dict[int, tuple[float, int, int]] = {}
-    for g, lab, _k, _loc, tg, th, _reach in exits:  # exits in index order: first minimum wins
-        if lab not in first_spill or th < first_spill[lab][0]:
-            first_spill[lab] = (th, g, tg)
+    if ex_lab.size:
+        o = np.lexsort((np.arange(ex_lab.size), ex_th, ex_lab))
+        fl, fi = np.unique(ex_lab[o], return_index=True)
+        for lab, j in zip(fl.tolist(), o[fi].tolist(), strict=True):
+            first_spill[lab] = (float(ex_th[j]), int(ex_g[j]), int(ex_tg[j]))
     records: list[dict[str, object]] = []
     for a in range(1, n + 1):
         draw = int(comps.size[a])
@@ -751,10 +821,10 @@ def tiled_terminal_routing(
         n_exits=n_exits,
         kept_counts=kept_counts,
         stats=stats,
-        exit_cell=np.array([e[0] for e in exits], dtype=np.int64),
-        exit_lake=np.array([e[1] for e in exits], dtype=np.int64),
-        exit_target=np.array([e[4] for e in exits], dtype=np.int64),
-        exit_reach=np.array([e[6] for e in exits], dtype=np.int64),
+        exit_cell=ex_g,
+        exit_lake=ex_lab,
+        exit_target=ex_tg,
+        exit_reach=ex_reach,
         lake_records=records,
     )
 

@@ -402,9 +402,8 @@
     54.0% 只差约 2 个百分点，原先约 6.6 个百分点的差距大部分来自臭氧开关而不是重写本身。
     脚本与数据在 `private/gcm/runs/ozone-round1-20261104/`。
 
-54. **S2 河网阶段整画布读入内存**（2026-11-11）— `run_canvas_rivers` 把整张画布的填平面、流向与汇流放进内存，
-    world-west（67 亿像素）超过 1 TiB 被终止，所以 `canvas run` 与 `canvas hydrology` 在这一级画布上不能端到端运行，
-    只能分块填洼再分块统计湖。需要改成与填洼同一套分块的外存实现。
+54. **S2 河网外存化已完成。** 实现与内存约束由[画布链 §3.4](pipelines/canvas-chain.md#34-汇流)维护，
+    world-west 的完整回归结果见 [CHANGELOG](../../CHANGELOG.md) 的未发布条目。
 
 ### 工程卫生
 
