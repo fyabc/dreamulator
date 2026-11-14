@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794497436839,
+  "lastUpdate": 1794624410874,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2065,6 +2065,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00008783139036584222",
             "extra": "mean: 3.225159199999439 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "948b968cd6ddaff77336a3eb876a4c69bdc7aad3",
+          "message": "fix(media): guard POSIX-only os APIs for Windows mypy\n\nsched_getaffinity/sysconf live behind getattr probes (runtime behavior\nunchanged on Linux), and the windll type-ignore also silences the\nunused-ignore warning on platforms where it is needed.\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-14T10:46:11+08:00",
+          "tree_id": "ea0e86f41f4369f1e76407822e026a655584dab9",
+          "url": "https://github.com/fyabc/dreamulator/commit/948b968cd6ddaff77336a3eb876a4c69bdc7aad3"
+        },
+        "date": 1794624410238,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.44531295635323953,
+            "unit": "iter/sec",
+            "range": "stddev: 0.060129609497807227",
+            "extra": "mean: 2.2456117337999957 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 5.021165757677173,
+            "unit": "iter/sec",
+            "range": "stddev: 0.045040587005186865",
+            "extra": "mean: 199.15693849999627 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.2836687379429983,
+            "unit": "iter/sec",
+            "range": "stddev: 0.693886388589629",
+            "extra": "mean: 437.8918813333428 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1173.0681385956143,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006544021148369352",
+            "extra": "mean: 852.465400004121 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 241.85143269655546,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006165061042177058",
+            "extra": "mean: 4.134769799998139 msec\nrounds: 5"
           }
         ]
       }
