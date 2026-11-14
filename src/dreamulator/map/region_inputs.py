@@ -292,11 +292,9 @@ def local_climate(input_dir: Path) -> tuple[np.ndarray, np.ndarray]:
 
 def local_conditioning(input_dir: Path) -> dict[str, np.ndarray]:
     """Use the prototype's bilinear height alignment and surface-month statistics."""
-    from scipy.ndimage import zoom
-
     t, p = local_climate(input_dir)
     height = np.load(input_dir / "height.meters.npy", allow_pickle=False)
-    h = zoom(height, (t.shape[0] / height.shape[0], t.shape[1] / height.shape[1]), order=1)
+    h = resize_local_field(height, t.shape[0])
     return conditioning_fields(h, t, p)
 
 
@@ -309,3 +307,18 @@ def local_runoff(input_dir: Path, **overrides: float | None) -> np.ndarray:
     indices = nearest[:, None] * n + nearest[None, :]
     shares = monthly_runoff_shape(t.reshape(-1, 12), p.reshape(-1, 12), **overrides)
     return runoff_on_grid(shares, indices, annual)
+
+
+def resize_local_field(values: np.ndarray, out_res: int) -> np.ndarray:
+    """Bilinear local-grid resize with nearest boundary values, never zero padding.
+
+    Endpoint-coordinate roundoff can place the last sample just beyond the
+    source extent. Constant padding would turn deep sea into zero-metre shore.
+    """
+    from scipy.ndimage import zoom
+
+    return np.asarray(
+        zoom(
+            values, (out_res / values.shape[0], out_res / values.shape[1]), order=1, mode="nearest"
+        )
+    )

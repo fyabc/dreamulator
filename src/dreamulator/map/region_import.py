@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any, Literal
 import numpy as np
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
-from scipy.ndimage import zoom
 
 from dreamulator.engine.climate_physics import (
     annual_runoff_turc_pike,
@@ -28,6 +27,7 @@ from dreamulator.map.region_inputs import (
     conditioning_fields,
     file_sha256,
     local_runoff,
+    resize_local_field,
     write_refinement_inputs,
 )
 from dreamulator.result_contract import REFERENCE_MONTH_DAYS
@@ -125,7 +125,7 @@ def import_region_pack(
     n = max(2, round(span / (math.pi * radius_km / 2047.0)))
     t, p, climate_source = load_local_climate(climate_file, n)
     height = imported.metres.astype(np.float32)
-    coarse_height = zoom(height, t.shape[0] / out_res, order=1)
+    coarse_height = resize_local_field(height, t.shape[0])
     fields = conditioning_fields(coarse_height, t, p)
     pet = potential_evapotranspiration_hamon(t.reshape(-1, 12), REFERENCE_MONTH_DAYS)
     annual = annual_runoff_turc_pike(p.sum(axis=-1).ravel(), pet).reshape(t.shape[:2])
@@ -141,7 +141,7 @@ def import_region_pack(
     climate_meta: dict[str, Any] = {}
     sampled: dict[str, np.ndarray] = {}
     for name, (stem, values) in scalars.items():
-        values = zoom(values, out_res / values.shape[0], order=1)
+        values = resize_local_field(values, out_res)
         sampled[name] = values
         climate_meta[name] = _export_scalar_channel(
             values,

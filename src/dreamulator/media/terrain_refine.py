@@ -77,7 +77,7 @@ if mode == "condition":
 
     rows = max(2, round(span_km / {km}))
     for name, arr in loaded.items():
-        coarse = zoom(arr, (rows / arr.shape[0], rows / arr.shape[1]), order=1)
+        coarse = zoom(arr, (rows / arr.shape[0], rows / arr.shape[1]), order=1, mode="nearest")
         tifffile.imwrite(out / f"{name}.tif", coarse.astype(np.float32))
 elif mode == "infer":
     import subprocess as sp

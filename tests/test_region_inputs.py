@@ -22,6 +22,7 @@ from dreamulator.map.region_inputs import (
     CONDITIONING_UNITS,
     file_sha256,
     read_refinement_inputs,
+    resize_local_field,
 )
 from dreamulator.media import terrain_refine as tr
 from dreamulator.result_contract import REFERENCE_MONTH_DAYS
@@ -328,7 +329,7 @@ def test_td_condition_driver_converts_surface_temperature_once(
     p = np.load(fields / "precipitation_total_mm.npy").astype(float)
     expected = t - np.clip(-6.5 + 0.0015 * p, -9.8, -4.0) / 1000 * np.maximum(0, z)
     rows = max(2, round(64 / tr.TD_COARSE_KM))
-    expected = zoom(expected, rows / n, order=1).astype(np.float32)
+    expected = zoom(expected, rows / n, order=1, mode="nearest").astype(np.float32)
     np.testing.assert_array_equal(tifffile.imread(tmp_path / "tiffs/temperature.tif"), expected)
 
 
@@ -347,3 +348,56 @@ def test_standalone_render_inputs_keep_ecology_missing(
     assert not inputs.biome_codes.any()
     assert np.isnan(inputs.npp_gc_m2_yr).all()
     assert not inputs.ice_m.any()
+
+
+@pytest.mark.parametrize("size,target", [(3072, 192), (192, 24), (192, 3072)])
+def test_local_resize_cannot_turn_uniform_deep_sea_into_land(size: int, target: int) -> None:
+    field = np.full((size, size), -4000.0, dtype=np.float32)
+    resized = resize_local_field(field, target)
+    assert resized.shape == (target, target)
+    assert np.all(resized == -4000.0)
+
+
+def test_local_conditioning_keeps_coastal_land_and_deep_sea_edges(tmp_path: Path) -> None:
+    from dreamulator.map.region_inputs import local_conditioning
+
+    height = np.full((3072, 3072), -4000.0, dtype=np.float32)
+    height[:, :1536] = 1200.0
+    np.save(tmp_path / "height.meters.npy", height)
+    np.save(tmp_path / "climate_monthly_T.npy", np.full((192, 192, 12), 10.0))
+    np.save(tmp_path / "climate_monthly_P.npy", np.full((192, 192, 12), 100.0))
+    fields = local_conditioning(tmp_path)
+    np.testing.assert_array_equal(fields["elevation_m"][:, 0], 1200.0)
+    np.testing.assert_array_equal(fields["elevation_m"][:, -1], -4000.0)
+    np.testing.assert_array_equal(fields["elevation_m"][-1, :90], 1200.0)
+    np.testing.assert_array_equal(fields["elevation_m"][-1, -90:], -4000.0)
+
+
+def test_td_driver_resize_cannot_insert_zero_height_on_frame_edges(tmp_path: Path) -> None:
+    import tifffile
+
+    fields = tmp_path / "fields"
+    fields.mkdir()
+    # This sizing makes SciPy's last source coordinate overshoot by roundoff.
+    for name in CONDITIONING_UNITS:
+        np.save(
+            fields / f"{name}.npy",
+            np.full((3072, 3072), -4000.0 if name == "elevation_m" else 0.0, dtype=np.float32),
+        )
+    driver = tmp_path / "driver.py"
+    driver.write_text(tr._TD_DRIVER, encoding="utf-8")
+    subprocess.run(
+        [
+            sys.executable,
+            str(driver),
+            "condition",
+            str(fields),
+            str(tmp_path / "tiffs"),
+            str(192 * tr.TD_COARSE_KM),
+            "3072",
+        ],
+        check=True,
+    )
+    height = tifffile.imread(tmp_path / "tiffs/heightmap.tif")
+    assert height.shape == (192, 192)
+    assert np.all(height == -4000.0)
