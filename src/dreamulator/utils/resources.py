@@ -17,9 +17,10 @@ MEMORY_FRACTION = 0.5
 
 def cpu_quota() -> int:
     """CPUs this process may use: affinity mask, capped by a cgroup CPU quota when one is set."""
+    affinity = getattr(os, "sched_getaffinity", None)  # POSIX only
     try:
-        n = len(os.sched_getaffinity(0))
-    except AttributeError:  # not on Linux
+        n = len(affinity(0)) if affinity is not None else (os.cpu_count() or 1)
+    except OSError:
         n = os.cpu_count() or 1
     for path in (Path("/sys/fs/cgroup/cpu.max"),):  # cgroup v2: "<quota> <period>" or "max ..."
         try:
@@ -79,7 +80,7 @@ def _windows_available() -> int | None:
 
     status = _Status()
     status.dwLength = ctypes.sizeof(_Status)
-    if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):  # type: ignore[attr-defined]
+    if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):  # type: ignore[attr-defined,unused-ignore]
         return None
     return int(status.ullAvailPhys)
 
@@ -94,9 +95,12 @@ def available_memory_bytes() -> int | None:
     avail = _linux_available()
     if avail is not None:
         return avail
-    try:  # other POSIX: physical memory as an upper bound
-        return int(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES"))
-    except (ValueError, OSError, AttributeError):
+    sysconf = getattr(os, "sysconf", None)  # other POSIX: physical memory as an upper bound
+    if sysconf is None:
+        return None
+    try:
+        return int(sysconf("SC_PAGE_SIZE") * sysconf("SC_PHYS_PAGES"))
+    except (ValueError, OSError):
         return None
 
 

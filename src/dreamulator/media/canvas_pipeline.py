@@ -543,9 +543,10 @@ def default_workers(cap: int = 16) -> int:
     """
     import os
 
+    affinity = getattr(os, "sched_getaffinity", None)  # POSIX only
     try:
-        n = len(os.sched_getaffinity(0))
-    except AttributeError:  # not on Linux
+        n = len(affinity(0)) if affinity is not None else (os.cpu_count() or 1)
+    except OSError:
         n = os.cpu_count() or 1
     return max(1, min(cap, n))
 
