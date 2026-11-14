@@ -25,24 +25,30 @@ def sample_heightmap(
     elevation_min_m: float = -11_000.0,
     elevation_max_m: float = 9_000.0,
 ) -> VoronoiNetwork:
-    """Sample elevation values from the heightmap for each Voronoi cell.
+    """Sample the stored heightmap onto the Voronoi cells, in metres.
+
+    ``elevation`` is the map's normalised raster (``elevation.png``), whose metres are
+    ``elevation_min_m`` + v · (``elevation_max_m`` − ``elevation_min_m``) by the map's own
+    ``map.yaml``.  The cells get metres, the same semantics as the CVT mesh's
+    ``cell.elevation`` that the climate and ecology layers read (land is ``elevation > 0``).
 
     Args:
         network: Voronoi network with cell positions.
-        elevation: 2-D normalised heightmap array.
-        elevation_min_m: Minimum elevation in metres (unused, for API compat).
-        elevation_max_m: Maximum elevation in metres (unused, for API compat).
+        elevation: 2-D normalised heightmap array in [0, 1].
+        elevation_min_m: Metres at value 0 (the map's ``elevation_min_m``).
+        elevation_max_m: Metres at value 1 (the map's ``elevation_max_m``).
 
     Returns:
-        Updated network with elevation values filled in.
+        Updated network with elevation values in metres.
     """
     h, w = elevation.shape
+    span = elevation_max_m - elevation_min_m
     updated_cells: list[VoronoiCell] = []
     for cell in network.cells:
         x, y = lon_lat_to_pixel(cell.lon, cell.lat, w, h)
         updated_cells.append(
             cell.model_copy(
-                update={"elevation": float(elevation[y, x])},
+                update={"elevation": float(elevation_min_m + elevation[y, x] * span)},
             )
         )
     return network.model_copy(update={"cells": updated_cells})

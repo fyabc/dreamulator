@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import yaml
 
 from dreamulator.resolver import LayerResolver
@@ -28,8 +29,6 @@ from .models import (
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import numpy as np
 
 
 class MapManager:
@@ -203,6 +202,24 @@ class MapManager:
         png_path = map_dir / "elevation.png"
         with png_path.open("wb") as f:
             f.write(encode_elevation(elevation, min_m, max_m))
+
+    def save_elevation_metres(self, planet_id: str, metres: np.ndarray) -> tuple[float, float]:
+        """Save a heightmap given in metres; returns the (min, max) written to ``map.yaml``.
+
+        The stored raster stays the normalised 16-bit ``elevation.png``; its scale is the
+        map's ``elevation_min_m``/``elevation_max_m``, which this sets to whole metres just
+        outside the data so nothing is clipped.  One 16-bit level is then (max − min) / 65535.
+        """
+        lo = float(np.floor(np.nanmin(metres)))
+        hi = float(np.ceil(np.nanmax(metres)))
+        if hi <= lo:
+            hi = lo + 1.0
+        metadata = self.get_map_metadata(planet_id) or MapMetadata(planet_id=planet_id)
+        metadata.elevation_min_m = lo
+        metadata.elevation_max_m = hi
+        self.save_map_metadata(planet_id, metadata)
+        self.save_elevation(planet_id, (np.asarray(metres, np.float64) - lo) / (hi - lo))
+        return lo, hi
 
     # -------------------------------------------------------------------
     # Voronoi network
