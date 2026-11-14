@@ -183,9 +183,19 @@ class AnchoredSea:
         return np.asarray(sea, dtype=bool)
 
 
+#: Ice preparation retains the ice-including geological ocean anchor here
+#: when conditioning/heightmap.npy describes the exposed rock instead.
+GEOLOGICAL_OCEAN_FILE = "geometry_fields/geological_ocean_heightmap.npy"
+
+
 def _geological_ocean(root: Path, geometry: CanvasGeometry, sea_level: float) -> np.ndarray:
-    """23 km geological-ocean cells of the canvas conditioning (True = ocean)."""
-    path = root / "conditioning" / "heightmap.npy"
+    """23 km geological ocean from the retained reference or conditioning."""
+    retained = root / GEOLOGICAL_OCEAN_FILE
+    if not retained.exists():
+        meta = json.loads((root / "canvas.json").read_text(encoding="utf-8"))
+        if (meta.get("sea_mask") or {}).get("anchor") == GEOLOGICAL_OCEAN_FILE:
+            raise FileNotFoundError(f"declared geological ocean anchor {retained} is missing")
+    path = retained if retained.exists() else root / "conditioning" / "heightmap.npy"
     if not path.exists():
         raise FileNotFoundError(
             f"{path} is missing: the canvas declares the connected-sea product, "
@@ -199,6 +209,8 @@ def _geological_ocean(root: Path, geometry: CanvasGeometry, sea_level: float) ->
             f"conditioning heightmap {path} has shape {grid.shape}, expected "
             f"{(ncell, ncell)} (one value per 23 km cell)"
         )
+    if not np.isfinite(grid).all():
+        raise ValueError(f"geological ocean heightmap {path} contains non-finite values")
     return grid <= sea_level
 
 
@@ -317,14 +329,35 @@ def canvas_anchored_sea(
     sea_level: float,
     *,
     workers: int = 8,
+    geological_root: Path | None = None,
 ) -> AnchoredSea:
-    """The anchored sea of a canvas directory — the one rule S2, the seam check
-    and the window renderer share."""
+    """The anchored sea shared by ice preparation, S2 and surface consumers.
+
+    Ice preparation can use rock-conditioned TD as ``load`` while retaining
+    the ice-including geological surface as its ocean anchor. In that case
+    ``geological_root`` identifies the original conditioning canvas. Both
+    canvases must describe the same geometry. Mesh sea-lake declarations
+    remain those of ``root``, the canvas whose water is being classified.
+    """
+    anchor = root if geological_root is None else geological_root
+    if geological_root is not None:
+        meta = json.loads((anchor / "canvas.json").read_text(encoding="utf-8"))
+        geom = meta["geometry"]
+        anchor_geometry = CanvasGeometry(
+            float(geom["center_lat"]),
+            float(geom["center_lon"]),
+            float(geom["radius_km"]),
+            int(geom["ncell"]),
+        )
+        if anchor_geometry != geometry:
+            raise ValueError(
+                "geological ocean anchor and water canvas must share the same geometry"
+            )
     return _anchored_sea(
         keys,
         load,
         tile,
-        _geological_ocean(root, geometry, sea_level),
+        _geological_ocean(anchor, geometry, sea_level),
         sea_level,
         mesh_interior=_mesh_sea_lake_interior(root, geometry),
         workers=workers,
@@ -340,8 +373,9 @@ def surface_sea(store: CanvasStore, sea_level: float, *, workers: int = 8) -> An
     * the boundary pass seeds the open boundary the fill itself honours — the
       outer edges of the chunk grid and the edges facing a missing chunk;
     * the geological pass seeds the pixels inside 23 km geological-ocean cells
-      (``conditioning/heightmap.npy`` at or below sea level, upsampled to native
-      resolution).
+      (the retained ``GEOLOGICAL_OCEAN_FILE``, or ``conditioning/heightmap.npy``
+      without a retained reference, at or below sea level and upsampled to
+      native resolution).
 
     A water body is sea when it passes both tests, or when it contains a pixel
     inside a closed water body the mesh upgraded to sea class

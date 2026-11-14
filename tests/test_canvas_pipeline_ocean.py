@@ -26,10 +26,12 @@ import pytest
 
 from dreamulator.map.td_canvas import CanvasGeometry
 from dreamulator.media.canvas_pipeline import (
+    GEOLOGICAL_OCEAN_FILE,
     MESH_SEA_LAKE_FILE,
     SEA_MASK_VERSION,
     CanvasStore,
     _external_mask,
+    canvas_anchored_sea,
     chunk_ocean,
     surface_sea,
 )
@@ -222,6 +224,136 @@ def test_mesh_sea_lake_field_has_the_canvas_grid_shape(tmp_path: Path) -> None:
         mesh_sea_lake=np.ones((NCELL // 2, NCELL // 2), bool),
     )
     with pytest.raises(ValueError, match="mesh sea-lake"):
+        surface_sea(store, 0.0)
+
+
+def test_ice_bed_uses_the_original_geological_surface_anchor(tmp_path: Path) -> None:
+    rock = _make_store(
+        tmp_path / "rock",
+        sea_mask=None,
+        conditioning_height=np.full((NCELL, NCELL), -100.0, dtype=np.float32),
+    )
+    original = _make_store(
+        tmp_path / "original",
+        sea_mask=None,
+        conditioning_height=np.full((NCELL, NCELL), 100.0, dtype=np.float32),
+    )
+
+    def load(key: tuple[int, int]) -> np.ndarray:
+        return rock.raw(*key)
+
+    sea = canvas_anchored_sea(
+        rock.root,
+        rock.geometry,
+        rock.chunks,
+        load,
+        rock.tile,
+        0.0,
+        geological_root=original.root,
+    )
+    # The exposed sub-ice bed touches the artificial boundary but has no
+    # geological ocean contact in the ice-including reference surface.
+    assert not sea.mask((0, 0), load((0, 0)) <= 0).any()
+    assert surface_sea(rock, 0.0).mask((0, 0), load((0, 0)) <= 0)[:, :2].all()
+
+
+def test_ice_bed_keeps_mesh_sea_lakes_from_its_own_canvas(tmp_path: Path) -> None:
+    mesh = np.zeros((NCELL, NCELL), bool)
+    mesh[:, :6] = True
+    rock = _make_store(
+        tmp_path / "rock",
+        sea_mask=None,
+        dem=_rift_dem(),
+        mesh_sea_lake=mesh,
+    )
+    original = _make_store(tmp_path / "original", sea_mask=None)
+    water = rock.raw(0, 0) <= 0
+    sea = canvas_anchored_sea(
+        rock.root,
+        rock.geometry,
+        rock.chunks,
+        lambda key: rock.raw(*key),
+        rock.tile,
+        0.0,
+        geological_root=original.root,
+    )
+    assert sea.mask((0, 0), water)[300:700, 300:700].all()
+
+
+def test_ice_surface_recomputes_water_after_a_channel_closes(tmp_path: Path) -> None:
+    store = _make_store(tmp_path / "rock", sea_mask=None, connected_basin=True)
+    bed = store.raw(0, 0)
+    ice = np.zeros_like(bed)
+    ice[4, 2] = 100
+    before = canvas_anchored_sea(
+        store.root,
+        store.geometry,
+        store.chunks,
+        lambda key: bed,
+        store.tile,
+        0.0,
+    )
+    after = canvas_anchored_sea(
+        store.root,
+        store.geometry,
+        store.chunks,
+        lambda key: bed + ice,
+        store.tile,
+        0.0,
+    )
+    assert before.mask((0, 0), bed <= 0)[4, 4]
+    assert not after.mask((0, 0), bed + ice <= 0)[4, 4]
+
+
+def test_ice_geological_anchor_must_share_the_canvas_geometry(tmp_path: Path) -> None:
+    store = _make_store(tmp_path / "rock", sea_mask=None)
+    original = _make_store(tmp_path / "original", sea_mask=None)
+    path = original.root / "canvas.json"
+    meta = json.loads(path.read_text(encoding="utf-8"))
+    meta["geometry"]["center_lon"] += 1.0
+    path.write_text(json.dumps(meta), encoding="utf-8")
+    with pytest.raises(ValueError, match="same geometry"):
+        canvas_anchored_sea(
+            store.root,
+            store.geometry,
+            store.chunks,
+            lambda key: store.raw(*key),
+            store.tile,
+            0.0,
+            geological_root=original.root,
+        )
+
+
+def test_retained_geological_anchor_precedes_rock_conditioning(tmp_path: Path) -> None:
+    store = _make_store(
+        tmp_path / "rock",
+        sea_mask=None,
+        conditioning_height=np.full((NCELL, NCELL), -100.0, dtype=np.float32),
+    )
+    retained = store.root / GEOLOGICAL_OCEAN_FILE
+    retained.parent.mkdir(parents=True, exist_ok=True)
+    np.save(retained, np.full((NCELL, NCELL), 100.0, dtype=np.float32))
+    water = store.raw(0, 0) <= 0
+    assert not surface_sea(store, 0.0).mask((0, 0), water).any()
+
+
+def test_retained_geological_anchor_must_be_finite(tmp_path: Path) -> None:
+    store = _make_store(tmp_path / "rock", sea_mask=None)
+    retained = store.root / GEOLOGICAL_OCEAN_FILE
+    retained.parent.mkdir(parents=True, exist_ok=True)
+    height = _default_conditioning()
+    height[0, 0] = np.nan
+    np.save(retained, height)
+    with pytest.raises(ValueError, match="non-finite"):
+        surface_sea(store, 0.0)
+
+
+def test_declared_geological_anchor_cannot_fall_back_when_missing(tmp_path: Path) -> None:
+    store = _make_store(
+        tmp_path / "rock",
+        sea_mask={"version": SEA_MASK_VERSION, "anchor": GEOLOGICAL_OCEAN_FILE},
+    )
+    with pytest.raises(FileNotFoundError, match="declared geological ocean anchor"):
         surface_sea(store, 0.0)
 
 
