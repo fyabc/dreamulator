@@ -16,7 +16,7 @@
 - `architecture.md` — 项目架构：目录结构、模块职责、核心设计概念（层级架构、分支系统、input/derived 分离、可复现性）
 - `frontend-3d-viewer.md` — 3D 恒星系可视化器架构（真实比例设计、层级轨道解算、标签去重叠）
 - `roadmap.md` — 开发路线图（Phase 状态、优先级、技术债务）
-- `competitor-analysis.md` — 竞品分析（护城河定位与参考链接）
+- `competitor-analysis.md` — 竞品分析（护城河定位与参考链接；第十节登记 Code Planet 的地表到星球可视化调研与《戴森球计划》开发记录）
 - `audit-plan.md` — 三波审计计划（按变化速率分波，各有启动判据与审计产物）
 - `web-gcm-and-frontend.md` — 浏览器内 GCM 与前端调研（web-exoplasim：把 ExoPlaSim 重写为 TypeScript 加 WGSL 而非仅编译 Fortran；GPU 路径在集成显卡上每步 10.3 ms，同为 20 分钟步长下比本机 16 核（20.1 ms）快约 2 倍，按各自默认步长的物理时间吞吐量几乎相同；§2.1 为本机强扩展曲线（16 rank 为工作点、单核与并行效率不逊于原生基准、认证跑可缩到 20 个模式年）；§4 记作者实跑与正典的逐项对比：全局量对得上，陆地偏干已判为动态植被所致，洋面云量差一成与植被和轨道均无关而待追，另发现它的 Köppen 按模式月长累加降水，短年世界上干旱区虚高到陆地的三分之二；可借鉴的是工程纪律三条、迭代过程可见、参数面板即文档、以及共享内存 Worker 推翻了「浏览器只能串行」的前提；GPL-2.0 不抄码）
 - `profiling.md` — 性能剖析工作流（build_profile.json、py-spy 火焰图、CI 基准测试、前端 React Profiler、跨版本对比）
@@ -53,7 +53,7 @@
 - `blender-render-pipeline.md` — Blender 高清渲染链的定位与设计选择（脚本重建工程、纯数据直出、细化层独立成包、每场一个文件）；区域数据包与静帧已实现，技术参考在 `pipelines/region-pack.md`，提案登记相机动画与整球渲染等路线
 - `sky-ephemeris.md` — 天球星历查询：引擎查询、命令行、消费方接线、前端天球视图与背景天球已实现（技术参考在 `pipelines/sky-ephemeris.md`），提案保留设计选择、未实现的事件搜索与 N 体及开放问题；2026-11-01 立项
 - `monthly-climate-display.md` — 月度温度/降水展示（Phase 4 前端延伸；SunControl 周年滑杆驱动月度图层；提案，未实现）
-- `nonspecialist-entry.md` — 非专业用户入口（前端 UI 提案与「非专业用户导入」合并）：现状核查发现导入链的高程语义在归一化与米之间未定、`sample_heightmap` 的米制参数是死参数，所以阶段 A 先定契约，再做导入面板即文档（两个数字 + 可选掩膜 + 写盘前预览陆地占比 + 长宽比与位深警告）、计算过程可见（已有阶段划分与逐月场当时间轴，不做流式渲染）与入口放出；2026-11-04 立项
+- `nonspecialist-entry.md` — 非专业用户入口（前端 UI 提案与「非专业用户导入」合并，部分实现）：阶段 A 的高程契约已实现（`ElevationMapping` 三种模式、源分辨率判海陆、导入报告，技术参考在 `pipelines/map-system.md`），剩下把导入图接进构建；再做导入面板即文档（两个数字 + 可选掩膜 + 写盘前预览陆地占比 + 长宽比与位深警告）、计算过程可见（已有阶段划分与逐月场当时间轴，不做流式渲染）与入口放出；2026-11-04 立项
 - `browser-playground.md` — 浏览器气候实验台（Gate D 温度首图原型：拖放高度图 → 年均/逐月温度；规则 180×90 网格、只算温度；2026-10-23 原型落地，完整气候待引擎加速）
 - `geology-layer-improvement.md` — 地质层改进方案（§1–§8 已实现，技术参考见 geological-pipeline.md；未实现 proposal：裂谷海宽度分段、板块从 geography 派生）
 - `evolution-mode.md` — 演化模式提案（新建世界：geography.yaml 作为演化目标，逆向规划超大陆后正向运动学模拟出现状，时间轴为副产品；未实现，2026-10 立案）

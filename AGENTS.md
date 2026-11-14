@@ -308,6 +308,8 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 
 ### 多 agent 与跨平台约定
 
+- **共享记忆**：开工读 `private/memory/MEMORY.md` 与 `private/today.md`，按索引读相关记录；收工更新必要事实与进度。
+  规范写 `AGENTS.md`，经验写 `private/memory/`，待办写执行台。私有文件缺失时继续工作。
 - **规则只写在 `AGENTS.md`。** 根目录与子目录的 `AGENTS.md` 是 Claude Code、Codex 等工具共用的唯一来源；同目录的
   `CLAUDE.md` 只含 `@AGENTS.md` 导入，不写内容。新建作用域规则时两个文件一起建，`tests/test_agent_instructions.py` 检查成对与导入。
 - **进入子目录先读该目录的 `AGENTS.md`。** Codex 只加载从仓库根到启动目录路径上的文件，在根目录启动时不会自动读到
