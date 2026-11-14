@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 import numpy as np
 import typer
+import yaml
 from pydantic import TypeAdapter
 from rich.console import Console
 from rich.table import Table
@@ -443,10 +444,12 @@ def export_layers(
 
 
 def export_region(
-    world: str = typer.Argument(help="World name"),
+    world: str | None = typer.Argument(None, help="World name; omit with --from-image"),
     lat: float = typer.Option(0.0, "--lat", help="Region centre latitude (degrees)"),
     lon: float = typer.Option(0.0, "--lon", help="Region centre longitude (degrees)"),
-    span_km: float = typer.Option(2500.0, "--span-km", help="Square region side length (km)"),
+    span_km: float | None = typer.Option(
+        None, "--span-km", help="World window side (km; default 2500)"
+    ),
     climate: bool = typer.Option(
         True,
         "--climate/--no-climate",
@@ -474,10 +477,75 @@ def export_region(
         help="Pack ROOT dir (channels land in <root>/input/; "
         "default: <data-dir>/<world>/packs/<world>-<lat>_<lon>_<span>km)",
     ),
+    from_image: Path | None = typer.Option(
+        None, "--from-image", help="Standalone square heightmap"
+    ),
+    px_km: float | None = typer.Option(None, "--px-km", help="Source image pixel size in km"),
+    z_range: str | None = typer.Option(
+        None, "--z-range", help="Image full-scale min,max in metres"
+    ),
+    mapping_file: Path | None = typer.Option(None, "--mapping-file", help="ElevationMapping YAML"),
+    climate_file: Path | None = typer.Option(
+        None, "--climate-file", help="Twelve-month local climate YAML"
+    ),
+    radius_km: float | None = typer.Option(
+        None, "--radius-km", help="Local placement radius (default 6371)"
+    ),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Export a square region data pack for external renderers (Gaea/Blender chain)."""
     _set_data_dir(data_dir)
+
+    if from_image is not None:
+        if world is not None or planet is not None or branch is not None or span_km is not None:
+            raise typer.BadParameter(
+                "--from-image cannot combine with world, --planet, --branch or --span-km"
+            )
+        if px_km is None or climate_file is None or output is None or not climate:
+            raise typer.BadParameter(
+                "--from-image needs --px-km, --climate-file, --output and climate enabled"
+            )
+        if (z_range is None) == (mapping_file is None):
+            raise typer.BadParameter("choose exactly one of --z-range or --mapping-file")
+        from dreamulator.map.models import ElevationMapping
+        from dreamulator.map.region_import import import_region_pack
+
+        try:
+            if mapping_file is not None:
+                mapping = ElevationMapping.model_validate(
+                    yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+                )
+            else:
+                lo, hi = (float(x) for x in str(z_range).split(","))
+                mapping = ElevationMapping(mode="range", min_m=lo, max_m=hi)
+            pack_meta = import_region_pack(
+                from_image,
+                climate_file,
+                mapping,
+                px_km=px_km,
+                out_dir=output / "input",
+                out_res=out_res,
+                center_lat=lat,
+                center_lon=lon,
+                radius_km=6371.0 if radius_km is None else radius_km,
+                seafloor_clamp_m=seafloor_clamp,
+            )
+        except (ValueError, OSError) as exc:
+            console.print(f"[red]Region import rejected: {exc}[/red]")
+            raise typer.Exit(code=2) from None
+        console.print(
+            f"[green]Standalone region pack: {output}[/green] · "
+            f"{out_res}×{out_res} px · {pack_meta['span_km']:g} km · "
+            f"ocean {pack_meta['ocean_fraction'] * 100:.1f}%"
+        )
+        for warning in pack_meta["source"]["warnings"]:
+            console.print(f"[yellow]{warning}[/yellow]")
+        return
+    if world is None:
+        raise typer.BadParameter("provide a world or --from-image")
+    if any(x is not None for x in (px_km, z_range, mapping_file, climate_file, radius_km)):
+        raise typer.BadParameter("local image options require --from-image")
+    span_km = 2500.0 if span_km is None else span_km
 
     mgr = WorldManager()
     try:
@@ -578,7 +646,7 @@ def export_region(
             out_res=out_res,
             astronomy=astronomy,
         )
-    except RegionWindowError as exc:
+    except (RegionWindowError, ValueError) as exc:
         console.print(f"[red]Region rejected: {exc}[/red]")
         raise typer.Exit(code=2) from None
 
@@ -653,14 +721,18 @@ def export_build(
         )
         raise typer.Exit(code=2) from None
     console.print(f"Refining {pack} via terrain-diffusion ({td.name if td else 'cached height'})")
-    td_info = refine_region_pack(
-        pack,
-        td,
-        river_threshold=river_threshold,
-        coast_warp=coast_warp,
-        reuse_height=reuse_height,
-        debug=debug,
-    )
+    try:
+        td_info = refine_region_pack(
+            pack,
+            td,
+            river_threshold=river_threshold,
+            coast_warp=coast_warp,
+            reuse_height=reuse_height,
+            debug=debug,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        console.print(f"[red]Region build rejected: {exc}[/red]")
+        raise typer.Exit(code=2) from None
     console.print(
         f"  refined-out/: res {td_info['res']}² · lakes {td_info['lakes_pct']}% of land · "
         f"{td_info['river_segments']} river segments"

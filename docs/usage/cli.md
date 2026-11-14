@@ -413,6 +413,52 @@ Terrain Definition 有 Height ≤ 10 km、Width ≤ 2400 km 上限，深海沟�
 喂给 Gaea 时区域 span 建议 ≤ 2350 km；操作配方见
 [gaea-video-chain.md](gaea-video-chain.md)。
 
+#### 独立局部高度图
+
+局部图可以直接生成区域包。源图需要是正方形，图像上方代表北方。`--px-km` 指定源像素的千米尺度，
+所以窗口边长由源图像素数乘该尺度决定；`--out-res` 只改变包内分辨率。
+
+```bash
+dreamulator region pack --from-image local.png --px-km 0.35 \
+    --z-range=-200,3000 --climate-file local-climate.yaml \
+    --lat -41 --lon 174 --out-res 3072 -o exports/local-pack
+dreamulator region build exports/local-pack --td <terrain-diffusion-repo>
+dreamulator render exports/local-pack --style survey -o exports/local-survey
+```
+
+`--z-range` 把整数图的全量程映射为米值。也可以改用 `--mapping-file mapping.yaml`，
+其字段与[高程导入契约](../design/pipelines/map-system.md)的映射模型相同。
+已经带米值的浮点 TIFF 使用 `mode: metres`；无海底图使用 `mode: threshold`，
+并声明海面灰度阈值、陆地曲线、最高高程和假设海底深度。两种映射入口互斥。
+
+月气候文件提供 12 个地表月均温和月降水量。月份按顺序排列，每月按 365.25 / 12 天计，
+全年按 365.25 天计。温度使用摄氏度，降水使用毫米，降水不得为负。
+
+```yaml
+temperature_basis: surface
+description: 作者指定的均匀地表气候情景。
+temperature_C: [8, 9, 12, 15, 18, 21, 23, 22, 19, 15, 11, 8]
+precipitation_mm: [80, 70, 80, 90, 100, 110, 110, 100, 90, 80, 80, 80]
+```
+
+空间气候可以把两个列表换成相对于 YAML 所在目录的 `.npy` 文件名，数组形状必须同为
+`(N, N, 12)`。这张粗气候网格覆盖整幅局部图，上方同样代表北方，分辨率可以不同于高程图。
+若现有气候描述的是低地温度，需要先换算成各处地表温度；TD 条件转换只会做一次海平面温度还原。
+当前入口要求海平面为 0 m，并要求显式输出到一个新包。它与世界名、分支、星球和 `--span-km` 互斥。
+
+`--lat`、`--lon` 和 `--radius-km` 指定局部图放置到方位等距平面的假设；半径缺省为 6371 km。
+包记录这项假设、高程映射、输入哈希和气候说明。包内已有高程、基本配色、年温度、年降水、
+年径流、月径流和湖冰月数。生态分类、生产力、陆冰厚度和能量型湖面蒸发需要额外输入，
+本入口不生成这些通道。制图可以显示地形与水文；卫星着色的未分类陆地显示为中性色。
+
+#### 可移交的细化输入
+
+带月气候的世界包和独立局部包都保存五个 TD 条件场与 12 个月径流。
+细化和 `--reuse-height` 从包内读取这些输入，因此移交完整包后可以脱离母世界运行。
+输入清单校验形状、单位、时间口径和文件哈希，并检查月径流之和是否等于年径流。
+有清单却缺文件或校验失败时会报错。旧世界包仍按原路径读取母世界，
+已有外部实验包可以读取自身的两个月气候数组。
+
 ### 全球画布链（canvas）
 
 每块大陆整块生成为一张 90 m 分块画布（S1），可选地做二次侵蚀与沉积，在画布上做外存水文（S2），再裁出区域

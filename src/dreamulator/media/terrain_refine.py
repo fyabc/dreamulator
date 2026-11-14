@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 import math
 import subprocess
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -24,6 +23,8 @@ import numpy as np
 from dreamulator.media.lake_masks import lake_footprint
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from dreamulator.map.models import CVTMesh
     from dreamulator.map.region_export import RegionWindow
 
@@ -119,11 +120,10 @@ def _pack_map_dir(meta: dict[str, Any]) -> Path:
     climate; MapManager applies the branch → root → legacy resolution order.
     """
     from dreamulator.map.manager import MapManager
+    from dreamulator.world_manager import _data_dir
 
     src = meta["source"]
-    map_dir = MapManager(Path("data") / "worlds" / src["world"], src.get("branch"))._maps_dir(
-        src["planet"]
-    )
+    map_dir = MapManager(_data_dir() / src["world"], src.get("branch"))._maps_dir(src["planet"])
     if map_dir is None:
         raise FileNotFoundError(
             f"no maps for {src['world']}/{src['planet']} (branch {src.get('branch')})"
@@ -178,17 +178,24 @@ def _pack_monthly_runoff(
     The two optional parameters are sensitivity-experiment overrides;
     production uses the documented WBM-default constants.
     """
-    from dreamulator.engine.climate_physics import (
-        BASEFLOW_RECHARGE_FRACTION,
-        BASEFLOW_RESIDENCE_TIME_DAYS,
-        SOIL_WATER_CAPACITY_MM,
-        potential_evapotranspiration_hamon_monthly,
-        route_runoff_with_baseflow,
-        soil_bucket_monthly,
-    )
     from dreamulator.map.export import build_export_tree, find_mesh_file, load_climate_monthly
     from dreamulator.map.region_export import _nearest_indices_on_grid
-    from dreamulator.result_contract import REFERENCE_MONTH_DAYS
+    from dreamulator.map.region_inputs import (
+        local_runoff,
+        monthly_runoff_shape,
+        read_refinement_inputs,
+    )
+
+    meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
+    overrides = {"recharge_fraction": recharge_fraction, "residence_time_days": residence_time_days}
+    if "refinement_inputs" in meta:
+        if recharge_fraction is not None or residence_time_days is not None:
+            raise ValueError("runoff overrides need a newly exported input snapshot")
+        return read_refinement_inputs(pack_dir / "input", meta["refinement_inputs"])[
+            "runoff_monthly_mm"
+        ]
+    if meta.get("source", {}).get("world") == "external":
+        return local_runoff(pack_dir / "input", **overrides)
 
     annual_path = pack_dir / "input" / "runoff.mm.npy"
     if not annual_path.exists():
@@ -206,32 +213,7 @@ def _pack_monthly_runoff(
     except FileNotFoundError:
         print(f"[refine] no climate_monthly under {map_dir}; river regime off (all solid)")
         return None
-    pet_m = potential_evapotranspiration_hamon_monthly(t_m, REFERENCE_MONTH_DAYS)
-    _e, r_m, _cycles, _resid = soil_bucket_monthly(p_m, pet_m, SOIL_WATER_CAPACITY_MM)
-    r_m = route_runoff_with_baseflow(
-        r_m,
-        days_per_month=REFERENCE_MONTH_DAYS,
-        recharge_fraction=(
-            BASEFLOW_RECHARGE_FRACTION if recharge_fraction is None else recharge_fraction
-        ),
-        residence_time_days=(
-            BASEFLOW_RESIDENCE_TIME_DAYS if residence_time_days is None else residence_time_days
-        ),
-    )
-
-    # Normalised monthly shape: every cell's twelve shares sum to one, so
-    # multiplying by the pack's annual channel preserves that channel
-    # exactly (including its C1 interpolation, which nearest-CVT sampling
-    # of a mesh-annual field would not reproduce).
-    shape = np.zeros_like(r_m)
-    bucket_total = r_m.sum(axis=1)
-    has_bucket = bucket_total > 1e-6
-    shape[has_bucket] = r_m[has_bucket] / bucket_total[has_bucket, None]
-    surplus = np.maximum(p_m - pet_m, 0.0)
-    surplus_total = surplus.sum(axis=1)
-    has_surplus = ~has_bucket & (surplus_total > 1e-6)
-    shape[has_surplus] = surplus[has_surplus] / surplus_total[has_surplus, None]
-    shape[~has_bucket & ~has_surplus] = 1.0 / 12.0
+    shape = monthly_runoff_shape(t_m, p_m, **overrides)
 
     mesh, window = _mesh_and_window(pack_dir)
     tree = build_export_tree(mesh)
@@ -245,38 +227,39 @@ def _export_conditioning(pack_dir: Path, tmp: Path, *, coast_warp: bool = False)
     """Stage 1 (main env): sample the mesh + monthly climate on the AEQ window."""
     from dreamulator.map.export import build_export_tree, load_climate_monthly
     from dreamulator.map.region_export import _nearest_indices_on_grid
+    from dreamulator.map.region_inputs import (
+        CONDITIONING_UNITS,
+        local_conditioning,
+        read_refinement_inputs,
+    )
 
-    mesh, window = _mesh_and_window(pack_dir)
-    # Conditioning pitch = the legacy equirect export grid's meridional pitch
-    # (2048 rows), the resolution the TD chain was tuned on.  AEQ sampling
-    # holds that ground pitch at every latitude; the TD driver resamples the
-    # fields to round(span / 23 km) coarse cells either way.
-    n = max(2, round(window.span_km / (math.pi * window.radius_km / 2047.0)))
-    tree = build_export_tree(mesh)
-    indices = _nearest_indices_on_grid(tree, *window.out_latlon(n))
     meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
-    map_dir = _pack_map_dir(meta)
-
-    t_m, p_m = load_climate_monthly(map_dir)
-    t_mean, p_mean = t_m.mean(axis=1), p_m.mean(axis=1)
-    fields = {
-        "elevation_m": np.fromiter(
-            (c.elevation for c in mesh.cells), dtype=np.float64, count=t_m.shape[0]
-        ),
-        "temperature_mean_c": t_mean,
-        "temperature_std_c": t_m.std(axis=1),
-        "precipitation_total_mm": p_m.sum(axis=1),
-        "precipitation_cv_pct": np.where(
-            p_mean > 1e-9, p_m.std(axis=1) / np.maximum(p_mean, 1e-9) * 100.0, 0.0
-        ),
-    }
+    if "refinement_inputs" in meta:
+        snapshot = read_refinement_inputs(pack_dir / "input", meta["refinement_inputs"])
+        out_fields = {name: snapshot[name] for name in CONDITIONING_UNITS}
+        n = out_fields["elevation_m"].shape[0]
+    elif meta.get("source", {}).get("world") == "external":
+        out_fields = local_conditioning(pack_dir / "input")
+        n = out_fields["elevation_m"].shape[0]
+    else:
+        mesh, window = _mesh_and_window(pack_dir)
+        n = max(2, round(window.span_km / (math.pi * window.radius_km / 2047.0)))
+        indices = _nearest_indices_on_grid(build_export_tree(mesh), *window.out_latlon(n))
+        t_m, p_m = load_climate_monthly(_pack_map_dir(meta))
+        t_mean, p_mean = t_m.mean(axis=1), p_m.mean(axis=1)
+        fields = {
+            "elevation_m": np.fromiter(
+                (c.elevation for c in mesh.cells), dtype=np.float64, count=t_m.shape[0]
+            ),
+            "temperature_mean_c": t_mean,
+            "temperature_std_c": t_m.std(axis=1),
+            "precipitation_total_mm": p_m.sum(axis=1),
+            "precipitation_cv_pct": np.where(
+                p_mean > 1e-9, p_m.std(axis=1) / np.maximum(p_mean, 1e-9) * 100.0, 0.0
+            ),
+        }
+        out_fields = {name: arr[indices].astype(np.float32) for name, arr in fields.items()}
     tmp.mkdir(parents=True, exist_ok=True)
-    # Optional coast-domain warp before coarse conditioning (off by default):
-    # the engine's sea-land edges are straight Voronoi boundaries and TD
-    # anchors its coastline to the conditioning elevation — warped, straight
-    # runs bend into organic shorelines (measured 9.1→14.6 roughness), at
-    # the cost of ~35 km of coordinate drift on the conditioning.
-    out_fields = {name: arr[indices].astype(np.float32) for name, arr in fields.items()}
     if coast_warp:
         from dreamulator.media.satellite_color import apply_boundary_warp
 
@@ -287,7 +270,7 @@ def _export_conditioning(pack_dir: Path, tmp: Path, *, coast_warp: bool = False)
         }
     for name, arr in out_fields.items():
         np.save(tmp / f"{name}.npy", arr.astype(np.float32))
-    return n
+    return int(n)
 
 
 def _run_td(py: Path, td_repo: Path, tmp: Path, span_km: float, n: int, out_tif: Path) -> None:
@@ -359,6 +342,8 @@ def refine_region_pack(
         terminal_equilibrium_routing,
     )
 
+    if td_repo is not None:
+        td_repo = td_repo.resolve()
     pack_dir = pack_dir.resolve()  # td subprocess runs with cwd=repo —
     # every path handed to it must be absolute or it resolves under the repo
     meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))

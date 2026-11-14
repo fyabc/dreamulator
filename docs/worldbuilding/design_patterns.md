@@ -523,3 +523,21 @@ subduction_polarities:
 
 接口见 [画布管线 2.5.2](../design/pipelines/canvas-chain.md#252-连续地形来源)
 与 [地质管线 7.6](../design/pipelines/geological-pipeline.md#76-参数表)。
+
+## 模式 16：可移交的局部区域包
+
+作者可以给独立局部高度图配一份显式月气候，生成同时包含高程、TD 条件场与月径流的区域包。
+这个包可以交给另一套环境细化和渲染，来源世界的数据不必随包保留。
+气候声明使用地表月均温及参考月降水量，空间场与高程的覆盖范围相同。
+
+```yaml
+temperature_basis: surface
+description: 作者提供的局部气候情景。
+temperature_C: temperature-monthly.npy
+precipitation_mm: precipitation-monthly.npy
+```
+
+两个空间数组的形状同为 `(N, N, 12)`，文件名相对于 YAML 所在目录解析。
+源像素尺度、高程映射、窗口放置假设与气候说明都随包归档；未给出输入的生态和冰厚仍保持缺失。
+完整参数由[局部图入口](../usage/cli.md#独立局部高度图)维护，输入契约由[区域包实现参考](../design/pipelines/region-pack.md)维护。
+源码为 `src/dreamulator/map/region_import.py` 与 `src/dreamulator/map/region_inputs.py`。

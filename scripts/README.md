@@ -131,11 +131,15 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
 - `export_static.py` — 静态站数据导出（`frontend` 的 `npm run export` / `build:static` 调它；
   `deploy-pages.yml` 直接运行）。**移动此文件须同步 CI 的 path trigger 与 package.json。**
 
-## media/ — 视频素材与外部渲染链（1 个）
+## media/ — 视频素材与外部渲染链
 
 Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
 `docs/design/proposals/blender-render-pipeline.md`：工程与渲染输出入
-`<render-workdir>/<项目>/` 不入 git，`.blend` 一律由脚本从数据包重建）。
+主仓库 `exports/`，不入 git；`.blend` 一律由脚本从数据包重建）。
+
+- `region_input_qa.py` 校验区域包的细化输入，并导出原图、TD 高程、水体和月径流对照图。
+  使用 `uv run python scripts/media/region_input_qa.py <pack> --output exports/region-inputs/qa`。
+
 数据侧的正式 CLI 在 in-package（`dreamulator region pack`），不在本组。
 
 - `blender/region_still.py` — bpy 场景构建 + Cycles 渲染（消费

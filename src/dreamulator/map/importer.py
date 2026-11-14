@@ -134,6 +134,7 @@ def import_heightmap_metres(
     filename: str = "",
     target_width: int | None = None,
     target_height: int | None = None,
+    global_map: bool = True,
 ) -> MetricImport:
     """Import a heightmap as metres under an explicit mapping (the elevation import contract).
 
@@ -163,7 +164,7 @@ def import_heightmap_metres(
             land = v > mapping.sea_level
             metres = np.where(land, _threshold_curve(v, mapping), 0.0)
     src_h, src_w = metres.shape
-    if src_w != 2 * src_h:
+    if global_map and src_w != 2 * src_h:
         warnings.append(
             f"aspect {src_w}x{src_h} is not 2:1; a global map is read as equirectangular, "
             "so the image is stretched to the planet"

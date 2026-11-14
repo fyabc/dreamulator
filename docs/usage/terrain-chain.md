@@ -31,7 +31,7 @@
 
 ### 前置数据
 
-第①步的 pack 从世界的**构建产物**切窗，所以目标世界必须先构建过：
+从世界切窗时，第①步读取世界的构建产物，所以目标世界必须先构建过：
 
 ```bash
 dreamulator build nacrea       # geological + climate 两层
@@ -40,6 +40,8 @@ dreamulator build nacrea       # geological + climate 两层
 构建产出 `maps/<planet>/cvt_mesh.msgpack.gz`（地形合成网格）与
 `climate_monthly.msgpack`（月度气候序列，第②步的条件场与河道权重都
 读它）。世界构建过一次后链路各步可反复重跑，互不依赖重新构建。
+独立局部图也可以直接打包，输入方式见 [CLI 的局部图入口](cli.md#独立局部高度图)。
+带月气候的新包在导出时保存完整细化输入，后续步骤只需完整包和 TD 环境。
 
 ## 链路总览
 
@@ -91,13 +93,14 @@ dreamulator region build data/worlds/nacrea/packs/nacrea-15_-100_550km \
 模型的工作机制、能力边界（确定性、海岸线漂移、不管水文）见
 [knowledge/cartography/terrain_diffusion.md](../knowledge/cartography/terrain_diffusion.md)。
 
-命令编排三段：条件场导出（主库，读 mesh 与月度气候）→ td venv 子
-进程（条件 GeoTIFF + 扩散推理，550 km 约 2.5 分钟）→ 水文提取（主库）。
-条件导出时对全部通道做**海岸域扭曲**（复用渲染链的 boundary warp）：
+命令先读取条件场，再由 TD 独立环境完成条件 GeoTIFF 转换与扩散推理，最后在主库提取水文。
+带输入清单的新包读取自身的条件场与月径流，旧世界包才读取源网格与月度气候。
+条件场的温度是地表温度，转换为 TD GeoTIFF 时还原为海平面温度。
+`--coast-warp` 可以对全部条件通道做海岸域扭曲，缺省关闭（复用渲染链的 boundary warp）：
 引擎海陆边界是平直的 Voronoi 边，而 TD 把海岸线锚定在条件的粗格
 （23 km）形态上——不扭曲的话 0 m 等值线会是大段直线（实测曲折度
 9.1 vs 等高线 10.5），扭曲后 14.6 反超（2026-10-14 实验）。
-输出写 `<pack>/refined-out/`（词汇见「输出契约」）。包用 `--branch` 导出时
+输出写 `<pack>/refined-out/`（词汇见「输出契约」）。旧包用 `--branch` 导出时
 （例如 `gcm-t42-712`），细化按包 meta 的 `source.branch` 解析该分支的 mesh
 与月度气候（`MapManager` 的 branch → root 解析顺序），条件场与月径流形状都
 跟随分支气候，不会回落到根世界的引擎气候。550 km 是单次
@@ -113,6 +116,20 @@ dreamulator region build data/worlds/nacrea/packs/nacrea-15_-100_550km \
 化会把低于海平面的湖床抹平到海平面，从改写后的场无法重新导出湖的
 水量收支判据，迭代环必须从原始洼地几何重新推导。heal 与平衡改写对
 缓存场都是幂等的。
+
+### 局部入口验收
+
+独立包完成构建后，可以先出一张测绘图，再检查输入与结果的对照图。
+
+```bash
+dreamulator render exports/local-pack --style survey -o exports/local-survey
+uv run python scripts/media/region_input_qa.py exports/local-pack --output exports/local-qa
+```
+
+对照图展示原图高程、细化高程、水系及包内月径流。报告检查月径流之和与年径流的偏差，
+并记录源尺度、最终像素尺度与缺失通道。工程验收检查完整包能否脱离母世界读取、
+气候和高程是否套准以及输入校验能否识别损坏；创作验收查看山带、海岸和水系是否符合作者意图。
+当前 TD 会重新生成地貌，原图山带与海岸的保留程度需要单独评估。
 
 ## ③ 水文语义（第②步产出，供渲染使用）
 
