@@ -542,3 +542,80 @@ def test_chunk_reads_retry_a_stale_handle(tmp_path: Path, monkeypatch) -> None: 
     monkeypatch.setattr(cft.np, "load", denied)
     with pytest.raises(OSError, match="denied"):
         cft.load_npy(path)
+
+
+def test_channel_table_without_lake_interiors_walks_the_same_rivers(tmp_path: Path) -> None:
+    """Dropping the lake interiors from the chain table changes no segment, flow or regime.
+
+    The walk touches lake cells only at the lake exits, where a chain ends, and along the
+    dried-fringe descent; the full table (every lake cell, every descent row) is built here by
+    hand as the reference.  The canvas is the shrunk-lake case, so fringes and pass-through
+    exits are both exercised.
+    """
+    from dreamulator.map.prog_erosion import (
+        LAKE_MIN_WIDTH_KM,
+        RUNOFF_REFERENCE_MM,
+        ChannelGraph,
+        keep_large_lakes,
+        lake_mmu_cells,
+        renderable_lakes,
+        river_mask,
+        river_segments,
+        river_segments_from_graph,
+        terminal_equilibrium_routing,
+    )
+    from dreamulator.map.td_canvas import PX_PER_CELL
+
+    root = tmp_path / "canvas"
+    root.mkdir()
+    precip, temp, ow = _make_lakes_canvas(root, 100.0, 4000.0)
+    store = CanvasStore.load(root)
+    run_canvas_fill(store, verbose=False, workers=1)
+    graded, dem, rec, _acc0, land, order, weight, inland = canvas_flow_fields(store)
+    km = store.geometry.px_km
+    mmu = lake_mmu_cells(km)
+    lakes0 = renderable_lakes(graded, dem, inland, mmu, km)
+    out = terminal_equilibrium_routing(
+        dem, land, lakes0, order, rec.copy(), weight.ravel().copy(),
+        precip_mm=precip, temp_c=temp, runoff_land_mean_mm=RUNOFF_REFERENCE_MM,
+        mmu_cells=mmu, km_per_px=km, sea_level_m=0.0, climate_block=PX_PER_CELL,
+        open_water_mm=ow, keep_rewritten_h=False,
+    )  # fmt: skip
+    _h, land2, _render, chain_stop, desc, rec_route, acc, _water, _stats, _records = out
+    assert desc is not None and ((desc >= 0) & (desc != np.arange(desc.size))).sum() > 50
+    acc2 = acc.reshape(land.shape)
+    rivers = river_mask(acc2, land2, 8)
+    rows = store.geometry.size_px
+    segs, flows, regimes = river_segments(
+        rivers, rec_route, acc2, km, lake=chain_stop, lake_descend=desc, pixel_rows=rows
+    )
+    assert len(segs) > 50
+
+    # the reference: every lake cell and every descent row, as the table was first built
+    lake_big = keep_large_lakes(chain_stop, mmu, LAKE_MIN_WIDTH_KM, km).reshape(-1)
+    riv = np.flatnonzero(rivers.reshape(-1))
+    src = np.flatnonzero(desc >= 0)
+    cells = np.unique(
+        np.concatenate([riv, np.flatnonzero(lake_big), rec_route[riv], src, desc[src]])
+    )
+    cells = cells[cells >= 0]
+    full = ChannelGraph(
+        cells=cells,
+        is_river=rivers.reshape(-1)[cells],
+        is_lake=lake_big[cells],
+        receiver=rec_route[cells].astype(np.int64),
+        acc=acc2.reshape(-1)[cells].astype(np.float64),
+        month=np.full(cells.size, 12, dtype=np.uint8),
+        descend=desc[cells].astype(np.int64),
+        width=land.shape[1],
+        rows=rows,
+        km_per_px=km,
+    )
+    segs_f, flows_f, regimes_f = river_segments_from_graph(full)
+    assert np.array_equal(segs, segs_f)
+    assert np.array_equal(flows, flows_f)
+    assert np.array_equal(regimes, regimes_f)
+    # and the table really is the rim: far fewer lake rows than lake cells
+    n_lake = int(lake_big.sum())
+    exits = np.flatnonzero(lake_big & (rec_route >= 0) & ~lake_big[np.maximum(rec_route, 0)])
+    assert n_lake > 20 * max(exits.size, 1)

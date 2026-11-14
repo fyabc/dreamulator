@@ -1683,16 +1683,22 @@ def river_segments(
         lake_big = keep_large_lakes(lake, lake_mmu_cells(km_per_px), LAKE_MIN_WIDTH_KM, km_per_px)
     else:
         lake_big = np.zeros(h * w, dtype=bool)
-    lake_cells = np.nonzero(lake_big.reshape(-1))[0]
+    lake_flat = lake_big.reshape(-1)
     rec_flat = np.asarray(receiver).reshape(-1)
-    # Every cell a chain can visit: the channel cells, the cell each of them drains into (the
-    # junction, mouth or shore the chain is always extended to) and the dried-fringe descent.
-    extra = [rec_flat[riv_cells]]
+    # The rows a chain can visit (see ChannelGraph): the channel cells and the cell each drains
+    # into, the lake exits (lake cells draining out of the lake, where a chain resumes) and the
+    # dried-fringe descent with its targets.  The lake interiors never are.
+    lake_cells = np.flatnonzero(lake_flat)
+    lake_rec = rec_flat[lake_cells]
+    exits = lake_cells[(lake_rec >= 0) & ~lake_flat[np.maximum(lake_rec, 0)]]
+    del lake_cells, lake_rec
+    extra = [rec_flat[riv_cells], exits]
     if lake_descend is not None:
         d = np.asarray(lake_descend).reshape(-1)
-        extra.append(np.nonzero(d >= 0)[0])
-        extra.append(d[extra[-1]])
-    cells = np.unique(np.concatenate([riv_cells, lake_cells, *extra]))
+        src = np.flatnonzero(d >= 0)
+        src = src[d[src] != src]  # water cells point at themselves: they end a descent
+        extra += [src, d[src]]
+    cells = np.unique(np.concatenate([riv_cells, *extra]))
     cells = cells[cells >= 0]
     desc = np.full(cells.size, -1, dtype=np.int64)
     if lake_descend is not None:
@@ -1719,6 +1725,12 @@ def river_segments(
 @dataclass(frozen=True)
 class ChannelGraph:
     """Every cell a river chain can visit, in one sorted sparse table.
+
+    The walk touches lake cells in three places only: a lake exit (a lake cell draining out of
+    the lake, where a resumed reach starts), the lake cell a chain ends in (the receiver of a
+    channel cell), and the dried-fringe descent from it.  So the rows are the channel cells,
+    their receivers, the lake exits, and the fringe cells with their descent targets — never
+    the lake interiors, which on a world-sized canvas outnumber the channel cells sixty to one.
 
     ``cells`` are the global cell indices (row-major, row 0 north), sorted; every other field
     is indexed the same way.  ``receiver`` and ``descend`` are global indices (-1 for none),

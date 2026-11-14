@@ -35,6 +35,7 @@ from dreamulator.media.canvas_flow_tiled import (
     _pool_map,
     _store_of,
     drop_kinds,
+    halo,
     load_chunk,
     save_chunk,
 )
@@ -73,31 +74,49 @@ def _receivers(code: np.ndarray, key: tuple[int, int], tile: int, width: int) ->
 
 
 def _river_chunk(key: tuple[int, int]) -> tuple[np.ndarray, ...]:
-    """Write the chunk's channel mask; return the cells a chain can visit from it."""
+    """Write the chunk's channel mask; return the cells a chain can visit from it.
+
+    The rows of :class:`dreamulator.map.prog_erosion.ChannelGraph`: the channel cells and their
+    receivers, the lake exits (a lake cell whose receiver is not a lake cell, read across the
+    chunk border from the neighbours' label rings) and the dried-fringe cells with their descent
+    targets.  Lake interiors are left out — on world-west they were 803M of 817M rows and the
+    whole of the stage's 111 GB peak.
+    """
     ctx = cft._CTX
     assert ctx is not None
     st = _store_of(ctx)
     x = _extra()
     t = ctx.tile
     width = int(x["width"])
+    layout = ChunkLayout(t, ctx.keys)
     acc = load_chunk(st, x["acc_kind"], key).ravel()
     land = load_chunk(st, "land2", key).ravel().astype(bool)
     rivers = land & (acc > x["threshold_cells"])
     save_chunk(st, RIVER_KIND, key, rivers.reshape(t, t).astype(np.uint8))
     keep = x["lake_keep"]
-    lbl = load_chunk(st, "lbl_lakes0", key).ravel()
-    is_lake = np.where(lbl > 0, keep[lbl], False)
-    rec = _receivers(load_chunk(st, "dir_route", key), key, t, width)
-    here = np.flatnonzero(rivers | is_lake)
-    desc = load_chunk(st, "desc", key).ravel() if x["has_desc"] else None
-    out = [here, rec[here]]
-    if desc is not None:
+    lbl_h = halo(st, layout, "lbl_lakes0", key, 0, dtype=np.int64)
+    lake_h = np.where(lbl_h > 0, keep[lbl_h], False)
+    is_lake = lake_h[1:-1, 1:-1].ravel()
+    code = load_chunk(st, "dir_route", key).ravel()
+    rec = _receivers(code.reshape(t, t), key, t, width)
+    # lake exits: the receiver (possibly in a neighbouring chunk) is not a chain-breaking lake
+    has = code != 255
+    k = np.where(has, code, 0).astype(np.int64)
+    rr, cc = np.divmod(np.arange(t * t, dtype=np.int64), t)
+    recv_lake = lake_h[rr + 1 + _DY[k], cc + 1 + _DX[k]]
+    exits = np.flatnonzero(is_lake & has & ~recv_lake)
+    riv = np.flatnonzero(rivers)
+
+    def glob(loc: np.ndarray) -> np.ndarray:
+        return np.asarray((key[0] * t + loc // t) * width + (key[1] * t + loc % t))
+
+    out = [glob(riv), rec[riv], glob(exits)]
+    if x["has_desc"]:
+        desc = load_chunk(st, "desc", key).ravel()
         src = np.flatnonzero(desc >= 0)
-        out += [src, desc[src]]
-    base = (key[0] * t + here // t) * width + (key[1] * t + here % t)
-    out[0] = base
-    if desc is not None:
-        out[2] = (key[0] * t + out[2] // t) * width + (key[1] * t + out[2] % t)
+        g = glob(src)
+        fringe = desc[src] != g  # water cells point at themselves: they end a descent
+        out += [g[fringe], desc[src][fringe]]
     return tuple(np.asarray(a, dtype=np.int64) for a in out)
 
 
