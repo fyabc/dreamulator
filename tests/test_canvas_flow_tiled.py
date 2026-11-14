@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing as mp
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -50,7 +51,11 @@ def _make_canvas(root: Path, missing: tuple[int, int] | None) -> None:
 
 @pytest.mark.parametrize(
     ("missing", "workers", "start"),
-    [(None, 1, "fork"), ((1, 2), 1, "fork"), ((1, 2), 3, "fork"), (None, 3, "spawn")],
+    [
+        c
+        for c in ((None, 1, "fork"), ((1, 2), 1, "fork"), ((1, 2), 3, "fork"), (None, 3, "spawn"))
+        if c[2] in mp.get_all_start_methods()
+    ],
 )
 def test_tiled_flow_fields_match_the_in_memory_oracle(
     tmp_path: Path,

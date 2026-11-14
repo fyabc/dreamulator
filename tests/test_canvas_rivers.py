@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing as mp
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -86,7 +87,10 @@ def test_canvas_rivers(tmp_path: Path) -> None:
     assert len(lakes["lakes"]) > 0 and all("verdict" in lk for lk in lakes["lakes"])
 
 
-@pytest.mark.parametrize("start_method", ["fork", "spawn"])
+_START_METHODS = [m for m in ("fork", "spawn") if m in mp.get_all_start_methods()]
+
+
+@pytest.mark.parametrize("start_method", _START_METHODS)
 def test_fill_is_independent_of_the_worker_count(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, start_method: str
 ) -> None:

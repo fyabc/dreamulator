@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing as mp
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -239,7 +240,10 @@ def test_surface_option_rejects_a_missing_product(tmp_path: Path) -> None:
         CanvasStore.load(root, surface="eroded")
 
 
-@pytest.mark.parametrize("start_method", ["fork", "spawn"])
+_START_METHODS = [m for m in ("fork", "spawn") if m in mp.get_all_start_methods()]
+
+
+@pytest.mark.parametrize("start_method", _START_METHODS)
 def test_native_pass_is_independent_of_the_worker_count(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, start_method: str
 ) -> None:
