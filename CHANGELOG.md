@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- World Orogen v3.0.1 复调研（竞品分析 §4.3 条目按现行版本重写）：结论落到三份提案。[非专业用户入口](docs/design/proposals/nonspecialist-entry.md)阶段 A 的高程契约补四项——传递曲线作为声明的输入、海陆在源分辨率上判定、海底作为输入假设、导出与导入共用一个量程——并加一条地球 8 位灰度往返验收；[山系形态差距](docs/design/proposals/terrain-morphology-gap.md)第 5 节第 4 条补上「结构场振幅基数从亚格子起伏换成保留缩短量」的候选，正对高原内部结构场趋零的剩余差距；[气候层改进](docs/design/proposals/climate-layer-improvement.md)补常年海冰区冰底海洋热通量（年均 3–4 W/m²，Krishfield & Perovich 2005）的守恒检查候选，并登记不借鉴它的极地夏季拟合阻尼。
 - 导出产物精简：按「有没有消费方」清掉了几类写出但无人读的文件。区域数据包的标量通道只有降水与冰厚还写 16 位 PNG 孪生（手工 Gaea 工程里具名的 File 节点），温度、径流、NPP 与湖面蒸发四个通道只写 `.npy`（每包省 12–24 MB）；`region build` 的 `refined-out/height.gaea.png` 不再写（Gaea 读的是数据包 `input/` 那张，15–25 MB/包），汇流诊断图 `flow-accum.png` 改到 `--debug` 后（20–35 MB/包）。`map globe` 不再写把两层云壳合成好的 `clouds.png`（4K 30 MB、8K 约 120 MB，像素就是两层叠加的结果；脚本里读它的回退分支保留，旧导出照常可用），云量场与气旋模板、包络三张诊断图改到 `--debug` 后。画布窗口包不再写 `input/pet_hamon.mm.npy`（包这一侧无人读），`input/height.meters.npy` 改为硬链接到 `refined-out/` 那份而不是写第二遍（各省 16.8 MB/窗口）。静态导出不再写无人读的 `has_civmap.json`；`canvas generate --check` 的跨进程自检改为直接与邻居已写出的块比对并把最大差值记进日志，比完不留文件。
 
 - 河段游走提为共用的 `ChannelGraph` 与 `river_segments_from_graph`，整图路径改为装配同一张表后调用它。链头与溢口格的先后由集合遍历顺序改为按格下标，所以输出数组里少量河段的位置变了（一张试验画布 13.15 万段中 26 段换位），河段集合与总长度不变。
