@@ -25,6 +25,30 @@ Copernicus GLO-90 对照），峰顶约 5.8 km；起伏的上限在模型本身�
 符号一致率 97.5% @ SNR 0.2、94.5% @ SNR 1.0）。想要「粗场逐位保留、
 细节补全」的语义会失望；它给的是「统计上一致的地貌再生成」。
 
+## 细化级读取的高程统计
+
+模型的粗级输出与最初的五通道条件不是同一个对象。潜空间细化级读取六个通道：变换高程的均值、
+第 5 百分位数，以及四个气候统计。高程使用训练数据的数值变换
+$s(z)=\operatorname{sign}(z)\sqrt{|z|}$，其中 $z$ 以米计。这是模型的数值表示，不是高程守恒律。
+
+固定版本的训练预处理先对高分辨率高程做上述变换，再把每个 8 × 8 像素块的中位数作为约 720 m
+的参考。潜空间数据集在每个 32 × 32 参考格块中取均值和第 5 百分位数，形成约 23 km 的统计。
+相关实现是上游的
+[高程预处理](https://github.com/xandergos/terrain-diffusion/blob/e8dcb4b1a834ab2f6b1a6f5256ed7c9f2f3e8230/terrain_diffusion/data/preprocessing/elevation_dataset.py)与
+[潜空间数据集](https://github.com/xandergos/terrain-diffusion/blob/e8dcb4b1a834ab2f6b1a6f5256ed7c9f2f3e8230/terrain_diffusion/training/datasets/h5_latents_dataset.py)。
+
+变换后的均值通常不等于米制均高的平方根。物理高程均值、变换统计和细化后的实际高程应分别记录并验收。
+第 5 百分位数也不必低于均值：跨海岸的偏斜分布可以让少数深海值拉低均值，而第 5 百分位仍在浅海或陆地。
+因此不能把均值减分位数的差强行截成非负值。上游
+[粗级生成与潜空间消费](https://github.com/xandergos/terrain-diffusion/blob/e8dcb4b1a834ab2f6b1a6f5256ed7c9f2f3e8230/terrain_diffusion/inference/world_pipeline.py)
+使用这个带符号的差；消费前恢复第 5 百分位数。
+
+细输入能够直接统计这些量。只有格子均高和标准差的粗输入不足以唯一确定它们，因为不同的谷地和山脊分布
+可以有相同的均值与标准差。若假设格内高程服从高斯分布，第 5 百分位米值为均高减去约 1.64485 倍标准差；
+该系数来自[标准正态分位数](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.norm.html)，
+格内分布的高斯假设本身仍需观测检验。粗图直写的设计与验收见
+[画布条件场提案](../../design/proposals/canvas-conditioning-structure.md)第 4.2 节。
+
 ## 实测能力与边界（RTX 3060 6 GB，2026-10 本库验证）
 
 | 维度 | 实测 |

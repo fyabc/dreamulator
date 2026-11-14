@@ -12,9 +12,8 @@
 - `drainage_cartography.md` — 制图用途的水文后处理：洼地语义二分
   （fill 产湖 / breach 凿谷）、河链聚合与平滑、湖的最小面积阈值、
   终点湖/过路湖的水量收支二分、河链月度情相（2026-10）
-- `terrain_diffusion.md` — terrain-diffusion 学习式地形细化器：条件
-  扩散机制、实测能力边界（确定性/海岸线漂移/不管水文）、与 SPL 链
-  的分工（2026-10）
+- [terrain_diffusion.md](terrain_diffusion.md) 介绍学习式地形细化器的条件扩散机制、训练口径的高程统计、
+  粗输入的分布假设、实测能力边界，以及它与地表过程链的分工。
 - `vegetation_cartography.md` — 植被/群系可视化两路线的惯例：分类
   群系图（Olson/WWF 标杆：平色填充、海洋留白、图例只列现出类）与
   卫星遥感风（Blue Marble/Sentinel-2：色相族+长势明暗+地表纹理）

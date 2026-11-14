@@ -120,7 +120,7 @@
 | P2 | **画布级二次沉积与溢口切穿（湖密度治理）**（TD 地形封闭盆地系统性偏多：永耀岛渲染级湖面占陆 9.2%，地球天然湖参照约 1.5–3%、盾状火山岛近零；治理机制是搬运-沉积充填与满溢湖溢口切穿，并补湿润高原的外流河下切；已产品化为 `canvas erode`，随全量重生成切换正典）→ [canvas-erosion-deposition.md](proposals/canvas-erosion-deposition.md) | 原型 1–2 周 + 画布放大 1 周 | ★★★★ |
 | P3 | **水体分区水位**（每片封闭水体按水量平衡定水面，取代全局锁定海平面与固定湖深；前置的能量型湖面蒸发已实现；草案，暂不实施）→ [water-body-levels.md](proposals/water-body-levels.md) | 2–3 周 | ★★★ |
 | P1 | **画布条件场的构造结构**（金字塔、同质山地与高原无镶边源于条件场只带格子平均；结构场、TD 细节配方、气候守恒重采样，以及曙光、南方大陆与世界岛东南的连续山带来源已进入生产；剩余为有来源的主谷、山前与高原坡折几何和沿岸平原宽度。永耀岛的例证见提案 §2 读法 5）→ [canvas-conditioning-structure.md](proposals/canvas-conditioning-structure.md) | 对照 2–3 天 + 实现 1 周 | ★★★★ |
-| P1 | **TD 粗图直写（路 A）**：跳过 terrain-diffusion 的粗级扩散，把引擎的 23 km 平均高程与由 `relief_std_m` 推出的格内低分位高程直接写入粗图，消除条件场被弱化的大尺度漂移（高程斜率现约 0.64、海岸漂移约一格）；画布链与外部高度图导入共用 → [terrain_diffusion.md](../knowledge/cartography/terrain_diffusion.md) | 小画布验证 2–3 天 + 接入 1 周 | ★★★★ |
+| P1 | **TD 粗图直写（路 A）**：细来源的局部对照显示布局与起伏收益；粗输入的低分位来源和后续细化漂移仍待解决，正式接入须分列验收。方案见[画布条件场提案](proposals/canvas-conditioning-structure.md)。 | 来源验证与接入约 1 周 | ★★★★ |
 | P2 | **外部高度图细化与潜空间 SDEdit（路 B）**：独立区域包入口与可移交月气候已实现（[输入契约](pipelines/region-pack.md)）；保留原图中尺度结构的细化方法仍待验证，见 [terrain_diffusion.md](../knowledge/cartography/terrain_diffusion.md)。 | 原型 1–2 周 | ★★★★ |
 | P1 | **山系形态与地球的差距**（窄长山带、高原内部结构与镶边、老造山带宽度继承与分段、25–150 km 顺走向山脊；引擎部分随下一次全层重建，画布部分随同次画布重生成；[terrain-morphology-gap.md](proposals/terrain-morphology-gap.md)） | 2–4 周 | ★★★★ |
 | P3 | ~~构造-侵蚀 Δt 耦合~~——随流水侵蚀关闭搁置，重启再评估 | — | ★★ |
