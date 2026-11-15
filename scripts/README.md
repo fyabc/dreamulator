@@ -139,6 +139,9 @@ Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
 
 - `region_input_qa.py` 校验区域包的细化输入，并导出原图、TD 高程、水体和月径流对照图。
   使用 `uv run python scripts/media/region_input_qa.py <pack> --output exports/region-inputs/qa`。
+- `td_source_guided_generate.py` 在独立 TD 环境中检查原图编码，并生成部分加噪编辑和逐步低频约束的局部对照。
+  `td_source_guided_qa.py` 读取保存的数组，比较原图、等频谱噪声、现行混合、重绘和候选，分别报告结构、盆地与独立 DSM 误差。
+  生成脚本的模型路径与窗口要求见模块说明；输出写入 `exports/`，候选不改变正式构建模式。
 
 数据侧的正式 CLI 在 in-package（`dreamulator region pack`），不在本组。
 

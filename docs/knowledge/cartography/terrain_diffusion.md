@@ -49,6 +49,38 @@ $s(z)=\operatorname{sign}(z)\sqrt{|z|}$，其中 $z$ 以米计。这是模型的
 格内分布的高斯假设本身仍需观测检验。粗图直写的设计与验收见
 [画布条件场提案](../../design/proposals/canvas-conditioning-structure.md)第 4.2 节。
 
+## 原图的潜空间表示与一致性编辑
+
+TD 的公开自编码器把细节残差压缩为四个潜通道，低频背景另占第五个通道。编码先对米制高程
+取带符号平方根，再用八倍下采样和高斯滤波分解低频背景与残差。训练预处理以 `1.1678`
+标准化残差；这个数值属于训练数据拟合，不是物理常数。自编码器的 `preencode` 返回均值与
+对数方差，`postencode(use_mode=True)` 取均值，适合测量不加噪的往返损失。90 米输出对应
+约 720 米潜格；解码器输出更密的像素并不保证更细结构能够通过编码保存。
+这些口径来自[固定版本的训练预处理](https://github.com/xandergos/terrain-diffusion/blob/e8dcb4b1a834ab2f6b1a6f5256ed7c9f2f3e8230/terrain_diffusion/data/preprocessing/build_encoded_dataset.py)
+和[公开自编码器配置](https://huggingface.co/xandergos/terrain-diffusion-autoencoder/blob/fb55182d7b468c35e54079b78b7f165c610a1a77/config.json)。
+
+编码标准化和生成幅度是两个不同的参数口径。现有供体配方以 `2.3356` 放大输出残差；原图往返
+与生成干预的归因对照使用训练值 `1.1678`。直接把供体幅度用于原图解码会放大已有细节，
+因此验收必须分别记录编码标准化、输出幅度以及供体配方。
+
+上游采样器使用一致性模型。设标准化参考潜变量为 $z$，噪声为 $\epsilon$，
+内部数据标准差为 $d=0.5$，部分噪声角度为 $t=\arctan(\sigma/d)$，其模型输入为
+$x_t/d$，其中 $x_t=d\cos(t)z+d\sin(t)\epsilon$。模型预测后直接估计清洁样本。
+从参考潜变量出发的这一步借鉴了 [SDEdit](https://arxiv.org/abs/2108.01073) 的部分加噪思想，
+但它没有逐步积分完整的反向随机微分方程。实验因此称为“部分加噪的一致性编辑”，
+采样口径由[上游实现](https://github.com/xandergos/terrain-diffusion/blob/e8dcb4b1a834ab2f6b1a6f5256ed7c9f2f3e8230/terrain_diffusion/inference/world_pipeline.py)维护。
+
+粗输入的另一种适配是在每次清洁样本估计后，用 $z'=z-L(z)+L(z_{\mathrm{ref}})$
+匹配参考潜变量的低频。$L$ 是具有明确响应波长的低通算子。这借鉴了
+[ILVR](https://arxiv.org/abs/2108.02938) 的频带投影思路；原论文在 DDPM 的相应噪声状态
+匹配参考，本适配则在一致性估计之间投影，二者的噪声日程不同。滤波必须读取覆盖核宽的
+上下文，并在重叠窗口平均后执行，避免把窗口边缘当作真实地貌。
+
+离线实验由 `scripts/media/td_source_guided_generate.py` 生成数组，
+`scripts/media/td_source_guided_qa.py` 统一检查往返、坡向、脊谷代理、排水方向和盆地变化。
+脊谷代理使用平滑曲率极值，它衡量相对原图的位置变化，不能替代实测分水岭与河网。
+部分加噪是否改善地貌，仍需同时查看同尺度图像和独立高程资料；接近原图不等于恢复未知细节。
+
 ## 原图结构与生成细节的分频混合
 
 混合模式把原图记为 $I$，同范围生成的供体地形记为 $T$，高通算子记为 $H$，合成场为
