@@ -148,6 +148,8 @@ Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
 - `blender/region_still.py` — bpy 场景构建 + Cycles 渲染（消费
   `dreamulator region pack` 的数据包；`blender -b -P … -- --datadir <pack>
   [--render …]`；OptiX>CUDA>CPU 自动降级，seed 固定）。
+- `diagnose_river_directions.py` 只读导出的河线，以线段长度加权统计八方向对齐，按批处理大文件；
+  `--plane-control` 用旋转解析斜坡检查现有 D8 与河线导出，`--plot` 生成验收图。
 
 ## dev/ — 开发工具（5 个）
 

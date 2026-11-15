@@ -775,6 +775,26 @@ hydrology.md 的月度情相一节。缺 `lake_evaporation_monthly.mm` 时不扣
 90 m 像素的同一起点约 27000 格，因此 `--river-threshold` 默认 27000；需要更密的小溪网
 时下调。
 
+#### 3.6.1 河线方向诊断
+
+`scripts/media/diagnose_river_directions.py` 只读最终的 `rivers.line.npy`，以线段长度加权
+报告走向直方图、八方向各 ±5° 内的长度占比，以及八倍角余弦指标。定义与均匀走向的
+对照值见[水文学第 4.1 节](../../knowledge/geology/hydrology.md#41-方向离散化与诊断)。
+脚本同时报告长直线段，避免只看 Chaikin 平滑产生的大量短段。
+
+```bash
+uv run python scripts/media/diagnose_river_directions.py <画布>/hydro/rivers.line.npy \
+  --out-dir exports/hydrology/river-directions --plane-control --plot
+```
+
+命令可以接受多份河线文件。输入按内存映射读取，工作数组按批创建，默认每批 131072 条
+线段；它不加载整张画布、不重跑水文，也不修改输入。输出为 `report.json`、走向直方图
+与旋转斜坡对照图。缺失或零长度线段单列计数，无有效线段时明确报告未测。
+
+旋转斜坡使用现有 D8 参照实现与正式河链导出，检查解析下坡方向在两步之后的误差。
+采样角度避开两方向恰好相等的分界，避免浮点平局影响对照。诊断结果衡量最终折线的
+方向偏差，不能代替汇流守恒、湖泊收支或跨块一致性验收。
+
 ### 3.7 最终产品目录约定
 
 最终产品使用第 2.7 节的画布根目录。共享几何文件位于根目录，各画布的资产状态与水文产品位于其子目录。
