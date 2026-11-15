@@ -95,9 +95,9 @@ def test_modes_cache_and_routing_use_adopted_bed(
     original_flood = erosion.priority_flood
     routed = []
 
-    def capture(height: np.ndarray, land: np.ndarray):
+    def capture(height: np.ndarray, land: np.ndarray, **kwargs: object):
         routed.append(height.copy())
-        return original_flood(height, land)
+        return original_flood(height, land, **kwargs)
 
     monkeypatch.setattr(erosion, "priority_flood", capture)
     result = tr.refine_region_pack(pack, tmp_path, mode=RefinementMode.BLEND)
@@ -110,6 +110,7 @@ def test_modes_cache_and_routing_use_adopted_bed(
     manifest = json.loads((out / "meta.json").read_text(encoding="utf-8"))
     assert manifest["cache_contract"]["native_resolution_km"] == 2
     assert manifest["cache_contract"]["preserve_wavelength_km"] == 8
+    assert manifest["hydrology_routing"]["scheme"] == "two-ring-constrained-v1"
     tr.refine_region_pack(pack, None, mode=RefinementMode.BLEND, reuse_height=True)
     np.testing.assert_array_equal(adopted, np.load(out / "height.meters.npy"))
     for kwargs in (

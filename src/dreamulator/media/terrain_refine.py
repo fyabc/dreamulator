@@ -414,6 +414,7 @@ def refine_region_pack(
 
     from dreamulator.map.importer import _resample_by_class
     from dreamulator.map.region_inputs import file_sha256, read_refinement_inputs
+    from dreamulator.map.river_routing import two_ring_receivers
 
     mode = RefinementMode(mode)
     sea_level = float(meta["sea_level_m"])
@@ -569,10 +570,11 @@ def refine_region_pack(
             )
         )
 
-    filled, order, rec = priority_flood(h, land)
+    filled, order, rec = priority_flood(h, land, eps=0.0)
     lakes = lake_footprint(lake_mask(filled, h), filled, h)
     mmu = lake_mmu_cells(km_pp)
     lakes_draw0 = keep_large_lakes(lakes, mmu, LAKE_MIN_WIDTH_KM, km_pp) | inland_big
+    rec, routing_stats = two_ring_receivers(filled, land, rec, lakes_draw0)
     # Save the geometry used for routing before the terminal-lake verdict.
     np.save(out / "height.pre-equilibrium.npy", h.astype(np.float32))
     # Terminal-lake equilibrium with through-flow depletion (the shared
@@ -631,7 +633,14 @@ def refine_region_pack(
     np.save(out / "height.meters.npy", h.astype(np.float32))
     Image.fromarray((geographic_land * 255).astype(np.uint8)).save(out / "land.png")
     segs, flows, regimes = river_segments(
-        rivers, rec, acc, km_pp, lake=chain_stop, lake_descend=fringe_desc, month_active=month_act
+        rivers,
+        rec,
+        acc,
+        km_pp,
+        lake=chain_stop,
+        lake_descend=fringe_desc,
+        month_active=month_act,
+        smooth=False,
     )
     np.save(out / "rivers.line.npy", segs)
     np.save(out / "rivers.flow.npy", flows)
@@ -678,6 +687,12 @@ def refine_region_pack(
         "td_snr": TD_SNR if donor is not None else None,
         "td_seed": TD_SEED if donor is not None else None,
         "river_threshold": thr,
+        "hydrology_routing": {
+            "scheme": "two-ring-constrained-v1",
+            "flat_preparation": "zero-epsilon Priority-Flood with equal-height D8 predecessors",
+            "geometry": "receiver links without additional smoothing",
+            **routing_stats,
+        },
         "lake_mmu_cells": mmu,
         "hydrology_weight": weight_src,
         "runoff_normalizer_mm": round(run_norm_mm, 3),

@@ -6,7 +6,7 @@
 > [ecology-pipeline.md](../../design/pipelines/ecology-pipeline.md) 与
 > [civilization-pipeline.md](../../design/pipelines/civilization-pipeline.md)；
 > 湖命运的 P−E 判决提案见
-> [inland-water-refine.md](../../design/proposals/inland-water-refine.md)。
+> [水体分区水位与湖泊状态](../../design/proposals/water-body-levels.md)。
 
 梦想机的地表水划分用**两个正交字段**表达，缺一不可：
 

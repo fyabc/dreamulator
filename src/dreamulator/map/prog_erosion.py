@@ -1254,13 +1254,9 @@ def heal_inland_water(
 
 
 def _chaikin(pts: np.ndarray, rounds: int = 2) -> np.ndarray:
-    """Chaikin corner-cutting: polylines become smooth curves, endpoints kept.
-
-    Works on (N, K) points — extra columns beyond xy (e.g. per-cell flow)
-    ride along and interpolate linearly through the cut."""
+    """Cut corners in every coordinate column and keep both endpoints."""
     for _ in range(rounds):
-        a = pts[:-1]
-        b = pts[1:]
+        a, b = pts[:-1], pts[1:]
         cut = np.empty((2 * (len(pts) - 1), pts.shape[1]), dtype=np.float64)
         cut[0::2] = 0.75 * a + 0.25 * b
         cut[1::2] = 0.25 * a + 0.75 * b
@@ -1636,8 +1632,14 @@ def river_segments(
     lake_descend: np.ndarray | None = None,
     month_active: np.ndarray | None = None,
     pixel_rows: int | None = None,
+    *,
+    smooth: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Channel polylines for vector rendering, smoothed.
+    """Channel polylines for vector rendering with optional smoothing.
+
+    With ``smooth=False``, emit the receiver vertices directly, preserving
+    the constrained routing geometry without collinear compression or
+    corner cutting. The default retains the existing D8 drawing method.
 
     D8 walks step cell-by-step in 8 directions; rendered raw they read as
     45°/90° zigzags.  Chains are aggregated from channel heads, collinear
@@ -1719,7 +1721,7 @@ def river_segments(
         rows=h if pixel_rows is None else int(pixel_rows),
         km_per_px=km_per_px,
     )
-    return river_segments_from_graph(graph)
+    return river_segments_from_graph(graph, smooth=smooth)
 
 
 @dataclass(frozen=True)
@@ -1764,6 +1766,8 @@ class ChannelGraph:
 
 def river_segments_from_graph(
     graph: ChannelGraph,
+    *,
+    smooth: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """The chain walk of :func:`river_segments` on a :class:`ChannelGraph`.
 
@@ -1863,6 +1867,15 @@ def river_segments_from_graph(
                 continue
             reach = pts[run_start : run_end + 1]
             regime = int(labels[run_start])
+            # Keep every original receiver vertex for constrained routing:
+            # removing a node can lose a junction or a flow/regime station.
+            if not smooth:
+                for a, b in zip(reach[:-1], reach[1:], strict=True):
+                    segs.append(((a[0], a[1]), (b[0], b[1])))
+                    flows.append(float(0.5 * (a[2] + b[2])))
+                    regimes.append(regime)
+                run_start = run_end
+                continue
             # Merge collinear runs (the 8-direction walks have long straight bits).
             d = np.diff(reach[:, :2], axis=0)
             keep = np.ones(len(reach), dtype=bool)
@@ -1874,8 +1887,8 @@ def river_segments_from_graph(
             reach = reach[keep]
             # Two points after the merge = one long straight run — a legal channel (dropping
             # <3-point chains erased whole straight rivers and left region-scale gaps).
-            smooth = _chaikin(reach) if len(reach) >= 3 else reach
-            for a, b in zip(smooth[:-1], smooth[1:], strict=True):
+            drawn = _chaikin(reach) if len(reach) >= 3 else reach
+            for a, b in zip(drawn[:-1], drawn[1:], strict=True):
                 segs.append(((a[0], a[1]), (b[0], b[1])))
                 flows.append(float(0.5 * (a[2] + b[2])))
                 regimes.append(regime)

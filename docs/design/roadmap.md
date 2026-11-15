@@ -119,7 +119,7 @@
 | **P1** | **全球画布链 S2–S5**（每块大陆整块生成，23 km 粗格、90 m 像素；S2 外存填平·汇流·湖级联与 S3 区域裁窗已并入 main，S4 校验器已实现并完成首个接缝样本，S5 全局概览待做（计划见 [canvas-chain.md](pipelines/canvas-chain.md) §6.1）；S1 画布已生成，可用于接入验收；降尺度正典冻结后集中更新终版数据）→ [canvas-chain.md](pipelines/canvas-chain.md) | S4/S5 各 1–2 周 | ★★★★ |
 | P2 | **画布级二次沉积与溢口切穿（湖密度治理）**（TD 地形封闭盆地系统性偏多：永耀岛渲染级湖面占陆 9.2%，地球天然湖参照约 1.5–3%、盾状火山岛近零；治理机制是搬运-沉积充填与满溢湖溢口切穿，并补湿润高原的外流河下切；已产品化为 `canvas erode`，随全量重生成切换正典）→ [canvas-erosion-deposition.md](proposals/canvas-erosion-deposition.md) | 原型 1–2 周 + 画布放大 1 周 | ★★★★ |
 | P2 | **河网方向偏差治理**：最终河线与旋转斜坡诊断确认 D8 方向偏差仍在；路由候选须连同汇流守恒、湖泊收支和跨块一致性验收。→ [诊断入口](pipelines/canvas-chain.md#361-河线方向诊断) | 局部对照后估算 | ★★★ |
-| P3 | **水体分区水位**（每片封闭水体按水量平衡定水面，取代全局锁定海平面与固定湖深；前置的能量型湖面蒸发已实现；草案，暂不实施）→ [water-body-levels.md](proposals/water-body-levels.md) | 2–3 周 | ★★★ |
+| P3 | **水体分区水位与湖泊状态**：统一水位、湖命运与下游消费，草案暂不实施。见[水体提案](proposals/water-body-levels.md)。 | 2–3 周 | ★★★ |
 | P1 | **画布条件场的构造结构**（金字塔、同质山地与高原无镶边源于条件场只带格子平均；结构场、TD 细节配方、气候守恒重采样，以及曙光、南方大陆与世界岛东南的连续山带来源已进入生产；剩余为有来源的主谷、山前与高原坡折几何和沿岸平原宽度。永耀岛的例证见提案 §2 读法 5）→ [canvas-conditioning-structure.md](proposals/canvas-conditioning-structure.md) | 对照 2–3 天 + 实现 1 周 | ★★★★ |
 | P1 | **TD 粗图直写（路 A）**：细来源的局部对照显示布局与起伏收益；粗输入的低分位来源和后续细化漂移仍待解决，正式接入须分列验收。方案见[画布条件场提案](proposals/canvas-conditioning-structure.md)。 | 来源验证与接入约 1 周 | ★★★★ |
 | P2 | **原图驱动的 TD 地形细化（路 B）**：现有混合的地貌效果不足；后续比较潜空间 SDEdit 与逐步低频约束，粗统计直写单独验收。见[画布条件场提案](proposals/canvas-conditioning-structure.md)。 | 局部候选验证约 1 周 | ★★★★ |
@@ -142,7 +142,6 @@
 | P2 | **earth 观测锚 1km 升级**（CHELSA/WorldClim 30″ 面积加权聚合；须在 LGM 分支之前） | 1–2 天 | ★★★ |
 | P2 | **地球历史气候分支**（`earth/branches/lgm`：ICE-6G_C + CHELSA-TraCE21k；模式重建非观测真值，provenance 声明） | ~1 周级 | ★★★ |
 | P2 | 河流增强（3B）：侵蚀机制重启与沉积物搬运随局地精修/未来评估 | — | ★★ |
-| P2 | **内陆水体物理 refine**（湖命运 P−E 判决四类结局 + 溢流湖接通河网 + rim/spill 落盘字段；语义闭合 (a)+(b) 已于 10-08 收口）→ [inland-water-refine.md](proposals/inland-water-refine.md) | 1–2 周 | ★★★ |
 | P2 | **海岸侵蚀·潮汐冲刷主导**（随侵蚀关闭搁置；大尺度指纹可在 200k 表达）→ `knowledge/geology/coastal_geomorphology.md` | 1–2 周 | ★★ |
 | P2 | **生态层海洋模块**（3B.5：潮间带宽度、海洋 NPP 潮汐混合因子、深海热泉密度——生态层现全陆相） | 1–2 周 | ★★★ |
 | P2 | **生物地理分区算法改进**（唯一屏障=海洋；沙漠/山脉不构成屏障、过渡带零建模）→ ① 参数侧 target_provinces_per_realm；② 扩散阻力加权分区（Holt 2013 / WWF）；③ ecology-layer §2.4 字段 | 1–2 周 | ★★★ |

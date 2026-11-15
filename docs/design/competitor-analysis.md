@@ -149,6 +149,10 @@ Dreamulator 的 DAG 管线：`physics → chemistry → astronomy → geological
 本库的连续河线试点将解析方向、谷地位置和出口连通分别验收；三次插值的新低点与三角面沿边流路的方向偏差由
 [水文学第 4.3 节](../knowledge/geology/hydrology.md)维护。
 
+河线制图参考 [GRASS 的 `v.generalize`](https://grass.osgeo.org/grass-stable/manuals/v.generalize.html)。
+它将线平滑与网络概化分开。本库当前推荐在现有 D8 河段上复用 Chaikin，并固定汇合点和湖口；
+位置约束与水体检查由[水文制图知识](../knowledge/cartography/drainage_cartography.md)维护。
+
 ### 4.2.1 侵蚀业界做法对照（2026-08-25 调研，2026-08-26 侵蚀移除后修订）
 
 dreamulator 曾实现流水侵蚀（Fastscape 式隐式 stream power + 坡面扩散 + 地貌降水

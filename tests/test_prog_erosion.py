@@ -298,6 +298,27 @@ def test_river_segments_flows_grow_downstream() -> None:
     assert flows[-1] - flows[0] > 25.0  # visibly graded
 
 
+def test_receiver_geometry_trunk_and_tributary_share_exact_junction() -> None:
+    """Exact receiver geometry retains the first-traced trunk's junction."""
+    rivers = np.zeros((6, 7), dtype=bool)
+    receiver = np.full(rivers.size, -1, dtype=np.int64)
+    acc = np.zeros(rivers.shape)
+    for source, target in (
+        ((1, 2), (2, 2)),
+        ((2, 1), (2, 2)),
+        ((2, 2), (3, 3)),
+        ((3, 3), (3, 4)),
+    ):
+        rivers[source] = True
+        receiver[source[0] * 7 + source[1]] = target[0] * 7 + target[1]
+        acc[source] = 100.0
+    segments, flows, regimes = river_segments(rivers, receiver, acc, 1.0, smooth=False)
+    junction = np.array([2.0, 3.0])  # east and north from the southwest origin
+    contacts = (segments == junction).all(axis=2)
+    assert contacts.sum() == 3  # trunk enters and leaves, tributary enters
+    assert len(segments) == len(flows) == len(regimes)
+
+
 def test_river_segments_crosses_submmu_lake_stops_at_big() -> None:
     # Same slope with two basins: a sub-MMU lake (between LAKE_MIN_CELLS and
     # the MMU) is crossed invisible; a wide flat-floored basin makes an
@@ -822,7 +843,8 @@ def test_hydrology_weight_precip_gated_by_pet(tmp_path) -> None:
     assert (weight[:, : half // 2 - 1] > 0.0).all()
 
 
-def test_terminal_routing_emits_lake_records() -> None:
+@pytest.mark.parametrize("two_ring", [False, True])
+def test_terminal_routing_emits_lake_records(two_ring: bool) -> None:
     # The spill/verdict record closes the "rim/spill 不落盘" gap: every
     # drawn lake gets a verdict, and pass-through lakes carry their spill.
     n = 64
@@ -832,8 +854,13 @@ def test_terminal_routing_emits_lake_records() -> None:
     land = dem > 0.0
     runoff = np.where(x < 22, 1.0, 0.0)
     rbar = float(runoff[land].mean())
-    filled, order, rec = priority_flood(dem, land)
+    filled, order, rec = priority_flood(dem, land, eps=0.0 if two_ring else 1e-4)
+    if two_ring:
+        from dreamulator.map.river_routing import two_ring_receivers
+
     lakes_draw = keep_large_lakes(lake_mask(filled, dem), lake_mmu_cells(1.0))
+    if two_ring:
+        rec, _stats = two_ring_receivers(filled, land, rec, lakes_draw)
     assert lakes_draw.any()
     common = dict(
         # The routing mutates the weight in place (pass-through depletion);
@@ -877,7 +904,8 @@ def test_terminal_routing_emits_lake_records() -> None:
             assert r["kept_water_cells"] <= cap, (r["label"], r["kept_water_cells"], cap)
 
 
-def test_terminal_verdict_uses_the_cascaded_inflow() -> None:
+@pytest.mark.parametrize("two_ring", [False, True])
+def test_terminal_verdict_uses_the_cascaded_inflow(two_ring: bool) -> None:
     """A lake fed by an upstream lake's overflow is judged on its total inflow.
 
     Two closed basins in series on an eastward ramp: the western bowl sits in a
@@ -895,8 +923,13 @@ def test_terminal_verdict_uses_the_cascaded_inflow() -> None:
     land = dem > 0.0
     runoff = np.where(x < 20, 1000.0, 0.0)  # mm/yr: only the far west generates water
     rbar = float(runoff[land].mean())
-    filled, order, rec = priority_flood(dem, land)
+    filled, order, rec = priority_flood(dem, land, eps=0.0 if two_ring else 1e-4)
+    if two_ring:
+        from dreamulator.map.river_routing import two_ring_receivers
+
     lakes_draw = keep_large_lakes(lake_mask(filled, dem), lake_mmu_cells(1.0))
+    if two_ring:
+        rec, _stats = two_ring_receivers(filled, land, rec, lakes_draw)
     wet_west = x < 45
     *_rest, records = terminal_equilibrium_routing(
         dem,
