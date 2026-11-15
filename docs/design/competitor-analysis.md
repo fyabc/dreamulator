@@ -144,6 +144,11 @@ Dreamulator 的 DAG 管线：`physics → chemistry → astronomy → geological
 | [**TauDEM**](https://hydrology.usu.edu/taudem/taudem5/) | 它在数字高程上计算填洼、流向与汇水面积，支持 MPI 分条带处理。 | 它按 Tarboton 的三角面定义输出 D∞ 连续角度，明确区分角度场与双邻格分流；本库的理论与实现比较由[水文学](../knowledge/geology/hydrology.md)的第 4.2 节维护。 |
 | [**Fastscape**](https://fastscape.org/) | 河流切割 + 坡面扩散地表演化 | 轻量级，算法可参考 |
 
+连续流线的实现参照是 [GRASS 的 `r.flow`](https://grass.osgeo.org/grass-stable/manuals/r.flow.html)。
+它在浮点坐标上沿坡向追踪，以高程下降与障碍检查控制终止，并分别输出流线、长度与流线密度。
+本库的连续河线试点将解析方向、谷地位置和出口连通分别验收；三次插值的新低点与三角面沿边流路的方向偏差由
+[水文学第 4.3 节](../knowledge/geology/hydrology.md)维护。
+
 ### 4.2.1 侵蚀业界做法对照（2026-08-25 调研，2026-08-26 侵蚀移除后修订）
 
 dreamulator 曾实现流水侵蚀（Fastscape 式隐式 stream power + 坡面扩散 + 地貌降水
