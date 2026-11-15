@@ -1413,6 +1413,8 @@ def check_polar_configuration(
 每个 cell 的 `ice_thickness_m` 字段记录冰厚，受载基岩高程为 `elevation − ice_thickness_m`。冰载荷按局地 Airy
 均衡压低基岩 `ICE_LOAD_DEPRESSION` = ρ_i/ρ_m ≈ 0.28 倍冰厚（技术债 45），冰面 = 无冰基岩 + 0.72·冰厚；重跑幂等
 （先剥旧冰并补回下沉量，再重算，不会重复叠加或重复下压）。
+参考地表、受载与未受载基岩、气候边界及高清冰面的阶段合同见
+[画布管线第 2.5.13 节](canvas-chain.md#2513-冰盖阶段与高程来源)。
 机制分三段：
 
 1. **日照门（无量纲）**：cell 的年平均大气顶（TOA）日照低于本世界赤道值的
