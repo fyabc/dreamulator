@@ -1,4 +1,4 @@
-# 水文学：洼地填平、D8 汇流与河网
+# 水文学：洼地填平、栅格汇流与河网
 
 > 实现：全球网格 `src/dreamulator/map/hydrology.py`（填洼与封闭盆地湖泊）；栅格画布链
 > `src/dreamulator/media/canvas_hydrology.py`（全局前沿参照实现）、
@@ -87,12 +87,48 @@ $C_8 = \sum_i L_i\cos(8\theta_i)/\sum_i L_i$。正值表示方向集中在 45° 
 整条河流的长度。解析斜坡按多个角度旋转后再走同一套路由与导出代码，才是离散方向误差
 的因果对照。诊断实现和运行入口见[画布链第 3.6.1 节](../../design/pipelines/canvas-chain.md#361-河线方向诊断)。
 
-Tarboton（1997）的 D∞ 方法在每格的八个三角面上求连续最陡坡向，并把流量分给夹住
-该方向的两个接收格，属于数值方法。它可以降低方向离散化，但需要分叉汇流与湖泊账本
-共同支持；本库现行的单接收格外存链不能只替换角度字段就接入它。
+### 4.2 D∞ 的连续坡向与双接收格
 
-参考资料为 [Tarboton（1997）的 D∞ 工具说明](https://hydrology.usu.edu/taudem/taudem5/help53/DInfinityFlowDirections.html)
-与 [Landlab 的 D8 实现](https://github.com/landlab/landlab/blob/master/src/landlab/components/flow_director/flow_director_d8.py)。
+Tarboton（1997）的 D∞ 方法在每格的八个三角面上求连续最陡坡向，再按角度把流量分给
+夹住该方向的两个接收格。TauDEM 使用填洼后的高程，输出从东向逆时针计量的弧度角；
+Landlab 同时返回接收格与分流比例。局部数值参照位于 `scripts/media/dinf_local.py`，
+对照入口位于 `scripts/media/compare_dinf_routing.py`。正式画布仍使用 D8。
+
+在边长为 $d$ 米的正方形网格上，一个三角面由中心高程 $e_0$、轴向邻格高程 $e_1$
+与对角邻格高程 $e_2$ 构成。三个高程的单位均为米。面内的两个无量纲下降分量为
+
+$$
+s_1 = (e_0-e_1)/d,\qquad s_2 = (e_1-e_2)/d.
+$$
+
+面内角 $r=\operatorname{atan2}(s_2,s_1)$ 从轴向指向对角向。若 $r<0$，采用轴向
+坡度 $s_1$；若 $r>\pi/4$，采用对角坡度 $(e_0-e_2)/(\sqrt{2}d)$；其余情况采用
+$\sqrt{s_1^2+s_2^2}$。在八个面中选择最大的正坡度，并将角度限制在所选面的范围内。
+对角邻格的比例为 $p_2=r/(\pi/4)$，轴向邻格的比例为 $p_1=1-p_2$。每条正比例连边
+必须严格下降，比例必须有限、非负，并在出流格上相加为一。缺失顶点不能参与面拟合，
+本地参照在边界保留有效的单连边；显式出口与首触湖格只接收入流。
+
+| 项目 | 认识论类别与适用范围 |
+|---|---|
+| 三角面的最陡坡向 | 这是分片线性地表的几何计算，当前参照只接受正方形格子。 |
+| 按角度分流 | 这是数值插值，减少方向离散误差，并不求解地表水动力方程。 |
+| 双接收格累积 | 这是水量守恒账本，每条连边只传递本格累积量乘以该边比例。 |
+| 平地微坡 | 这是填洼后的数值稳定化，幅度与原始地形编辑分别记录。 |
+
+连续坡向与水量的实际位移方向需要分别验收。以东向和东北向之间的面为例，两条连边
+的东向位移都为 $d$，北向位移分别为零与 $d$，因此水量加权的一步位移角是
+$\operatorname{atan}(p_2)$，一般不等于 $r$。当 $r=22.5^\circ$ 时，两格各接收一半
+水量，位移角为约 $26.565^\circ$。这个差异来自连边几何与角度插值，不应通过坡向
+直方图掩盖。
+
+现行外存累积、湖泊下游表与河链游走均使用单接收格。接入 D∞ 需要分别处理双边累积、
+湖泊出口到下游湖的分流与连续河线几何。若直接把较大比例的接收格交给单链导出，河线
+方向仍被限制在八个格心方向。局部对照分别验解析坡面、径向汇聚、首触湖预算、规定的
+湖级联与真实邻域的分块方向；完整的外存湖网和成品河线另行验收。
+
+参考资料为 [Tarboton（1997）的论文](https://doi.org/10.1029/96WR03137)、
+[TauDEM 的 D∞ 工具说明](https://hydrology.usu.edu/taudem/taudem5/help53/DInfinityFlowDirections.html)
+与 [Landlab 的 D∞ 实现](https://github.com/landlab/landlab/blob/master/src/landlab/components/flow_director/flow_direction_dinf.py)。
 
 ## 5. 汇流累积（拓扑排序）
 
@@ -344,6 +380,7 @@ stream_m = (1−f)·W_m + B_m
 - Barnes, R., Lehman, C., & Mulla, D. (2014). Priority-flood: An optimal
   depression-filling and watershed-labeling algorithm for digital elevation
   models. *Computers & Geosciences*, 62, 117–127.
+- Tarboton, D. G. (1997). A new method for the determination of flow directions and upslope areas in grid digital elevation models. *Water Resources Research*, 33(2), 309–319. [doi:10.1029/96WR03137](https://doi.org/10.1029/96WR03137).（第 4.2 节的三角面坡向与角度分流）
 - O'Callaghan, J. F., & Mark, D. M. (1984). The extraction of drainage networks
   from digital elevation data. *Computer Vision, Graphics, and Image Processing*,
   28(3), 323–344.（D8 流向）

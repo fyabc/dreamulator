@@ -15,7 +15,7 @@
 - `cortial_2019_notes.md` — Cortial et al. 2019 论文解读（自 geological-pipeline.md 附录 D 上浮）
 - `tidal_plate_speed.md` — 内热与板块速度的关系（v ∝ q^β 标度律与争论、金星悖论；热管体制下板块只排出传导部分，板块排热按半空间冷却 ∝ √v）
 - `supercontinent_cycle.md` — 超大陆旋回周期的标度估算（T ∝ R/v、阶段比例、裂谷沿古缝合带张开；nacrea 约 0.3–2.5 亿年；2026-10）
-- `hydrology.md` — 全球网格只做洼地填平与封闭盆地湖泊；画布链的 D8 汇流、按河线长度加权的方向诊断、径流加权河网、能量型湖面蒸发、终点湖水收支与月度情相。
+- `hydrology.md` 说明全球网格的洼地与封闭盆地，以及画布链的 D8 汇流、方向诊断、径流加权河网和湖泊水收支。D∞ 局部参照分别说明连续坡向、双格分流与实际水量位移的差异。
 - `surface_transport.md` — 坡面输运的物理扩散系数、有限体积交换与海洋边界体积收支，以及均匀格网的河流侵蚀量纲。
 - `volcanic_geometry.md` — 火山目录的当前背景、固定建成翼坡、出水面积和连续锥体体积，原粗格载荷与球面查询分别计账。
 - `inland_water_classification.md` — 内陆水体分类学：water_class × is_lake 二维语义矩阵、尺寸分界依据、各层湖语义与不变式（2026-10）

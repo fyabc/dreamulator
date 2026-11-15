@@ -140,7 +140,8 @@ Dreamulator 的 DAG 管线：`physics → chemistry → astronomy → geological
 |------|------|---------------------|
 | [**GPlates**](https://www.gplates.org/) | 板块构造重建与可视化。支持 Euler 极旋转、洋壳年龄、古地理重建 | Dreamulator 的 tectonic_simulator（Euler 极 + 边界演化）是 GPlates 的"正向生成"镜像——GPlates 做反演（数据→模型），Dreamulator 做生成（参数→板块） |
 | [**Badlands**](https://badlands.readthedocs.io/) | 盆地地层模拟：侵蚀/沉积/构造沉降/海平面变化（TIN 网格 + 沉积物溯源搬运 + 海进程） | 3B 侵蚀层的参考模型；其沉积物搬运与海进程是 dreamulator 沉积待办（§4.2.1）的直接参照 |
-| [**Landlab**](https://landlab.github.io/) | 地表过程建模框架：河流/坡面/冰川/海岸线 | D8 流向/流量累积/隐式 stream power 侵蚀已实现（同算法族）；仍可复用的组件：MFD 多向流、transport-limited 泥沙搬运 |
+| [**Landlab**](https://landlab.github.io/) | 它提供河流、坡面、冰川与海岸地表过程组件。 | 本库 D8 与它属于同一算法族。它的 D∞ 返回双接收格与角度比例，可用于局部数值对照；泥沙搬运组件仍是后续参照。 |
+| [**TauDEM**](https://hydrology.usu.edu/taudem/taudem5/) | 它在数字高程上计算填洼、流向与汇水面积，支持 MPI 分条带处理。 | 它按 Tarboton 的三角面定义输出 D∞ 连续角度，明确区分角度场与双邻格分流；本库的理论与实现比较由[水文学](../knowledge/geology/hydrology.md)的第 4.2 节维护。 |
 | [**Fastscape**](https://fastscape.org/) | 河流切割 + 坡面扩散地表演化 | 轻量级，算法可参考 |
 
 ### 4.2.1 侵蚀业界做法对照（2026-08-25 调研，2026-08-26 侵蚀移除后修订）
