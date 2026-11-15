@@ -121,7 +121,7 @@
 | P3 | **水体分区水位**（每片封闭水体按水量平衡定水面，取代全局锁定海平面与固定湖深；前置的能量型湖面蒸发已实现；草案，暂不实施）→ [water-body-levels.md](proposals/water-body-levels.md) | 2–3 周 | ★★★ |
 | P1 | **画布条件场的构造结构**（金字塔、同质山地与高原无镶边源于条件场只带格子平均；结构场、TD 细节配方、气候守恒重采样，以及曙光、南方大陆与世界岛东南的连续山带来源已进入生产；剩余为有来源的主谷、山前与高原坡折几何和沿岸平原宽度。永耀岛的例证见提案 §2 读法 5）→ [canvas-conditioning-structure.md](proposals/canvas-conditioning-structure.md) | 对照 2–3 天 + 实现 1 周 | ★★★★ |
 | P1 | **TD 粗图直写（路 A）**：细来源的局部对照显示布局与起伏收益；粗输入的低分位来源和后续细化漂移仍待解决，正式接入须分列验收。方案见[画布条件场提案](proposals/canvas-conditioning-structure.md)。 | 来源验证与接入约 1 周 | ★★★★ |
-| P2 | **外部高度图混合补细节（路 B）**：区域模式与阶段缓存已实现；独立窗口及大画布分块接缝仍待设计，潜空间 SDEdit 为独立候选。见[画布条件场提案](proposals/canvas-conditioning-structure.md)。 | 分块设计约 1 周 | ★★★★ |
+| P2 | **原图驱动的 TD 地形细化（路 B）**：现有混合的地貌效果不足；后续比较潜空间 SDEdit 与逐步低频约束，粗统计直写单独验收。见[画布条件场提案](proposals/canvas-conditioning-structure.md)。 | 局部候选验证约 1 周 | ★★★★ |
 | P1 | **山系形态与地球的差距**（窄长山带、高原内部结构与镶边、老造山带宽度继承与分段、25–150 km 顺走向山脊；引擎部分随下一次全层重建，画布部分随同次画布重生成；[terrain-morphology-gap.md](proposals/terrain-morphology-gap.md)） | 2–4 周 | ★★★★ |
 | P3 | ~~构造-侵蚀 Δt 耦合~~——随流水侵蚀关闭搁置，重启再评估 | — | ★★ |
 | **P0** | nacrea 样板世界改造（五）：天文/地质/气候/文明种子已就绪；视频素材三件套 ✅（2026-10-02 合入）+ Blender 高清渲染链 MVP 落地（`region pack` + bpy 静帧），后续为相机动画与整球渲染（[blender-render-pipeline.md](proposals/blender-render-pipeline.md) 路线节） | — | ★★★★★ |
