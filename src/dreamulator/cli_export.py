@@ -58,6 +58,7 @@ from dreamulator.map.region_export import (
     mesh_fingerprint,
     read_radius_km,
 )
+from dreamulator.media.terrain_blend import RefinementMode
 from dreamulator.world_manager import WorldManager
 
 map_app = typer.Typer(
@@ -681,8 +682,28 @@ def export_build(
     td: Path | None = typer.Option(
         None,
         "--td",
-        help="terrain-diffusion repo clone (with .venv) — required for --method td "
+        help="terrain-diffusion repo clone (with .venv) — required for redraw and blend "
         "(not needed with --reuse-height); see terrain-chain manual",
+    ),
+    mode: RefinementMode = typer.Option(
+        RefinementMode.REDRAW,
+        "--mode",
+        help="redraw, source-preserving blend, or source hydrology",
+    ),
+    native_resolution_km: float | None = typer.Option(
+        None,
+        "--native-resolution-km",
+        help="Blend source's effective native spacing; upscaling does not improve it",
+    ),
+    preserve_wavelength_km: float | None = typer.Option(
+        None,
+        "--preserve-wavelength-km",
+        help="Blend trusted wavelength boundary (default four native pixels)",
+    ),
+    depth_cap: bool = typer.Option(
+        False,
+        "--cap-depression-depth",
+        help="Explicit blend terrain edit: cap depressions at source depth",
     ),
     river_threshold: int | None = typer.Option(
         None,
@@ -695,7 +716,7 @@ def export_build(
     reuse_height: bool = typer.Option(
         False,
         "--reuse-height",
-        help="TD method only: skip inference and re-extract hydrology from the cached refined DEM",
+        help="Validate the mode/input/scale cache and rebuild using the saved TD donor",
     ),
     debug: bool = typer.Option(
         False,
@@ -706,21 +727,21 @@ def export_build(
 ) -> None:
     """Build the high-resolution terrain of a region pack.
 
-    terrain-diffusion refinement + hydrology -> <pack>/refined-out/
-    (the single build method since the SPL path's retirement, 2026-11-08)
+    Select redraw, source-preserving detail blend or original-terrain hydrology.
+    Each writes the adopted height and drainage products to refined-out/.
     """
     if not (pack / "input" / "meta.json").exists():
         console.print(f"[red]No input/meta.json in {pack} — is this a pack root?[/red]")
         raise typer.Exit(code=2) from None
     from dreamulator.media.terrain_refine import refine_region_pack
 
-    if td is None and not reuse_height:
+    if td is None and not reuse_height and mode != RefinementMode.HYDROLOGY:
         console.print(
             "[red]--td is required (or pass --reuse-height "
             "to re-extract from the cached refined DEM)[/red]"
         )
         raise typer.Exit(code=2) from None
-    console.print(f"Refining {pack} via terrain-diffusion ({td.name if td else 'cached height'})")
+    console.print(f"Building {pack} in {mode.value} mode")
     try:
         td_info = refine_region_pack(
             pack,
@@ -729,6 +750,10 @@ def export_build(
             coast_warp=coast_warp,
             reuse_height=reuse_height,
             debug=debug,
+            mode=mode,
+            native_resolution_km=native_resolution_km,
+            preserve_wavelength_km=preserve_wavelength_km,
+            depth_cap=depth_cap,
         )
     except (ValueError, FileNotFoundError) as exc:
         console.print(f"[red]Region build rejected: {exc}[/red]")

@@ -541,3 +541,23 @@ precipitation_mm: precipitation-monthly.npy
 源像素尺度、高程映射、窗口放置假设与气候说明都随包归档；未给出输入的生态和冰厚仍保持缺失。
 完整参数由[局部图入口](../usage/cli.md#独立局部高度图)维护，输入契约由[区域包实现参考](../design/pipelines/region-pack.md)维护。
 源码为 `src/dreamulator/map/region_import.py` 与 `src/dreamulator/map/region_inputs.py`。
+
+## 按来源尺度选择局部细化
+
+创作时先声明输入可靠表达的尺度，再选择原图水文、原图混合或地形重绘。
+下面的 YAML 是任务规划示例，供创作者记录来源假设；它不作为区域命令的配置文件读取。
+
+```yaml
+source:
+  native_resolution_km: 50.0
+  description: 原图表达区域地势，上传前插值到较细的文件网格。
+refinement:
+  mode: blend
+  preserve_wavelength_km: 200.0
+  cap_depression_depth: false
+```
+
+执行时将这些值传给 `region build` 的模式与尺度选项。原图输入保留，供体与混合结果分别保存，
+可选排水修整作为显式地形编辑。水文与渲染使用最终采用高程，小窗从同一母网格裁出。
+模式枚举与分频实现在 `src/dreamulator/media/terrain_blend.py`，编排与缓存核查在
+`src/dreamulator/media/terrain_refine.py`；参数用法见[地形视频链](../usage/terrain-chain.md#②-区域构建与细节模式)。

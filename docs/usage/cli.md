@@ -553,17 +553,27 @@ Köppen 与群系各一份 uint8 类别码 `.npy` 加调色板配色 PNG。
 共用同一正方形输出网格，套准由构造保证。技术参考见
 [design/pipelines/region-pack.md](../design/pipelines/region-pack.md)。
 
-### terrain-diffusion 细化 + 水文（region build）
+### 区域构建（region build）
 
-地形链第②步的主方法（引擎粗条件场 → 90 m 地貌重生成 → 排水/河网/湖）：
+区域包可以用 TD 重绘地形、在原图上混合细节，或直接提取原图水文。
+默认模式为 `redraw`，输出网格为包网格的两倍。
 
 ```bash
-dreamulator region build data/worlds/nacrea/packs/nacrea-15_-100_550km     --td <terrain-diffusion-repo>
-# 写 <pack>/refined-out/；推理在外部 td venv（安装见 terrain-chain 手册）
+dreamulator region build <pack> --mode redraw --td <terrain-diffusion-repo>
+dreamulator region build <pack> --mode blend --td <terrain-diffusion-repo> \
+    --native-resolution-km 0.36
+dreamulator region build <pack> --mode blend --native-resolution-km 0.36 --reuse-height
+dreamulator region build <pack> --mode hydrology
 ```
 
-550 km 约 2.5 分钟。模型机制与能力边界见
-[usage/terrain-chain.md](terrain-chain.md) 第②步。
+`--native-resolution-km` 声明混合输入的有效原生尺度，默认使用图像像素尺度或 CVT 平均格距。
+`--preserve-wavelength-km` 声明可信长波边界，默认是四个原生像素长度。
+`--cap-depression-depth` 显式限制新增洼地深度，修整结果单独保存。
+`--reuse-height` 校验模式、输入与尺度后复用 TD 供体，改变这些条件时需要重新构建。
+`--river-threshold` 调整河道起点，`--debug` 增加汇流诊断图。
+
+最终高程统一写入 `refined-out/height.meters.npy`，供探针和渲染读取；各阶段高程与身份记录保存在同目录。
+模式、缓存与接缝的详细约定见[地形视频链](terrain-chain.md#②-区域构建与细节模式)。
 
 ### 制图（render --style survey|relief|biome|hand|medieval）
 

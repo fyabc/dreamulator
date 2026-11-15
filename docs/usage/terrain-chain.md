@@ -81,7 +81,7 @@ GCM 投影场而非引擎 EBM 模拟。同一窗口在两种气候源之间切�
 refine**（不能 `--reuse-height`）——TD 推理以温度/降水为条件场，气候源换了，
 缓存高度与新条件不再对应。
 
-## ② terrain-diffusion 细化（主方法）
+## ② 区域构建与细节模式
 
 ```bash
 dreamulator region build data/worlds/nacrea/packs/nacrea-15_-100_550km \
@@ -109,13 +109,36 @@ dreamulator region build data/worlds/nacrea/packs/nacrea-15_-100_550km \
 （实测两次全等）；条件场变一点（如窗口切法不同）则会得到另一张
 同统计特征的地形——条件生成模型的本质。
 
-**快速重提水文**：`--reuse-height` 跳过 TD 推理，直接用盘上缓存的高度场
-重跑水文提取（无需 `--td`）——调湖/河链语义参数时的迭代环（提取一次约
-1–2 分钟，全链重跑含推理）。复用优先读 `refined-out/height.pre-equilibrium.npy`
-（治愈与平衡水位改写**之前**的场；旧包回退 `height.meters.npy`）：干盐滩
-化会把低于海平面的湖床抹平到海平面，从改写后的场无法重新导出湖的
-水量收支判据，迭代环必须从原始洼地几何重新推导。heal 与平衡改写对
-缓存场都是幂等的。
+区域构建支持三个模式，默认仍为 `redraw`。`redraw` 用 TD 重绘地形，并沿用内陆小水体修整与终端湖床处理。
+`blend` 保留原图的可信长波，用 TD 与原图之差的短波部分替换细节；海底与原图海陆符号保持一致。
+`hydrology` 在原图上提取水文，无需安装 TD。三个模式的输出网格均为包网格的两倍，插值不增加原图精度。
+
+```bash
+dreamulator region build <pack> --mode blend --td <terrain-diffusion-repo>
+dreamulator region build <pack> --mode blend --td <terrain-diffusion-repo> \
+    --native-resolution-km 50 --preserve-wavelength-km 200
+dreamulator region build <pack> --mode blend --td <terrain-diffusion-repo> \
+    --cap-depression-depth
+dreamulator region build <pack> --mode hydrology
+```
+
+混合默认保留四个原生像素长度以上的波段，在两个到四个原生像素长度之间过渡。
+这是显式的采样与创作假设。外部包默认从图像的像素尺度取原生间距，世界包从 CVT 平均格距取值。
+若上传图由粗图放大，应使用 `--native-resolution-km` 声明有效间距，例如 50 km；
+360 m 的文件像素不能将它变成 360 m 的数据。`--preserve-wavelength-km` 可以独立指定可信波长，至少为四个输出像素。
+
+混合本身会增加封闭盆地。`--cap-depression-depth` 将新增洼地的深度限制在原图的几何洼地深度内，
+会抬高谷底并影响长波，因此只作为显式地形编辑。混合结果、修整结果和最终采用高程分别保存。
+混合与原图水文模式不隐式抬高内陆湖床；湖面范围由水量平衡决定，湖面掩膜与地形海陆分类具有不同含义。
+
+**快速重提水文。** 对 `redraw` 或 `blend` 使用 `--reuse-height` 时，命令核查包内高程与气候哈希、模式、
+尺度、供体参数和缓存文件，再从保存的 TD 供体重建，无需提供 `--td`。复用时须重复原构建的模式与尺度选项。
+输入、模式、尺度或修整选项改变时，命令要求重新构建。旧缓存缺少身份记录时同样需要重新构建一次。
+河道阈值与诊断输出选项可以单独调整。被拒绝的构建保留上次完整产物。
+
+整窗分频采用反射边界。同一母窗口应先混合并提取水文，再从最终采用场裁出重叠图；
+这样重叠像素与掩膜一致。分别生成与混合两个独立窗口不能保证接缝一致，
+大画布的分块混合仍需独立设计与验收。
 
 ### 局部入口验收
 
@@ -217,6 +240,11 @@ uv run python scripts/media/region_input_qa.py exports/local-pack --output expor
 
 | 文件 | 说明 |
 |------|------|
+| `height.source.npy`、`height.donor.npy` | 对齐到输出网格的原图与 TD 供体；原图水文模式不写供体。 |
+| `height.frequency-delta.npy`、`height.blended.npy` | 混合模式保存分频残差与海岸处理后的混合高程。 |
+| `height.depth-capped.npy` | 显式排水修整后的高程，仅启用深度上限时写出。 |
+| `height.pre-equilibrium.npy` | 水文路由的地形依据；终端湖收支在此路由上切断汇。 |
+| `land.png` | 地形海陆分类的 8 位掩膜；整数高度量化不能代替它。 |
 | `height.meters.npy` | 高度 f32 米（pack 网格的整数倍）。下游消费方一律读它；手工 Gaea 工程读的是数据包 `input/height.gaea.png`，不是本目录 |
 | `rivers.line.npy` + `rivers.flow.npy` | 平滑矢量河段 (M, 2, 2) km + 流量 (M,) |
 | `rivers.regime.npy` | 逐河段情相 uint8 (M,)：0 常流、1 非常流；缺月度气候或年径流通道时不写 |
@@ -224,7 +252,7 @@ uv run python scripts/media/region_input_qa.py exports/local-pack --output expor
 | `sea-water.png` / `sea-depth.png` | 海掩膜 / 真实水深 |
 | `lake.png` | 内流湖掩膜 |
 | `flow-accum.png` | 汇流累积（16-bit 归一）。没有下游消费方，只在调排水时看，仅 `--debug` 写出 |
-| `meta.json` | 量程 / 海平面 / 参数记录 |
+| `meta.json` | 记录模式、尺度、输入缓存身份、各阶段哈希、采用场、路由场和地形编辑幅度。 |
 
 `satellite_color.load_inputs` 自动识别构建目录：有 `rivers-h.exr` 走
 Gaea 8K 路径；有 `height.meters.npy` 走本链路径（缺的掩膜读零）。
