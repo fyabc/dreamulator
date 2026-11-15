@@ -70,6 +70,14 @@ $x_t/d$，其中 $x_t=d\cos(t)z+d\sin(t)\epsilon$。模型预测后直接估计�
 但它没有逐步积分完整的反向随机微分方程。实验因此称为“部分加噪的一致性编辑”，
 采样口径由[上游实现](https://github.com/xandergos/terrain-diffusion/blob/e8dcb4b1a834ab2f6b1a6f5256ed7c9f2f3e8230/terrain_diffusion/inference/world_pipeline.py)维护。
 
+细节通道与背景通道可以作为诊断分开处理。通道约束适配对前四个通道沿用上述加噪公式，
+第五通道在模型输入中取 $x_{t,5}=dz_{\mathrm{ref},5}$，并在清洁样本估计后恢复原背景，
+然后进行窗口重叠平均。它保留了潜变量背景，但改变了训练时五通道共同加噪的联合分布，
+因此属于未经重新训练的诊断适配。解码端的 `laplacian_denoise` 先重建平方根场，从中重新提取低频，并保留输入残差；
+随后带符号平方变换将重建值转为米制高程。固定第五通道并不保证最终米制长波固定。
+具体代数来自上述上游采样与重建实现，适配由 `scripts/media/td_source_guided_generate.py`
+的 `residual` 轮提供，分尺度与母图海岸对照由 `scripts/media/td_residual_qa.py` 提供。
+
 粗输入的另一种适配是在每次清洁样本估计后，用 $z'=z-L(z)+L(z_{\mathrm{ref}})$
 匹配参考潜变量的低频。$L$ 是具有明确响应波长的低通算子。这借鉴了
 [ILVR](https://arxiv.org/abs/2108.02938) 的频带投影思路；原论文在 DDPM 的相应噪声状态

@@ -5,6 +5,8 @@ the upstream terrain-diffusion checkout, at commit e8dcb4b, with its GPU environ
 Fine cases test AE round trips and SDEdit-inspired consistency editing. Coarse cases
 test low-frequency projection between the two upstream consistency steps. These are
 experimental adapters, not production modes or reproductions of DDPM samplers.
+The residual round reuses a completed fine export and edits four detail channels
+with a clean, fixed fifth background channel at the same sigma as edit-035.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shutil
 import time
 from pathlib import Path
 
@@ -20,7 +23,11 @@ import torch
 from infinite_tensor import InfiniteTensor, TensorWindow
 from scipy.ndimage import distance_transform_edt, gaussian_filter
 from terrain_diffusion.data.laplacian_encoder import laplacian_decode, laplacian_encode
-from terrain_diffusion.inference.world_pipeline import WorldPipeline, linear_weight_window
+from terrain_diffusion.inference.world_pipeline import (
+    WorldPipeline,
+    gaussian_noise_patch,
+    linear_weight_window,
+)
 from terrain_diffusion.models.edm_autoencoder import EDMAutoencoder
 from terrain_diffusion.scheduler.dpmsolver import EDMDPMSolverMultistepScheduler
 
@@ -166,6 +173,7 @@ def stage(
     name: str,
     reference: np.ndarray | None = None,
     wavelength_px: float = 0,
+    residual_only: bool = False,
 ) -> InfiniteTensor:
     scheduler = EDMDPMSolverMultistepScheduler(sigma_min=0.002, sigma_max=80, sigma_data=0.5)
     angle = torch.atan(torch.tensor(sigma / 0.5))
@@ -179,6 +187,10 @@ def stage(
         low = gaussian_filter(reference, (0, smooth_sigma, smooth_sigma), mode="nearest")
 
     def infer(ctxs, samples, conds):
+        if residual_only:
+            return detail_inference(
+                world, ctxs, samples, conds, angle, weight, histogram, means, stds
+            )
         outputs = world._latent_inference(
             ctxs,
             samples,
@@ -233,6 +245,68 @@ def stage(
     )
 
 
+def detail_inference(world, ctxs, samples, conds, angle, weight, histogram, means, stds):
+    """Use upstream consistency algebra with a clean, fixed fifth latent channel.
+
+    The four residual channels use identical seeds and noise to edit-035. The
+    model sees the original background without cosine attenuation or added noise;
+    its predicted background is discarded before any tile overlap is averaged.
+    This diagnostic changes the joint input noise distribution of the trained model.
+    """
+    dtype = world._dtype or torch.float32
+    t = torch.as_tensor(angle, device=world.device, dtype=dtype)
+    model_inputs, conditioning, states, backgrounds = [], [], [], []
+    for ctx, sample, cond in zip(ctxs, samples, conds, strict=True):
+        original = torch.as_tensor(sample, device=world.device, dtype=dtype)
+        original = original[:-1] / original[-1:]
+        cond = cond[:-1] / cond[-1:]
+        cond = torch.cat([cond, torch.ones((1, 4, 4))], dim=0)[None]
+        controls = world._process_latent_conditioning(
+            cond,
+            histogram,
+            means,
+            stds,
+            torch.tensor(0.0),
+            seed_offset=ctx[1] * 65536 + ctx[2],
+        ).to(world.device, dtype=dtype)
+        noise = torch.as_tensor(
+            gaussian_noise_patch(
+                world.seed + 5820,
+                ctx[1] * 32,
+                ctx[2] * 32,
+                64,
+                64,
+                channels=5,
+                tile_h=64,
+                tile_w=64,
+            ),
+            device=world.device,
+            dtype=dtype,
+        )[None]
+        noisy = 0.5 * (torch.cos(t) * original[None] + torch.sin(t) * noise)
+        noisy[:, 4] = 0.5 * original[4]
+        model_inputs.append(noisy / 0.5)
+        conditioning.append(controls)
+        states.append(noisy)
+        backgrounds.append(original[4].cpu().float())
+    if not model_inputs:
+        return []
+    if world.torch_compile:
+        raise ValueError("Residual diagnostic requires torch_compile=False")
+    prediction = -world.base_model(
+        torch.cat(model_inputs),
+        noise_labels=torch.full((len(ctxs),), t.item(), device=world.device, dtype=dtype),
+        conditional_inputs=[torch.cat(conditioning)],
+    )
+    outputs = []
+    for i, noisy in enumerate(states):
+        rebuilt = (torch.cos(t) * noisy - torch.sin(t) * 0.5 * prediction[i : i + 1]) / 0.5
+        rebuilt = rebuilt[0].cpu().float()
+        rebuilt[4] = backgrounds[i]
+        outputs.append(torch.cat([rebuilt * weight[None], weight[None]], dim=0))
+    return outputs
+
+
 def roundtrip_gate(source: np.ndarray, rebuilt: np.ndarray, pixel_km: float) -> dict:
     sigma = 1.4375 * np.sqrt(np.log(2)) / (np.sqrt(2) * np.pi * pixel_km)
     ga = np.gradient(gaussian_filter(source, sigma))
@@ -252,14 +326,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     for flag in ("inputs", "output", "world-model", "autoencoder"):
         parser.add_argument("--" + flag, type=Path, required=True)
-    parser.add_argument("--round", choices=("fine", "coarse"), required=True)
+    parser.add_argument("--round", choices=("fine", "coarse", "residual"), required=True)
     parser.add_argument("--cases", nargs="*")
     args = parser.parse_args()
     if file_hash(args.autoencoder / "diffusion_pytorch_model.safetensors") != AE_HASH:
         raise ValueError("Autoencoder weight hash differs from the fixed experiment")
     torch.set_num_threads(8)
     torch.manual_seed(42)
-    ae = EDMAutoencoder.from_pretrained(str(args.autoencoder), local_files_only=True).cuda().eval()
+    ae = (
+        EDMAutoencoder.from_pretrained(str(args.autoencoder), local_files_only=True).cuda().eval()
+        if args.round != "residual"
+        else None
+    )
     world = WorldPipeline.from_pretrained(
         str(args.world_model),
         seed=42,
@@ -270,20 +348,36 @@ def main() -> None:
         residual_std=RESIDUAL_STD,
         cond_snr=[0.05, 0.2, 1.0, 0.2, 1.0],
     ).to("cuda")
-    for name in args.cases or (FINE if args.round == "fine" else COARSE):
+    for name in args.cases or (COARSE if args.round == "coarse" else FINE):
         started = time.monotonic()
-        meta, source = prepare(args.inputs, args.output, name)
         case = args.output / name
-        latent, rebuilt = encode(ae, source)
+        if args.round == "residual":
+            parent = args.inputs / name
+            case.mkdir(parents=True, exist_ok=True)
+            for path in parent.iterdir():
+                if path.name in {"input.json", "ae-gate.json"} or path.name.endswith(".npy"):
+                    shutil.copyfile(path, case / path.name)
+            meta = json.loads((case / "input.json").read_text(encoding="utf-8"))
+            source = np.load(case / "source.meters.npy", allow_pickle=False)
+            latent = np.load(case / "source.latent.npy", allow_pickle=False)
+            rebuilt = np.load(case / "ae-roundtrip.meters.npy", allow_pickle=False)
+            if source.shape != (SIZE, SIZE) or latent.shape != (5, 384, 384):
+                raise ValueError("Residual round requires the fixed 2048-pixel fine-case encoding")
+        else:
+            meta, source = prepare(args.inputs, args.output, name)
+            assert ae is not None
+            latent, rebuilt = encode(ae, source)
         save(case / "ae-roundtrip.meters.npy", rebuilt)
         save(case / "source.latent.npy", latent)
         gate = roundtrip_gate(source, rebuilt, meta["pixel_km"])
         (case / "ae-gate.json").write_text(json.dumps(gate, indent=2) + "\n", encoding="utf-8")
         print(name, "AE", gate, flush=True)
-        if args.round == "fine" and not gate["passed"]:
+        if args.round in {"fine", "residual"} and not gate["passed"]:
             continue
         arms = (
-            ("decoder", "edit-0065", "edit-035")
+            ("residual-035",)
+            if args.round == "residual"
+            else ("decoder", "edit-0065", "edit-035")
             if args.round == "fine"
             else ("unprojected", "projected")
         )
@@ -296,6 +390,8 @@ def main() -> None:
             ref = frozen(world, latent, 32, "source_latent")
             if arm == "decoder":
                 world.latents = ref
+            elif arm == "residual-035":
+                world.latents = stage(world, ref, 0.35, arm, residual_only=True)
             elif arm.startswith("edit"):
                 world.latents = stage(world, ref, 0.065 if arm == "edit-0065" else 0.35, arm)
             else:
@@ -308,6 +404,14 @@ def main() -> None:
                 first = stage(world, zero, 80, "initial", **kwargs)
                 world.latents = stage(world, first, 0.35, "second", **kwargs)
             world.residual = world._build_decoder_stage()
+            background_difference = None
+            if arm == "residual-035":
+                generated = world.latents[:, 0 : latent.shape[1], 0 : latent.shape[2]]
+                generated = (generated[:-1] / generated[-1:]).numpy()
+                save(case / f"{arm}.latent.npy", generated)
+                background_difference = float(np.max(np.abs(generated[4] - latent[4])))
+                if background_difference > 2e-6:
+                    raise ValueError(f"Frozen background changed by {background_difference}")
             result = world.get(PAD, PAD, PAD + SIZE, PAD + SIZE, with_climate=False)["elev"].numpy()
             repeat = world.get(PAD, PAD, PAD + SIZE, PAD + SIZE, with_climate=False)["elev"].numpy()
             max_repeat = float(np.max(np.abs(result - repeat)))
@@ -320,7 +424,14 @@ def main() -> None:
             receipt = dict(
                 arm=arm,
                 td_commit="e8dcb4b1a834ab2f6b1a6f5256ed7c9f2f3e8230",
-                noise_sigma=0.065 if arm == "edit-0065" else 0.35 if arm == "edit-035" else None,
+                noise_sigma=0.065
+                if arm == "edit-0065"
+                else 0.35
+                if arm in {"edit-035", "residual-035"}
+                else None,
+                edited_latent_channels=[0, 1, 2, 3] if arm == "residual-035" else None,
+                background_latent_max_difference=background_difference,
+                source_latent_sha256=file_hash(case / "source.latent.npy"),
                 sigma_data=0.5,
                 projection_response_wavelength_km=meta["native_km"] if arm == "projected" else None,
                 source_sha256=file_hash(case / "source.meters.npy"),
