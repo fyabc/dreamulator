@@ -426,6 +426,9 @@
    代码版本，改了算法而未提升 schema 版本时旧缓存仍会命中；`plates` 阶段的字段清单也漏了
    `coherent_motion`、`convection_harmonics` 等板块运动参数。
 
+9. **S4 命令行的完整验收门尚未实现。** 当前退出码未覆盖海陆、湖、河段、坐标及水文覆盖的全部分歧；
+   批次验收先按[分项清单](pipelines/canvas-acceptance.md)核对 JSON，证据见[专项审计](audit/wave8-ridge-canvas-acceptance.md)。
+
 ## 八、内部文档链接
 
 - `docs/design/architecture.md` — 项目架构（层级架构与分支管理）
