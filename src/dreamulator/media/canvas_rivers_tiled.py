@@ -63,13 +63,14 @@ def _extra() -> dict[str, Any]:
 
 
 def _receivers(code: np.ndarray, key: tuple[int, int], tile: int, width: int) -> np.ndarray:
-    """Global receiver index of every cell of a chunk, -1 where the D8 code is 255."""
+    """Decode D8 or two-ring directions as global receiver indices."""
     rr, cc = np.divmod(np.arange(code.size, dtype=np.int64), tile)
     k = code.ravel()
     has = k != 255
     ki = np.where(has, k, 0).astype(np.int64)
     gr = key[0] * tile + rr + _DY[ki]
     gc = key[1] * tile + cc + _DX[ki]
+    has &= (gr >= 0) & (gc >= 0) & (gc < width)
     return np.where(has, gr * width + gc, -1)
 
 
@@ -94,16 +95,16 @@ def _river_chunk(key: tuple[int, int]) -> tuple[np.ndarray, ...]:
     rivers = land & (acc > x["threshold_cells"])
     save_chunk(st, RIVER_KIND, key, rivers.reshape(t, t).astype(np.uint8))
     keep = x["lake_keep"]
-    lbl_h = halo(st, layout, "lbl_lakes0", key, 0, dtype=np.int64)
+    lbl_h = halo(st, layout, "lbl_lakes0", key, 0, dtype=np.int64, radius=2)
     lake_h = np.where(lbl_h > 0, keep[lbl_h], False)
-    is_lake = lake_h[1:-1, 1:-1].ravel()
+    is_lake = lake_h[2:-2, 2:-2].ravel()
     code = load_chunk(st, "dir_route", key).ravel()
     rec = _receivers(code.reshape(t, t), key, t, width)
     # lake exits: the receiver (possibly in a neighbouring chunk) is not a chain-breaking lake
     has = code != 255
     k = np.where(has, code, 0).astype(np.int64)
     rr, cc = np.divmod(np.arange(t * t, dtype=np.int64), t)
-    recv_lake = lake_h[rr + 1 + _DY[k], cc + 1 + _DX[k]]
+    recv_lake = lake_h[rr + 2 + _DY[k], cc + 2 + _DX[k]]
     exits = np.flatnonzero(is_lake & has & ~recv_lake)
     riv = np.flatnonzero(rivers)
 

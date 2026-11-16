@@ -11,9 +11,10 @@ time, with memory bounded by a few chunks and a small cross-chunk graph:
   a strictly lower neighbour).  ``d`` is a geodesic distance, so it is solved per chunk by
   breadth-first search and exchanged across chunk seams until no chunk changes; the level is then
   rebuilt by the same additions, bit-for-bit equal to the whole-canvas kernel.
-* **D8 directions.**  Steepest descent on the graded surface with a one-pixel halo, the same
-  comparisons and dtypes as the in-memory loop; stored as one byte per cell (index into
-  ``_NEIGHBOURS``, 255 = none).
+* **Directions.**  Generation retains D8 steepest descent on the graded surface. Consumers
+  decode ``FLOW_OFFSETS``: codes 0-7 retain the D8 order, codes 8-15 hold the primitive
+  two-ring offsets, and 255 means no receiver. Halo rings and chunk-exit tables carry two
+  layers so an extended edge can land in the neighbouring chunk's second row or column.
 * **Flow accumulation** (Barnes 2017, Environmental Modelling & Software 92:202-212): each chunk
   accumulates its own weights with outgoing links cut, the border transfers are solved on the graph
   of chunk exits in descending graded order, and the incoming flow is folded back by a second local
@@ -27,11 +28,12 @@ from __future__ import annotations
 import errno
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import numba
 import numpy as np
 
+from dreamulator.map.river_routing import KNIGHT_OFFSETS
 from dreamulator.media.canvas_hydrology import _NEIGHBOURS
 
 if TYPE_CHECKING:
@@ -41,8 +43,9 @@ if TYPE_CHECKING:
     from dreamulator.media.canvas_pipeline import CanvasStore
 
 NO_DIR = np.uint8(255)
-_DY = np.array([d[0] for d in _NEIGHBOURS], dtype=np.int64)
-_DX = np.array([d[1] for d in _NEIGHBOURS], dtype=np.int64)
+FLOW_OFFSETS = np.vstack((np.asarray(_NEIGHBOURS, dtype=np.int64), KNIGHT_OFFSETS))
+_DY = FLOW_OFFSETS[:, 0].copy()
+_DX = FLOW_OFFSETS[:, 1].copy()
 _UNREACHED = np.int32(2**31 - 1)
 
 
@@ -79,8 +82,11 @@ def flow_path(store: CanvasStore, kind: str, key: tuple[int, int], ext: str = "n
 
 
 def _ring(a: np.ndarray) -> np.ndarray:
-    """Border of a chunk: top row, bottom row, left column, right column (corners repeat)."""
-    return np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]])
+    """Two border layers, grouped as top, bottom, left and right bands."""
+    radius = min(2, a.shape[0])
+    return np.concatenate(
+        [a[:radius].ravel(), a[-radius:].ravel(), a[:, :radius].ravel(), a[:, -radius:].ravel()]
+    )
 
 
 def _atomic_save(path: Path, a: np.ndarray) -> None:
@@ -95,7 +101,7 @@ def _atomic_save(path: Path, a: np.ndarray) -> None:
 
 
 def save_chunk(store: CanvasStore, kind: str, key: tuple[int, int], a: np.ndarray) -> None:
-    """Save a chunk array and its border ring (what the neighbours' halos read)."""
+    """Save a chunk array and its two-layer border ring for neighbouring halos."""
     path = flow_path(store, kind, key)
     path.parent.mkdir(parents=True, exist_ok=True)
     _atomic_save(path, a)
@@ -107,7 +113,7 @@ _LOAD_RETRIES = 8
 _LOAD_BACKOFF_S = 0.05
 
 
-def load_npy(path: Path) -> np.ndarray:
+def load_npy(path: Path, *, mmap_mode: Literal["r"] | None = None) -> np.ndarray:
     """Load a chunk file, retrying while a network filesystem reports a stale handle.
 
     Chunk files are published by writing a temporary and renaming it, which is atomic on a
@@ -122,7 +128,7 @@ def load_npy(path: Path) -> np.ndarray:
     delay = _LOAD_BACKOFF_S
     for attempt in range(_LOAD_RETRIES):
         try:
-            return np.asarray(np.load(path))
+            return np.asarray(np.load(path, mmap_mode=mmap_mode))
         except OSError as exc:  # ESTALE, and the ENOENT a rename can show on the same mount
             if exc.errno not in (errno.ESTALE, errno.ENOENT) or attempt == _LOAD_RETRIES - 1:
                 raise
@@ -143,11 +149,17 @@ def halo(
     fill: float,
     dtype: type = np.float32,
     center: np.ndarray | None = None,
+    *,
+    radius: int = 1,
 ) -> np.ndarray:
-    """The chunk with a one-pixel ring from its neighbours' saved rings (``fill`` elsewhere)."""
+    """Add one or two halo layers; old single-layer rings remain readable."""
     t = layout.tile
-    out: np.ndarray = np.full((t + 2, t + 2), fill, dtype=dtype)
-    out[1:-1, 1:-1] = load_chunk(store, kind, key) if center is None else center
+    if radius not in (1, 2) or radius > t:
+        raise ValueError("halo radius must be one or two pixels and no larger than a tile")
+    out: np.ndarray = np.full((t + 2 * radius, t + 2 * radius), fill, dtype=dtype)
+    out[radius : radius + t, radius : radius + t] = (
+        load_chunk(store, kind, key) if center is None else center
+    )
     keys = layout.keyset
     ci, cj = key
     for di in (-1, 0, 1):
@@ -156,19 +168,33 @@ def halo(
             if (di == 0 and dj == 0) or nk not in keys:
                 continue
             ring = load_npy(flow_path(store, kind, nk, "ring.npy"))
-            top, bottom = ring[:t], ring[t : 2 * t]
-            left, right = ring[2 * t : 3 * t], ring[3 * t :]
+            saved_radius = ring.size // (4 * t)
+            if saved_radius not in (1, 2) or ring.size != 4 * t * saved_radius:
+                raise ValueError("invalid saved halo ring")
+            if saved_radius < radius:
+                # Legacy stores only saved one layer. Memory mapping reads the
+                # required boundary slices without loading an entire neighbour.
+                a = load_npy(flow_path(store, kind, nk), mmap_mode="r")
+                top, bottom, left, right = a[:radius], a[-radius:], a[:, :radius], a[:, -radius:]
+            else:
+                size = t * saved_radius
+                top = ring[:size].reshape(saved_radius, t)[:radius]
+                bottom = ring[size : 2 * size].reshape(saved_radius, t)[-radius:]
+                left = ring[2 * size : 3 * size].reshape(t, saved_radius)[:, :radius]
+                right = ring[3 * size :].reshape(t, saved_radius)[:, -radius:]
             if di == -1 and dj == 0:
-                out[0, 1:-1] = bottom
+                out[:radius, radius : radius + t] = bottom
             elif di == 1 and dj == 0:
-                out[-1, 1:-1] = top
+                out[-radius:, radius : radius + t] = top
             elif di == 0 and dj == -1:
-                out[1:-1, 0] = right
+                out[radius : radius + t, :radius] = right
             elif di == 0 and dj == 1:
-                out[1:-1, -1] = left
+                out[radius : radius + t, -radius:] = left
             else:  # corners
                 row = bottom if di == -1 else top
-                out[0 if di == -1 else -1, 0 if dj == -1 else -1] = row[-1 if dj == -1 else 0]
+                rs = slice(None, radius) if di == -1 else slice(-radius, None)
+                cs = slice(None, radius) if dj == -1 else slice(-radius, None)
+                out[rs, cs] = row[:, -radius:] if dj == -1 else row[:, :radius]
     return out
 
 
@@ -585,7 +611,7 @@ def tiled_directions(
 
 @numba.njit(cache=True)
 def _local_receivers(code: np.ndarray) -> tuple[np.ndarray, np.ndarray]:  # pragma: no cover
-    """Local receiver index (-1 none or outside), and the outgoing direction (-1 if inside)."""
+    """Decode either direction set into local receivers and outgoing direction codes."""
     t = code.shape[0]
     rec = np.full(t * t, -1, dtype=np.int64)
     out = np.full(t * t, -1, dtype=np.int8)
@@ -594,6 +620,8 @@ def _local_receivers(code: np.ndarray) -> tuple[np.ndarray, np.ndarray]:  # prag
             k = code[r, c]
             if k == 255:
                 continue
+            if k >= len(_DY):
+                raise ValueError("invalid flow direction code")
             rr = r + _DY[k]
             cc = c + _DX[k]
             if 0 <= rr < t and 0 <= cc < t:
@@ -654,8 +682,19 @@ def _local(
 
 
 def _ring_index(t: int) -> np.ndarray:
+    """All cells in the two-layer boundary band, including second-layer targets."""
     r = np.arange(t)
-    return np.concatenate([r, (t - 1) * t + r, r * t, r * t + t - 1])
+    band = np.arange(min(2, t))
+    return np.unique(
+        np.concatenate(
+            [
+                (band[:, None] * t + r).ravel(),
+                ((t - 1 - band[:, None]) * t + r).ravel(),
+                (r[:, None] * t + band).ravel(),
+                (r[:, None] * t + t - 1 - band).ravel(),
+            ]
+        )
+    )
 
 
 def _acc_stage1(key: tuple[int, int]) -> tuple[Any, ...]:

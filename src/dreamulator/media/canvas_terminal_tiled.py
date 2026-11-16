@@ -148,12 +148,12 @@ def _lake_info(key: tuple[int, int]) -> tuple[Any, ...]:
     w_bbox = layout.shape[1]
     assert ctx.extra is not None
     clim: _Climate = ctx.extra["climate"]
-    lbl_h = halo(st, layout, "lbl_lakes0", key, 0, dtype=np.int32)
-    lbl = lbl_h[1:-1, 1:-1].ravel()
+    lbl_h = halo(st, layout, "lbl_lakes0", key, 0, dtype=np.int32, radius=2)
+    lbl = lbl_h[2:-2, 2:-2].ravel()
     code = load_chunk(st, "dir", key)
     order, rec, out = cft._local(st, key)
     res = _reach_local(order, rec, out, lbl.astype(np.int64))
-    dem_h = halo(st, layout, "dem", key, np.nan, dtype=np.float64)  # f32 on disk, exact
+    dem_h = halo(st, layout, "dem", key, np.nan, dtype=np.float64, radius=2)
     rr, cc = np.divmod(np.arange(t * t), t)
     g_row, g_col = rr + key[0] * t, cc + key[1] * t
     gidx = g_row * w_bbox + g_col
@@ -161,8 +161,8 @@ def _lake_info(key: tuple[int, int]) -> tuple[Any, ...]:
     k = np.where(has, code.ravel(), 0).astype(np.int64)
     tr = rr + _DY[k]  # receiver row/col in the halo frame minus one
     tc = cc + _DX[k]
-    t_lbl = np.where(has, lbl_h[tr + 1, tc + 1], 0)
-    t_dem = np.where(has, dem_h[tr + 1, tc + 1], np.nan)
+    t_lbl = np.where(has, lbl_h[tr + 2, tc + 2], 0)
+    t_dem = np.where(has, dem_h[tr + 2, tc + 2], np.nan)
     t_gidx = np.where(has, (g_row + _DY[k]) * w_bbox + (g_col + _DX[k]), -1)
     # 1. first-touch inflow donors: non-lake cells draining into a lake cell
     donors = has & (lbl == 0) & (t_lbl > 0)
