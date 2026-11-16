@@ -40,7 +40,7 @@ Goff 与 Arbic（2010）汇编了 Goff 等（1997）的近洋脊测区平均值�
 80 mm/yr 的轴部形态转换是同一件事。第三，中央裂谷型一侧起伏随速率下降而增大，轴部高地型一侧与
 速率基本无关。同一速率下各测区相对平均值的散布为：起伏约 20% 到 30%，宽度与长度约 30% 到 50%；
 洋脊分段与洋壳厚度是次级因素。分形维数不随速率变化，未受沉积覆盖时取 D = 2.2，即 ν = 0.8。
-走向 θ_s 取形成时的洋脊走向，也就是古扩张方向的法向。
+走向 θ_s 取形成时的洋脊走向，并随板块旋转到查询位置。正交扩张时，它垂直于古扩张方向；斜交扩张时，应直接保存洋脊切向。
 
 沉积覆盖的修正采用 Webb 与 Jordan（2001）用扩散型远洋沉积模型得到的经验式，S 为沉积总厚度，
 下标 0 表示未受覆盖的值：
@@ -67,7 +67,7 @@ h = h₀·exp(−r²/2σ²) 表达，宽度取 σ = 2.4·h₀（两者同为长�
 
 洋脊被转换断层分段，段间的错距把不同年龄的洋壳并在一起。由于洋底深度随年龄的平方根下沉，
 两侧年龄差会在破碎带上产生一个深度台阶，台阶高度可以直接从已有的下沉律算出，不需要新参数。
-破碎带走向平行于板块相对运动方向，因而也与深海丘陵走向垂直，这是地球洋底最显眼的方向纹理。
+破碎带走向记录形成时的板块相对运动方向。在近似正交扩张区，它与深海丘陵走向近似垂直；形成后，两类方向都随所属板块搬运。这是地球洋底最显眼的方向纹理之一。
 
 ## 沉积覆盖与深海平原
 
@@ -90,6 +90,18 @@ h = h₀·exp(−r²/2σ²) 表达，宽度取 σ = 2.4·h₀（两者同为长�
 海底高程不进 GCM，气候层对海洋格子取海平面，所以这类改动只影响地图观感与潮汐、洋流一类的诊断，
 下游风险低。
 
+## 洋壳出生条件的保存
+
+洋壳年龄是查询时刻与出生时刻之差。使用向前增加的时间坐标时，年龄为 $a=t-t_b$，其中 $t_b$ 是洋壳在洋脊出生的时刻。若使用距今多少百万年的坐标，则年龄是出生年代减去查询年代。用现今距洋脊的距离除以现今半扩张速率，只能在路径、速率和洋脊运动满足对应稳态假设时恢复年龄。
+
+在出生点的单位位置向量 $\mathbf{x}_b$ 上，板块两侧的相对速度为 $\mathbf{v}_{rel}=R(\boldsymbol{\omega}_L-\boldsymbol{\omega}_R)\times\mathbf{x}_b$。这里 $R$ 是行星半径，两侧的 $\boldsymbol{\omega}$ 是同一参考系中的角速度。形成全扩张速率记录 $|\mathbf{v}_{rel}|$，形成面积使用沿洋脊法向的张开分量；斜交扩张时，两者不同。这里的速度与面积关系属于刚体运动学，深海丘陵对速率的响应仍是地球观测拟合。
+
+若出生时的洋脊单位切向为 $\boldsymbol{\tau}_b$，所属板块之后依次经历旋转矩阵 $Q_1$ 到 $Q_k$，则位置和方向分别满足 $\mathbf{x}=Q_k\cdots Q_1\mathbf{x}_b$ 与 $\boldsymbol{\tau}=Q_k\cdots Q_1\boldsymbol{\tau}_b$。位置和切向必须使用同一顺序的旋转。刚性旋转保持单位长度以及 $\mathbf{x}\cdot\boldsymbol{\tau}=0$，因此方向继续位于当地切平面；出生时的速率与出生日期保持不变。
+
+GPlately 的海底网格流程在有效洋脊两侧发射新点，保存出生年代与扩张速率，再由板块拓扑重建搬运和移除被消耗的点。它对初始老洋壳采用距离与假定速率估计，而且文档明确说明这些初始点可能残留。因此，历史中实际生成的示踪记录和初始化假设应分别标明来源。只有模型外推约束的地球年龄区域，也不能作为同源重建的独立真值。
+
+本库的刚性旋转实现为 `src/dreamulator/map/paleo_kinematics.py` 中的 `rotation_matrices`，洋壳形成示踪仍是候选；生产契约由[历史契约](../../design/proposals/history-contract.md)维护。业界方法与初始化限制见 [GPlately 1.3.0 的 SeafloorGrid 文档](https://gplates.github.io/gplately/v1.3.0/oceans.html)。
+
 ## 不确定度与适用范围
 
 - 起伏与宽度随扩张速率的关系来自地球测区统计，散布大，属于观测拟合；外推到岩浆供应显著不同的
@@ -100,6 +112,7 @@ h = h₀·exp(−r²/2σ²) 表达，宽度取 σ = 2.4·h₀（两者同为长�
 
 ## 参考资料
 
+- GPlately 1.3.0. [SeafloorGrid 方法与初始化限制](https://gplates.github.io/gplately/v1.3.0/oceans.html)，[对应源码](https://github.com/GPlates/gplately/blob/v1.3.0/gplately/oceans.py)。
 - Goff, J. A., & Jordan, T. H. (1988). Stochastic modeling of seafloor morphology: Inversion of Sea Beam data for second-order statistics. *JGR*, 93(B11).
 - Goff, J. A. (1991). A global and regional stochastic analysis of near-ridge abyssal hill morphology. *JGR*, 96(B13).
 - Goff, J. A., & Arbic, B. K. (2010). Global prediction of abyssal hill roughness statistics for use in ocean models from digital maps of paleo-spreading rate, paleo-ridge orientation, and sediment thickness. *Ocean Modelling*, 32, 36–43.

@@ -144,6 +144,8 @@ Dreamulator 的 DAG 管线：`physics → chemistry → astronomy → geological
 | [**TauDEM**](https://hydrology.usu.edu/taudem/taudem5/) | 它在数字高程上计算填洼、流向与汇水面积，支持 MPI 分条带处理。 | 它按 Tarboton 的三角面定义输出 D∞ 连续角度，明确区分角度场与双邻格分流；本库的理论与实现比较由[水文学](../knowledge/geology/hydrology.md)的第 4.2 节维护。 |
 | [**Fastscape**](https://fastscape.org/) | 河流切割 + 坡面扩散地表演化 | 轻量级，算法可参考 |
 
+洋壳形成历史参考 [GPlately 1.3.0 的 `SeafloorGrid`](https://gplates.github.io/gplately/v1.3.0/oceans.html)与[对应源码](https://github.com/GPlates/gplately/blob/v1.3.0/gplately/oceans.py)。它在有效历史洋脊两侧生成示踪点，保存出生年代与扩张速率，再按板块拓扑搬运和移除被消耗的点。初始老洋壳由距离与假定速率估龄，文档明确提示这些点可能残留；本库候选将初始化来源与历史出生记录分开，方案与验收由[地质时间轴第 4.1 节](proposals/geological-timeline.md#41-合成现状海底年龄与记忆段)维护。
+
 连续流线的实现参照是 [GRASS 的 `r.flow`](https://grass.osgeo.org/grass-stable/manuals/r.flow.html)。
 它在浮点坐标上沿坡向追踪，以高程下降与障碍检查控制终止，并分别输出流线、长度与流线密度。
 本库的连续河线试点将解析方向、谷地位置和出口连通分别验收；三次插值的新低点与三角面沿边流路的方向偏差由
