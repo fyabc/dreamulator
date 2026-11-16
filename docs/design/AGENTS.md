@@ -24,6 +24,8 @@
 
 ### pipelines/ — 已实现管线技术参考
 
+- `guard-ledger.md` 说明守护轴的三层检查、接受基线、命令退出码、分支隔离及台账状态管理。
+
 - `browser-playground.md` — 已实现的浏览器温度实验台，说明运行时、规则网格、温度内核、输入限制与原型验收。
 - `world-generation-pipeline.md` — 世界生成管线总览（阶段 1–12 目录 + 层级映射 + Gaea 指针）
 - `geological-pipeline.md` — 地质层生成管线技术参考（CVT 网格、板块构造、地形合成、封闭盆地湖泊、极地冰盖、导出）

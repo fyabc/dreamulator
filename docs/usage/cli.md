@@ -292,34 +292,25 @@ uv run dreamulator sky nacrea --from satellite_nacrea     --at 61.979 --targets 
 dreamulator guard check nacrea [--branch <b>] [--data-dir <dir>]
 ```
 
-三级检测，从粗到精（harness.md §7）：
+命令检查模板引用、决策登记的输入和接受时的事实基线。输入不变时，也会比较事实。检查通过返回退出码 0；发现输入或事实变化返回 1；缺少产物、指纹或基线，或者模板无法求值时返回 2。
 
-| 级别 | 检测什么 | 判定 |
-|------|---------|------|
-| ① 模板断链 | 渲染文档/ADR 后残留 `{{ ... }}` | 字段被删/改名 → 硬约束 |
-| ② 输入指纹 | ADR frontmatter `checked_against` vs 当前层 yaml 哈希 | 输入改了 → 需复核 |
-| ③ 渲染 diff | ADR 定量声明（模板）重渲染 vs 基线 | 事实漂移 → 结论需复核 |
-
-意图感知：`divergence: intentional` 的记录报 info（已知覆写），不报 stale。
+`divergence: intentional` 只将声明过的输入变化转为提示，事实漂移仍需复核。完整判定和继承规则见[守护台账技术参考](../design/pipelines/guard-ledger.md)。
 
 ### 决策记录台账（ADR）
 
+ADR 是保存问题、依据和结论的决策记录。新记录放在世界或分支的设计笔记目录，以 `00NN-<slug>.md` 命名，并使用 `status: proposed`。
+
 ```bash
-dreamulator guard accept nacrea 0001              # proposed → accepted（写 checked_against + 基线）
-dreamulator guard supersede nacrea 0001 --by 0002 # 标记被 0002 取代（正文不动）
-dreamulator guard deprecate nacrea 0001           # 弃用（前提失效但历史保留）
-dreamulator guard archive nacrea --limit 20       # 归档最旧的 accepted，直至 ≤ 上限
+dreamulator guard accept nacrea 0001
+dreamulator guard accept nacrea 0001 --branch variant
+dreamulator guard supersede nacrea 0001 --by 0002
+dreamulator guard deprecate nacrea 0001
+dreamulator guard archive nacrea --limit 20
 ```
 
-- ADR 落在 `data/worlds/<world>/design-notes/00NN-<slug>.md`，frontmatter 带 `status` 字段。
-- 状态机：`proposed → accepted / deprecated / superseded by <编号>`。
-- **永不编辑 accepted 的结论正文**——推翻走 `supersede`（git 记历史，文档不写「旧值→新值」）。
-- `accept` 自动写入 `checked_against`（astronomy + geological 的 yaml 指纹）与渲染基线
-  `design-notes/.guard-baseline.json`（③ 的比对基准）。
+接受命令先验证事实，再保存输入指纹和模板基线。已经接受的记录没有变化时，重复接受不会写文件；需要变更结论时，先另写并接受新记录，再以替代命令关联两者。替代记录必须已经存在且已接受。
 
-**容量上限 + 强制剪枝**（harness.md §8.2，借鉴 Hermes）：台账默认上限 **20 条 accepted**
-（`accept --limit` / `archive --limit` 可调）。`accept` 在台账已满时**拒绝写入**（而非静默追加），
-先 `guard archive` 把最旧的 accepted 标 `deprecated` 归档腾位。
+归档命令只隐藏超出容量的已接受记录，仍保留其结论并继续检查变化。弃用表示作者裁决前提失效。所有台账写命令都支持 `--branch`；写入分支前，该分支需要自己的设计笔记目录，继承的父世界记录保持原样。
 
 ---
 

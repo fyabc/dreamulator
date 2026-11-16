@@ -1,6 +1,6 @@
 # 守护轴（Harness）：校验 · 审计 · 设定维护
 
-> 状态：Draft 0.1 · 2026-08-16
+> 状态：部分实现。立项日期为 2026-08-16。事实检查与决策台账的技术参考见[守护台账](../pipelines/guard-ledger.md)。
 > 定位：Dreamulator 的**第三条轨道（守护轴）**——在 [vision.md](vision.md) §2「双轨驱动」（ODE/SDE 引力骨架 + LLM 血肉）之外补齐的第三条：校验与维护。
 > 关联：[vision.md](vision.md) 的 Fantasy Harness；[layer-control-model.md](layer-control-model.md) 的校验层；
 > [audit-plan.md](../audit-plan.md)（守护引擎那一半）；本文件补齐「守护世界」那一半并把两者统一。
@@ -38,20 +38,11 @@ vision.md 只把生成轴写全了，守护轴至今散落在 `validate`、`audi
 
 Dreamulator 的世界设定本质上也是一种「跨会话的记忆」——它同样会 silent drift、会 stale。守护轴就是把业界防漂移的经验，**提升到有 ground truth（引擎 derived 数据）可校验的层面**。
 
-### 1.3 超越论：从「文本↔文本一致」到「文本↔物理一致」
+### 1.3 将设定文字与其事实依据联系起来
 
-这是守护轴作为核心、而非工具的**根本理由**。竞品的自维护都在做「**文本与文本一致**」：
+世界托管平台的变量可以让同一个手动数值在多处同步。Dreamulator 的模板还可以引用引擎派生的事实，守护轴据此检查文档是否仍引用有效字段，以及决策的依据是否发生变化。
 
-| 竞品 | 机制 | 天花板 |
-|---|---|---|
-| Agent 框架（Claude Code / OpenClaw / Hermes） | 分层记忆 + 容量限制 + cron 轮换 | 记忆是 agent 自己写的文本，**无 ground truth**——只能判断「旧不旧」，不能判断「错没错」 |
-| World Anvil | [Variables](https://www.worldanvil.com/learn/variables/tips-variables) 变量单点更新处处同步 + [Autolinker](https://blog.worldanvil.com/worldanvil/dev-news/world-anvils-most-requested-new-feature-the-autolinker/) 自动链接 | 变量是**手动打的文本**——防笔误漂移，不防逻辑漂移，没有任何东西检查「人口 6000 是否与承载力物理矛盾」 |
-
-**Dreamulator 的变量锚定的是引擎确定性推演的 derived 数据**：
-
-> World Anvil 的变量是「打字一次，处处同步」；Dreamulator 的变量是「引擎推演一次，处处同步**且处处可验证**」。
-
-因此守护轴能防的，竞品防不了：别人只能判断「这条设定旧了」，Dreamulator 能判断「这条设定**错了**」——因为引擎有 ground truth。这是相对所有同类（agent 框架与世界托管平台）**不可复制的差异点**。
+引擎结果提供可追溯的模型事实。模型准确性需要由守恒、收敛和独立观测检验；文档与模型一致，也要和作者的创作意图分别验收。守护轴负责保留这几种证据的边界，避免把一次文字一致性检查当成整个世界的科学验证。
 
 ### 1.4 引擎即环境：苦涩的教训的正确读法
 
@@ -313,90 +304,25 @@ cell_facts(lon, lat) -> {koppen, domesticable_tags, distance_to_coast_km, ...}
 
 ---
 
-## 7. 三级过期检测（`stale.py`）
+## 7. 过期检测的设计选择
 
-复用 doc_render 已有能力，从粗到精三级：
+✅ 三级检查已实现。当前输入继承、模板比较、缺失依据和命令退出码由[守护台账技术参考](../pipelines/guard-ledger.md)维护。
 
-**① 引用断裂（字段没了）** — 已内置，零成本。`SourceUndefined` 遇到不存在的 `{{ path }}` 会原样回显；checker 扫描渲染产物里残留的 `{{ ... }}`，就是「字段被删/改名」的信号。
+引用检查发现字段失效，输入指纹发现依据变化，渲染比较发现决策使用的事实变化。事实比较独立于输入指纹，因为新版引擎可能从同一份输入推导出不同值。创作覆写只解释声明过的输入偏离，不能使其他事实变化自动成立。
 
-**② 输入指纹不匹配** — 复用 `ComputationManifest.input_checksum`（`models/simulation.py`，已接入 `terrain_cache.py`）。每条决策记录记 `checked_against: <input_checksum>`；设定一改 → build 出新校验和 → `guard check` 比对 → 列出「输入已变」。
+缺少产物和比较基线时，检查需要明确表示未完成。页面渲染允许保留未求出的模板，以便作者继续编辑；事实检查则需要严格求值，因为保存失败后的原始文本会失去数值比较的意义。
 
-**③ 数值漂移（渲染 diff）** — 比 ② 更精准。决策记录的定量声明是模板（`{{ aggregates.climate.seasonal_range_C.land.median | round1 }} °C`）；`guard check` 重渲染当前上下文，diff 定量子集：
+已否证方向：仅在输入指纹变化后比较事实会漏掉引擎改动引起的漂移，因此不用输入变化作为事实比较的前置条件。
 
-- 指纹变了 **但** 渲染结果没变 → 这条决策记录引用的事实没被改动 → **结论仍成立，不用重算**；
-- 渲染结果变了 → 事实漂移 → **结论需复核**。**③ 独立于 ② 运行**（GUARD-01）：指纹没变
-  也会漂移——同一份输入 YAML、新版引擎派生出不同值，正是「校验和门控」漏检的场景。
+## 8. 决策台账的设计选择
 
-这区分了「设定改了但这条拷问不受影响」与「这条拷问的前提真的变了」——比单纯看校验和精准。
+✅ ADR 接受、替代、弃用和容量归档已实现，当前状态及分支写入规则由[守护台账技术参考](../pipelines/guard-ledger.md#接受与状态管理)维护。
 
-> ⚠️ **意图感知（作用域限定）**：用户**故意覆写**（如 `edits.json` 把某 cell 温度设为
-> 30°C、`physics.yaml` 改重力）产生的「输入不一致」是**声明过的创造力**，`divergence:
-> intentional` 把 **② input_changed** 降级为 info（可选 `divergence_layers: [...]`
-> 限定到声明的层，其余层照常报）。但 **③ fact_drifted 永不豁免**——故意改温度不能
-> 豁免卫星轨道等其它依赖的漂移（GUARD-01，astra proposals-review §3.3）。
->
-> **不可运行 ≠ 干净**：事实上下文缺失（未构建世界/目录损坏）时检测返回显式
-> `not_run` finding，CLI 黄字警示——空清单只在检查真正跑过时才显示绿勾。
+决策记录采用 Michael Nygard 的 ADR 约定，记录问题、依据、结论和后果。结论发生变化时另写记录并保留替代关系，不能通过重复接受覆盖旧依据。分支有自己的裁决与比较基线，写操作不能改判父世界。
 
-### 决策状态（对齐 ADR）
+容量限制用于保持活动台账易读。归档只改变可见性，有效结论仍接受检查；作者判定前提失效时才使用弃用状态。
 
-采用 ADR（Architecture Decision Records，Nygard 2011）的生命周期，与业界主流一致：
-
-| 状态 | 含义 | 触发 |
-|---|---|---|
-| `proposed` | 尚未定案 | 问题刚提出 |
-| `accepted` | 已定案、当前有效 | 拷问后确认自洽（如「季节温差小是物理必然」） |
-| `deprecated` | 不再推荐但保留（上下文变了） | 设定弃用但历史保留 |
-| `superseded by <编号>` | 被新决策取代 | 拷问发现矛盾 → 改设定 → 旧记录被新记录取代，二者互相链接 |
-
-**核心规则（ADR）：永不编辑已 accepted 的记录——用 supersede 取代它**，以保留决策历史。历史痕迹由
-git commit 记录，不由文档保留「旧值→新值」叙事（遵守「只写当前设定」原则）。「删除还是重算」的答案：
-`superseded` 即重算并写新记录；前提失效且无后继则标 `deprecated`。
-
----
-
-## 8. 决策记录台账（ADR）
-
-### 8.1 落点与 schema
-
-采用 ADR 约定（业界主流，模板用 MADR），落点 `data/worlds/<world>/design-notes/`，编号 kebab-case 文件名
-（`0001-seasonal-range-too-small.md`），平铺不嵌套。**`design-notes/` 已是代码库的一等「虚拟层」**（API
-端点 + 前端「设计笔记」标签页 + 静态导出均支持），ADR 记录放这里自动获得 UI/API 支持：
-
-```markdown
----
-status: accepted           # proposed | accepted | deprecated | superseded by 0002-xxx
-checked_against: <input_checksum>
-divergence: intentional    # 可选：intentional = 故意覆写（创造性分歧），缺省 = 与引擎一致
----
-
-# 0001 — 9° 倾角 + 67 天年是否使季节温差过小？
-
-## 维度 / 目标层
-物理一致性 / climate
-
-## 定量事实（模板，读时渲染）
-陆地季节温差中位数 {{ aggregates.climate.seasonal_range_C.land.median | round1 }} °C，
-最大 {{ aggregates.climate.seasonal_range_C.land.max | round1 }} °C。
-
-## 结论
-符合物理（North & Coakley 1979 季节 EBM），无需改。
-```
-
-> **创造性分歧**：当用户**故意覆写**（Override / Modifier / physics override）时，决策记录带
-> `divergence: intentional` 标记，含义是「这条设定明知偏离物理，是声明的创造力，不是漂移」。
-> `guard check` 对这类记录报 info（已知覆写），不报 stale（见 §2.4 意图感知、§7）。
-
-### 8.2 容量上限 + 强制剪枝（借鉴 Hermes）
-
-台账不设上限会变坟场（三年后 `design-notes/` 全是过期条目，`guard check` 在坟场里捞针）。借鉴 Hermes 的
-「**容量上限 + 超限写入失败**」：设一个世界一个上限（如 N 条 active 记录），超限时 `guard archive`
-把最旧的 `accepted` 移出活动台账，**写不进去而非静默追加**。
-
-归档是**可见性字段而非状态改判**（GUARD-01，2026-09-18）：`archive` 写 `archived: true`，
-**不改 `status`**——存储/阅读容量不是结论失效的证据，把仍有效的 `accepted` 改判
-`deprecated` 是在篡改台账真值。归档记录继续接受 ②/③ 漂移检测（结论仍有效仍需守护），
-删掉 `archived` 字段即恢复活动。`deprecate` 仍是显式裁决「前提失效」的唯一入口。
+已否证方向：容量归档将有效决策标为弃用会混淆存储管理与结论有效性，因此归档不修改接受状态。
 
 ---
 
@@ -584,7 +510,7 @@ GitHub Actions 每周一跑 `guard check --all`。一旦有决策记录的 `chec
 | 阶段 | 内容 | 产物 | 依赖 | 状态 |
 |---|---|---|---|---|
 | **P0** | `build_fact_context` 扩展 + 各层 `*_summary.yaml` 补统计量 | 事实上下文 + 字段导出 | 无 | ✅ v0.31.0 |
-| **P1** | `stale.py` + `guard check` 命令 + 决策记录模板/状态机（ADR） | 三级过期检测（①②③） | P0 | ✅ v0.31.0 |
+| **P1** | 事实检查与决策记录台账。 | 实现由[守护台账技术参考](../pipelines/guard-ledger.md)维护。 | 需要 P0 的事实库。 | 确定性内核已实现。 |
 | **P2** | `queries.py` 几何/空间查询（天空现象、锚点） | 纯函数 + 单测 | 无 | ✅ v0.31.0 |
 | **P3** | `critique.py` 子代理互审 + `/grill-world` skill + 接 `ai critique` | 完整拷问入口 | P0–P2 | 🚧 内核 + skill ✅；「接 `ai critique` CLI」待 `ai` 命令组（roadmap P2） |
 
@@ -606,7 +532,7 @@ P0–P2 是**确定性内核**（纯函数、可单测、不依赖 LLM），先�
 ## 参考资料
 
 - 竞品/框架自维护：见 `docs/knowledge/agent-engineering/self-maintenance-patterns.md`
-- ADR 决策记录约定（Nygard 2011，ThoughtWorks「Adopt」）：模板采用 MADR，见 [adr-tools](https://github.com/adr/adr-tools) / [MADR](https://github.com/adr/madr)
+- ADR 决策记录约定（[Nygard 2011](https://www.cognitect.com/blog/2011/11/15/documenting-architecture-decisions)，ThoughtWorks「Adopt」）：模板采用 MADR，见 [adr-tools](https://github.com/adr/adr-tools) / [MADR](https://github.com/adr/madr)
 - 物理/气候（供 §9.2 维度取证引用）：
   - North & Coakley (1979)，季节能量平衡模型 `T_amp = ΔQ / sqrt(B² + (ωC)²)` —— 见 `src/dreamulator/engine/climate_seasonality.py`
   - Hartmann (2016)，*Global Physical Climatology*，eq. 3.7（日平均日照）

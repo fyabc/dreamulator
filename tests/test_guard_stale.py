@@ -167,6 +167,7 @@ def test_decision_record_input_changed(tmp_path: Path) -> None:
         "---\nstatus: accepted\nchecked_against:\n  astronomy: deadbeef\n---\nbody\n",
     )
 
+    write_baseline(world, {"0001-ok.md": {}, "0002-drift.md": {}})
     findings = check_decision_records(world)
     assert len(findings) == 1
     f = findings[0]
@@ -176,13 +177,14 @@ def test_decision_record_input_changed(tmp_path: Path) -> None:
     assert "input changed" in f.detail
 
 
-def test_decision_record_without_checked_against_skipped(tmp_path: Path) -> None:
+def test_accepted_record_without_fingerprints_is_not_checked(tmp_path: Path) -> None:
     world = _make_world(tmp_path)
     _write_text(
         world / "design-notes" / "0001-no-check.md",
         "---\nstatus: accepted\n---\nbody\n",
     )
-    assert check_decision_records(world) == []
+    write_baseline(world, {"0001-no-check.md": {}})
+    assert [f.kind for f in check_decision_records(world)] == ["not_run"]
 
 
 # ---------------------------------------------------------------------------
@@ -286,6 +288,7 @@ def test_divergence_layers_scope(tmp_path: Path) -> None:
         world / "layers" / "astronomy" / "input" / "stellar.yaml",
         {"stars": [{"id": "star_sol", "luminosity": 1.0, "note": "edited"}]},
     )
+    write_baseline(world, {"0001-div.md": {}})
     findings = check_decision_records(world)
     assert [f.kind for f in findings] == ["input_changed"]
 
