@@ -9,6 +9,7 @@ new machines that lack the gitignored, imported base terrain.
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import tempfile
 from pathlib import Path
@@ -158,6 +159,8 @@ def fetch(
                         "release",
                         "download",
                         entry.tag,
+                        "--repo",
+                        "fyabc/dreamulator",
                         "--pattern",
                         entry.asset_name,
                         "--dir",
@@ -166,8 +169,12 @@ def fetch(
                     ],
                     check=True,
                 )
-            except subprocess.CalledProcessError as e:
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 console.print(f"[red]Download failed: {e}[/red]")
+                console.print(
+                    "Install GitHub CLI (gh), or download the indexed release asset "
+                    "and use --from <package.tar.gz>."
+                )
                 raise typer.Exit(code=1) from e
 
         extract_dir = tmpdir / "extract"
@@ -176,6 +183,7 @@ def fetch(
                 tarball,
                 extract_dir,
                 package_sha256=entry.package_sha256,
+                manifest_sha256=entry.manifest_sha256,
                 fingerprint=fingerprint,
                 world=world,
                 planet_id=planet_id,
@@ -189,5 +197,12 @@ def fetch(
         f"[green]Installed base terrain {entry.asset_name} "
         f"({fingerprint[:12]}…) into {target}[/green]"
     )
+    if world == "earth" and branch is None:
+        console.print(
+            "Earth root is an observation reference. Run climate calculations on a branch."
+        )
+        branch = "climate-dev"
     next_cmd = f"uv run dreamulator build {world}" + (f" --branch {branch}" if branch else "")
+    if data_dir is not None:
+        next_cmd += f" --data-dir {shlex.quote(str(data_dir))}"
     console.print(f"Next: {next_cmd}")

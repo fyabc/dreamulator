@@ -8,6 +8,7 @@ import json
 import tarfile
 
 import pytest
+from typer.testing import CliRunner
 
 from dreamulator.datapkg import (
     MESH_FORMAT_VERSION,
@@ -186,6 +187,77 @@ def test_verify_package_digest_mismatch(tmp_path):
         verify_package(tar, tmp_path / "e", package_sha256="f" * 64)
 
 
+def _repack(tar_path, staging, manifest):
+    (staging / "manifest.json").write_text(manifest.model_dump_json(), encoding="utf-8")
+    with tarfile.open(tar_path, "w:gz") as tar:
+        for path in staging.rglob("*"):
+            if path.is_file():
+                tar.add(path, arcname=str(path.relative_to(staging)))
+
+
+def test_verify_manifest_digest_mismatch(tmp_path):
+    tar, _, _ = _build_package(tmp_path)
+    with pytest.raises(InstallError, match="manifest SHA-256"):
+        verify_package(tar, tmp_path / "e", manifest_sha256="0" * 64)
+
+
+@pytest.mark.parametrize("field", ["schema_version", "mesh_format_version"])
+def test_verify_rejects_unknown_versions(tmp_path, field):
+    tar, manifest, _ = _build_package(tmp_path)
+    setattr(manifest, field, 999)
+    _repack(tar, tmp_path / "staging", manifest)
+    with pytest.raises(InstallError, match="unsupported"):
+        verify_package(tar, tmp_path / "e")
+
+
+def test_verify_rejects_recipe_inconsistent_with_fingerprint(tmp_path):
+    tar, manifest, _ = _build_package(tmp_path)
+    manifest.recipe["seed"] = 99
+    _repack(tar, tmp_path / "staging", manifest)
+    with pytest.raises(InstallError, match="recipe does not match"):
+        verify_package(tar, tmp_path / "e")
+
+
+@pytest.mark.parametrize("change", ["extra_config", "duplicate", "wrong_planet"])
+def test_verify_rejects_files_outside_four_artifact_contract(tmp_path, change):
+    tar, manifest, _ = _build_package(tmp_path)
+    if change == "extra_config":
+        path = tmp_path / "staging/layers/geological/input/planets.yaml"
+        path.parent.mkdir(parents=True)
+        path.write_text("planets: []\n", encoding="utf-8")
+        manifest.files.append(
+            PackageFile(
+                path="layers/geological/input/planets.yaml",
+                sha256=file_sha256(path),
+                size_bytes=path.stat().st_size,
+            )
+        )
+    elif change == "duplicate":
+        manifest.files.append(manifest.files[0].model_copy())
+    else:
+        manifest.files[0].path = "maps/planet_other/elevation.png"
+    _repack(tar, tmp_path / "staging", manifest)
+    with pytest.raises(InstallError, match="exactly four"):
+        verify_package(tar, tmp_path / "e")
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("precipitation_mm", 0.0), ("cloud_total_frac", 0.0), ("wind_east_m_s", 1.0)],
+)
+def test_verify_rejects_climate_in_base_package(tmp_path, field, value):
+    tar, manifest, _ = _build_package(tmp_path)
+    path = tmp_path / "staging/maps/planet_earth/cvt_mesh.json"
+    mesh = {"seed": 42, "num_cells": 200_000, "cells": [{field: value}]}
+    path.write_bytes(gzip.compress(json.dumps(mesh).encode("utf-8")))
+    mesh_file = next(f for f in manifest.files if f.path.endswith("cvt_mesh.json"))
+    mesh_file.sha256 = file_sha256(path)
+    mesh_file.size_bytes = path.stat().st_size
+    _repack(tar, tmp_path / "staging", manifest)
+    with pytest.raises(InstallError, match="contains climate fields"):
+        verify_package(tar, tmp_path / "e")
+
+
 def test_verify_package_fingerprint_mismatch(tmp_path):
     tar, _, recipe = _build_package(tmp_path)
     with pytest.raises(InstallError):
@@ -251,3 +323,100 @@ def test_install_idempotent_on_matching_mesh(tmp_path):
     # matching params → proceeds (refreshes) rather than raising
     install_files(extract, manifest, target, recipe)
     assert (target / "elevation.png").exists()
+
+
+def test_install_preserves_existing_observation_mesh_and_source_config(tmp_path):
+    tar, manifest, recipe = _build_package(tmp_path)
+    extract = tmp_path / "extract"
+    verify_package(tar, extract)
+    target = tmp_path / "world/maps/planet_earth"
+    target.mkdir(parents=True)
+    reference = gzip.compress(
+        json.dumps({"seed": 42, "num_cells": 200_000, "cells": [{"precipitation_mm": 0.0}]}).encode(
+            "utf-8"
+        )
+    )
+    (target / "cvt_mesh.json").write_bytes(reference)
+    (target / "elevation.png").write_bytes(b"existing elevation")
+    config = tmp_path / "world/layers/geological/input/planets.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("planets: [{id: planet_earth}]\n", encoding="utf-8")
+    before = {p: p.read_bytes() for p in (tmp_path / "world").rglob("*") if p.is_file()}
+    with pytest.raises(InstallError, match="would erase"):
+        install_files(extract, manifest, target, recipe)
+    assert before == {p: p.read_bytes() for p in before}
+    assert not (target / "dev-data-manifest.json").exists()
+
+
+def test_install_legacy_package_removes_stale_modern_base_mesh(tmp_path):
+    from dreamulator.map.export import MESH_FILENAME, find_mesh_file, save_cvt_mesh
+
+    tar, manifest, recipe = _build_package(tmp_path)
+    extract = tmp_path / "extract"
+    verify_package(tar, extract)
+    target = tmp_path / "target"
+    target.mkdir()
+    save_cvt_mesh(target / MESH_FILENAME, {"seed": 42, "num_cells": 200_000, "cells": []})
+    install_files(extract, manifest, target, recipe)
+    assert not (target / MESH_FILENAME).exists()
+    assert find_mesh_file(target).name == "cvt_mesh.json"
+
+
+def _fetch_fixture(tmp_path, monkeypatch):
+    from dreamulator.datapkg import IndexEntry
+
+    tar, manifest, recipe = _build_package(tmp_path)
+    world = tmp_path / "worlds/earth/layers/geological/input"
+    world.mkdir(parents=True)
+    import yaml
+
+    (world / "terrain_config.yaml").write_text(
+        yaml.safe_dump({"elevation_source": "imported", "terrain_import": recipe.to_dict()}),
+        encoding="utf-8",
+    )
+    entry = IndexEntry(
+        world="earth",
+        planet_id="planet_earth",
+        input_fingerprint=manifest.input_fingerprint,
+        mesh_format_version=MESH_FORMAT_VERSION,
+        tag="dev-data",
+        asset_name=tar.name,
+        package_sha256=file_sha256(tar),
+        manifest_sha256=file_sha256(tmp_path / "staging/manifest.json"),
+        size_bytes=tar.stat().st_size,
+        recipe=recipe.to_dict(),
+    )
+    index_path = tmp_path / "index.json"
+    DevDataIndex(entries=[entry]).save(index_path)
+    monkeypatch.setattr("dreamulator.cli_data.default_index_path", lambda: index_path)
+    monkeypatch.setenv("DREAMULATOR_DATA_DIR", str(tmp_path / "worlds"))
+    return tar
+
+
+def test_fetch_local_package_points_earth_to_branch(tmp_path, monkeypatch):
+    from dreamulator.cli import app
+
+    tar = _fetch_fixture(tmp_path, monkeypatch)
+    worlds = tmp_path / "worlds"
+    result = CliRunner().invoke(
+        app, ["data", "fetch", "earth", "--from", str(tar), "--data-dir", str(worlds)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "build earth --branch climate-dev" in result.output
+    assert "--data-dir" in result.output
+    assert (tmp_path / "worlds/earth/maps/planet_earth/elevation.png").exists()
+
+
+def test_fetch_missing_gh_offers_local_install(tmp_path, monkeypatch):
+    from dreamulator.cli import app
+
+    _fetch_fixture(tmp_path, monkeypatch)
+
+    def unavailable(*args, **kwargs):
+        raise FileNotFoundError("gh")
+
+    monkeypatch.setattr("dreamulator.cli_data.subprocess.run", unavailable)
+    result = CliRunner().invoke(app, ["data", "fetch", "earth"])
+    assert result.exit_code == 1
+    assert "use --from" in result.output
+    assert not (tmp_path / "worlds/earth/maps").exists()

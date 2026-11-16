@@ -8,7 +8,7 @@ import-recipe fingerprint), tarballs the four base-terrain files, and upserts a
 content-addressed entry into the git-committed index.
 
 This is deliberately separate from ``publish_world_data.py``: that script
-packages the climate-polluted mesh for the website; this one packages the clean
+packages website data including climate fields; this one packages the clean
 base terrain a new machine needs before any climate step runs (audit
 github-data-bootstrap-evaluation §推荐的包边界).
 
@@ -23,7 +23,6 @@ Upload is opt-in and gated behind ``--upload`` (outward-facing, requires review)
 from __future__ import annotations
 
 import argparse
-import json
 import subprocess
 import sys
 import tarfile
@@ -47,10 +46,19 @@ def _load_recipe() -> tuple[object, str, str]:
 
     root = _project_root()
     cfg = TerrainPipelineConfig.from_yaml(
-        root / "data" / "worlds" / "earth" / "layers" / "geological" / "input" / "terrain_config.yaml"
+        root
+        / "data"
+        / "worlds"
+        / "earth"
+        / "layers"
+        / "geological"
+        / "input"
+        / "terrain_config.yaml"
     )
     # Earth's only terrestrial planet (matches engine load_planets -> planets[0]).
-    planets_path = root / "data" / "worlds" / "earth" / "layers" / "geological" / "input" / "planets.yaml"
+    planets_path = (
+        root / "data" / "worlds" / "earth" / "layers" / "geological" / "input" / "planets.yaml"
+    )
     data = yaml.safe_load(planets_path.read_text(encoding="utf-8")) or {}
     planet_id = data["planets"][0]["id"]
     return cfg, planet_id, "earth"
@@ -84,16 +92,14 @@ def _run_importers(staging_maps: Path, recipe: object) -> None:
 
 def _verify_clean_mesh(mesh_path: Path) -> None:
     """Assert the produced mesh carries no climate-derived fields."""
+    from dreamulator.datapkg.terrain_base import populated_climate_fields
     from dreamulator.map.export import load_cvt_mesh
 
     data = load_cvt_mesh(mesh_path)
-    polluted = 0
-    for cell in data.get("cells", []):
-        if cell.get("temperature_C") is not None or cell.get("koppen_class") is not None:
-            polluted += 1
+    polluted = populated_climate_fields(data)
     if polluted:
         raise RuntimeError(
-            f"staging mesh has {polluted} cells with climate fields — the base "
+            f"staging mesh has climate fields ({', '.join(sorted(polluted))}) — the base "
             "terrain must come from the importers only, not a climate step"
         )
     print("Verified: staging mesh carries no climate-derived fields.")
@@ -101,7 +107,11 @@ def _verify_clean_mesh(mesh_path: Path) -> None:
 
 def _git_revision() -> str:
     return subprocess.run(
-        ["git", "rev-parse", "HEAD"], check=True, capture_output=True, text=True, cwd=str(_project_root())
+        ["git", "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=str(_project_root()),
     ).stdout.strip()
 
 
@@ -112,10 +122,10 @@ def main() -> None:
     args = parser.parse_args()
 
     from dreamulator.datapkg import (
+        MESH_FORMAT_VERSION,
         DevDataIndex,
         DevDataManifest,
         IndexEntry,
-        MESH_FORMAT_VERSION,
         PackageFile,
         file_sha256,
         recipe_fingerprint,

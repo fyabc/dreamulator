@@ -588,3 +588,24 @@ planet_gaia:
 原图以 `input/elevation_sources/<sha256>.bin` 保存，解码器按内容识别格式。
 实现见 `map/elevation_input.py` 与 `engine/geological.py`，完整契约见
 [地图系统](../design/pipelines/map-system.md#高程语义与导入契约)。
+
+## 模式 19：用配方恢复真实基础地形
+
+真实数据导入的世界在地质输入中声明导入配方。另一台机器根据同一配方选择兼容的数据包，随后在分支上计算模型结果。基础地形与气候观测分开准备，地球主世界保留真实观测状态。
+
+下面的地质配置声明 ETOPO1 冰面高程、4096 × 2048 像素栅格、200000 个网格节点和种子 42：
+
+```yaml
+elevation_source: imported
+terrain_import:
+  provider: etopo1
+  dataset: etopo1_ice_surface_grid_registered
+  resolution: [4096, 2048]
+  mesh_nodes: 200000
+  seed: 42
+  importer_version: 1
+```
+
+执行 `dreamulator data fetch earth --branch climate-dev` 时，命令按有效配方查询固定索引，校验发布包并准备基础地形。已有气候参考不能通过基础地形包覆盖。
+包边界与兼容性由[真实地球数据管线](../design/pipelines/earth-real-data.md#11-版本化基础地形包)维护，下载依赖和离线安装由[数据包用法](../usage/cli.md#数据包data)维护。
+实现见 `src/dreamulator/map/pipeline_types.py` 与 `src/dreamulator/datapkg/`。

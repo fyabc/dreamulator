@@ -19,13 +19,15 @@ import tarfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from dreamulator.datapkg.fingerprint import file_sha256
+from dreamulator.datapkg.fingerprint import MESH_FORMAT_VERSION, file_sha256, recipe_fingerprint
 from dreamulator.datapkg.manifest import (
     MESH_FILE_NAMES,
     ROLE_TERRAIN_BASE,
+    SCHEMA_VERSION,
     TERRAIN_BASE_FILES,
     DevDataManifest,
 )
+from dreamulator.datapkg.terrain_base import populated_climate_fields
 
 if TYPE_CHECKING:
     from dreamulator.map.pipeline_types import TerrainImportRecipe
@@ -64,6 +66,7 @@ def verify_package(
     extract_dir: Path,
     *,
     package_sha256: str | None = None,
+    manifest_sha256: str | None = None,
     fingerprint: str | None = None,
     world: str | None = None,
     planet_id: str | None = None,
@@ -85,8 +88,14 @@ def verify_package(
     manifest_path = extract_dir / _MANIFEST_NAME
     if not manifest_path.exists():
         raise InstallError("package has no manifest.json")
+    if manifest_sha256 is not None and file_sha256(manifest_path) != manifest_sha256:
+        raise InstallError("manifest SHA-256 mismatch")
     manifest = DevDataManifest.model_validate(json.loads(manifest_path.read_text(encoding="utf-8")))
 
+    if manifest.schema_version != SCHEMA_VERSION:
+        raise InstallError(f"unsupported manifest schema version: {manifest.schema_version}")
+    if manifest.mesh_format_version != MESH_FORMAT_VERSION:
+        raise InstallError(f"unsupported mesh format version: {manifest.mesh_format_version}")
     if manifest.role != ROLE_TERRAIN_BASE:
         raise InstallError(f"unexpected package role: {manifest.role!r}")
     if world is not None and manifest.world != world:
@@ -96,17 +105,26 @@ def verify_package(
     if fingerprint is not None and manifest.input_fingerprint != fingerprint:
         raise InstallError("package recipe fingerprint does not match the resolved recipe")
 
+    from dreamulator.map.pipeline_types import TerrainImportRecipe
+
+    recipe = TerrainImportRecipe.from_dict(manifest.recipe)
+    if (
+        manifest.recipe != recipe.to_dict()
+        or recipe_fingerprint(recipe, manifest.mesh_format_version) != manifest.input_fingerprint
+    ):
+        raise InstallError("manifest recipe does not match its fingerprint")
+
     _verify_files(extract_dir, manifest)
     return manifest
 
 
 def _verify_files(extract_dir: Path, manifest: DevDataManifest) -> None:
     present = {f.path for f in manifest.files}
-    for name in TERRAIN_BASE_FILES:
-        if not any(p.split("/")[-1] == name for p in present):
-            raise InstallError(f"manifest is missing base-terrain file {name!r}")
-    if not any(p.split("/")[-1] in MESH_FILE_NAMES for p in present):
-        raise InstallError(f"manifest is missing a mesh file (any of {MESH_FILE_NAMES})")
+    prefix = f"maps/{manifest.planet_id}/"
+    meshes = present & {prefix + name for name in MESH_FILE_NAMES}
+    expected = {prefix + name for name in TERRAIN_BASE_FILES} | meshes
+    if len(meshes) != 1 or present != expected or len(manifest.files) != 4:
+        raise InstallError("manifest must contain exactly four base-terrain files for its planet")
     for f in manifest.files:
         p = extract_dir / f.path
         if not p.is_file():
@@ -116,17 +134,38 @@ def _verify_files(extract_dir: Path, manifest: DevDataManifest) -> None:
         if p.stat().st_size != f.size_bytes:
             raise InstallError(f"size mismatch: {f.path}")
 
+    from dreamulator.map.export import load_cvt_mesh
+
+    data = load_cvt_mesh(extract_dir / next(iter(meshes)))
+    climate = populated_climate_fields(data)
+    if climate:
+        raise InstallError(
+            f"base-terrain package contains climate fields: {', '.join(sorted(climate))}"
+        )
+    if (data.get("seed"), data.get("num_cells")) != (
+        manifest.recipe["seed"],
+        manifest.recipe["mesh_nodes"],
+    ):
+        raise InstallError("package mesh parameters do not match its recipe")
+
 
 def _mesh_params(mesh_path: Path) -> tuple[int, int] | None:
     """(seed, num_cells) of an installed mesh, or ``None`` if unreadable."""
     try:
-        from dreamulator.map.export import find_mesh_file, load_cvt_mesh
+        from dreamulator.map.export import load_cvt_mesh
 
-        mesh_file = find_mesh_file(mesh_path.parent)
-        if mesh_file is None:
+        if not mesh_path.is_file():
             return None
-        data = load_cvt_mesh(mesh_file)
+        data = load_cvt_mesh(mesh_path)
+        climate = populated_climate_fields(data)
+        if climate:
+            raise InstallError(
+                "existing mesh contains climate data; base-terrain installation would erase it. "
+                "Keep this reference mesh and install into a separate data directory."
+            )
         return int(data.get("seed", -1)), int(data.get("num_cells", -1))
+    except InstallError:
+        raise
     except Exception:
         return None
 
@@ -144,10 +183,10 @@ def install_files(
     """
     target_maps_dir.mkdir(parents=True, exist_ok=True)
 
-    from dreamulator.map.export import find_mesh_file
-
-    mesh_target = find_mesh_file(target_maps_dir)
-    if mesh_target is not None:
+    for name in MESH_FILE_NAMES:
+        mesh_target = target_maps_dir / name
+        if not mesh_target.exists():
+            continue
         existing = _mesh_params(mesh_target)
         if existing is None:
             raise InstallError("existing mesh file could not be parsed; refusing to overwrite")
@@ -167,6 +206,11 @@ def install_files(
         tmp_dst = target_maps_dir / (name + ".tmp")
         shutil.copy2(src, tmp_dst)
         os.replace(tmp_dst, dst)
+
+    installed_names = {Path(f.path).name for f in manifest.files}
+    for name in MESH_FILE_NAMES:
+        if name not in installed_names:
+            (target_maps_dir / name).unlink(missing_ok=True)
 
     (target_maps_dir / _INSTALL_MANIFEST_NAME).write_text(
         manifest.model_dump_json(indent=2), encoding="utf-8"
