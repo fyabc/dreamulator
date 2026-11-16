@@ -252,10 +252,11 @@ def _pool_map(fn: Callable[[Any], Any], items: list[Any], ctx: _Ctx, workers: in
         return list(pool.map(fn, items, chunksize=1))
 
 
-def _default_workers(tile: int) -> int:
+def _default_workers(tile: int, workers: int | None = None, *, cap: int | None = None) -> int:
     from dreamulator.utils.resources import worker_budget
 
-    return worker_budget(64.0 * (tile + 2) ** 2)  # a few float64 chunk-sized arrays per process
+    # A few float64 chunk-sized arrays per process; cap the actual pool by its task count.
+    return worker_budget(64.0 * (tile + 2) ** 2, requested_workers=workers, cap=cap)
 
 
 # ---------------------------------------------------------------------------
@@ -471,7 +472,7 @@ def tiled_graded(
     ctx = _ctx_of(store, sea_level, eps)
     ctx.open_edges = open_edges
     layout = ChunkLayout(ctx.tile, ctx.keys)
-    n = _default_workers(ctx.tile) if workers is None else max(1, workers)
+    n = _default_workers(ctx.tile, workers, cap=len(ctx.keys))
     keys = list(layout.keys)
     _pool_map(_final_rings, keys, ctx, n)
     _pool_map(_graded_seed, keys, ctx, n)
@@ -608,7 +609,7 @@ def tiled_directions(
     ctx.land_floor = sea_level if INTERTIDAL_M is None else sea_level + INTERTIDAL_M[0]
     ctx.healed = healed_by_chunk(store)
     ctx.runoff = runoff_on_bbox(store)
-    n = _default_workers(ctx.tile) if workers is None else max(1, workers)
+    n = _default_workers(ctx.tile, workers, cap=len(ctx.keys))
     _pool_map(_direction_chunk, list(ctx.keys), ctx, n)
 
 
@@ -776,7 +777,7 @@ def tiled_accumulation(
     ctx.acc_kind = out_kind or f"acc_{weight_kind}"
     ctx.acc_f64 = float64
     t = ctx.tile
-    n = _default_workers(t) if workers is None else max(1, workers)
+    n = _default_workers(t, workers, cap=len(ctx.keys))
     t0 = time.time()
     (store.work / "flow" / ctx.acc_kind).mkdir(parents=True, exist_ok=True)
     res = _pool_map(_acc_stage1, list(ctx.keys), ctx, n)

@@ -611,7 +611,7 @@ def tiled_terminal_routing(
     t = layout.tile
     ctx = _ctx_of(store)
     ctx.increments = store.increments
-    n_work = _default_workers(t) if workers is None else max(1, workers)
+    n_work = _default_workers(t, workers, cap=len(ctx.keys))
     keys = list(layout.keys)
     n = comps.count
     stats = {"terminal": 0, "dry_playas": 0, "shrunk": 0}

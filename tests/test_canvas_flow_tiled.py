@@ -19,6 +19,40 @@ if TYPE_CHECKING:
 T = 128
 
 
+@pytest.mark.parametrize("workers", [None, 1, 3])
+@pytest.mark.parametrize(
+    "stage", ["fill", "graded", "directions", "accumulation", "lakes", "routing"]
+)
+def test_low_memory_stops_before_chunk_work_or_cache_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, workers: int | None, stage: str
+) -> None:
+    from dreamulator.media import canvas_flow_tiled as flow
+    from dreamulator.media.canvas_lakes_tiled import tiled_components
+    from dreamulator.media.canvas_routing import tiled_two_ring_routing
+    from dreamulator.utils import resources
+
+    root = tmp_path / "canvas"
+    root.mkdir()
+    _make_canvas(root, None)
+    store = CanvasStore.load(root)
+    marker = store.work / "preserved.txt"
+    marker.write_text("previous result", encoding="utf-8")
+    before = set(root.rglob("*"))
+    monkeypatch.setattr(resources, "available_memory_bytes", lambda: 1)
+    actions = {
+        "fill": lambda: run_canvas_fill(store, workers=workers, resume=False, verbose=False),
+        "graded": lambda: flow.tiled_graded(store, workers=workers),
+        "directions": lambda: flow.tiled_directions(store, workers=workers),
+        "accumulation": lambda: flow.tiled_accumulation(store, "source", workers=workers),
+        "lakes": lambda: tiled_components(store, "lake", workers=workers),
+        "routing": lambda: tiled_two_ring_routing(store, workers=workers),
+    }
+    with pytest.raises(MemoryError, match="Insufficient memory"):
+        actions[stage]()
+    assert set(root.rglob("*")) == before
+    assert marker.read_text(encoding="utf-8") == "previous result"
+
+
 def _make_canvas(root: Path, missing: tuple[int, int] | None) -> None:
     """4x4 chunks: tilted slope, a wide pit across the central seams (a flat lake), a sea band."""
     geom = CanvasGeometry(10.0, 20.0, 6816.97, 4)

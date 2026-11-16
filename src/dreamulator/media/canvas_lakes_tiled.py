@@ -145,7 +145,7 @@ def tiled_components(
     """Label the ``flow/<kind>`` masks as one canvas (4-connected); write ``flow/lbl_<kind>``."""
     ctx = ctx or _ctx_of(store)
     layout = ChunkLayout(ctx.tile, ctx.keys)
-    n_work = _default_workers(ctx.tile) if workers is None else max(1, workers)
+    n_work = _default_workers(ctx.tile, workers, cap=len(ctx.keys))
     res = _pool_map(_label_chunk, [(k, kind) for k in layout.keys], ctx, n_work)
     offset: dict[tuple[int, int], int] = {}
     total = 0
@@ -301,7 +301,7 @@ def tiled_geometry_lakes(
 
     ctx = _ctx_of(store)
     ctx.increments = store.increments
-    n = _default_workers(ctx.tile) if workers is None else max(1, workers)
+    n = _default_workers(ctx.tile, workers, cap=len(ctx.keys))
     keys = list(ctx.keys)
     _pool_map(_depth_masks, keys, ctx, n)
     deep = tiled_components(store, "deep", workers=n, ctx=ctx)

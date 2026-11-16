@@ -204,7 +204,7 @@ def tiled_channel_graph(
     ctx = _ctx_of(store)
     ctx.increments = store.increments
     keys = list(ctx.keys)
-    n_work = _default_workers(ctx.tile) if workers is None else max(1, workers)
+    n_work = _default_workers(ctx.tile, workers, cap=len(ctx.keys))
     t0 = time.time()
     ctx.extra = {
         "width": layout.shape[1],
@@ -409,7 +409,7 @@ def run_canvas_rivers_tiled(
     ctx = _ctx_of(store)
     counts = np.zeros(term.n + 1, dtype=np.int64)
     for present, part in _pool_map(
-        _sparse_chunk, list(ctx.keys), ctx, _default_workers(t) if workers is None else workers
+        _sparse_chunk, list(ctx.keys), ctx, _default_workers(t, workers, cap=len(ctx.keys))
     ):
         if present.size:
             counts[present] += part

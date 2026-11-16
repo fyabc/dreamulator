@@ -25,6 +25,7 @@ import json
 import os
 import subprocess
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, cast
@@ -34,6 +35,8 @@ from rich.console import Console
 from rich.table import Table
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from dreamulator.map.td_canvas_build import CanvasLayoutConfig
 
 canvas_app = typer.Typer(
@@ -43,6 +46,16 @@ canvas_app = typer.Typer(
 )
 console = Console()
 LAYOUT_FILE = "canvas_layout.yaml"
+
+
+@contextmanager
+def _memory_errors() -> Iterator[None]:
+    """Report an unavailable worker budget as a normal command-line error."""
+    try:
+        yield
+    except MemoryError as exc:
+        console.print(str(exc), style="red", markup=False)
+        raise typer.Exit(code=2) from None
 
 
 def _set_data_dir(data_dir: Path | None) -> None:
@@ -507,6 +520,7 @@ def canvas_status_cmd(
     console.print(table)
 
 
+@_memory_errors()
 def _run_hydrology(
     canvas: Path,
     *,
@@ -596,7 +610,7 @@ def canvas_hydrology(
         27000, "--river-threshold", "--threshold-cells", help=_THRESHOLD_HELP
     ),
     workers: int | None = typer.Option(
-        None, "--workers", help="Processes for the per-chunk fill stages (default: CPUs, max 16)"
+        None, "--workers", help="Processes per chunk (default: CPU and memory budget, max 16)"
     ),
     surface: str = typer.Option("auto", "--surface", help=_SURFACE_HELP),
     out_of_core: bool | None = typer.Option(
@@ -721,6 +735,7 @@ def backfill_lake_evaporation(canvas: Path, data_dir: Path | None = None) -> Non
     )
 
 
+@_memory_errors()
 def _erode_one(
     canvas: Path,
     block: int,

@@ -572,20 +572,15 @@ def _node_id(chunk_index: int, lab: int) -> int:
     return chunk_index * _NODE_STRIDE + lab
 
 
-def default_workers(cap: int = 16) -> int:
-    """Worker processes for per-chunk stages: the CPUs this process may use, capped.
+def default_workers(cap: int = 16, *, tile: int = 2048, workers: int | None = None) -> int:
+    """Worker processes for per-chunk stages, bounded by CPU and known memory.
 
     Each stage-1 worker holds a few float64 copies of one chunk (about 0.3 GB
     for 2048 x 2048 tiles), so the cap bounds memory as well as contention.
     """
-    import os
+    from dreamulator.utils.resources import worker_budget
 
-    affinity = getattr(os, "sched_getaffinity", None)  # POSIX only
-    try:
-        n = len(affinity(0)) if affinity is not None else (os.cpu_count() or 1)
-    except OSError:
-        n = os.cpu_count() or 1
-    return max(1, min(cap, n))
+    return worker_budget(64.0 * (tile + 2) ** 2, cap=cap, requested_workers=workers)
 
 
 @dataclass
@@ -755,7 +750,11 @@ def _map_chunks(
     Each worker receives ``ctx`` once through its initializer — inherited under
     fork, pickled under spawn — and per-chunk data with each task.
     """
-    n = default_workers() if workers is None else max(1, workers)
+    n = default_workers(
+        min(16, len(tasks)) if workers is None else len(tasks),
+        tile=ctx.store.tile,
+        workers=workers,
+    )
     if n == 1 or len(tasks) < 2:
         _init_worker(ctx)
         try:
@@ -1033,6 +1032,7 @@ def run_canvas_fill(
     """
     t = store.tile
     keys = store.chunks
+    default_workers(min(16, len(keys)) if workers is None else len(keys), tile=t, workers=workers)
     ncol = (max(cj for _, cj in store.chunks) + 1) * t
     stats = {"cells": 0.0, "watersheds": 0.0, "stages_seconds": 0.0}
     t0 = time.time()

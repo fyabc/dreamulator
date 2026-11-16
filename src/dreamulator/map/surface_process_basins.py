@@ -230,10 +230,10 @@ def run_surface_process_by_basin(
     from dreamulator.utils.resources import cpu_quota, worker_budget
 
     largest = max((t.members.size for t in tasks), default=0)
-    n = (
-        worker_budget(SOLVER_BYTES_PER_CELL * largest, cap=DEFAULT_WORKERS)
-        if workers is None
-        else max(1, workers)
+    n = worker_budget(
+        SOLVER_BYTES_PER_CELL * largest,
+        cap=min(DEFAULT_WORKERS, len(tasks)) if workers is None else len(tasks),
+        requested_workers=workers,
     )
     threads = threads_per_worker or max(1, min(MAX_THREADS, cpu_quota() // n))
     shared = _Shared(

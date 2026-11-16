@@ -247,7 +247,7 @@ def tiled_two_ring_routing(
 
     layout = cft.ChunkLayout.of(store)
     ctx = cft._ctx_of(store)
-    n = cft._default_workers(store.tile) if workers is None else max(1, workers)
+    n = cft._default_workers(store.tile, workers, cap=len(ctx.keys))
     cft.drop_kinds(store, "order", "flat_rank")
     cft._pool_map(_base_chunk, list(layout.keys), ctx, n)
     cft.drop_kinds(store, "dist")
