@@ -66,6 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- 共享冰面与水文的小批来源、守恒、分块消费和量化诊断已获作者验收。三个独立基岩样本的冰量账本相对残差不超过 3.61×10⁻¹⁰，三种水文组合的河线、流量和情相逐值一致。厚冰窗口的米级量化使 77.1% 的水平与垂直相邻像素同高，两圈长边份额为零；同一算法读取未量化冰面时，长边份额为 52.5%，按河段长度加权的下坡方向误差由 15.53° 降至 7.44°。后续修复需让亚米级地表贯穿水文输入、填洼和边界缓存，完整冰体与跨画布接缝继续分项验收。
+
 - 水文提案集中维护当前方案与取舍。河线路由、简单平滑与未采用方案的原因集中在 `canvas-erosion-deposition.md` 第 6.1 节；`inland-water-refine.md` 的湖状态、溢流连接和下游消费并入 `water-body-levels.md`，路线图、目录索引与知识库指针同步更新。
 
 - 前端入口的设计由 `frontend-entry.md` 统一维护，覆盖用户分层、首屏与工作台、导入到高清导出的旅程、三档计算、连续空间浏览和分阶段验收。月度展示的交互设计与浏览器原型的入口设计并入统一提案；原型实现移入 `pipelines/browser-playground.md`，完整浏览器计算候选保持独立。竞品依据包括 World Orogen、web-exoplasim、Code Planet、《戴森球计划》、平面制图工具、天文查看器、dayside.studio 与 World Anvil。Code Planet 的完整交互仍待实测。
