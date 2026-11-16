@@ -24,6 +24,7 @@
 
 ### pipelines/ — 已实现管线技术参考
 
+- `browser-playground.md` — 已实现的浏览器温度实验台，说明运行时、规则网格、温度内核、输入限制与原型验收。
 - `world-generation-pipeline.md` — 世界生成管线总览（阶段 1–12 目录 + 层级映射 + Gaea 指针）
 - `geological-pipeline.md` — 地质层生成管线技术参考（CVT 网格、板块构造、地形合成、封闭盆地湖泊、极地冰盖、导出）
 - `map-system.md` — 地图子系统（球面 CVT 网格、板块构造、地形、气候、导出）
@@ -53,9 +54,10 @@
 - `gaea-refinement.md` — Gaea 局部精细化（全局管线之后的区域后处理；提案，未实现）
 - `blender-render-pipeline.md` — Blender 高清渲染链的定位与设计选择（脚本重建工程、纯数据直出、细化层独立成包、每场一个文件）；区域数据包与静帧已实现，技术参考在 `pipelines/region-pack.md`，提案登记相机动画与整球渲染等路线
 - `sky-ephemeris.md` — 天球星历查询：引擎查询、命令行、消费方接线、前端天球视图与背景天球已实现（技术参考在 `pipelines/sky-ephemeris.md`），提案保留设计选择、未实现的事件搜索与 N 体及开放问题；2026-11-01 立项
-- `monthly-climate-display.md` — 月度温度/降水展示（Phase 4 前端延伸；SunControl 周年滑杆驱动月度图层；提案，未实现）
-- `nonspecialist-entry.md` — 非专业用户入口（前端 UI 提案与「非专业用户导入」合并，部分实现）：阶段 A 的高程契约已实现（`ElevationMapping` 三种模式、源分辨率判海陆、导入报告，技术参考在 `pipelines/map-system.md`），剩下把导入图接进构建；再做导入面板即文档（两个数字 + 可选掩膜 + 写盘前预览陆地占比 + 长宽比与位深警告）、计算过程可见（已有阶段划分与逐月场当时间轴，不做流式渲染）与入口放出；2026-11-04 立项
-- `browser-playground.md` — 浏览器气候实验台（Gate D 温度首图原型：拖放高度图 → 年均/逐月温度；规则 180×90 网格、只算温度；2026-10-23 原型落地，完整气候待引擎加速）
+- `monthly-climate-display.md` — 月度展示的兼容指针，交互设计由 `frontend-entry.md` 维护，已实现接口与查看器由 `pipelines/map-system.md` 维护。
+- `frontend-entry.md` — 前端入口与用户旅程的统一提案，覆盖用户分层、竞品优势、导入与计算、月度阅读、高清窗口、连续空间浏览、三档计算和分阶段验收；2026-11-04 立项。
+- `nonspecialist-entry.md` — 前端入口提案的兼容指针，高程契约由 `pipelines/map-system.md` 维护。
+- `browser-playground.md` — 完整浏览器计算与资源产品化的候选，原型架构由 `pipelines/browser-playground.md` 维护，入口体验由 `frontend-entry.md` 维护。
 - `geology-layer-improvement.md` — 地质层改进方案（§1–§8 已实现，技术参考见 geological-pipeline.md；未实现 proposal：裂谷海宽度分段、板块从 geography 派生）
 - `evolution-mode.md` — 演化模式提案（新建世界：geography.yaml 作为演化目标，逆向规划超大陆后正向运动学模拟出现状，时间轴为副产品；未实现，2026-10 立案）
 - `geological-timeline.md` — 地质时间轴提案（大陆块为主体，整段历史作为带约束的求解问题：陆壳守恒为硬约束，速度、重组稀疏、净旋转为先验，合并与切开由焊接关系表示；板块与边界由大陆块运动推出；时刻分支接气候与生态；2026-10 立案，10-18 重构）

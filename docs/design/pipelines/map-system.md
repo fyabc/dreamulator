@@ -203,7 +203,7 @@ maps/
 
 地图上的高程有两种存法，单位都是米，只是存储形式不同：
 
-- **CVT 网格**的 `cell.elevation` 直接是米，相对海平面。气候与生态层按米消费，海陆判据是 `elevation > 0`。
+- **CVT 网格**的 `cell.elevation` 直接以米保存高程，海平面由输入声明，默认是 0 m。气候与生态层按米消费，海陆以 `water_class` 为权威判据。
 - **栅格** `elevation.png` 是 16 位归一化 PNG，它的米制刻度写在同目录 `map.yaml` 的 `elevation_min_m` 与
   `elevation_max_m` 里：米数 = `elevation_min_m` + v ×（`elevation_max_m` − `elevation_min_m`）。旧的 Voronoi
   网络由 `sample_heightmap` 按这条式子从栅格采样，格子上存的同样是米。
@@ -225,10 +225,30 @@ maps/
 映射参数与浮点图像必须为有限值，缺失像素须先由作者补齐再导入。灰度步长由线性或幂曲线的端点直接计算，
 内存开销不随位深增长，因此 32 位整数 TIFF 也能返回精度报告。
 
-**导入的高程目前不进入构建**：构建用的 CVT 网格由地质管线生成，或在 `elevation_source: imported` 下由专门的导入器写成
-米制网格（地球与太阳系天体，见 `build_mesh_from_dem`）。API 导入只改变地图的栅格与 Voronoi 网络。把导入图接进构建是
-[非专业用户入口](../proposals/nonspecialist-entry.md)的下一步。陆地偏置图（geography raster）与 `import_heightmap` 的
-归一化结果是概率场，不属于高程契约。
+### 导入输入与构建接线
+
+API 导入把原图按 SHA-256 内容哈希保存在地质层 `input/elevation_sources/`，
+`input/elevation_imports.yaml` 按行星编号记录哈希、映射、目标尺寸与溯源。原图是作者输入，
+地图栅格与网格是可重新生成的产物。分支在自己的地质输入中保存覆盖，未覆盖文件按继承链读取。
+参照世界的 root 不接受导入，继承地质层的气候分支也不能覆盖地形。
+
+地质引擎优先读取该行星的导入声明，校验原图哈希，再生成带邻接关系与面积的 CVT 网格。
+它复用 `generate_cvt_mesh` 与标准行星参数解析，半径来自该行星的正典输入。
+高程与海陆从同一个等距圆柱像素采样，避免在海岸混合两类高度；这是包含像素采样，
+不是对每个球面格子的面积求积。网格海陆面积与栅格像素比例因此属于不同口径。
+
+导入像素声明的所有非陆地格都作为水域，本入口尚不区分内陆湖与开阔海洋，也不推测板块构造史。
+构建写出空板块表，移除会遮蔽新 CVT 网格的旧 Voronoi 表。海平面同步到地图元数据与气候配置，
+气候读取网格的 `water_class`，不会把海底高度当作大气下边界。
+
+导入声明与原图纳入地质构建的过期判定，重新导入后下游会重算。删除地图后可以从输入重建；
+原图缺失、哈希不匹配或声明无效时明确失败，不以已有旧网格掩盖输入问题。
+外部安装的地球和太阳系参照网格仍使用 `elevation_source: imported` 的专用保护路径。
+普通上传无需手改这个全局开关，导入声明按行星生效。
+
+操作与验收见[地图工作流](../../usage/map-workflow.md#71-后端导入链验收)，
+前端旅程由[前端入口提案](../proposals/frontend-entry.md)维护。
+陆地偏置图和 `import_heightmap` 的归一化结果是概率场，不属于高程契约。
 
 ## 后端模块
 
@@ -238,6 +258,7 @@ maps/
 | `map/elevation_codec.py` | 高度图 PNG ↔ numpy 编解码 | Pillow 16-bit PNG I/O |
 | `map/voronoi_generator.py` | 高度图采样（`sample_heightmap`；Voronoi 生成 + Lloyd 已迁至 `cvt_mesh.py` / `plate_generator.py`） | [Red Blob Games](https://www.redblobgames.com/x/2022-voronoi-maps-tutorial/)、scipy.spatial.Voronoi |
 | `map/terrain_synthesizer.py` | 程序化地形合成（双峰基底 + 边界效应 + 热点 + fBm） | [Red Blob Games](https://www.redblobgames.com/maps/terrain/) 地形生成方法论 |
+| `map/elevation_input.py` | 原图保留、导入声明与构建网格采样 | SHA-256 内容寻址与分支继承 |
 | `map/importer.py` | 外部高度图导入：格式解码，以及按 `ElevationMapping` 转成米的导入契约（见上节） | — |
 | `map/manager.py` | 地图 CRUD + 分支继承 + 同步 | dreamulator LayerResolver |
 

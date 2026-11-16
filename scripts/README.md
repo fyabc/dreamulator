@@ -1,6 +1,6 @@
 # scripts/ 目录说明
 
-按域分组，共 72 个脚本（含 gcm/ 子组 6 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 73 个脚本（含 gcm/ 子组 6 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §6
 与 `docs/usage/climate-validation-workflow.md`。
@@ -170,3 +170,5 @@ Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
   `station_diagnostics` 的站点表——跨组复用请改走 `dreamulator` 包。
 - **数据文件位置**：观测数据缓存在系统 temp（ETOPO1/Beck）与 `<workdir>/climatology/`（可用 `DREAMULATOR_WORK_DIR` 指定根目录）
   （NCEP/GPCP/SODA，gitignored）。
+
+`dev/accept_elevation_import.py` 提供 API 导入与地质、气候构建的可复现验收，并可只读地球高程完成量化损失对照；产物统一写入 `exports/`。

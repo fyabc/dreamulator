@@ -55,6 +55,7 @@ class ClimateEngine(BaseEngine):
     ]
     optional_input_files = [
         "terrain_config.yaml",  # → geological input (climate tuning knobs; defaults ok)
+        "elevation_imports.yaml",  # authored elevation contract, including the sea datum
         "gcm_fields.msgpack.gz",  # → climate input of a climate_source: gcm branch
     ]
     output_files = [
@@ -137,6 +138,17 @@ class ClimateEngine(BaseEngine):
         else:
             config = TerrainPipelineConfig()
         warnings.extend(resolve_and_apply_physical_parameters(self, config, planet=planet))
+
+        from dreamulator.map.elevation_input import SOURCE_MANIFEST, load_elevation_sources
+
+        try:
+            source = load_elevation_sources(self.find_input(SOURCE_MANIFEST)).get(planet.id)
+        except ValueError as e:
+            return EngineResult(engine_name=self.name, success=False, warnings=warnings + [str(e)])
+        if source is not None:
+            mapping = source.provenance.mapping
+            assert mapping is not None
+            config.sea_level_offset_m = 0.0 if mapping.mode == "threshold" else mapping.sea_level_m
 
         # ---- 4. Load CVT mesh with elevation ----
         mesh, mesh_source, mwarnings = _load_cvt_mesh_from_geological(

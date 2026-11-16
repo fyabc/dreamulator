@@ -115,6 +115,26 @@ class ElevationImportProvenance(BaseModel):
     imported_at: datetime = Field(default_factory=datetime.now)
 
 
+class ElevationImportSource(BaseModel):
+    """Retained image and its decoding contract, stored in geological input."""
+
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    provenance: ElevationImportProvenance
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> ElevationImportSource:
+        if self.provenance.mapping is None:
+            raise ValueError("retained elevation source needs an explicit mapping")
+        size = self.provenance.output_resolution
+        if len(size) != 2 or min(size) <= 0:
+            raise ValueError("retained elevation source needs a positive [width, height]")
+        return self
+
+    @property
+    def relative_path(self) -> str:
+        return f"elevation_sources/{self.sha256}.bin"
+
+
 class MapMetadata(BaseModel):
     """Map metadata — stored in maps/<planet_id>/map.yaml."""
 

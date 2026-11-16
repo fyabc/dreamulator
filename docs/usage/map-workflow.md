@@ -314,8 +314,8 @@ git、不走 LFS**（`.gitignore` 已忽略）。发版由
   只有 8 位这类警告。8 位图只有 256 级，陆地部分每级可能有几十米，能用 16 位就用 16 位。
 - 导入会把映射与上述报告记进 `map.yaml` 的 `elevation_import` 块，并在 `registry.yaml`
   把 elevation 标为 `imported`、下游图层（气候等）标为 stale。
-- **导入的高程目前只改变地图显示，不进入构建**：重建时地质管线会重新生成自己的网格。
-  让导入图直接驱动气候是下一步的工作。
+- **导入的高程进入正式构建**：API 保留原图与映射声明，地质构建从这份输入生成网格，气候继续在该网格上计算。
+  上传后先更新预览栅格，正式网格在下一次构建时更新；无需手改全局 `elevation_source`。
 - **导入的高度图不含板块构造数据**：plates 图层为空（左栏有提示），
   boundaries 图层回落到地壳底色。需要构造叙事时，用 geography 锚定 +
   管线生成，或把导入图当作"最终高程"接受无板块设定。
@@ -333,6 +333,46 @@ git、不走 LFS**（`.gitignore` 已忽略）。发版由
   （存 `geography_raster.png`，白=陆/黑=海/中灰=中立），下次生成时与
   geography.yaml 叠加（`raster_weight` 调和）——形状是你的，地貌细节是物理的。
 - 静态模式（GitHub Pages）为只读，按钮禁用。
+
+### 7.1 后端导入链验收
+
+当前验收针对正式后端连接，前端统一入口和导入面板仍待实现。基础自动检查覆盖映射、高程和海陆、
+非零海平面、分支继承、旧网格遮蔽、删除产物后的重建，以及原图缺失与哈希损坏：
+
+```bash
+uv run pytest tests/test_map/test_import_elevation.py tests/test_map/test_elevation_import_build.py -n 0 -q
+```
+
+下面的命令创建一个小世界，经真实 API 导入，再运行地质与气候引擎，并输出图像和 JSON 报告。
+脚本直接使用进程内 API，无需另开服务器。产物和样例世界写到本次生成的 `exports/elevation-import/` 子目录：
+
+```bash
+uv run python scripts/dev/accept_elevation_import.py
+```
+
+本地已有地球高程参照时，可附加 16 位、8 位与无海底的陆地灰度图对照。脚本只读地球高程和刻度，
+在独立样例世界上构建，绝不构建 earth root：
+
+```bash
+uv run python scripts/dev/accept_elevation_import.py --earth-map data/worlds/earth/maps/planet_earth
+```
+
+检查 `sample-climate.png` 中陆地是否保留在原图位置、温度和降水是否完整；再读 `report.json`。
+16 位往返的高程误差应落在一个保存台阶内，8 位量程图误差应落在半个源灰度台阶加保存误差内。
+报告按源高程分组统计网格误差，按球面面积统计海陆变化，使用两组海岸像素的对称最近距离描述岸线位移。
+这是相对于已有地球栅格的输入损失，不能当作独立海岸测绘精度，也不能代表气候模型的科学验收。
+低平小岛消失时，其原海岸到剩余海岸的最近距离可能很大，因此最大距离不能解读成整条大陆海岸平移。
+仅陆地图的海底误差单列为声明假设造成的损失，不套用灰度量化的误差门槛。
+
+样例世界可以用下列命令进入已有查看器。把路径替换为脚本打印的实际样例数据目录：
+
+```bash
+uv run dreamulator serve --data-dir exports/elevation-import/<本次目录>/worlds --port 8001
+```
+
+在 API 模式查看样例时检查温度、降水、月度图层和单元格读数，切换平面与球面后核对位置。
+导入、取消、错误恢复、预算和连续空间浏览的产品验收由
+[前端入口提案](../design/proposals/frontend-entry.md#8-分阶段验收)维护。
 
 ### 锚定灰度图格式规范
 

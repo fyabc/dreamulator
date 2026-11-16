@@ -561,3 +561,30 @@ refinement:
 可选排水修整作为显式地形编辑。水文与渲染使用最终采用高程，小窗从同一母网格裁出。
 模式枚举与分频实现在 `src/dreamulator/media/terrain_blend.py`，编排与缓存核查在
 `src/dreamulator/media/terrain_refine.py`；参数用法见[地形视频链](../usage/terrain-chain.md#②-区域构建与细节模式)。
+
+## 模式 18：保留原图的高程输入
+
+作者上传的原始高度图和映射属于地质输入，显示栅格与球面网格属于构建产物。
+API 在 `layers/geological/input/elevation_imports.yaml` 按行星登记声明，并以内容哈希保存原图。
+分支覆盖声明时保持父世界不变，删除构建产物后可以从原图和种子重建。
+
+下面的声明示意采用仅陆地灰度图，白色代表 6000 m，海底统一假设为 −3800 m。
+实际哈希由 API 根据上传字节生成，作者不应手填占位值：
+
+```yaml
+planet_gaia:
+  sha256: <上传原图的六十四位 SHA-256>
+  provenance:
+    source_format: png-8bit
+    source_filename: authored.png
+    output_resolution: [2048, 1024]
+    mapping:
+      mode: threshold
+      sea_level: 0.0
+      max_m: 6000.0
+      seafloor_m: -3800.0
+```
+
+原图以 `input/elevation_sources/<sha256>.bin` 保存，解码器按内容识别格式。
+实现见 `map/elevation_input.py` 与 `engine/geological.py`，完整契约见
+[地图系统](../design/pipelines/map-system.md#高程语义与导入契约)。
