@@ -141,6 +141,7 @@ Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
   使用 `uv run python scripts/media/region_input_qa.py <pack> --output exports/region-inputs/qa`。
 - `ice_reference_small_batch_review.py` 读取独立基岩与两种订温参考的小批覆冰对照，导出原生分块、同位置 46 km 细节图和逐画布冰体积统计。使用 `uv run python scripts/media/ice_reference_small_batch_review.py --inputs <实验目录> --output exports/ice-reference-small-batch/<批次>`；实验输入需要包含冻结基岩、响应数组和来源报告。
 - `ice_connected_domain_review.py` 读取完整既有冰体的共享域结果，导出同位置三阶段冰面与跨块剖面，并附冰量账本。输入目录须提供来源报告、独立基岩、各阶段冰厚和浮点地表。
+- `ice_margin_applicability_review.py` 读取冻结小冰体的冰缘处理对照，导出不同带宽的同位置冰面、移除冰量和第一圈冰厚，并用合成厚冰缘检查带宽变化的代价。
 - `td_source_guided_generate.py` 在独立 TD 环境中检查原图编码，并生成部分加噪编辑和逐步低频约束的局部对照。
   `td_source_guided_qa.py` 读取保存的数组，比较原图、等频谱噪声、现行混合、重绘和候选，分别报告结构、盆地与独立 DSM 误差。
   生成脚本的模型路径与窗口要求见模块说明；输出写入 `exports/`，候选不改变正式构建模式。
