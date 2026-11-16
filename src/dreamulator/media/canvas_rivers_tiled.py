@@ -305,6 +305,7 @@ def run_canvas_rivers_tiled(
     from dreamulator.media.canvas_lakes_tiled import tiled_geometry_lakes
     from dreamulator.media.canvas_month_tiled import tiled_month_active
     from dreamulator.media.canvas_pipeline import (
+        FILL_FORMAT,
         _declares_sea_mask,
         read_river_climate_inputs,
         write_lake_tables_from_counts,
@@ -421,6 +422,7 @@ def run_canvas_rivers_tiled(
         else 0
     )
     meta = {
+        "fill_format": FILL_FORMAT,
         "threshold_cells": threshold_cells,
         "weight_source": inputs.weight_source,
         "km_per_px": km,

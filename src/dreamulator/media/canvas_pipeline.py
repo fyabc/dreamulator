@@ -10,10 +10,10 @@ summaries, independent of the canvas size.
 Work directory layout::
 
     <canvas>/hydro-work/
-        fill/r<ci:03d>_c<cj:03d>.i16.npy      stage-1 local fill
+        fill/r<ci:03d>_c<cj:03d>.f32.npy      stage-1 local fill
         labels/r<ci:03d>_c<cj:03d>.i32.npy    local watershed labels
         summary/r<ci:03d>_c<cj:03d>.npz       spill edges + edge labels
-        final/r<ci:03d>_c<cj:03d>.i16.npy     stage-3 filled surface
+        final/r<ci:03d>_c<cj:03d>.f32.npy     stage-3 filled surface
         chunks.sha256                         output checksums (resume)
 
 The streaming path uses ``_local_flood`` from
@@ -46,6 +46,9 @@ __all__ = ["CanvasStore", "run_canvas_fill"]
 
 #: 8-connectivity offsets (same fixed order as the fill kernels).
 _NEIGHBOURS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+
+#: Physical heights stay separate from integer flat-routing distances.
+FILL_FORMAT = "canvas-fill-f32-v1"
 
 
 @dataclass
@@ -639,26 +642,28 @@ def _stage1_chunk(task: Any) -> tuple[tuple[int, int], dict[str, np.ndarray], st
     assert ctx is not None
     store, sea_level = ctx.store, ctx.sea_level
     ci, cj = key
-    fill_path = store.path("fill", ci, cj, "i16.npy")
+    fill_path = store.path("fill", ci, cj, "f32.npy")
     dem = store.raw(ci, cj)
     healed_mask = np.zeros(dem.shape, dtype=bool)
     if key in ctx.healed:
         rr, cc, hh = ctx.healed[key]
         dem[rr, cc] = hh
         healed_mask[rr, cc] = True
+    # Normalize once to the same precision as both routing consumers.
+    dem = dem.astype(np.float32).astype(np.float64)
     ext = _external_mask(store, key, dem, sea_level, healed=healed_mask, sea=ctx.sea)
     labels, filled, spill = _local_flood(dem, ext)
-    np.save(fill_path, np.rint(filled).astype(np.int16))
+    np.save(fill_path, filled.astype(np.float32))
     np.save(store.path("labels", ci, cj, "i32.npy"), labels.astype(np.int32))
-    edge = {
+    edge: dict[str, np.ndarray] = {
         "top_lab": labels[0, :].astype(np.int32),
-        "top_z": np.rint(dem[0, :]).astype(np.int16),
+        "top_z": dem[0, :].astype(np.float32),
         "bottom_lab": labels[-1, :].astype(np.int32),
-        "bottom_z": np.rint(dem[-1, :]).astype(np.int16),
+        "bottom_z": dem[-1, :].astype(np.float32),
         "left_lab": labels[:, 0].astype(np.int32),
-        "left_z": np.rint(dem[:, 0]).astype(np.int16),
+        "left_z": dem[:, 0].astype(np.float32),
         "right_lab": labels[:, -1].astype(np.int32),
-        "right_z": np.rint(dem[:, -1]).astype(np.int16),
+        "right_z": dem[:, -1].astype(np.float32),
     }
     if spill:
         spill_ab = np.array(list(spill.keys()), dtype=np.int64)
@@ -670,7 +675,14 @@ def _stage1_chunk(task: Any) -> tuple[tuple[int, int], dict[str, np.ndarray], st
         store.path("summary", ci, cj, "npz"),
         spill_ab=spill_ab,
         spill_level=spill_levels,
-        **edge,
+        top_lab=edge["top_lab"],
+        top_z=edge["top_z"],
+        bottom_lab=edge["bottom_lab"],
+        bottom_z=edge["bottom_z"],
+        left_lab=edge["left_lab"],
+        left_z=edge["left_z"],
+        right_lab=edge["right_lab"],
+        right_z=edge["right_z"],
     )
     summary = {"spill_ab": spill_ab, "spill_level": spill_levels, **edge}
     return key, summary, hashlib.sha256(fill_path.read_bytes()).hexdigest()
@@ -704,13 +716,13 @@ def _stage3_chunk(task: Any) -> tuple[tuple[int, int], dict[str, np.ndarray], st
     store = ctx.store
     ci, cj = key
     labels = np.load(store.path("labels", ci, cj, "i32.npy"))
-    filled = np.load(store.path("fill", ci, cj, "i16.npy")).astype(np.float64)
+    filled = np.load(store.path("fill", ci, cj, "f32.npy")).astype(np.float64)
     top = int(labels.max())
     if top >= table.size:  # defensive: a label beyond the edge bound has no level
         table = np.concatenate([table, np.full(top + 1 - table.size, -np.inf)])
     out = np.maximum(filled, table[labels])
-    final_path = store.path("final", ci, cj, "i16.npy")
-    np.save(final_path, np.rint(out).astype(np.int16))
+    final_path = store.path("final", ci, cj, "f32.npy")
+    np.save(final_path, out.astype(np.float32))
     return key, {}, hashlib.sha256(final_path.read_bytes()).hexdigest()
 
 
@@ -979,6 +991,33 @@ def _watershed_levels_reference(
     return tables, len(level) - 1
 
 
+def _ensure_fill_format(store: CanvasStore, *, resume: bool) -> None:
+    """Reject legacy height caches; a forced fill rebuilds all dependent work files."""
+    import shutil
+
+    path = store.work / "fill-format.json"
+    saved = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+    valid = isinstance(saved, dict) and saved.get("format") == FILL_FORMAT
+    cached = any(any((store.work / sub).glob("r*_c*.*")) for sub in ("fill", "final"))
+    if not valid and (saved is not None or cached):
+        if resume:
+            raise RuntimeError(
+                f"{store.work} uses an older elevation cache format; "
+                "rebuild S2 with canvas hydrology --force"
+            )
+        for sub in ("fill", "labels", "summary", "final", "flow"):
+            shutil.rmtree(store.work / sub, ignore_errors=True)
+        for sub in ("fill", "labels", "summary", "final"):
+            (store.work / sub).mkdir(parents=True, exist_ok=True)
+        (store.work / "chunks.sha256").unlink(missing_ok=True)
+        (store.work / "heal.npz").unlink(missing_ok=True)
+        store._checked.clear()
+    path.write_text(
+        json.dumps({"format": FILL_FORMAT, "height_dtype": "float32", "height_unit": "m"}),
+        encoding="utf-8",
+    )
+
+
 def run_canvas_fill(
     store: CanvasStore,
     *,
@@ -999,6 +1038,7 @@ def run_canvas_fill(
     t0 = time.time()
     from dreamulator.media.canvas_surface_process import read_surface_tag, write_surface_tag
 
+    _ensure_fill_format(store, resume=resume)
     done_on = read_surface_tag(store.work)
     if done_on is not None and done_on != store.surface:
         if resume:
@@ -1014,7 +1054,7 @@ def run_canvas_fill(
         store._checked.clear()
     write_surface_tag(store.work, store.surface)
     heal, heal_fresh = _ensure_heal_delta(store, sea_level, verbose=verbose)
-    if heal_fresh and any((store.work / "fill").glob("r*_c*.i16.npy")):
+    if heal_fresh and any((store.work / "fill").glob("r*_c*.f32.npy")):
         # Fill caches predating the heal generation treat pit cells as flood
         # seeds; a first-time heal next to surviving caches means heal.npz
         # was removed by hand — refuse rather than resume stale semantics.
@@ -1045,7 +1085,7 @@ def run_canvas_fill(
     summaries: dict[tuple[int, int], dict[str, np.ndarray]] = {}
     todo: list[tuple[int, int]] = []
     for ci, cj in keys:
-        fill_path = store.path("fill", ci, cj, "i16.npy")
+        fill_path = store.path("fill", ci, cj, "f32.npy")
         sum_path = store.path("summary", ci, cj, "npz")
         if resume and store.done(f"fill/{ci:03d}_{cj:03d}", fill_path) and sum_path.exists():
             data = np.load(sum_path)
@@ -1075,7 +1115,7 @@ def run_canvas_fill(
         for ci, cj in keys
         if not (
             resume
-            and store.done(f"final/{ci:03d}_{cj:03d}", store.path("final", ci, cj, "i16.npy"))
+            and store.done(f"final/{ci:03d}_{cj:03d}", store.path("final", ci, cj, "f32.npy"))
         )
     ]
     del tables, summaries
@@ -1235,7 +1275,7 @@ def canvas_flow_fields(
     filled = np.full((nrow, ncol), np.nan, dtype=np.float32)
     for ci, cj in store.chunks:
         filled[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = np.load(
-            store.path("final", ci, cj, "i16.npy")
+            store.path("final", ci, cj, "f32.npy")
         ).astype(np.float32)
     h, w = filled.shape
     if not two_ring:
@@ -1579,6 +1619,7 @@ def run_canvas_rivers(
         "lake_mmu_cells": mmu,
         "lake_min_width_km": LAKE_MIN_WIDTH_KM,
         "solver": "in-memory",
+        "fill_format": FILL_FORMAT,
         "routing": "constrained-two-ring-v1",
         "flat_order": "integer-distance-to-outlet",
         "crossing_order": "global-row-major",

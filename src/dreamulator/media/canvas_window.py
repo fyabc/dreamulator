@@ -11,8 +11,8 @@ Geometry: the window is the same azimuthal-equidistant square as
 :func:`dreamulator.map.region_export.region_window`; every window pixel maps
 to (lat, lon) and then into the canvas plane through
 :class:`dreamulator.map.td_canvas.CanvasGeometry` (the single conversion
-source).  Elevation is bilinearly sampled from the canvas chunks; the
-canvas is int16 at 90 m, so a window at 2048² resamples about 2.7x.
+source).  Elevation is bilinearly sampled from the canvas chunks at 90 m,
+retaining fractional heights when provided; a 2048² window over 550 km resamples about 2.7x.
 
 Masks come from S2: lake pixels from the sparse per-chunk lake files
 (``hydro/lakes.sparse/``), rivers from the vector segments (transformed into
@@ -106,7 +106,7 @@ class CanvasSource:
             name = f"r{ci:03d}_c{cj:03d}.npy"
             arr = np.load(self.root / "chunks" / name)
             if self.increments is not None:
-                arr = (arr.astype(np.int32) + np.load(self.increments / name)).astype(arr.dtype)
+                arr = (arr.astype(np.float64) + np.load(self.increments / name)).astype(arr.dtype)
             self._chunk_cache[key] = arr
         return self._chunk_cache[key]
 
@@ -222,7 +222,10 @@ def _fill_raster(source: CanvasSource, r0: int, c0: int, r1: int, c1: int) -> np
         final = source.root / "hydrology-work" / "final"
     for ci in range(r0 // t, (r1 - 1) // t + 1):
         for cj in range(c0 // t, (c1 - 1) // t + 1):
-            path = final / f"r{ci:03d}_c{cj:03d}.i16.npy"
+            path = final / f"r{ci:03d}_c{cj:03d}.f32.npy"
+            if not path.exists():
+                # Read-only windows can still display previously accepted products.
+                path = final / f"r{ci:03d}_c{cj:03d}.i16.npy"
             if not path.exists():
                 continue
             arr = np.load(path)

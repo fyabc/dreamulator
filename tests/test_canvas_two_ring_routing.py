@@ -11,7 +11,7 @@ import pytest
 
 from dreamulator.map.river_routing import accumulate
 from dreamulator.media import canvas_flow_tiled as flow
-from dreamulator.media.canvas_pipeline import CanvasStore
+from dreamulator.media.canvas_pipeline import FILL_FORMAT, CanvasStore
 from dreamulator.media.canvas_routing import (
     downstream_order,
     flat_ranks,
@@ -34,7 +34,7 @@ def _store(root: Path, height: np.ndarray, tile: int) -> CanvasStore:
     ]
     st = cast("CanvasStore", SimpleNamespace(root=root, work=root / "work", tile=tile, chunks=keys))
     for r, c in keys:
-        p = st.work / "final" / f"r{r:03d}_c{c:03d}.i16.npy"
+        p = st.work / "final" / f"r{r:03d}_c{c:03d}.f32.npy"
         p.parent.mkdir(parents=True, exist_ok=True)
         np.save(p, height[r * tile : (r + 1) * tile, c * tile : (c + 1) * tile])
     return st
@@ -163,6 +163,7 @@ def test_cli_refreshes_old_routing_without_repeating_the_fill(
 
     st = _store(tmp_path, np.full((16, 16), 30, np.float32), 16)
     st.surface = "td"
+    (st.work / "fill-format.json").write_text(json.dumps({"format": FILL_FORMAT}), encoding="utf-8")
     (tmp_path / "hydro").mkdir()
     np.save(tmp_path / "hydro/rivers.line.npy", np.zeros((0, 2, 2)))
     write_surface_tag(tmp_path / "hydro", st.surface)
@@ -178,7 +179,13 @@ def test_cli_refreshes_old_routing_without_repeating_the_fill(
     def rivers(store: CanvasStore, *, threshold_cells: int) -> None:
         calls.append(threshold_cells)
         meta.write_text(
-            json.dumps({"routing": "constrained-two-ring-v1", "threshold_cells": threshold_cells}),
+            json.dumps(
+                {
+                    "routing": "constrained-two-ring-v1",
+                    "threshold_cells": threshold_cells,
+                    "fill_format": FILL_FORMAT,
+                }
+            ),
             encoding="utf-8",
         )
 

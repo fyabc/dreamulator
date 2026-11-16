@@ -401,7 +401,7 @@ def _final_rings(key: tuple[int, int]) -> None:
 
 
 def _final_path(ctx: _Ctx, key: tuple[int, int]) -> Path:
-    return ctx.work / "final" / f"r{key[0]:03d}_c{key[1]:03d}.i16.npy"
+    return ctx.work / "final" / f"r{key[0]:03d}_c{key[1]:03d}.f32.npy"
 
 
 def _final(ctx: _Ctx, key: tuple[int, int]) -> np.ndarray:

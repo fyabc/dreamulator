@@ -295,7 +295,7 @@ def test_fill_refuses_to_resume_on_another_surface(tmp_path: Path) -> None:
         run_canvas_fill(eroded, verbose=False, workers=1)
     run_canvas_fill(eroded, resume=False, verbose=False, workers=1)
     assert read_surface_tag(root / "hydro-work") == eroded.surface
-    final = np.load(root / "hydro-work" / "final" / "r000_c000.i16.npy").astype(np.int32)
+    final = np.load(root / "hydro-work" / "final" / "r000_c000.f32.npy").astype(np.int32)
     assert (final >= np.rint(eroded.raw(0, 0)).astype(np.int32) - 1).all()
 
 

@@ -87,7 +87,7 @@ def test_tiled_flow_fields_match_the_in_memory_oracle(
     # a flat crossing the seams exists (the filled pit): grading changes cells there
     final = np.full((h, w), np.nan, np.float32)
     for ci, cj in store.chunks:
-        part(final, (ci, cj))[:] = np.load(store.path("final", ci, cj, "i16.npy"))
+        part(final, (ci, cj))[:] = np.load(store.path("final", ci, cj, "f32.npy"))
     assert (graded != final)[np.isfinite(final)].any()
 
     rounds = tiled_graded(store, workers=workers)

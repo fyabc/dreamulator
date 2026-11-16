@@ -517,7 +517,12 @@ def _run_hydrology(
     surface: str = "auto",
     out_of_core: bool | None = None,
 ) -> None:
-    from dreamulator.media.canvas_pipeline import CanvasStore, run_canvas_fill, run_canvas_rivers
+    from dreamulator.media.canvas_pipeline import (
+        FILL_FORMAT,
+        CanvasStore,
+        run_canvas_fill,
+        run_canvas_rivers,
+    )
     from dreamulator.media.canvas_rivers_tiled import prefer_out_of_core, run_canvas_rivers_tiled
     from dreamulator.media.canvas_surface_process import read_surface_tag
 
@@ -529,10 +534,16 @@ def _run_hydrology(
             f"{store.surface}[/yellow]"
         )
         force, resume = True, False
-    finals = list((store.work / "final").glob("r*_c*.npy"))
-    if force or len(finals) < len(store.chunks):
+    finals = list((store.work / "final").glob("r*_c*.f32.npy"))
+    format_path = store.work / "fill-format.json"
+    fill_current = False
+    if format_path.exists():
+        fill_current = (
+            json.loads(format_path.read_text(encoding="utf-8")).get("format") == FILL_FORMAT
+        )
+    if force or not fill_current or len(finals) < len(store.chunks):
         console.print(f"Running hydrology on {canvas.name} ({len(store.chunks)} chunks)")
-        stats = run_canvas_fill(store, resume=resume, workers=workers)
+        stats = run_canvas_fill(store, resume=resume and not force, workers=workers)
         console.print(f"  {int(stats['watersheds'])} watersheds · {stats['stages_seconds']:.1f} s")
     else:
         console.print(f"Hydrology already complete under {store.work}")
@@ -545,6 +556,7 @@ def _run_hydrology(
             routing_current = (
                 meta.get("routing") == "constrained-two-ring-v1"
                 and meta.get("threshold_cells") == threshold_cells
+                and meta.get("fill_format") == FILL_FORMAT
             )
         except (ValueError, OSError):
             pass
