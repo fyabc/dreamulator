@@ -100,6 +100,14 @@ h = h₀·exp(−r²/2σ²) 表达，宽度取 σ = 2.4·h₀（两者同为长�
 
 GPlately 的海底网格流程在有效洋脊两侧发射新点，保存出生年代与扩张速率，再由板块拓扑重建搬运和移除被消耗的点。它对初始老洋壳采用距离与假定速率估计，而且文档明确说明这些初始点可能残留。因此，历史中实际生成的示踪记录和初始化假设应分别标明来源。只有模型外推约束的地球年龄区域，也不能作为同源重建的独立真值。
 
+pyGPlates 的 `DefaultDeactivatePoints` 根据板块归属变化、速度差和距边界的距离决定移除，适用于拓扑重建中的数值处理。其默认速度差阈值为 0.7 cm/yr，距离阈值为相对速度与 10 km/Myr 之和乘以时间步；它没有直接要求边界是海沟。这类数值移除应与有海沟和俯冲极性支持的物理消耗分别记录，不能把全部移除量当作俯冲量。示踪点携带的出生面积是来源权重；在变形区，当前地理面积还取决于累积伸展，来源权重之和不能代替空间覆盖核查。接口定义见 [pyGPlates 的时间跨度与默认移除器](https://www.gplates.org/docs/pygplates/generated/pygplates.ReconstructedGeometryTimeSpan.html#pygplates.ReconstructedGeometryTimeSpan.DefaultDeactivatePoints)。
+
+GPlately 1.3.0 的 `_DefaultCollision` 对未单独配置的边界类型仍使用全局碰撞参数；只给海沟配置参数不会关闭其他边界的移除。核查俯冲时，可以使用共享边界段的 `get_overriding_and_subducting_plates` 直接读取上下伏板块与极性，该接口也会说明组合不唯一或网络覆盖的情况。随后还需核对位置确实从下伏侧跨到上覆侧，以及法向相对速度为汇聚。边界的生效或失效属于拓扑生命周期，不能仅凭板块号变化认定俯冲。实现依据见 [GPlately 的碰撞回退源码](https://github.com/GPlates/gplately/blob/v1.3.0/gplately/reconstruction.py)和 [pyGPlates 的共享边界接口](https://www.gplates.org/docs/pygplates/generated/pygplates.ResolvedTopologicalSharedSubSegment.html#pygplates.ResolvedTopologicalSharedSubSegment.get_overriding_and_subducting_plates)。
+
+洋脊出生点应先确定出生时刻的两侧归属，再接入后续搬运；后续归属转移不改变出生日期和形成速率。数值验收要检查快照定位与搬运初始定位一致，以及批量输入顺序和单点搬运是否改变结果。位于边界的点可用两档微小法向偏移检查归属稳定性；偏移用于处理数值歧义，不代表新增洋壳的物理宽度。重建的时间与初始位置约定见 [pyGPlates 的拓扑搬运接口](https://www.gplates.org/docs/pygplates/generated/pygplates.TopologicalModel.html#pygplates.TopologicalModel.reconstruct_geometry)。
+
+pyGPlates 1.0.0 的批量拓扑搬运会把刚命中的多边形移到搜索列表前部。在多边形重叠处，搜索顺序因此可能影响后续点的归属；实现见[版本固定的拓扑搬运源码](https://github.com/GPlates/GPlates/blob/PyGPlates-1.0.0/src/app-logic/TopologyReconstruct.cc)。已有可靠归属且该拓扑仍有效、仍包含示踪点时，可以显式调用该拓扑的 `reconstruct_point`，消除跨点搜索顺序的影响。没有可靠归属的重叠应单独标记，不能把固定遍历顺序当作物理归属证据。该处理属于数值稳定化；板块的阶段旋转和网络变形仍由[原生板块接口](https://www.gplates.org/docs/pygplates/generated/pygplates.ResolvedTopologicalBoundary.html#pygplates.ResolvedTopologicalBoundary.reconstruct_point)与[原生网络接口](https://www.gplates.org/docs/pygplates/generated/pygplates.ResolvedTopologicalNetwork.html#pygplates.ResolvedTopologicalNetwork.reconstruct_point)计算。
+
 本库的刚性旋转实现为 `src/dreamulator/map/paleo_kinematics.py` 中的 `rotation_matrices`，洋壳形成示踪仍是候选；生产契约由[历史契约](../../design/proposals/history-contract.md)维护。业界方法与初始化限制见 [GPlately 1.3.0 的 SeafloorGrid 文档](https://gplates.github.io/gplately/v1.3.0/oceans.html)。
 
 ## 不确定度与适用范围
@@ -112,6 +120,8 @@ GPlately 的海底网格流程在有效洋脊两侧发射新点，保存出生�
 
 ## 参考资料
 
+- pyGPlates 1.0.0. [拓扑时间跨度、默认点移除与地壳伸展字段](https://www.gplates.org/docs/pygplates/generated/pygplates.ReconstructedGeometryTimeSpan.html)。
+- pyGPlates 1.0.0. [共享边界的上下伏板块与方向](https://www.gplates.org/docs/pygplates/generated/pygplates.ResolvedTopologicalSharedSubSegment.html)，[拓扑搬运的初始位置约定](https://www.gplates.org/docs/pygplates/generated/pygplates.TopologicalModel.html)。
 - GPlately 1.3.0. [SeafloorGrid 方法与初始化限制](https://gplates.github.io/gplately/v1.3.0/oceans.html)，[对应源码](https://github.com/GPlates/gplately/blob/v1.3.0/gplately/oceans.py)。
 - Goff, J. A., & Jordan, T. H. (1988). Stochastic modeling of seafloor morphology: Inversion of Sea Beam data for second-order statistics. *JGR*, 93(B11).
 - Goff, J. A. (1991). A global and regional stochastic analysis of near-ridge abyssal hill morphology. *JGR*, 96(B13).

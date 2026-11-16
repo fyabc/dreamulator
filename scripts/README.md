@@ -111,7 +111,7 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
 - `rebound_nbody.py` — REBOUND 自旋-轨道积分（轨道稳定性、Laplace 共振角）。
 - `diagnose_stellar_physics.py` — 恒星物理公式（质光关系、演化时标）诊断。
 
-## geology/ — 地质与古地理（2 个）
+## geology/ — 地质与古地理
 
 - `paleo_rewind.py` — 地质时间轴 M1 诊断：读已构建的地图（只读），由洋中脊与欧拉极合成现状海底
   年龄，再把板块倒推到若干时刻（默认先换成大陆块刚性的重建用板块模型），输出各时刻的地壳、
@@ -123,6 +123,7 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
   时刻栅格化并报告拓扑规则；`--walk` 跑逐步倒推（地壳质点、体积账本、作者缝合带，保留作对照），
   `--plot` 画出各时刻的边界类型与三联点。设计见 `docs/design/proposals/geological-timeline.md`
   （板块拓扑层在附录 A）。
+- `ocean_crust_transport.py` 提供外部历史模型示踪的搬运助手。它用已确认归属选择有效板块或变形网络，再调用 pyGPlates 的原生点搬运接口；未知重叠保留未确认状态，数值移除与俯冲消费另行核查。
 
 ## release/ — 发布与静态导出（2 个）
 
