@@ -537,8 +537,20 @@ def _run_hydrology(
     else:
         console.print(f"Hydrology already complete under {store.work}")
     hydro = canvas / "hydro"
+    routing_current = False
+    meta_path = hydro / "rivers.meta.json"
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            routing_current = (
+                meta.get("routing") == "constrained-two-ring-v1"
+                and meta.get("threshold_cells") == threshold_cells
+            )
+        except (ValueError, OSError):
+            pass
     if (
         force
+        or not routing_current
         or not (hydro / "rivers.line.npy").exists()
         or read_surface_tag(hydro) != store.surface
     ):

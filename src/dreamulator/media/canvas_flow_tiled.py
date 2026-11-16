@@ -1,4 +1,4 @@
-"""Out-of-core S2 flow fields: graded flats, D8 directions and flow accumulation chunk by chunk.
+"""Out-of-core S2 flow fields: flat distances, baseline directions and chunked accumulation.
 
 The in-memory path (:func:`dreamulator.media.canvas_pipeline.canvas_flow_fields`) assembles the
 whole canvas bounding box; a continent-sized canvas does not fit (world-west: 18.8 G pixels,
@@ -11,13 +11,14 @@ time, with memory bounded by a few chunks and a small cross-chunk graph:
   a strictly lower neighbour).  ``d`` is a geodesic distance, so it is solved per chunk by
   breadth-first search and exchanged across chunk seams until no chunk changes; the level is then
   rebuilt by the same additions, bit-for-bit equal to the whole-canvas kernel.
-* **Directions.**  Generation retains D8 steepest descent on the graded surface. Consumers
+* **Directions.**  This module supplies the D8 baseline. Formal S2 replaces it through
+  ``canvas_routing`` using unmodified height and integer flat distances. Consumers
   decode ``FLOW_OFFSETS``: codes 0-7 retain the D8 order, codes 8-15 hold the primitive
   two-ring offsets, and 255 means no receiver. Halo rings and chunk-exit tables carry two
   layers so an extended edge can land in the neighbouring chunk's second row or column.
 * **Flow accumulation** (Barnes 2017, Environmental Modelling & Software 92:202-212): each chunk
   accumulates its own weights with outgoing links cut, the border transfers are solved on the graph
-  of chunk exits in descending graded order, and the incoming flow is folded back by a second local
+  of chunk exits in topological order, and the incoming flow is folded back by a second local
   accumulation.  Sums are float64; they equal the whole-canvas float64 accumulation to round-off.
 
 Files live under ``<work>/flow/``: ``graded`` (float32), ``dir`` (uint8), ``acc_<name>`` (float32).
@@ -215,6 +216,7 @@ class _Ctx:
     acc_f64: bool = False
     increments: Path | None = None  # installed-surface increments (erosion product) or None
     extra: dict[str, Any] | None = None  # stage-specific shared inputs (small or shared by fork)
+    open_edges: bool = False
 
 
 _CTX: _Ctx | None = None
@@ -262,11 +264,13 @@ def _default_workers(tile: int) -> int:
 
 
 @numba.njit(cache=True)
-def _seed_dist(v: np.ndarray, sea_level: float) -> np.ndarray:  # pragma: no cover - numba
+def _seed_dist(
+    v: np.ndarray, sea_level: float, open_edges: bool = False
+) -> np.ndarray:  # pragma: no cover - numba
     """Step count 0 at seeds of the haloed values ``v``; unreached elsewhere (interior only)."""
-    n = v.shape[0]
-    d = np.full((n, n), 2**31 - 1, dtype=np.int32)
-    for r in range(1, n - 1):
+    nr, n = v.shape
+    d = np.full((nr, n), 2**31 - 1, dtype=np.int32)
+    for r in range(1, nr - 1):
         for c in range(1, n - 1):
             x = v[r, c]
             if not np.isfinite(x):
@@ -276,7 +280,7 @@ def _seed_dist(v: np.ndarray, sea_level: float) -> np.ndarray:  # pragma: no cov
                 continue
             for k in range(8):
                 y = v[r + _DY[k], c + _DX[k]]
-                if y < x - 1e-9:  # NaN compares false: no neighbour there
+                if y < x - 1e-9 or (open_edges and not np.isfinite(y)):
                     d[r, c] = 0
                     break
     return d
@@ -285,14 +289,14 @@ def _seed_dist(v: np.ndarray, sea_level: float) -> np.ndarray:  # pragma: no cov
 @numba.njit(cache=True)
 def _flat_bfs(v: np.ndarray, d: np.ndarray) -> bool:  # pragma: no cover - numba
     """Relax step counts inside the halo frame; halo cells are fixed sources.  Returns changed."""
-    n = v.shape[0]
+    nr, n = v.shape
     big = 2**31 - 1
     # bucket queue over distance values: cells are pushed when their d improves
-    qcap = n * n * 2
+    qcap = nr * n * 2
     queue = np.empty(qcap, dtype=np.int64)
     head = 0
     tail = 0
-    for r in range(n):
+    for r in range(nr):
         for c in range(n):
             if d[r, c] < big:
                 queue[tail] = r * n + c
@@ -332,7 +336,7 @@ def _flat_bfs(v: np.ndarray, d: np.ndarray) -> bool:  # pragma: no cover - numba
         for k in range(8):
             rr = r + _DY[k]
             cc = c + _DX[k]
-            if rr < 1 or rr >= n - 1 or cc < 1 or cc >= n - 1:
+            if rr < 1 or rr >= nr - 1 or cc < 1 or cc >= n - 1:
                 continue
             if v[rr, cc] != x:
                 continue
@@ -410,7 +414,7 @@ def _graded_seed(key: tuple[int, int]) -> None:
     st = _store_of(ctx)
     layout = ChunkLayout(ctx.tile, ctx.keys)
     v = halo(st, layout, "final", key, np.nan, center=_final(ctx, key))
-    d = _seed_dist(v, ctx.sea_level)
+    d = _seed_dist(v, ctx.sea_level, ctx.open_edges)
     _flat_bfs(v, d)
     save_chunk(st, "dist", key, d[1:-1, 1:-1])
 
@@ -439,7 +443,7 @@ def _graded_levels(key: tuple[int, int]) -> None:
     st = _store_of(ctx)
     v = _final(ctx, key)
     d = load_chunk(st, "dist", key)
-    save_chunk(st, "graded", key, _levels(v, d, ctx.eps))
+    save_chunk(st, "graded", key, v if ctx.eps == 0 else _levels(v, d, ctx.eps))
 
 
 def _ctx_of(store: CanvasStore, sea_level: float = 0.0, eps: float = 1e-3) -> _Ctx:
@@ -460,9 +464,12 @@ def tiled_graded(
     eps: float = 1e-3,
     workers: int | None = None,
     log: Callable[[str], None] | None = None,
+    keep_dist: bool = False,
+    open_edges: bool = False,
 ) -> int:
     """Write ``flow/graded`` for every chunk; returns the number of seam-exchange rounds."""
     ctx = _ctx_of(store, sea_level, eps)
+    ctx.open_edges = open_edges
     layout = ChunkLayout(ctx.tile, ctx.keys)
     n = _default_workers(ctx.tile) if workers is None else max(1, workers)
     keys = list(layout.keys)
@@ -487,7 +494,8 @@ def tiled_graded(
         if log is not None:
             log(f"[flow] graded flats: seam round {rounds}, {len(pending)} chunks to revisit")
     _pool_map(_graded_levels, keys, ctx, n)
-    drop_kinds(store, "dist")  # the flat distances are consumed by the levels pass
+    if not keep_dist:
+        drop_kinds(store, "dist")
     return rounds
 
 
@@ -658,16 +666,21 @@ def _exit_of(order: np.ndarray, rec: np.ndarray, out: np.ndarray) -> np.ndarray:
 def chunk_order(st: CanvasStore, key: tuple[int, int]) -> np.ndarray:
     """Downstream-first order of a chunk's cells, memoised under ``flow/order``.
 
-    The order is the graded surface's stable argsort, so it depends on ``flow/graded`` alone and
-    is shared by every routing over the chunk.  The monthly regime accumulates twenty-four
-    times; recomputing the sort each time dominated that stage.  ``flow/order`` is a cache:
+    With integer flat ranks, the order sorts height then rank; the D8 research reference uses
+    the graded surface alone. Direction regeneration clears this cache. The monthly regime
+    accumulates twenty-four times; recomputing the sort each time dominated that stage.
+    ``flow/order`` is a cache:
     deleting it only costs the sorts again.
     """
     p = flow_path(st, "order", key)
     if p.exists():
         return load_npy(p).astype(np.int64)
     g = load_chunk(st, "graded", key).ravel()
-    order = np.argsort(np.where(np.isfinite(g), g, np.inf), kind="stable")
+    rank_path = flow_path(st, "flat_rank", key)
+    if rank_path.exists():
+        order = np.lexsort((load_npy(rank_path).ravel(), g))
+    else:
+        order = np.argsort(np.where(np.isfinite(g), g, np.inf), kind="stable")
     _atomic_save(p, order.astype(np.int32))
     return order
 
@@ -781,7 +794,9 @@ def tiled_accumulation(
         if e >= 0:
             next_link[li] = node_of.get((tk, e), -1)
     total = np.array([lk[4] for lk in links], dtype=np.float64)
-    for li in sorted(range(len(links)), key=lambda i: -links[i][5]):  # upstream first
+    from dreamulator.media.canvas_routing import downstream_order
+
+    for li in downstream_order(next_link)[::-1]:
         nl = int(next_link[li])
         if nl >= 0:
             total[nl] += total[li]

@@ -336,13 +336,12 @@ def _deplete(task: tuple[Any, ...]) -> None:
     assert ctx is not None
     st = _store_of(ctx)
     w = load_chunk(st, "w_runoff", key).copy()
+    if cft.flow_path(st, "flat_rank", key).exists():
+        w = w.astype(np.float64)
     if len(cells):
         flat = w.reshape(-1)
         idx = np.asarray(cells, np.int64)
-        # as in memory: float32 weight minus a float64 amount, rounded back to float32
-        flat[idx] = (flat[idx].astype(np.float64) - np.asarray(amount, np.float64)).astype(
-            np.float32
-        )
+        flat[idx] = flat[idx].astype(np.float64) - np.asarray(amount, np.float64)
     save_chunk(st, "w_depleted", key, w)
 
 

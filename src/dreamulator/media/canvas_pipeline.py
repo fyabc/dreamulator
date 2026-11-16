@@ -1203,11 +1203,17 @@ _FlowFields = tuple[
 ]
 
 
-def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFields:
+def canvas_flow_fields(
+    store: CanvasStore,
+    *,
+    sea_level: float = 0.0,
+    two_ring: bool = False,
+    routing_stats: dict[str, int] | None = None,
+) -> _FlowFields:
     """Assembled (filled, dem, receiver, accumulation, land, order, weight,
     inland_big) for QA/extraction.
 
-    Applies the PF+ε flat grading before the D8 receivers so depressions have
+    The default is the D8 research reference, applying PF+ε flat grading so depressions have
     defined flow directions.  ``weight`` (runoff-weighted, reference-
     normalised) feeds the terminal-lake verdict alongside the accumulation;
     ``inland_big`` is the endorheic-water mask from the fill's heal delta.
@@ -1217,6 +1223,9 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
     downstream-first (ascending filled) sort used by accumulation — NaN cells
     sort last, matching the ``nan_to_num(1e30)`` order of previous versions
     without the full-size copy.
+
+    Formal S2 passes ``two_ring=True``: keep physical height unchanged, use separate
+    integer flat ranks, and share candidate and scanline kernels with the tiled path.
     """
     from dreamulator.map.prog_erosion import RUNOFF_REFERENCE_MM, flow_accumulation
 
@@ -1229,7 +1238,8 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
             store.path("final", ci, cj, "i16.npy")
         ).astype(np.float32)
     h, w = filled.shape
-    filled = _grade_flats(filled, sea_level, 1e-3)
+    if not two_ring:
+        filled = _grade_flats(filled, sea_level, 1e-3)
     # int32 receivers: cell indices < 2^31 on every canvas, half the int64
     # footprint — the accumulation kernel specialises per dtype.
     rec2d = np.full((h, w), -1, dtype=np.int32)
@@ -1281,7 +1291,7 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
     # NaN sorts after every real value (same stable order nan_to_num(1e30)
     # produced) — skips a full-canvas copy per sort.  int32 twin of the
     # argsort output (values < 2^31): the int64 intermediate is transient.
-    order = np.argsort(filled.ravel(), kind="stable").astype(np.int32)
+    order: np.ndarray = np.argsort(filled.ravel(), kind="stable").astype(np.int32)
     runoff_path = store.root / "climate" / "runoff.mm.npy"
     if runoff_path.exists():
         coarse = np.nan_to_num(np.load(runoff_path).astype(np.float32), nan=0.0)
@@ -1292,7 +1302,6 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
         weight[~land] = 0.0
     else:
         weight = land.astype(np.float32)
-    acc = flow_accumulation(order, rec, weight.ravel()).reshape(h, w)
     dem = np.full((nrow, ncol), np.nan, dtype=np.float32)
     for ci, cj in store.chunks:
         dem[ci * t : (ci + 1) * t, cj * t : (cj + 1) * t] = store.raw(ci, cj).astype(np.float32)
@@ -1302,6 +1311,20 @@ def canvas_flow_fields(store: CanvasStore, *, sea_level: float = 0.0) -> _FlowFi
         idx = np.load(heal_path)["inland_idx"]
         flat = inland_big.reshape(-1)
         flat[idx] = True
+    if two_ring:
+        from dreamulator.map.prog_erosion import lake_mmu_cells, renderable_lakes
+        from dreamulator.media.canvas_routing import flat_ranks, whole_grid_routing
+
+        rank = flat_ranks(filled, sea_level)
+        water = renderable_lakes(
+            filled, dem, inland_big, lake_mmu_cells(store.geometry.px_km), store.geometry.px_km
+        )
+        rec, stats = whole_grid_routing(filled, rank, land, water)
+        index_dtype = np.int32 if filled.size < 2**31 else np.int64
+        order = np.lexsort((rank.ravel(), filled.ravel())).astype(index_dtype)
+        if routing_stats is not None:
+            routing_stats.update(stats)
+    acc = flow_accumulation(order, rec, weight.ravel()).reshape(h, w)
     return filled, dem, rec, acc, land, order, weight, inland_big
 
 
@@ -1394,8 +1417,9 @@ def run_canvas_rivers(
         terminal_equilibrium_routing,
     )
 
+    routing_stats: dict[str, int] = {}
     filled, dem, rec, _acc0, land, order, weight, inland_big = canvas_flow_fields(
-        store, sea_level=sea_level
+        store, sea_level=sea_level, two_ring=True, routing_stats=routing_stats
     )
     # The terminal chain re-accumulates from scratch — free the flow-fields
     # accumulation before the cascade's own whole-canvas peaks (a 377M-cell
@@ -1420,6 +1444,8 @@ def run_canvas_rivers(
     if verbose and has_basis:
         print(f"[hydrology] lake evaporation: {inputs.lake_evaporation_source}")
     pass_through: list[PassThroughLakes] = []
+    # Match tiled annual accumulation: sum in float64, store the final field in float32.
+    weight = weight.astype(np.float64)
     (
         _h_rewritten,
         land,
@@ -1453,6 +1479,7 @@ def run_canvas_rivers(
     # Routing consumed them; the regime pass and segment extraction below
     # work from order/rec_route/acc (and the monthly pack's own weights).
     del dem, weight
+    acc = acc.astype(np.float32)
     rivers = river_mask(acc, land, threshold_cells)
 
     # Monthly regime on the FINAL routing (terminal footprints cut by the
@@ -1511,6 +1538,7 @@ def run_canvas_rivers(
         lake_descend=fringe_desc,
         month_active=month_active,
         pixel_rows=store.geometry.size_px,
+        smooth=False,
     )
     hydro = store.root / "hydro"
     hydro.mkdir(exist_ok=True)
@@ -1550,6 +1578,12 @@ def run_canvas_rivers(
         "healed_pit_cells": healed_cells,
         "lake_mmu_cells": mmu,
         "lake_min_width_km": LAKE_MIN_WIDTH_KM,
+        "solver": "in-memory",
+        "routing": "constrained-two-ring-v1",
+        "flat_order": "integer-distance-to-outlet",
+        "crossing_order": "global-row-major",
+        "routing_stats": routing_stats,
+        "river_geometry": "receiver-vertices",
     }
     (hydro / "rivers.meta.json").write_text(
         json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"

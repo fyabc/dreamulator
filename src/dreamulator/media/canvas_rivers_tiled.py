@@ -320,9 +320,14 @@ def run_canvas_rivers_tiled(
         print(f"[hydrology] lake evaporation: {inputs.lake_evaporation_source}")
     layout = ChunkLayout.of(store)
 
-    tiled_graded(store, sea_level=sea_level, workers=workers)
+    from dreamulator.media.canvas_routing import tiled_two_ring_routing
+
+    tiled_graded(
+        store, sea_level=sea_level, eps=0, keep_dist=True, open_edges=True, workers=workers
+    )
     tiled_directions(store, sea_level=sea_level, workers=workers)
     comps = tiled_geometry_lakes(store, mmu, km, workers=workers)
+    routing_stats = tiled_two_ring_routing(store, workers=workers, log=log)
     term = tiled_terminal_routing(
         store, comps, precip_mm=inputs.precip, temp_c=inputs.temp_c,
         open_water_mm=inputs.open_water, runoff_land_mean_mm=inputs.runoff_land_mean_mm,
@@ -371,7 +376,7 @@ def run_canvas_rivers_tiled(
         pixel_rows=store.geometry.size_px, month_kind=month_kind,
         has_descent=(store.work / "flow" / "desc").is_dir(), workers=workers, log=log,
     )  # fmt: skip
-    segs, flows, regimes = river_segments_from_graph(graph)
+    segs, flows, regimes = river_segments_from_graph(graph, smooth=False)
 
     hydro = store.root / "hydro"
     hydro.mkdir(exist_ok=True)
@@ -432,6 +437,11 @@ def run_canvas_rivers_tiled(
         "lake_mmu_cells": mmu,
         "lake_min_width_km": LAKE_MIN_WIDTH_KM,
         "solver": "out-of-core",
+        "routing": "constrained-two-ring-v1",
+        "flat_order": "integer-distance-to-outlet",
+        "crossing_order": "global-row-major",
+        "routing_stats": routing_stats,
+        "river_geometry": "receiver-vertices",
         "raster_pool": pool,
     }
     (hydro / "rivers.meta.json").write_text(
