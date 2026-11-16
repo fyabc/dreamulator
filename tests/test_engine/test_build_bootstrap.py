@@ -27,6 +27,7 @@ from dreamulator.engine.climate import (
 )
 from dreamulator.engine.geological import GeologicalEngine
 from dreamulator.engine.pipeline import run_pipeline
+from dreamulator.engine.progress import StageState
 from dreamulator.map.models import CVTMesh, VoronoiCell
 from dreamulator.models.layers import Layer
 
@@ -149,9 +150,18 @@ class TestAstronomyBootstrap:
         # Fresh checkout: no astronomy derived anywhere.
         assert not (world / "layers" / "astronomy" / "derived").exists()
 
+        events = []
         results = run_pipeline(
-            [AstronomyEngine, _DownstreamEngine], world, seed=42, branch="cl-fork"
+            [AstronomyEngine, _DownstreamEngine],
+            world,
+            seed=42,
+            branch="cl-fork",
+            on_progress=events.append,
         )
+        assert [(event.engine, event.state) for event in events if event.bootstrap] == [
+            ("astronomy", StageState.RUNNING),
+            ("astronomy", StageState.SUCCEEDED),
+        ]
 
         # The downstream engine ran and succeeded (bootstrap results are not
         # part of the main-loop result list — only its side effect is).

@@ -5,6 +5,7 @@
  * Only supports read operations; write operations throw.
  */
 
+import type { BuildJob } from './buildJobs'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 
@@ -176,6 +177,8 @@ export const staticApi = {
 
   // Build and simulation — not available in static mode
   buildWorld: () => notAvailable('buildWorld'),
+  startBuildJob: async (): Promise<BuildJob> => notAvailable('startBuildJob'),
+  getBuildJob: async (): Promise<BuildJob> => notAvailable('getBuildJob'),
 
   // Data access (branch-aware: fetches from branches/{branch}/ when branch is set)
   getStellarSystem: (name: string, branch?: string | null) =>

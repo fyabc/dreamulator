@@ -1,5 +1,6 @@
 import { isStaticMode } from './mode'
 import { staticApi } from './staticClient'
+import type { BuildJob, BuildOptions, BuildSummary } from './buildJobs'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 import i18n from '../i18n'
@@ -321,11 +322,20 @@ const liveOnlyApi = {
   validateWorld: (name: string) =>
     fetchJson<{ ok: boolean; errors: string[] }>(`/worlds/${name}/validate`),
 
-  buildWorld: (name: string, engine?: string) =>
-    fetchJson<{ status: string }>(`/worlds/${name}/build`, {
+  buildWorld: (name: string, engine?: string, options: Omit<BuildOptions, 'engine'> = {}) =>
+    fetchJson<BuildSummary>(`/worlds/${encodeURIComponent(name)}/build`, {
       method: 'POST',
-      body: JSON.stringify({ engine }),
+      body: JSON.stringify({ ...options, engine }),
     }),
+
+  startBuildJob: (name: string, options: BuildOptions = {}) =>
+    fetchJson<BuildJob>(`/worlds/${encodeURIComponent(name)}/build-jobs`, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    }),
+
+  getBuildJob: (name: string, jobId: string) =>
+    fetchJson<BuildJob>(`/worlds/${encodeURIComponent(name)}/build-jobs/${encodeURIComponent(jobId)}`),
 
   // ---- Map write operations ----
 
@@ -741,6 +751,12 @@ export const api = {
     isStaticMode()
       ? Promise.reject(new Error('Not available in static mode'))
       : liveOnlyApi.buildWorld(...args),
+
+  startBuildJob: (...args: Parameters<typeof liveOnlyApi.startBuildJob>) =>
+    isStaticMode() ? staticApi.startBuildJob() : liveOnlyApi.startBuildJob(...args),
+
+  getBuildJob: (...args: Parameters<typeof liveOnlyApi.getBuildJob>) =>
+    isStaticMode() ? staticApi.getBuildJob() : liveOnlyApi.getBuildJob(...args),
 
   // Map write operations
   saveElevation: (...args: Parameters<typeof liveOnlyApi.saveElevation>) =>

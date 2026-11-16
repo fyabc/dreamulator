@@ -6,6 +6,7 @@
 
 ## 文档列表
 
+- `build-progress.md` 说明 API 后台构建、真实阶段、错误提示与任务状态的保存范围。
 - `getting-started.md` — 新手教程（零基础完整链路：创建世界 → 设参数 → 构建 → 查看 → 出图）
 - `cli.md` — CLI 命令参考（init、list、info、validate、schema、delete、branch、conlang、terrain、build、climate、data、narrate、guard、export、explore-seeds、serve）
 - `skills.md` — 项目技能速查（Claude Code 与 Codex 共用）（/grill-world 拷问、/read-map 读图、/narrate 叙述、/audit-doc 文档审计、/diagnose-climate 气候诊断）

@@ -3,6 +3,9 @@
 Reads all worlds from data/worlds/ and exports their data as JSON files
 to frontend/public/data/ for static site hosting.
 
+Build jobs are process-local execution state and are not exported. The static
+client rejects startBuildJob and getBuildJob instead of requesting stale job files.
+
 Usage:
     python scripts/release/export_static.py
     python scripts/release/export_static.py --output frontend/public/data
