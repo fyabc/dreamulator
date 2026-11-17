@@ -1,6 +1,6 @@
 # scripts/ 目录说明
 
-按域分组，共 72 个脚本（含 gcm/ 子组 6 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
+按域分组，共 73 个脚本（含 gcm/ 子组 6 个）。一律在仓库根目录以 `uv run python scripts/<组>/<脚本>.py` 运行。
 新增脚本放入对应组；跨组通用工具放 `dev/`。本说明只到目录级——单个脚本的用途看其
 模块 docstring，气候诊断的方法论见 `docs/design/proposals/climate-layer-improvement.md` §6
 与 `docs/usage/climate-validation-workflow.md`。
@@ -111,7 +111,7 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
 - `rebound_nbody.py` — REBOUND 自旋-轨道积分（轨道稳定性、Laplace 共振角）。
 - `diagnose_stellar_physics.py` — 恒星物理公式（质光关系、演化时标）诊断。
 
-## geology/ — 地质与古地理（2 个）
+## geology/ — 地质与古地理
 
 - `paleo_rewind.py` — 地质时间轴 M1 诊断：读已构建的地图（只读），由洋中脊与欧拉极合成现状海底
   年龄，再把板块倒推到若干时刻（默认先换成大陆块刚性的重建用板块模型），输出各时刻的地壳、
@@ -123,6 +123,7 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
   时刻栅格化并报告拓扑规则；`--walk` 跑逐步倒推（地壳质点、体积账本、作者缝合带，保留作对照），
   `--plot` 画出各时刻的边界类型与三联点。设计见 `docs/design/proposals/geological-timeline.md`
   （板块拓扑层在附录 A）。
+- `ocean_crust_transport.py` 提供外部历史模型示踪的搬运助手。它用已确认归属选择有效板块或变形网络，再调用 pyGPlates 的原生点搬运接口；未知重叠保留未确认状态，数值移除与俯冲消费另行核查。
 
 ## release/ — 发布与静态导出（2 个）
 
@@ -131,16 +132,31 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
 - `export_static.py` — 静态站数据导出（`frontend` 的 `npm run export` / `build:static` 调它；
   `deploy-pages.yml` 直接运行）。**移动此文件须同步 CI 的 path trigger 与 package.json。**
 
-## media/ — 视频素材与外部渲染链（1 个）
+## media/ — 视频素材与外部渲染链
 
 Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
 `docs/design/proposals/blender-render-pipeline.md`：工程与渲染输出入
-`<render-workdir>/<项目>/` 不入 git，`.blend` 一律由脚本从数据包重建）。
+主仓库 `exports/`，不入 git；`.blend` 一律由脚本从数据包重建）。
+
+- `region_input_qa.py` 校验区域包的细化输入，并导出原图、TD 高程、水体和月径流对照图。
+  使用 `uv run python scripts/media/region_input_qa.py <pack> --output exports/region-inputs/qa`。
+- `ice_reference_small_batch_review.py` 读取独立基岩与两种订温参考的小批覆冰对照，导出原生分块、同位置 46 km 细节图和逐画布冰体积统计。使用 `uv run python scripts/media/ice_reference_small_batch_review.py --inputs <实验目录> --output exports/ice-reference-small-batch/<批次>`；实验输入需要包含冻结基岩、响应数组和来源报告。
+- `ice_connected_domain_review.py` 读取完整既有冰体的共享域结果，导出同位置三阶段冰面与跨块剖面，并附冰量账本。输入目录须提供来源报告、独立基岩、各阶段冰厚和浮点地表。
+- `ice_margin_applicability_review.py` 读取冻结小冰体的冰缘处理对照，导出不同带宽的同位置冰面、移除冰量和第一圈冰厚，并用合成厚冰缘检查带宽变化的代价。
+- `td_source_guided_generate.py` 在独立 TD 环境中检查原图编码，并生成部分加噪编辑和逐步低频约束的局部对照。
+  `td_source_guided_qa.py` 读取保存的数组，比较原图、等频谱噪声、现行混合、重绘和候选，分别报告结构、盆地与独立 DSM 误差。
+  生成脚本的模型路径与窗口要求见模块说明；输出写入 `exports/`，候选不改变正式构建模式。
+
 数据侧的正式 CLI 在 in-package（`dreamulator region pack`），不在本组。
 
 - `blender/region_still.py` — bpy 场景构建 + Cycles 渲染（消费
   `dreamulator region pack` 的数据包；`blender -b -P … -- --datadir <pack>
   [--render …]`；OptiX>CUDA>CPU 自动降级，seed 固定）。
+- `diagnose_river_directions.py` 只读导出的河线，以线段长度加权统计八方向对齐，按批处理大文件；
+  `--plane-control` 用旋转解析斜坡检查现有 D8 与河线导出，`--plot` 生成验收图。
+- `render_canvas_seam_products.py` 将两张画布的活动地表、冰厚、湖泊与河段画到同一个地理窗口，
+  用于目视核查接缝。使用 `uv run python scripts/media/render_canvas_seam_products.py <left> <right>
+  --lat <纬度> --lon <经度> --output exports/canvas-seams/window.png`。
 
 ## dev/ — 开发工具（5 个）
 
@@ -149,8 +165,9 @@ Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
 - `profile_build.py` — 构建性能剖析（产出 `build_profile.json`，见 `docs/design/profiling.md`）。
 - `prepare_civmap_data.py` — 文明地图底图数据下载与预处理。
 - `generate_planet_heightmap.py` — 外部高度图生成（世界创作辅助，配合地图导入工作流）。
-- `check_canvas_seams.py` — S4 跨画布接缝一致性检查（按 `seam_pairs.json` 取样两侧画布的高程、
-  湖、河与流量；退出码 0/1/2 分别表示通过、阈值超限、有配对点无法测量）。
+- `check_canvas_seams.py` 按 `seam_pairs.json` 取样两侧画布的高程、冰厚、海陆、湖泊、河段与流量。
+  缺少必需测量时退出码为 2；测量完整但有实际分歧或阈值超限时为 1；其余为 0。
+  未提供数值阈值时，退出码 0 只表示取样完成。
 
 ## 约定
 
@@ -160,3 +177,5 @@ Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
   `station_diagnostics` 的站点表——跨组复用请改走 `dreamulator` 包。
 - **数据文件位置**：观测数据缓存在系统 temp（ETOPO1/Beck）与 `<workdir>/climatology/`（可用 `DREAMULATOR_WORK_DIR` 指定根目录）
   （NCEP/GPCP/SODA，gitignored）。
+
+`dev/accept_elevation_import.py` 提供 API 导入与地质、气候构建的可复现验收，并可只读地球高程完成量化损失对照；产物统一写入 `exports/`。

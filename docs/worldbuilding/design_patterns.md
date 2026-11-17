@@ -523,3 +523,89 @@ subduction_polarities:
 
 接口见 [画布管线 2.5.2](../design/pipelines/canvas-chain.md#252-连续地形来源)
 与 [地质管线 7.6](../design/pipelines/geological-pipeline.md#76-参数表)。
+
+## 模式 16：可移交的局部区域包
+
+作者可以给独立局部高度图配一份显式月气候，生成同时包含高程、TD 条件场与月径流的区域包。
+这个包可以交给另一套环境细化和渲染，来源世界的数据不必随包保留。
+气候声明使用地表月均温及参考月降水量，空间场与高程的覆盖范围相同。
+
+```yaml
+temperature_basis: surface
+description: 作者提供的局部气候情景。
+temperature_C: temperature-monthly.npy
+precipitation_mm: precipitation-monthly.npy
+```
+
+两个空间数组的形状同为 `(N, N, 12)`，文件名相对于 YAML 所在目录解析。
+源像素尺度、高程映射、窗口放置假设与气候说明都随包归档；未给出输入的生态和冰厚仍保持缺失。
+完整参数由[局部图入口](../usage/cli.md#独立局部高度图)维护，输入契约由[区域包实现参考](../design/pipelines/region-pack.md)维护。
+源码为 `src/dreamulator/map/region_import.py` 与 `src/dreamulator/map/region_inputs.py`。
+
+## 按来源尺度选择局部细化
+
+创作时先声明输入可靠表达的尺度，再选择原图水文、原图混合或地形重绘。
+下面的 YAML 是任务规划示例，供创作者记录来源假设；它不作为区域命令的配置文件读取。
+
+```yaml
+source:
+  native_resolution_km: 50.0
+  description: 原图表达区域地势，上传前插值到较细的文件网格。
+refinement:
+  mode: blend
+  preserve_wavelength_km: 200.0
+  cap_depression_depth: false
+```
+
+执行时将这些值传给 `region build` 的模式与尺度选项。原图输入保留，供体与混合结果分别保存，
+可选排水修整作为显式地形编辑。水文与渲染使用最终采用高程，小窗从同一母网格裁出。
+模式枚举与分频实现在 `src/dreamulator/media/terrain_blend.py`，编排与缓存核查在
+`src/dreamulator/media/terrain_refine.py`；参数用法见[地形视频链](../usage/terrain-chain.md#②-区域构建与细节模式)。
+
+## 模式 18：保留原图的高程输入
+
+作者上传的原始高度图和映射属于地质输入，显示栅格与球面网格属于构建产物。
+API 在 `layers/geological/input/elevation_imports.yaml` 按行星登记声明，并以内容哈希保存原图。
+分支覆盖声明时保持父世界不变，删除构建产物后可以从原图和种子重建。
+
+下面的声明示意采用仅陆地灰度图，白色代表 6000 m，海底统一假设为 −3800 m。
+实际哈希由 API 根据上传字节生成，作者不应手填占位值：
+
+```yaml
+planet_gaia:
+  sha256: <上传原图的六十四位 SHA-256>
+  provenance:
+    source_format: png-8bit
+    source_filename: authored.png
+    output_resolution: [2048, 1024]
+    mapping:
+      mode: threshold
+      sea_level: 0.0
+      max_m: 6000.0
+      seafloor_m: -3800.0
+```
+
+原图以 `input/elevation_sources/<sha256>.bin` 保存，解码器按内容识别格式。
+实现见 `map/elevation_input.py` 与 `engine/geological.py`，完整契约见
+[地图系统](../design/pipelines/map-system.md#高程语义与导入契约)。
+
+## 模式 19：用配方恢复真实基础地形
+
+真实数据导入的世界在地质输入中声明导入配方。另一台机器根据同一配方选择兼容的数据包，随后在分支上计算模型结果。基础地形与气候观测分开准备，地球主世界保留真实观测状态。
+
+下面的地质配置声明 ETOPO1 冰面高程、4096 × 2048 像素栅格、200000 个网格节点和种子 42：
+
+```yaml
+elevation_source: imported
+terrain_import:
+  provider: etopo1
+  dataset: etopo1_ice_surface_grid_registered
+  resolution: [4096, 2048]
+  mesh_nodes: 200000
+  seed: 42
+  importer_version: 1
+```
+
+执行 `dreamulator data fetch earth --branch climate-dev` 时，命令按有效配方查询固定索引，校验发布包并准备基础地形。已有气候参考不能通过基础地形包覆盖。
+包边界与兼容性由[真实地球数据管线](../design/pipelines/earth-real-data.md#11-版本化基础地形包)维护，下载依赖和离线安装由[数据包用法](../usage/cli.md#数据包data)维护。
+实现见 `src/dreamulator/map/pipeline_types.py` 与 `src/dreamulator/datapkg/`。

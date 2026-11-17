@@ -190,6 +190,11 @@ def _pf_core(
             pred_slope = (f0 - fp) / dist
             if fp < f0 and best_slope - pred_slope <= eps:
                 best = pred
+            elif eps == 0.0 and best < 0 and fp == f0:
+                # Zero-epsilon filling leaves exact flats. The discovery
+                # predecessor was popped first and supplies a valid equal-
+                # height route without adding a synthetic surface gradient.
+                best = pred
         receiver[cell] = best
 
 

@@ -35,6 +35,7 @@ from dreamulator.media.canvas_flow_tiled import (
     _pool_map,
     _store_of,
     drop_kinds,
+    halo,
     load_chunk,
     save_chunk,
 )
@@ -62,42 +63,61 @@ def _extra() -> dict[str, Any]:
 
 
 def _receivers(code: np.ndarray, key: tuple[int, int], tile: int, width: int) -> np.ndarray:
-    """Global receiver index of every cell of a chunk, -1 where the D8 code is 255."""
+    """Decode D8 or two-ring directions as global receiver indices."""
     rr, cc = np.divmod(np.arange(code.size, dtype=np.int64), tile)
     k = code.ravel()
     has = k != 255
     ki = np.where(has, k, 0).astype(np.int64)
     gr = key[0] * tile + rr + _DY[ki]
     gc = key[1] * tile + cc + _DX[ki]
+    has &= (gr >= 0) & (gc >= 0) & (gc < width)
     return np.where(has, gr * width + gc, -1)
 
 
 def _river_chunk(key: tuple[int, int]) -> tuple[np.ndarray, ...]:
-    """Write the chunk's channel mask; return the cells a chain can visit from it."""
+    """Write the chunk's channel mask; return the cells a chain can visit from it.
+
+    The rows of :class:`dreamulator.map.prog_erosion.ChannelGraph`: the channel cells and their
+    receivers, the lake exits (a lake cell whose receiver is not a lake cell, read across the
+    chunk border from the neighbours' label rings) and the dried-fringe cells with their descent
+    targets.  Lake interiors are left out — on world-west they were 803M of 817M rows and the
+    whole of the stage's 111 GB peak.
+    """
     ctx = cft._CTX
     assert ctx is not None
     st = _store_of(ctx)
     x = _extra()
     t = ctx.tile
     width = int(x["width"])
+    layout = ChunkLayout(t, ctx.keys)
     acc = load_chunk(st, x["acc_kind"], key).ravel()
     land = load_chunk(st, "land2", key).ravel().astype(bool)
     rivers = land & (acc > x["threshold_cells"])
     save_chunk(st, RIVER_KIND, key, rivers.reshape(t, t).astype(np.uint8))
     keep = x["lake_keep"]
-    lbl = load_chunk(st, "lbl_lakes0", key).ravel()
-    is_lake = np.where(lbl > 0, keep[lbl], False)
-    rec = _receivers(load_chunk(st, "dir_route", key), key, t, width)
-    here = np.flatnonzero(rivers | is_lake)
-    desc = load_chunk(st, "desc", key).ravel() if x["has_desc"] else None
-    out = [here, rec[here]]
-    if desc is not None:
+    lbl_h = halo(st, layout, "lbl_lakes0", key, 0, dtype=np.int64, radius=2)
+    lake_h = np.where(lbl_h > 0, keep[lbl_h], False)
+    is_lake = lake_h[2:-2, 2:-2].ravel()
+    code = load_chunk(st, "dir_route", key).ravel()
+    rec = _receivers(code.reshape(t, t), key, t, width)
+    # lake exits: the receiver (possibly in a neighbouring chunk) is not a chain-breaking lake
+    has = code != 255
+    k = np.where(has, code, 0).astype(np.int64)
+    rr, cc = np.divmod(np.arange(t * t, dtype=np.int64), t)
+    recv_lake = lake_h[rr + 2 + _DY[k], cc + 2 + _DX[k]]
+    exits = np.flatnonzero(is_lake & has & ~recv_lake)
+    riv = np.flatnonzero(rivers)
+
+    def glob(loc: np.ndarray) -> np.ndarray:
+        return np.asarray((key[0] * t + loc // t) * width + (key[1] * t + loc % t))
+
+    out = [glob(riv), rec[riv], glob(exits)]
+    if x["has_desc"]:
+        desc = load_chunk(st, "desc", key).ravel()
         src = np.flatnonzero(desc >= 0)
-        out += [src, desc[src]]
-    base = (key[0] * t + here // t) * width + (key[1] * t + here % t)
-    out[0] = base
-    if desc is not None:
-        out[2] = (key[0] * t + out[2] // t) * width + (key[1] * t + out[2] % t)
+        g = glob(src)
+        fringe = desc[src] != g  # water cells point at themselves: they end a descent
+        out += [g[fringe], desc[src][fringe]]
     return tuple(np.asarray(a, dtype=np.int64) for a in out)
 
 
@@ -184,7 +204,7 @@ def tiled_channel_graph(
     ctx = _ctx_of(store)
     ctx.increments = store.increments
     keys = list(ctx.keys)
-    n_work = _default_workers(ctx.tile) if workers is None else max(1, workers)
+    n_work = _default_workers(ctx.tile, workers, cap=len(ctx.keys))
     t0 = time.time()
     ctx.extra = {
         "width": layout.shape[1],
@@ -285,6 +305,7 @@ def run_canvas_rivers_tiled(
     from dreamulator.media.canvas_lakes_tiled import tiled_geometry_lakes
     from dreamulator.media.canvas_month_tiled import tiled_month_active
     from dreamulator.media.canvas_pipeline import (
+        FILL_FORMAT,
         _declares_sea_mask,
         read_river_climate_inputs,
         write_lake_tables_from_counts,
@@ -300,9 +321,14 @@ def run_canvas_rivers_tiled(
         print(f"[hydrology] lake evaporation: {inputs.lake_evaporation_source}")
     layout = ChunkLayout.of(store)
 
-    tiled_graded(store, sea_level=sea_level, workers=workers)
+    from dreamulator.media.canvas_routing import tiled_two_ring_routing
+
+    tiled_graded(
+        store, sea_level=sea_level, eps=0, keep_dist=True, open_edges=True, workers=workers
+    )
     tiled_directions(store, sea_level=sea_level, workers=workers)
     comps = tiled_geometry_lakes(store, mmu, km, workers=workers)
+    routing_stats = tiled_two_ring_routing(store, workers=workers, log=log)
     term = tiled_terminal_routing(
         store, comps, precip_mm=inputs.precip, temp_c=inputs.temp_c,
         open_water_mm=inputs.open_water, runoff_land_mean_mm=inputs.runoff_land_mean_mm,
@@ -351,7 +377,7 @@ def run_canvas_rivers_tiled(
         pixel_rows=store.geometry.size_px, month_kind=month_kind,
         has_descent=(store.work / "flow" / "desc").is_dir(), workers=workers, log=log,
     )  # fmt: skip
-    segs, flows, regimes = river_segments_from_graph(graph)
+    segs, flows, regimes = river_segments_from_graph(graph, smooth=False)
 
     hydro = store.root / "hydro"
     hydro.mkdir(exist_ok=True)
@@ -383,7 +409,7 @@ def run_canvas_rivers_tiled(
     ctx = _ctx_of(store)
     counts = np.zeros(term.n + 1, dtype=np.int64)
     for present, part in _pool_map(
-        _sparse_chunk, list(ctx.keys), ctx, _default_workers(t) if workers is None else workers
+        _sparse_chunk, list(ctx.keys), ctx, _default_workers(t, workers, cap=len(ctx.keys))
     ):
         if present.size:
             counts[present] += part
@@ -396,6 +422,7 @@ def run_canvas_rivers_tiled(
         else 0
     )
     meta = {
+        "fill_format": FILL_FORMAT,
         "threshold_cells": threshold_cells,
         "weight_source": inputs.weight_source,
         "km_per_px": km,
@@ -412,6 +439,11 @@ def run_canvas_rivers_tiled(
         "lake_mmu_cells": mmu,
         "lake_min_width_km": LAKE_MIN_WIDTH_KM,
         "solver": "out-of-core",
+        "routing": "constrained-two-ring-v1",
+        "flat_order": "integer-distance-to-outlet",
+        "crossing_order": "global-row-major",
+        "routing_stats": routing_stats,
+        "river_geometry": "receiver-vertices",
         "raster_pool": pool,
     }
     (hydro / "rivers.meta.json").write_text(

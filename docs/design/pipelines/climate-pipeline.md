@@ -968,10 +968,14 @@ const temperature = tMin + (pixelValue / 65535) * (tMax - tMin);  // from climat
 月度和 ≡ 年值）。数值字段为 raw float32，未定义值存 NaN、原因由 uint8 状态数组
 （`ai_status` / `deficit_status`，取值见文件内 `status_codes` 枚举）表达；元数据内嵌
 `result_metadata()`（format_version + 参考年/月时间约定）+ `demand_model` +
-`freeze_threshold_c`。时间基准 = 12 个等长参考月：`p_total_mm` 为每参考年 mm，
-AI 为窗口不变量。该文件定位为「年度尺度气候量」的通用容器，后续年度量（如年风应力、
-年辐射）也归入此文件。API 侧 `GET /maps/{world}/climate-yearly`
+`freeze_threshold_c`。引擎输出使用 12 个等长参考月，`p_total_mm` 为每参考年的降水毫米数；
+导入文件可以声明当地窗口，总量按其自身的 `p_total_basis` 解读。AI 为窗口不变量。
+该文件定位为「年度尺度气候量」的通用容器，后续年风应力、年辐射等年度量也归入此文件。
+API 侧 `GET /api/worlds/{world}/maps/{planet}/climate-yearly`
 （`api_routes/maps.py` 的 `get_climate_yearly`）。
+
+API 服务与静态导出均原样传递年度文件，不重标记文件内部的版本和时间声明。
+地图公共元数据的序列化及真实文件对照见[地图结果契约](map-system.md#地图结果元数据与静态一致性)。
 
 同一文件还带 **UCC 分类字段与季节性描述量**（UCC-01 第四步，当前 profile =
 **v2**，见 `map/ucc.py` 的 `classify_v2` 与 `PROFILE_CURRENT`；v0/v1 保留可复现）：

@@ -25,6 +25,7 @@ import json
 import os
 import subprocess
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, cast
@@ -34,6 +35,8 @@ from rich.console import Console
 from rich.table import Table
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from dreamulator.map.td_canvas_build import CanvasLayoutConfig
 
 canvas_app = typer.Typer(
@@ -43,6 +46,16 @@ canvas_app = typer.Typer(
 )
 console = Console()
 LAYOUT_FILE = "canvas_layout.yaml"
+
+
+@contextmanager
+def _memory_errors() -> Iterator[None]:
+    """Report an unavailable worker budget as a normal command-line error."""
+    try:
+        yield
+    except MemoryError as exc:
+        console.print(str(exc), style="red", markup=False)
+        raise typer.Exit(code=2) from None
 
 
 def _set_data_dir(data_dir: Path | None) -> None:
@@ -507,6 +520,7 @@ def canvas_status_cmd(
     console.print(table)
 
 
+@_memory_errors()
 def _run_hydrology(
     canvas: Path,
     *,
@@ -517,7 +531,12 @@ def _run_hydrology(
     surface: str = "auto",
     out_of_core: bool | None = None,
 ) -> None:
-    from dreamulator.media.canvas_pipeline import CanvasStore, run_canvas_fill, run_canvas_rivers
+    from dreamulator.media.canvas_pipeline import (
+        FILL_FORMAT,
+        CanvasStore,
+        run_canvas_fill,
+        run_canvas_rivers,
+    )
     from dreamulator.media.canvas_rivers_tiled import prefer_out_of_core, run_canvas_rivers_tiled
     from dreamulator.media.canvas_surface_process import read_surface_tag
 
@@ -529,16 +548,35 @@ def _run_hydrology(
             f"{store.surface}[/yellow]"
         )
         force, resume = True, False
-    finals = list((store.work / "final").glob("r*_c*.npy"))
-    if force or len(finals) < len(store.chunks):
+    finals = list((store.work / "final").glob("r*_c*.f32.npy"))
+    format_path = store.work / "fill-format.json"
+    fill_current = False
+    if format_path.exists():
+        fill_current = (
+            json.loads(format_path.read_text(encoding="utf-8")).get("format") == FILL_FORMAT
+        )
+    if force or not fill_current or len(finals) < len(store.chunks):
         console.print(f"Running hydrology on {canvas.name} ({len(store.chunks)} chunks)")
-        stats = run_canvas_fill(store, resume=resume, workers=workers)
+        stats = run_canvas_fill(store, resume=resume and not force, workers=workers)
         console.print(f"  {int(stats['watersheds'])} watersheds · {stats['stages_seconds']:.1f} s")
     else:
         console.print(f"Hydrology already complete under {store.work}")
     hydro = canvas / "hydro"
+    routing_current = False
+    meta_path = hydro / "rivers.meta.json"
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            routing_current = (
+                meta.get("routing") == "constrained-two-ring-v1"
+                and meta.get("threshold_cells") == threshold_cells
+                and meta.get("fill_format") == FILL_FORMAT
+            )
+        except (ValueError, OSError):
+            pass
     if (
         force
+        or not routing_current
         or not (hydro / "rivers.line.npy").exists()
         or read_surface_tag(hydro) != store.surface
     ):
@@ -572,7 +610,7 @@ def canvas_hydrology(
         27000, "--river-threshold", "--threshold-cells", help=_THRESHOLD_HELP
     ),
     workers: int | None = typer.Option(
-        None, "--workers", help="Processes for the per-chunk fill stages (default: CPUs, max 16)"
+        None, "--workers", help="Processes per chunk (default: CPU and memory budget, max 16)"
     ),
     surface: str = typer.Option("auto", "--surface", help=_SURFACE_HELP),
     out_of_core: bool | None = typer.Option(
@@ -697,6 +735,7 @@ def backfill_lake_evaporation(canvas: Path, data_dir: Path | None = None) -> Non
     )
 
 
+@_memory_errors()
 def _erode_one(
     canvas: Path,
     block: int,

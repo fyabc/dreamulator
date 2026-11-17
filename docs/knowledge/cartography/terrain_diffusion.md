@@ -25,6 +25,95 @@ Copernicus GLO-90 对照），峰顶约 5.8 km；起伏的上限在模型本身�
 符号一致率 97.5% @ SNR 0.2、94.5% @ SNR 1.0）。想要「粗场逐位保留、
 细节补全」的语义会失望；它给的是「统计上一致的地貌再生成」。
 
+## 细化级读取的高程统计
+
+模型的粗级输出与最初的五通道条件不是同一个对象。潜空间细化级读取六个通道：变换高程的均值、
+第 5 百分位数，以及四个气候统计。高程使用训练数据的数值变换
+$s(z)=\operatorname{sign}(z)\sqrt{|z|}$，其中 $z$ 以米计。这是模型的数值表示，不是高程守恒律。
+
+固定版本的训练预处理先对高分辨率高程做上述变换，再把每个 8 × 8 像素块的中位数作为约 720 m
+的参考。潜空间数据集在每个 32 × 32 参考格块中取均值和第 5 百分位数，形成约 23 km 的统计。
+相关实现是上游的
+[高程预处理](https://github.com/xandergos/terrain-diffusion/blob/e8dcb4b1a834ab2f6b1a6f5256ed7c9f2f3e8230/terrain_diffusion/data/preprocessing/elevation_dataset.py)与
+[潜空间数据集](https://github.com/xandergos/terrain-diffusion/blob/e8dcb4b1a834ab2f6b1a6f5256ed7c9f2f3e8230/terrain_diffusion/training/datasets/h5_latents_dataset.py)。
+
+变换后的均值通常不等于米制均高的平方根。物理高程均值、变换统计和细化后的实际高程应分别记录并验收。
+第 5 百分位数也不必低于均值：跨海岸的偏斜分布可以让少数深海值拉低均值，而第 5 百分位仍在浅海或陆地。
+因此不能把均值减分位数的差强行截成非负值。上游
+[粗级生成与潜空间消费](https://github.com/xandergos/terrain-diffusion/blob/e8dcb4b1a834ab2f6b1a6f5256ed7c9f2f3e8230/terrain_diffusion/inference/world_pipeline.py)
+使用这个带符号的差；消费前恢复第 5 百分位数。
+
+细输入能够直接统计这些量。只有格子均高和标准差的粗输入不足以唯一确定它们，因为不同的谷地和山脊分布
+可以有相同的均值与标准差。若假设格内高程服从高斯分布，第 5 百分位米值为均高减去约 1.64485 倍标准差；
+该系数来自[标准正态分位数](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.norm.html)，
+格内分布的高斯假设本身仍需观测检验。粗图直写的设计与验收见
+[画布条件场提案](../../design/proposals/canvas-conditioning-structure.md)第 4.2 节。
+
+## 原图的潜空间表示与一致性编辑
+
+TD 的公开自编码器把细节残差压缩为四个潜通道，低频背景另占第五个通道。编码先对米制高程
+取带符号平方根，再用八倍下采样和高斯滤波分解低频背景与残差。训练预处理以 `1.1678`
+标准化残差；这个数值属于训练数据拟合，不是物理常数。自编码器的 `preencode` 返回均值与
+对数方差，`postencode(use_mode=True)` 取均值，适合测量不加噪的往返损失。90 米输出对应
+约 720 米潜格；解码器输出更密的像素并不保证更细结构能够通过编码保存。
+这些口径来自[固定版本的训练预处理](https://github.com/xandergos/terrain-diffusion/blob/e8dcb4b1a834ab2f6b1a6f5256ed7c9f2f3e8230/terrain_diffusion/data/preprocessing/build_encoded_dataset.py)
+和[公开自编码器配置](https://huggingface.co/xandergos/terrain-diffusion-autoencoder/blob/fb55182d7b468c35e54079b78b7f165c610a1a77/config.json)。
+
+编码标准化和生成幅度是两个不同的参数口径。现有供体配方以 `2.3356` 放大输出残差；原图往返
+与生成干预的归因对照使用训练值 `1.1678`。直接把供体幅度用于原图解码会放大已有细节，
+因此验收必须分别记录编码标准化、输出幅度以及供体配方。
+
+上游采样器使用一致性模型。设标准化参考潜变量为 $z$，噪声为 $\epsilon$，
+内部数据标准差为 $d=0.5$，部分噪声角度为 $t=\arctan(\sigma/d)$，其模型输入为
+$x_t/d$，其中 $x_t=d\cos(t)z+d\sin(t)\epsilon$。模型预测后直接估计清洁样本。
+从参考潜变量出发的这一步借鉴了 [SDEdit](https://arxiv.org/abs/2108.01073) 的部分加噪思想，
+但它没有逐步积分完整的反向随机微分方程。实验因此称为“部分加噪的一致性编辑”，
+采样口径由[上游实现](https://github.com/xandergos/terrain-diffusion/blob/e8dcb4b1a834ab2f6b1a6f5256ed7c9f2f3e8230/terrain_diffusion/inference/world_pipeline.py)维护。
+
+细节通道与背景通道可以作为诊断分开处理。通道约束适配对前四个通道沿用上述加噪公式，
+第五通道在模型输入中取 $x_{t,5}=dz_{\mathrm{ref},5}$，并在清洁样本估计后恢复原背景，
+然后进行窗口重叠平均。它保留了潜变量背景，但改变了训练时五通道共同加噪的联合分布，
+因此属于未经重新训练的诊断适配。解码端的 `laplacian_denoise` 先重建平方根场，从中重新提取低频，并保留输入残差；
+随后带符号平方变换将重建值转为米制高程。固定第五通道并不保证最终米制长波固定。
+具体代数来自上述上游采样与重建实现，适配由 `scripts/media/td_source_guided_generate.py`
+的 `residual` 轮提供，分尺度与母图海岸对照由 `scripts/media/td_residual_qa.py` 提供。
+
+粗输入的另一种适配是在每次清洁样本估计后，用 $z'=z-L(z)+L(z_{\mathrm{ref}})$
+匹配参考潜变量的低频。$L$ 是具有明确响应波长的低通算子。这借鉴了
+[ILVR](https://arxiv.org/abs/2108.02938) 的频带投影思路；原论文在 DDPM 的相应噪声状态
+匹配参考，本适配则在一致性估计之间投影，二者的噪声日程不同。滤波必须读取覆盖核宽的
+上下文，并在重叠窗口平均后执行，避免把窗口边缘当作真实地貌。
+
+离线实验由 `scripts/media/td_source_guided_generate.py` 生成数组，
+`scripts/media/td_source_guided_qa.py` 统一检查往返、坡向、脊谷代理、排水方向和盆地变化。
+脊谷代理使用平滑曲率极值，它衡量相对原图的位置变化，不能替代实测分水岭与河网。
+部分加噪是否改善地貌，仍需同时查看同尺度图像和独立高程资料；接近原图不等于恢复未知细节。
+
+## 原图结构与生成细节的分频混合
+
+混合模式把原图记为 $I$，同范围生成的供体地形记为 $T$，高通算子记为 $H$，合成场为
+$M=I+H(T-I)$。这等价于保留原图的低频部分并替换高频部分；直接向完整原图加上 $H(T)$ 会重复叠加原图已有的短波。
+高通是从地形中取出短波变化的数值操作，不是一次侵蚀模拟。
+多尺度分解的基本依据见 [Burt 与 Adelson（1983）](https://persci.mit.edu/pub_pdfs/pyramid83.pdf)。
+
+连续高斯低通的频率响应为 $G(f)=\exp(-2\pi^2\sigma^2f^2)$，其中 $f$ 以每公里的周期数计，$\sigma$ 以公里计。
+它在任意非零频率都有衰减，因此高斯混合也会改动原图的长波。若需要明确保留一个波段，可在
+[二维离散余弦表示](https://docs.scipy.org/doc/scipy/reference/generated/scipy.fft.dctn.html)中定义高通权重：
+可信波段 $f\le f_0$ 的权重为零，短波 $f\ge f_1$ 的权重为一，两者之间使用升余弦平滑过渡。
+合成前的可信波段因此保持原图；海岸掩膜、符号约束和排水修整之后应重新测量该波段的变化。
+
+实验使用四个原生像素长度作为可信波段边界，两倍原生像素长度作为完全替换的端点。
+这一划分是明确的采样与创作假设，不能从文件像素自动认证有效精度；来源已有平滑或量化时，需要另报可信尺度。
+粗图插值放大后仍使用原来的原生尺度。地形、海陆掩膜与海底分别核查，混合场的海洋高程沿用原图。
+
+局部地球对照显示，明确分频比高斯混合更充分地保留可信波段，但新增纹理仍会增加几何盆地。
+沿用原图洼地深度上限可以减少新增盆地，它也会抬高谷底并引入长波变化，须作为单独的排水修整输出。
+真实地球的高分辨率点值误差在加入生成细节后仍大于单纯插值；原图保留、纹理质量与真实地形恢复分别验收。
+版本化复现工具为 `scripts/media/td_source_detail_qa.py`。区域命令的分频与海岸处理由 `src/dreamulator/media/terrain_blend.py` 实现，模式与采用场合同由[区域包技术参考](../../design/pipelines/region-pack.md#7-区域构建模式)维护。符号约束遇到陆地被压到海平面以下时恢复该像素的原图值；浮点高程与独立海陆掩膜一并保存，整数灰度不能代替类别。
+
+[SDEdit](https://arxiv.org/abs/2108.01073)通过给输入加噪再去噪，在输入忠实度与生成真实感之间取舍。
+它需要修改生成过程，与生成后进行上述分频是两项独立方法；TD 的编码器、噪声日程与分块缓存适配仍需另外验证。
+
 ## 实测能力与边界（RTX 3060 6 GB，2026-10 本库验证）
 
 | 维度 | 实测 |

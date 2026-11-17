@@ -11,8 +11,10 @@ from dreamulator.resolver import LayerResolver
 from dreamulator.utils.logging import setup_logging
 
 from .base import BaseEngine, EngineResult
+from .progress import PipelineEvent, StageState
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 logger = setup_logging()
@@ -67,6 +69,7 @@ def run_pipeline(
     only_engine: str | None = None,
     branch: str | None = None,
     start_layer: Layer | str | None = None,
+    on_progress: Callable[[PipelineEvent], None] | None = None,
 ) -> list[EngineResult]:
     """Run the engine pipeline in dependency order.
 
@@ -78,6 +81,7 @@ def run_pipeline(
         only_engine: If set, run only this engine and its dependencies.
         branch: Branch name to build (None for root world).
         start_layer: Start building from this layer (skip earlier layers).
+        on_progress: Observe real engine boundaries, without estimating a percentage.
 
     Returns:
         List of EngineResults from each engine run.
@@ -105,9 +109,15 @@ def run_pipeline(
         sorted_engines = [e for e in sorted_engines if e.layer in valid_layers]
 
     if only_engine:
+        if only_engine not in {e.name for e in sorted_engines}:
+            raise ValueError(f"Engine '{only_engine}' is unavailable in this build context")
         # Find the target engine and all its transitive dependencies
         needed = _collect_dependencies(only_engine, sorted_engines)
         sorted_engines = [e for e in sorted_engines if e.name in needed]
+
+    if on_progress:
+        for engine_cls in sorted_engines:
+            on_progress(PipelineEvent(engine_cls.name, engine_cls.layer, StageState.PENDING))
 
     # Create resolver for layer-aware path resolution
     resolver = LayerResolver(world_dir, branch)
@@ -137,6 +147,7 @@ def run_pipeline(
             layer_input_dirs=layer_input_dirs,
             layer_derived_dirs=layer_derived_dirs,
             resolver=resolver,
+            on_progress=on_progress,
         )
 
     results: list[EngineResult] = []
@@ -146,6 +157,8 @@ def run_pipeline(
     t_build_start = _time.time()
     upstream_ran = False  # when an upstream engine executes, downstream must re-run
     for engine_cls in sorted_engines:
+        if on_progress:
+            on_progress(PipelineEvent(engine_cls.name, engine_cls.layer, StageState.VALIDATING))
         # Determine output directory for this engine's layer
         if branch is not None:
             branch_dir = world_dir / "branches" / branch
@@ -182,6 +195,8 @@ def run_pipeline(
         ):
             _console.print(f"  [dim]{engine.layer.value}: up-to-date, skipped[/dim]")
             logger.info("Skipping %s (outputs up-to-date)", engine.name)
+            if on_progress:
+                on_progress(PipelineEvent(engine.name, engine.layer, StageState.SKIPPED))
             continue
 
         errors = engine.validate_inputs()
@@ -196,6 +211,12 @@ def run_pipeline(
                     warnings=errors,
                 )
             )
+            if on_progress:
+                on_progress(
+                    PipelineEvent(
+                        engine.name, engine.layer, StageState.FAILED, errors=tuple(errors)
+                    )
+                )
             break
 
         logger.info(
@@ -209,10 +230,30 @@ def run_pipeline(
             f"\n[bold cyan]>> {engine.layer.value}[/bold cyan]  [dim]({engine.name})[/dim]"
         )
         _t0 = _time.time()
-        result = engine.run(force=should_force)
+        if on_progress:
+            on_progress(PipelineEvent(engine.name, engine.layer, StageState.RUNNING))
+        try:
+            result = engine.run(force=should_force)
+        except Exception as error:
+            if on_progress:
+                on_progress(
+                    PipelineEvent(
+                        engine.name, engine.layer, StageState.FAILED, errors=(str(error),)
+                    )
+                )
+            raise
         _elapsed = _time.time() - _t0
         upstream_ran = True
         results.append(result)
+        if on_progress:
+            on_progress(
+                PipelineEvent(
+                    engine.name,
+                    engine.layer,
+                    StageState.SUCCEEDED if result.success else StageState.FAILED,
+                    errors=tuple(result.warnings) if not result.success else (),
+                )
+            )
 
         record: dict[str, Any] = {
             "engine": engine.name,
@@ -289,6 +330,7 @@ def _bootstrap_missing_upstream(
     layer_input_dirs: dict[str, Path],
     layer_derived_dirs: dict[str, Path],
     resolver: LayerResolver,
+    on_progress: Callable[[PipelineEvent], None] | None = None,
 ) -> None:
     """Build missing derived inputs from engines the fork filter excluded.
 
@@ -357,7 +399,34 @@ def _bootstrap_missing_upstream(
             layer_output_dir=output_dir,
             maps_output_dir=world_dir / "maps",
         )
-        result = engine.run()
+        if on_progress:
+            on_progress(
+                PipelineEvent(engine.name, engine.layer, StageState.RUNNING, bootstrap=True)
+            )
+        try:
+            result = engine.run()
+        except Exception as error:
+            if on_progress:
+                on_progress(
+                    PipelineEvent(
+                        engine.name,
+                        engine.layer,
+                        StageState.FAILED,
+                        bootstrap=True,
+                        errors=(str(error),),
+                    )
+                )
+            raise
+        if on_progress:
+            on_progress(
+                PipelineEvent(
+                    engine.name,
+                    engine.layer,
+                    StageState.SUCCEEDED if result.success else StageState.FAILED,
+                    bootstrap=True,
+                    errors=tuple(result.warnings) if not result.success else (),
+                )
+            )
         if result.success:
             # Make the freshly built derived files visible to find_input()
             # for every engine constructed later in the main loop.

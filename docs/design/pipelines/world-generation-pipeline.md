@@ -24,6 +24,15 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 
 ## 引擎目录
 
+### API 构建反馈
+
+管线在检查输入、开始计算、完成计算及使用缓存时报告真实阶段；分支构建补齐上游天文
+数据时也报告准备阶段。API 使用这些事件提供后台构建与状态查询，显示当前引擎、已耗时、
+失败原因和最终结果。它沿用同一管线的执行与缓存规则，不把引擎数量换算成完成时间百分比。
+接口、状态含义及服务重启后的处理见[查询构建进度](../../usage/build-progress.md)。
+
+### 各引擎的依赖与产出
+
 | 引擎 | 层级 | requires | 产出 | 技术参考 |
 |------|------|----------|------|---------|
 | `AstronomyEngine` | astronomy | — | 恒星/行星派生参数、`system_catalog.yaml` 天体目录 | 无 pipeline 文档（缺口已登记 roadmap §七-2）；纯函数见 `engine/stellar_physics.py`、`satellite_dynamics.py`、`planet_dynamo.py` |

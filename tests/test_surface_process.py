@@ -17,6 +17,58 @@ if TYPE_CHECKING:
 PX_M = 720.0
 
 
+@pytest.mark.parametrize("workers", [None, 1, 4])
+def test_basin_memory_failure_leaves_the_input_unchanged(
+    monkeypatch: pytest.MonkeyPatch, workers: int | None
+) -> None:
+    from dreamulator.map.surface_process_basins import run_surface_process_by_basin
+    from dreamulator.utils import resources
+
+    z, land = _plateau()
+    before = z.copy()
+    climate = _climate(z.shape)
+    monkeypatch.setattr(resources, "available_memory_bytes", lambda: 1)
+    with pytest.raises(MemoryError, match="Insufficient memory"):
+        run_surface_process_by_basin(
+            z,
+            land,
+            climate["runoff_mm"],
+            climate["precip_mm"],
+            climate["temp_c"],
+            PX_M,
+            age_yr=np.full(z.shape, 1e5),
+            workers=workers,
+        )
+    assert np.array_equal(z, before)
+
+
+@pytest.mark.parametrize("workers", [None, 1, 4])
+def test_native_memory_failure_preserves_previous_product(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, workers: int | None
+) -> None:
+    from dreamulator.media.canvas_surface_process import (
+        MANIFEST,
+        SURFACE_PROCESS_DIR,
+        run_canvas_surface_process,
+    )
+    from dreamulator.utils import resources
+
+    root = tmp_path / "canvas"
+    root.mkdir()
+    _make_canvas(root)
+    previous = root / SURFACE_PROCESS_DIR / MANIFEST
+    previous.parent.mkdir()
+    previous.write_text("previous completed product", encoding="utf-8")
+    before = set(root.rglob("*"))
+    monkeypatch.setattr(resources, "available_memory_bytes", lambda: 1)
+    with pytest.raises(MemoryError, match="Insufficient memory"):
+        run_canvas_surface_process(
+            root, np.array([np.nan]), np.array([[1.0, 0.0, 0.0]]), workers=workers
+        )
+    assert set(root.rglob("*")) == before
+    assert previous.read_text(encoding="utf-8") == "previous completed product"
+
+
 def _plateau(n: int = 96, *, pit: bool = False) -> tuple[np.ndarray, np.ndarray]:
     """A 2 km plateau dropping to a sea on the west edge; optionally a closed pit on top."""
     y, x = np.mgrid[0:n, 0:n].astype(float)
@@ -295,7 +347,7 @@ def test_fill_refuses_to_resume_on_another_surface(tmp_path: Path) -> None:
         run_canvas_fill(eroded, verbose=False, workers=1)
     run_canvas_fill(eroded, resume=False, verbose=False, workers=1)
     assert read_surface_tag(root / "hydro-work") == eroded.surface
-    final = np.load(root / "hydro-work" / "final" / "r000_c000.i16.npy").astype(np.int32)
+    final = np.load(root / "hydro-work" / "final" / "r000_c000.f32.npy").astype(np.int32)
     assert (final >= np.rint(eroded.raw(0, 0)).astype(np.int32) - 1).all()
 
 

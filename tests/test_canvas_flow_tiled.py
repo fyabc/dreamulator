@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import multiprocessing as mp
+import weakref
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -17,6 +18,73 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 T = 128
+
+
+def test_component_summaries_are_released_before_relabelling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dreamulator.media import canvas_lakes_tiled as lakes
+    from dreamulator.media.canvas_flow_tiled import load_chunk, save_chunk
+
+    root = tmp_path / "canvas"
+    root.mkdir()
+    _make_canvas(root, None)
+    store = CanvasStore.load(root)
+    for key in store.chunks:
+        save_chunk(store, "empty", key, np.zeros((T, T), dtype=np.uint8))
+    original_map = lakes._pool_map
+    summaries: list[weakref.ReferenceType] = []
+
+    def checked_map(fn, items, ctx, workers):
+        if fn is lakes._relabel_chunk:
+            assert summaries and all(ref() is None for ref in summaries)
+        result = original_map(fn, items, ctx, workers)
+        if fn is lakes._label_chunk:
+            for row in result:
+                for array in row[2:]:
+                    assert array.base is None  # Empty summaries must not retain a whole tile.
+                    summaries.append(weakref.ref(array))
+        return result
+
+    monkeypatch.setattr(lakes, "_pool_map", checked_map)
+    comps = lakes.tiled_components(store, "empty", workers=1)
+    assert comps.count == 0
+    for key in store.chunks:
+        assert not load_chunk(store, "lbl_empty", key).any()
+
+
+@pytest.mark.parametrize("workers", [None, 1, 3])
+@pytest.mark.parametrize(
+    "stage", ["fill", "graded", "directions", "accumulation", "lakes", "routing"]
+)
+def test_low_memory_stops_before_chunk_work_or_cache_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, workers: int | None, stage: str
+) -> None:
+    from dreamulator.media import canvas_flow_tiled as flow
+    from dreamulator.media.canvas_lakes_tiled import tiled_components
+    from dreamulator.media.canvas_routing import tiled_two_ring_routing
+    from dreamulator.utils import resources
+
+    root = tmp_path / "canvas"
+    root.mkdir()
+    _make_canvas(root, None)
+    store = CanvasStore.load(root)
+    marker = store.work / "preserved.txt"
+    marker.write_text("previous result", encoding="utf-8")
+    before = set(root.rglob("*"))
+    monkeypatch.setattr(resources, "available_memory_bytes", lambda: 1)
+    actions = {
+        "fill": lambda: run_canvas_fill(store, workers=workers, resume=False, verbose=False),
+        "graded": lambda: flow.tiled_graded(store, workers=workers),
+        "directions": lambda: flow.tiled_directions(store, workers=workers),
+        "accumulation": lambda: flow.tiled_accumulation(store, "source", workers=workers),
+        "lakes": lambda: tiled_components(store, "lake", workers=workers),
+        "routing": lambda: tiled_two_ring_routing(store, workers=workers),
+    }
+    with pytest.raises(MemoryError, match="Insufficient memory"):
+        actions[stage]()
+    assert set(root.rglob("*")) == before
+    assert marker.read_text(encoding="utf-8") == "previous result"
 
 
 def _make_canvas(root: Path, missing: tuple[int, int] | None) -> None:
@@ -87,7 +155,7 @@ def test_tiled_flow_fields_match_the_in_memory_oracle(
     # a flat crossing the seams exists (the filled pit): grading changes cells there
     final = np.full((h, w), np.nan, np.float32)
     for ci, cj in store.chunks:
-        part(final, (ci, cj))[:] = np.load(store.path("final", ci, cj, "i16.npy"))
+        part(final, (ci, cj))[:] = np.load(store.path("final", ci, cj, "f32.npy"))
     assert (graded != final)[np.isfinite(final)].any()
 
     rounds = tiled_graded(store, workers=workers)
@@ -542,3 +610,80 @@ def test_chunk_reads_retry_a_stale_handle(tmp_path: Path, monkeypatch) -> None: 
     monkeypatch.setattr(cft.np, "load", denied)
     with pytest.raises(OSError, match="denied"):
         cft.load_npy(path)
+
+
+def test_channel_table_without_lake_interiors_walks_the_same_rivers(tmp_path: Path) -> None:
+    """Dropping the lake interiors from the chain table changes no segment, flow or regime.
+
+    The walk touches lake cells only at the lake exits, where a chain ends, and along the
+    dried-fringe descent; the full table (every lake cell, every descent row) is built here by
+    hand as the reference.  The canvas is the shrunk-lake case, so fringes and pass-through
+    exits are both exercised.
+    """
+    from dreamulator.map.prog_erosion import (
+        LAKE_MIN_WIDTH_KM,
+        RUNOFF_REFERENCE_MM,
+        ChannelGraph,
+        keep_large_lakes,
+        lake_mmu_cells,
+        renderable_lakes,
+        river_mask,
+        river_segments,
+        river_segments_from_graph,
+        terminal_equilibrium_routing,
+    )
+    from dreamulator.map.td_canvas import PX_PER_CELL
+
+    root = tmp_path / "canvas"
+    root.mkdir()
+    precip, temp, ow = _make_lakes_canvas(root, 100.0, 4000.0)
+    store = CanvasStore.load(root)
+    run_canvas_fill(store, verbose=False, workers=1)
+    graded, dem, rec, _acc0, land, order, weight, inland = canvas_flow_fields(store)
+    km = store.geometry.px_km
+    mmu = lake_mmu_cells(km)
+    lakes0 = renderable_lakes(graded, dem, inland, mmu, km)
+    out = terminal_equilibrium_routing(
+        dem, land, lakes0, order, rec.copy(), weight.ravel().copy(),
+        precip_mm=precip, temp_c=temp, runoff_land_mean_mm=RUNOFF_REFERENCE_MM,
+        mmu_cells=mmu, km_per_px=km, sea_level_m=0.0, climate_block=PX_PER_CELL,
+        open_water_mm=ow, keep_rewritten_h=False,
+    )  # fmt: skip
+    _h, land2, _render, chain_stop, desc, rec_route, acc, _water, _stats, _records = out
+    assert desc is not None and ((desc >= 0) & (desc != np.arange(desc.size))).sum() > 50
+    acc2 = acc.reshape(land.shape)
+    rivers = river_mask(acc2, land2, 8)
+    rows = store.geometry.size_px
+    segs, flows, regimes = river_segments(
+        rivers, rec_route, acc2, km, lake=chain_stop, lake_descend=desc, pixel_rows=rows
+    )
+    assert len(segs) > 50
+
+    # the reference: every lake cell and every descent row, as the table was first built
+    lake_big = keep_large_lakes(chain_stop, mmu, LAKE_MIN_WIDTH_KM, km).reshape(-1)
+    riv = np.flatnonzero(rivers.reshape(-1))
+    src = np.flatnonzero(desc >= 0)
+    cells = np.unique(
+        np.concatenate([riv, np.flatnonzero(lake_big), rec_route[riv], src, desc[src]])
+    )
+    cells = cells[cells >= 0]
+    full = ChannelGraph(
+        cells=cells,
+        is_river=rivers.reshape(-1)[cells],
+        is_lake=lake_big[cells],
+        receiver=rec_route[cells].astype(np.int64),
+        acc=acc2.reshape(-1)[cells].astype(np.float64),
+        month=np.full(cells.size, 12, dtype=np.uint8),
+        descend=desc[cells].astype(np.int64),
+        width=land.shape[1],
+        rows=rows,
+        km_per_px=km,
+    )
+    segs_f, flows_f, regimes_f = river_segments_from_graph(full)
+    assert np.array_equal(segs, segs_f)
+    assert np.array_equal(flows, flows_f)
+    assert np.array_equal(regimes, regimes_f)
+    # and the table really is the rim: far fewer lake rows than lake cells
+    n_lake = int(lake_big.sum())
+    exits = np.flatnonzero(lake_big & (rec_route >= 0) & ~lake_big[np.maximum(rec_route, 0)])
+    assert n_lake > 20 * max(exits.size, 1)

@@ -9,6 +9,10 @@ type: overview
 关键参数决策的「为什么」。每条决策带状态（`accepted` / `deprecated` / `superseded`），沿用
 守护轴约定（`docs/design/harness.md`）。
 
+[现行依据与复核范围 0024](0024-ledger-current-evidence.md)承接形成史、卫星系统和宜居保护的现行结论，
+并登记其余十一条已接受记录的检查范围。被取代记录保留原文与历史证据。缺少历史基线的记录从本次复核开始登记，
+其快照、实验档案和创作设定各按记录中的采用范围解释。
+
 ## 核心设计哲学
 
 Nacrea 世界严格遵循 Dreamulator 的**自变量/因变量分离**原则：
@@ -24,10 +28,10 @@ Nacrea 世界严格遵循 Dreamulator 的**自变量/因变量分离**原则：
 |------|------|------|
 | [0001](0001-stellar-parameters.md) | 恒星与行星系参数设计决策 | superseded by 0007 |
 | [0002](0002-eccentricity.md) | 偏心率设定依据 | superseded by 0007 |
-| [0003](0003-system-formation.md) | 系统形成史与共振验证（链长期模态数字以 0009 §1 β+ 为准） | accepted |
-| [0004](0004-satellite-systems.md) | 其他行星的卫星系统设计（含 Boreal/Umbra 潜在宜居冰卫星升级与稳定性判决） | accepted |
+| [0003](0003-system-formation.md) | 系统形成史与共振验证的历史记录；现今轨道与采用范围见 0024。 | superseded by 0024 |
+| [0004](0004-satellite-systems.md) | 其他行星卫星设计的历史记录；现今参数与沿用结论见 0024。 | superseded by 0024 |
 | [0005](0005-orbital-inclination.md) | 轨道倾角 9° 的设定原因 | superseded by 0009（ε=18° 锥摆） |
-| [0006](0006-habitability-protection.md) | 红矮星环境下的宜居保护（耀斑生存 + 撞击概率） | accepted |
+| [0006](0006-habitability-protection.md) | 橙矮星环境下宜居保护的历史记录；现行热流与证据范围见 0024。 | superseded by 0024 |
 | [0007](0007-aegis-seasonal-eccentricity.md) | Nacrea 天文系统调参（季节增强 + 轨道稳定） | superseded by 0009 |
 | [0008](0008-circulation-critical-instabilities.md) | 宽 Hadley 环流的临界不稳定性（弱斜压 + 赤道超旋转，未来丰富设定源） | proposed |
 | [0009](0009-satellite-architecture.md) | Aegis 卫星架构：β+ 安静链态 × FJ 近平衡双珠 × ε=18 锥摆 × Q=300 × 10-07 定版纪元态（实验矩阵见[附录](0009-appendix-experiment-log.md) §8–§10） | certified-current |
@@ -45,3 +49,4 @@ Nacrea 世界严格遵循 Dreamulator 的**自变量/因变量分离**原则：
 | [0021](0021-heat-co2-ice-history.md) | 最近200万年的热流、CO₂与全球冰量参考历史：热流峰在距今78万年，CO₂峰与冰量低谷在70万年，约化碳循环和冰量的采用范围分别登记 | accepted |
 | [0022](0022-insolation-recalibration.md) | Nacrea 辐照重标定：记录恒星质量杠杆、年长锁定与大气组成的最终裁决；现行气候定标引用 0012，裁决前的候选表和实施预案保存在文首历史块。 | accepted |
 | [0023](0023-world-island-dissected-highland.md) | 世界岛中央是深切高地：画布二次侵蚀第一轮锚定 200k 网格平均、按造山剖面回放推出有效下切时间（中位约 20 Myr），结果近似青藏东南式深谷山地；对外设定随全量重生成切换 | accepted |
+| [0024](0024-ledger-current-evidence.md) | 形成史、卫星系统与宜居保护采用现行依据，其余十一条记录登记复核范围与机器检查基线。 | accepted |

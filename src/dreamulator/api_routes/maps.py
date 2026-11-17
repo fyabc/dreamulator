@@ -154,10 +154,10 @@ def get_map_meta(
 ) -> dict[str, Any]:
     """Get map metadata for a planet."""
     mgr = _mgr_reading(_get_map_manager(world_name, branch), planet_id, "map.yaml")
-    meta = mgr.get_map_metadata(planet_id)
+    meta = mgr.get_map_metadata_result(planet_id)
     if meta is None:
         raise HTTPException(status_code=404, detail=f"No map metadata for '{planet_id}'")
-    return meta.model_dump(mode="json")
+    return meta
 
 
 @router.get("/{world_name}/maps/{planet_id}/elevation")
@@ -419,53 +419,98 @@ async def import_elevation(
     file: UploadFile = File(...),
     branch: str | None = None,
     notes: str | None = Form(None),
+    mode: str | None = Form(None),
+    min_m: float | None = Form(None),
+    max_m: float | None = Form(None),
+    sea_level: float | None = Form(None),
+    sea_level_m: float | None = Form(None),
+    curve: str | None = Form(None),
+    gamma: float | None = Form(None),
+    seafloor_m: float | None = Form(None),
 ) -> dict[str, Any]:
-    """Import a heightmap from an external tool (PNG/TIFF).
+    """Import a heightmap from an external tool (PNG/TIFF) under an explicit mapping to metres.
 
-    Auto-detects format, normalises to [0, 1], and optionally resamples to
-    match the project's target resolution.  After import the Voronoi network
-    is automatically re-sampled from the new elevation data.
+    The mapping is the import contract (``ElevationMapping``): ``range`` (the image carries
+    the sea floor; ``min_m``/``max_m`` at its ends), ``threshold`` (a land-only map; ``sea_level``
+    as a fraction of full scale, ``max_m`` at white, ``curve``/``gamma``, and the assumed
+    ``seafloor_m`` for every sea cell) or ``metres`` (a float TIFF already in metres).  With no
+    mapping fields it is ``range`` over the map's own ``elevation_min_m``/``elevation_max_m``,
+    which is what the endpoint has always implied.  Land and sea are decided on the source
+    pixels and the heights resampled per class to the map's resolution.
 
-    Supported formats: 16-bit PNG, 16-bit TIFF, 32-bit float TIFF.
+    The response reports the land fraction, the height of one grey level, whether the sea floor
+    is an assumption and any warnings about the image. The original image and contract are
+    retained in geological input; the next build samples them onto a CVT mesh for climate.
     """
-    from ..map.importer import import_heightmap
+    from ..map.elevation_input import save_elevation_source, validate_elevation_input_target
+    from ..map.importer import import_heightmap_metres
+    from ..map.models import ElevationImportProvenance, ElevationMapping
 
     mgr = _get_map_manager(world_name, branch)
+    try:
+        validate_elevation_input_target(mgr.world_dir, branch)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     meta = mgr.get_map_metadata(planet_id)
+    fields: dict[str, Any] = {
+        k: v
+        for k, v in {
+            "mode": mode, "min_m": min_m, "max_m": max_m, "sea_level": sea_level,
+            "sea_level_m": sea_level_m, "curve": curve, "gamma": gamma, "seafloor_m": seafloor_m,
+        }.items()
+        if v is not None
+    }  # fmt: skip
+    if not fields and meta is not None:
+        fields = {
+            "mode": "range",
+            "min_m": meta.elevation_min_m,
+            "max_m": meta.elevation_max_m,
+            "sea_level_m": meta.sea_level_m,
+        }
+    try:
+        mapping = ElevationMapping.model_validate(fields)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     data = await file.read()
     filename = file.filename or ""
+    try:
+        result = import_heightmap_metres(
+            data,
+            mapping,
+            filename=filename,
+            target_width=meta.width if meta else None,
+            target_height=meta.height if meta else None,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
-    # Determine target resolution
-    target_w = meta.width if meta else None
-    target_h = meta.height if meta else None
-
-    result = import_heightmap(
-        data,
-        filename=filename,
-        target_width=target_w,
-        target_height=target_h,
+    provenance = ElevationImportProvenance(
+        source_format=result.source_format,
+        source_filename=filename,
+        source_resolution=[result.source_width, result.source_height],
+        output_resolution=list(result.metres.shape[::-1]),
+        was_resampled=result.was_resampled,
+        mapping=mapping,
+        range_m=[float(result.metres.min()), float(result.metres.max())],
+        land_fraction=result.land_fraction,
+        seafloor_assumed=result.seafloor_assumed,
+        level_step_m=result.level_step_m,
+        notes=notes,
     )
-
-    mgr.save_elevation(planet_id, result.elevation)
+    try:
+        save_elevation_source(mgr.world_dir, branch, planet_id, data, provenance)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    lo, hi = mgr.save_elevation_metres(planet_id, result.metres)
+    # The declared sea level is part of the display contract as well as the water mask.
+    updated_meta = mgr.get_map_metadata(planet_id)
+    assert updated_meta is not None
+    updated_meta.width, updated_meta.height = result.metres.shape[::-1]
+    updated_meta.sea_level_m = 0.0 if mapping.mode == "threshold" else mapping.sea_level_m
+    updated_meta.elevation_import = provenance
+    mgr.save_map_metadata(planet_id, updated_meta)
     mgr.sync_voronoi_from_elevation(planet_id)
-
-    # Record import provenance in map.yaml (imported rasters carry no
-    # pipeline plate/tectonic data — the UI surfaces this to the author).
-    from ..map.models import ElevationImportProvenance
-
-    mgr.record_elevation_import(
-        planet_id,
-        ElevationImportProvenance(
-            source_format=result.source_format,
-            source_filename=filename,
-            source_resolution=[result.source_width, result.source_height],
-            output_resolution=list(result.elevation.shape[::-1]),
-            was_resampled=result.was_resampled,
-            range_normalized=[float(result.elevation.min()), float(result.elevation.max())],
-            notes=notes,
-        ),
-    )
 
     # Update layer registry and mark downstream layers as stale
     registry = mgr.update_registry_on_elevation_change(planet_id)
@@ -479,9 +524,15 @@ async def import_elevation(
         "ok": True,
         "source_format": result.source_format,
         "source_resolution": [result.source_width, result.source_height],
-        "output_resolution": list(result.elevation.shape[::-1]),
+        "output_resolution": list(result.metres.shape[::-1]),
         "was_resampled": result.was_resampled,
-        "range": [float(result.elevation.min()), float(result.elevation.max())],
+        "mapping": mapping.model_dump(),
+        "range_m": [float(result.metres.min()), float(result.metres.max())],
+        "stored_scale_m": [lo, hi],
+        "land_fraction": result.land_fraction,
+        "seafloor_assumed": result.seafloor_assumed,
+        "level_step_m": result.level_step_m,
+        "warnings": result.warnings,
         "stale_layers": stale_layers,
     }
 

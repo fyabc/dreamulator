@@ -2,7 +2,7 @@
 title: "系统形成史与共振验证"
 type: design
 tags: [formation, migration, resonance-verification]
-status: accepted
+status: superseded by 0024-ledger-current-evidence
 checked_against:
   physics: ''
   chemistry: ''

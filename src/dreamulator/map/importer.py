@@ -7,24 +7,48 @@ Photoshop):
 - 16-bit TIFF (integer)
 - 32-bit float TIFF (Gaea native output)
 
-All formats are normalised to a float64 array in [0, 1] and optionally resampled
-to the project's target resolution.
+Two entry points:
+
+- :func:`import_heightmap` decodes to a float64 array in [0, 1] (a fraction of the image's
+  full scale) and optionally resamples it.  This is what probability-style rasters use (the
+  geography land-bias map), and the decoding step of the elevation import.
+- :func:`import_heightmap_metres` is the elevation import contract: it decodes, turns the
+  values into metres through an explicit :class:`~dreamulator.map.models.ElevationMapping`,
+  decides land and sea at the source resolution, resamples heights and the land mask
+  separately, and reports what the result rests on (land fraction, the height of one grey
+  level, whether the sea floor is assumed, warnings about the image).
 """
 
 from __future__ import annotations
 
 import io
 import logging
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
+
+if TYPE_CHECKING:
+    from .models import ElevationMapping
 
 logger = logging.getLogger(__name__)
 
 # 16-bit quantisation constant
 _UINT16_MAX_F = 65535.0
+
+#: Levels of each integer source format (for the height of one grey level); floats have none.
+_LEVELS = {
+    "png-8bit": 255,
+    "png-converted": 255,
+    "tiff-uint8": 255,
+    "png-16bit": 65535,
+    "tiff-uint16": 65535,
+    "tiff-int16": 65535,
+    "tiff-uint32": 4294967295,
+}
 
 
 @dataclass
@@ -85,6 +109,144 @@ def import_heightmap(
         source_format=fmt,
         was_resampled=was_resampled,
     )
+
+
+@dataclass
+class MetricImport:
+    """An imported heightmap in metres, with what the result rests on."""
+
+    metres: np.ndarray  # 2-D float64, metres above sea level
+    land: np.ndarray  # 2-D bool, decided at the source resolution
+    source_width: int
+    source_height: int
+    source_format: str
+    was_resampled: bool
+    seafloor_assumed: bool  # the sea cells carry the mapping's declared depth, not data
+    land_fraction: float
+    level_step_m: dict[str, float] | None  # height of one level: at the coast and the largest
+    warnings: list[str] = field(default_factory=list)
+
+
+def import_heightmap_metres(
+    data: bytes,
+    mapping: ElevationMapping,
+    *,
+    filename: str = "",
+    target_width: int | None = None,
+    target_height: int | None = None,
+    global_map: bool = True,
+) -> MetricImport:
+    """Import a heightmap as metres under an explicit mapping (the elevation import contract).
+
+    Land and sea are decided on the source pixels; heights are then resampled per class (each
+    output cell averages only the source samples of its own class), so a coast is not dragged
+    toward the other side's values and the land mask is resampled on its own.  In ``threshold``
+    mode the sea has no data and every sea cell gets the mapping's ``seafloor_m``; the result
+    says so.  See :class:`~dreamulator.map.models.ElevationMapping` for the three modes.
+    """
+    warnings: list[str] = []
+    if mapping.mode == "metres":
+        fmt, values = _decode_metres(data)
+        land = values > mapping.sea_level_m
+        metres = values
+    else:
+        fmt, v = _decode(data, filename)
+        if not np.isfinite(v).all():
+            raise ValueError("heightmap values must be finite; fill missing pixels before import")
+        if mapping.mode == "range":
+            if mapping.max_m <= mapping.min_m:
+                raise ValueError("range mapping needs max_m > min_m")
+            metres = mapping.min_m + v * (mapping.max_m - mapping.min_m)
+            land = metres > mapping.sea_level_m
+        else:  # threshold
+            if mapping.max_m <= 0.0:
+                raise ValueError("threshold mapping needs max_m > 0")
+            land = v > mapping.sea_level
+            metres = np.where(land, _threshold_curve(v, mapping), 0.0)
+    src_h, src_w = metres.shape
+    if global_map and src_w != 2 * src_h:
+        warnings.append(
+            f"aspect {src_w}x{src_h} is not 2:1; a global map is read as equirectangular, "
+            "so the image is stretched to the planet"
+        )
+    levels = _LEVELS.get(fmt)
+    step = _level_step(mapping, levels) if levels else None
+    if levels == 255:
+        warnings.append(
+            f"8-bit input: {levels + 1} levels; one level is {step['coast']:.1f} m at the coast "
+            f"and up to {step['max']:.1f} m (prefer 16-bit or float)"
+            if step
+            else "8-bit input: 256 levels (prefer 16-bit or float)"
+        )
+    was_resampled = False
+    if target_width and target_height and (target_width, target_height) != (src_w, src_h):
+        metres, land = _resample_by_class(metres, land, target_width, target_height)
+        was_resampled = True
+    seafloor_assumed = mapping.mode == "threshold"
+    if seafloor_assumed:
+        metres = np.where(land, metres, mapping.seafloor_m)
+    return MetricImport(
+        metres=metres.astype(np.float64),
+        land=land,
+        source_width=src_w,
+        source_height=src_h,
+        source_format=fmt,
+        was_resampled=was_resampled,
+        seafloor_assumed=seafloor_assumed,
+        land_fraction=float(land.mean()),
+        level_step_m=step,
+        warnings=warnings,
+    )
+
+
+def _threshold_curve(v: np.ndarray, mapping: ElevationMapping) -> np.ndarray:
+    """Land metres above the sea threshold: 0 m at the threshold, ``max_m`` at full scale."""
+    u = np.clip((v - mapping.sea_level) / (1.0 - mapping.sea_level), 0.0, 1.0)
+    if mapping.curve == "gamma":
+        u = u**mapping.gamma
+    return np.asarray(mapping.max_m * u)
+
+
+def _level_step(mapping: ElevationMapping, levels: int) -> dict[str, float] | None:
+    """The height of one source level: just above the coast, and the largest anywhere."""
+    if mapping.mode == "range":
+        d = (mapping.max_m - mapping.min_m) / levels
+        return {"coast": d, "max": d}
+    if mapping.mode != "threshold":
+        return None
+    first = math.floor(mapping.sea_level * levels) + 1
+    # Linear and power curves have monotone increments.  The largest step is at one
+    # end, so even uint32 input needs only three samples, rather than 2**32 values.
+    ends = np.array([first, min(first + 1, levels), levels - 1], dtype=np.float64)
+    heights = _threshold_curve(ends / levels, mapping)
+    coast = float(heights[0])
+    largest = max(coast, float(heights[1] - heights[0]), mapping.max_m - float(heights[2]))
+    return {"coast": coast, "max": largest}
+
+
+def _resample_by_class(
+    metres: np.ndarray, land: np.ndarray, target_width: int, target_height: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Resample the land mask by area, and heights as per-class weighted means.
+
+    Box filtering when either side shrinks, bilinear otherwise; both are positive filters, so
+    no ringing can flip a coast.  A cell is land when at least half its footprint was land.
+    """
+    src_h, src_w = metres.shape
+    shrink = target_width < src_w or target_height < src_h
+    flt = Image.Resampling.BOX if shrink else Image.Resampling.BILINEAR
+
+    def rs(a: np.ndarray) -> np.ndarray:
+        img = Image.fromarray(np.ascontiguousarray(a, dtype=np.float32), mode="F")
+        return np.asarray(img.resize((target_width, target_height), flt), dtype=np.float64)
+
+    w_land = land.astype(np.float64)
+    frac = rs(w_land)
+    land_t = frac >= 0.5
+    num_l, num_s = rs(metres * w_land), rs(metres * (1.0 - w_land))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out = np.where(land_t, num_l / frac, num_s / (1.0 - frac))
+    return np.nan_to_num(out, nan=0.0), land_t
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +350,8 @@ def _decode_tiff(data: bytes) -> tuple[str, np.ndarray]:
         # 32-bit or 64-bit float TIFF — values should already be in [0, 1]
         # but some tools output in arbitrary ranges, so normalise if needed
         arr = arr.astype(np.float64)
+        if not np.isfinite(arr).all():
+            raise ValueError("heightmap values must be finite; fill missing pixels before import")
         vmin, vmax = float(arr.min()), float(arr.max())
         if vmin < 0.0 or vmax > 1.0:
             logger.info(
@@ -221,6 +385,22 @@ def _decode_tiff(data: bytes) -> tuple[str, np.ndarray]:
         fmt_label = f"tiff-{dtype}"
 
     return fmt_label, np.clip(arr, 0.0, 1.0)
+
+
+def _decode_metres(data: bytes) -> tuple[str, np.ndarray]:
+    """Decode a float TIFF whose values are metres, without normalising."""
+    import tifffile
+
+    if _detect_format(data) != "tiff":
+        raise ValueError("metres mapping needs a float TIFF whose values are metres")
+    arr = tifffile.imread(io.BytesIO(data))
+    if arr.ndim == 3:
+        arr = arr[:, :, 0]
+    if arr.ndim != 2 or not np.issubdtype(arr.dtype, np.floating):
+        raise ValueError(f"metres mapping needs a 2-D float TIFF, got {arr.dtype} {arr.shape}")
+    if not np.isfinite(arr).all():
+        raise ValueError("heightmap values must be finite; fill missing pixels before import")
+    return f"tiff-float{arr.dtype.itemsize * 8}", arr.astype(np.float64)
 
 
 # ---------------------------------------------------------------------------

@@ -108,14 +108,35 @@ def worker_budget(
     per_worker_bytes: float,
     *,
     cap: int | None = None,
+    requested_workers: int | None = None,
     threads_per_worker: int = 1,
     memory_fraction: float = MEMORY_FRACTION,
 ) -> int:
-    """Pool size bounded by the CPU quota and by ``memory_fraction`` of the free memory."""
-    n = max(1, cpu_quota() // max(1, threads_per_worker))
+    """Choose a pool size or reject a request that exceeds the known memory budget.
+
+    ``cap`` limits the actual pool (for example, to the number of tasks). Explicit counts
+    retain their CPU oversubscription behavior but must fit the same memory budget. When
+    memory is unknown or no per-worker estimate is supplied, only the CPU/task bounds apply.
+    """
+    n = (
+        max(1, cpu_quota() // max(1, threads_per_worker))
+        if requested_workers is None
+        else max(1, requested_workers)
+    )
+    if cap is not None:
+        n = max(1, min(n, cap))
     avail = available_memory_bytes()
     if avail is not None and per_worker_bytes > 0:
-        n = min(n, max(1, int(avail * memory_fraction // per_worker_bytes)))
-    if cap is not None:
-        n = min(n, cap)
-    return max(1, n)
+        allowed = max(0, avail) * memory_fraction
+        fits = int(allowed // per_worker_bytes)
+        required_workers = 1 if requested_workers is None else n
+        if required_workers > fits:
+            raise MemoryError(
+                f"Insufficient memory: {required_workers} worker(s) need an estimated "
+                f"{required_workers * per_worker_bytes / 2**30:.2f} GiB; the worker budget "
+                f"is {allowed / 2**30:.2f} GiB ({memory_fraction:.0%} of "
+                f"{max(0, avail) / 2**30:.2f} GiB available). At most {fits} worker(s) fit. "
+                "Use fewer workers when possible, smaller chunks, or an out-of-core path."
+            )
+        n = min(n, fits)
+    return n

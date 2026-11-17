@@ -1,29 +1,33 @@
-"""terrain_refine — terrain-diffusion refinement as an export command.
+"""Build a region from redrawn terrain, source detail blend or source hydrology.
 
-The main terrain source of the terrain chain (docs/usage/terrain-chain.md
-step ②): the engine's coarse conditioning fields drive the terrain-
-diffusion model to regenerate the landscape at 90 m; the programmatic
-hydrology layer (Priority-Flood + lakes + vector channels) then extracts
-the drainage semantics.  The heavy inference runs in the terrain-diffusion
-venv as a subprocess — its CUDA torch stack stays out of this project's
-dependencies.
-
-    <pack> + world data  →  <pack>/refined-out/  (shared file vocabulary)
+TD inference uses its own environment. All modes write one adopted height
+and the shared drainage/render vocabulary; intermediate fields are retained
+with hashes so terrain edits and cache reuse can be inspected.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
+import os
+import shutil
 import subprocess
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from dreamulator.media.lake_masks import lake_footprint
+from dreamulator.media.terrain_blend import (
+    RefinementMode,
+    blend_height,
+    cap_depression_depth,
+    detail_difference,
+)
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from dreamulator.map.models import CVTMesh
     from dreamulator.map.region_export import RegionWindow
 
@@ -76,7 +80,7 @@ if mode == "condition":
 
     rows = max(2, round(span_km / {km}))
     for name, arr in loaded.items():
-        coarse = zoom(arr, (rows / arr.shape[0], rows / arr.shape[1]), order=1)
+        coarse = zoom(arr, (rows / arr.shape[0], rows / arr.shape[1]), order=1, mode="nearest")
         tifffile.imwrite(out / f"{name}.tif", coarse.astype(np.float32))
 elif mode == "infer":
     import subprocess as sp
@@ -119,11 +123,10 @@ def _pack_map_dir(meta: dict[str, Any]) -> Path:
     climate; MapManager applies the branch → root → legacy resolution order.
     """
     from dreamulator.map.manager import MapManager
+    from dreamulator.world_manager import _data_dir
 
     src = meta["source"]
-    map_dir = MapManager(Path("data") / "worlds" / src["world"], src.get("branch"))._maps_dir(
-        src["planet"]
-    )
+    map_dir = MapManager(_data_dir() / src["world"], src.get("branch"))._maps_dir(src["planet"])
     if map_dir is None:
         raise FileNotFoundError(
             f"no maps for {src['world']}/{src['planet']} (branch {src.get('branch')})"
@@ -178,17 +181,24 @@ def _pack_monthly_runoff(
     The two optional parameters are sensitivity-experiment overrides;
     production uses the documented WBM-default constants.
     """
-    from dreamulator.engine.climate_physics import (
-        BASEFLOW_RECHARGE_FRACTION,
-        BASEFLOW_RESIDENCE_TIME_DAYS,
-        SOIL_WATER_CAPACITY_MM,
-        potential_evapotranspiration_hamon_monthly,
-        route_runoff_with_baseflow,
-        soil_bucket_monthly,
-    )
     from dreamulator.map.export import build_export_tree, find_mesh_file, load_climate_monthly
     from dreamulator.map.region_export import _nearest_indices_on_grid
-    from dreamulator.result_contract import REFERENCE_MONTH_DAYS
+    from dreamulator.map.region_inputs import (
+        local_runoff,
+        monthly_runoff_shape,
+        read_refinement_inputs,
+    )
+
+    meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
+    overrides = {"recharge_fraction": recharge_fraction, "residence_time_days": residence_time_days}
+    if "refinement_inputs" in meta:
+        if recharge_fraction is not None or residence_time_days is not None:
+            raise ValueError("runoff overrides need a newly exported input snapshot")
+        return read_refinement_inputs(pack_dir / "input", meta["refinement_inputs"])[
+            "runoff_monthly_mm"
+        ]
+    if meta.get("source", {}).get("world") == "external":
+        return local_runoff(pack_dir / "input", **overrides)
 
     annual_path = pack_dir / "input" / "runoff.mm.npy"
     if not annual_path.exists():
@@ -206,32 +216,7 @@ def _pack_monthly_runoff(
     except FileNotFoundError:
         print(f"[refine] no climate_monthly under {map_dir}; river regime off (all solid)")
         return None
-    pet_m = potential_evapotranspiration_hamon_monthly(t_m, REFERENCE_MONTH_DAYS)
-    _e, r_m, _cycles, _resid = soil_bucket_monthly(p_m, pet_m, SOIL_WATER_CAPACITY_MM)
-    r_m = route_runoff_with_baseflow(
-        r_m,
-        days_per_month=REFERENCE_MONTH_DAYS,
-        recharge_fraction=(
-            BASEFLOW_RECHARGE_FRACTION if recharge_fraction is None else recharge_fraction
-        ),
-        residence_time_days=(
-            BASEFLOW_RESIDENCE_TIME_DAYS if residence_time_days is None else residence_time_days
-        ),
-    )
-
-    # Normalised monthly shape: every cell's twelve shares sum to one, so
-    # multiplying by the pack's annual channel preserves that channel
-    # exactly (including its C1 interpolation, which nearest-CVT sampling
-    # of a mesh-annual field would not reproduce).
-    shape = np.zeros_like(r_m)
-    bucket_total = r_m.sum(axis=1)
-    has_bucket = bucket_total > 1e-6
-    shape[has_bucket] = r_m[has_bucket] / bucket_total[has_bucket, None]
-    surplus = np.maximum(p_m - pet_m, 0.0)
-    surplus_total = surplus.sum(axis=1)
-    has_surplus = ~has_bucket & (surplus_total > 1e-6)
-    shape[has_surplus] = surplus[has_surplus] / surplus_total[has_surplus, None]
-    shape[~has_bucket & ~has_surplus] = 1.0 / 12.0
+    shape = monthly_runoff_shape(t_m, p_m, **overrides)
 
     mesh, window = _mesh_and_window(pack_dir)
     tree = build_export_tree(mesh)
@@ -245,38 +230,39 @@ def _export_conditioning(pack_dir: Path, tmp: Path, *, coast_warp: bool = False)
     """Stage 1 (main env): sample the mesh + monthly climate on the AEQ window."""
     from dreamulator.map.export import build_export_tree, load_climate_monthly
     from dreamulator.map.region_export import _nearest_indices_on_grid
+    from dreamulator.map.region_inputs import (
+        CONDITIONING_UNITS,
+        local_conditioning,
+        read_refinement_inputs,
+    )
 
-    mesh, window = _mesh_and_window(pack_dir)
-    # Conditioning pitch = the legacy equirect export grid's meridional pitch
-    # (2048 rows), the resolution the TD chain was tuned on.  AEQ sampling
-    # holds that ground pitch at every latitude; the TD driver resamples the
-    # fields to round(span / 23 km) coarse cells either way.
-    n = max(2, round(window.span_km / (math.pi * window.radius_km / 2047.0)))
-    tree = build_export_tree(mesh)
-    indices = _nearest_indices_on_grid(tree, *window.out_latlon(n))
     meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
-    map_dir = _pack_map_dir(meta)
-
-    t_m, p_m = load_climate_monthly(map_dir)
-    t_mean, p_mean = t_m.mean(axis=1), p_m.mean(axis=1)
-    fields = {
-        "elevation_m": np.fromiter(
-            (c.elevation for c in mesh.cells), dtype=np.float64, count=t_m.shape[0]
-        ),
-        "temperature_mean_c": t_mean,
-        "temperature_std_c": t_m.std(axis=1),
-        "precipitation_total_mm": p_m.sum(axis=1),
-        "precipitation_cv_pct": np.where(
-            p_mean > 1e-9, p_m.std(axis=1) / np.maximum(p_mean, 1e-9) * 100.0, 0.0
-        ),
-    }
+    if "refinement_inputs" in meta:
+        snapshot = read_refinement_inputs(pack_dir / "input", meta["refinement_inputs"])
+        out_fields = {name: snapshot[name] for name in CONDITIONING_UNITS}
+        n = out_fields["elevation_m"].shape[0]
+    elif meta.get("source", {}).get("world") == "external":
+        out_fields = local_conditioning(pack_dir / "input")
+        n = out_fields["elevation_m"].shape[0]
+    else:
+        mesh, window = _mesh_and_window(pack_dir)
+        n = max(2, round(window.span_km / (math.pi * window.radius_km / 2047.0)))
+        indices = _nearest_indices_on_grid(build_export_tree(mesh), *window.out_latlon(n))
+        t_m, p_m = load_climate_monthly(_pack_map_dir(meta))
+        t_mean, p_mean = t_m.mean(axis=1), p_m.mean(axis=1)
+        fields = {
+            "elevation_m": np.fromiter(
+                (c.elevation for c in mesh.cells), dtype=np.float64, count=t_m.shape[0]
+            ),
+            "temperature_mean_c": t_mean,
+            "temperature_std_c": t_m.std(axis=1),
+            "precipitation_total_mm": p_m.sum(axis=1),
+            "precipitation_cv_pct": np.where(
+                p_mean > 1e-9, p_m.std(axis=1) / np.maximum(p_mean, 1e-9) * 100.0, 0.0
+            ),
+        }
+        out_fields = {name: arr[indices].astype(np.float32) for name, arr in fields.items()}
     tmp.mkdir(parents=True, exist_ok=True)
-    # Optional coast-domain warp before coarse conditioning (off by default):
-    # the engine's sea-land edges are straight Voronoi boundaries and TD
-    # anchors its coastline to the conditioning elevation — warped, straight
-    # runs bend into organic shorelines (measured 9.1→14.6 roughness), at
-    # the cost of ~35 km of coordinate drift on the conditioning.
-    out_fields = {name: arr[indices].astype(np.float32) for name, arr in fields.items()}
     if coast_warp:
         from dreamulator.media.satellite_color import apply_boundary_warp
 
@@ -287,7 +273,7 @@ def _export_conditioning(pack_dir: Path, tmp: Path, *, coast_warp: bool = False)
         }
     for name, arr in out_fields.items():
         np.save(tmp / f"{name}.npy", arr.astype(np.float32))
-    return n
+    return int(n)
 
 
 def _run_td(py: Path, td_repo: Path, tmp: Path, span_km: float, n: int, out_tif: Path) -> None:
@@ -300,6 +286,11 @@ def _run_td(py: Path, td_repo: Path, tmp: Path, span_km: float, n: int, out_tif:
     driver = tmp / "_td_driver.py"
     driver.write_text(_TD_DRIVER, encoding="utf-8")
     tiff_dir = tmp / "cond"
+    # The subprocess owns a different torch installation. Allocator settings
+    # from the host's torch can be unsupported by that installation.
+    env = os.environ.copy()
+    env.pop("PYTORCH_CUDA_ALLOC_CONF", None)
+    env.pop("PYTORCH_ALLOC_CONF", None)
     subprocess.run(
         [
             str(py),
@@ -311,11 +302,58 @@ def _run_td(py: Path, td_repo: Path, tmp: Path, span_km: float, n: int, out_tif:
             str(n),
         ],
         check=True,
+        env=env,
     )
     subprocess.run(
         [str(py), str(driver), "infer", str(td_repo), str(tiff_dir), str(out_tif)],
         check=True,
+        env=env,
     )
+
+
+def _cache_contract(
+    pack_dir: Path,
+    meta: dict[str, Any],
+    mode: RefinementMode,
+    native_km: float | None,
+    preserve_km: float | None,
+    coast_warp: bool,
+    depth_cap: bool,
+) -> dict[str, Any]:
+    from dreamulator.map.region_inputs import file_sha256
+
+    # Hash actual portable files, including legacy monthly forcing. Paths are
+    # relative so moving a pack does not invalidate the cache.
+    files = sorted((pack_dir / "input").rglob("*.npy"))
+    return {
+        "version": "region-refinement-modes-v1",
+        "input_meta_sha256": file_sha256(pack_dir / "input/meta.json"),
+        "inputs": {str(p.relative_to(pack_dir)): file_sha256(p) for p in files},
+        "mode": mode.value,
+        "native_resolution_km": native_km,
+        "preserve_wavelength_km": preserve_km,
+        "coast_warp": coast_warp,
+        "cap_depression_depth": depth_cap,
+        "res": int(meta["grid"]["w"]) * REFINE_FACTOR,
+        "driver_sha256": hashlib.sha256(_TD_DRIVER.encode("utf-8")).hexdigest(),
+    }
+
+
+def _td_revision(td_repo: Path) -> str:
+    try:
+        revision = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=td_repo,
+            text=True,
+            encoding="utf-8",
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except subprocess.CalledProcessError as exc:
+        raise ValueError("--td must point to a terrain-diffusion git checkout") from exc
+    changes = subprocess.check_output(
+        ["git", "diff", "HEAD", "--", "terrain_diffusion"], cwd=td_repo
+    )
+    return revision if not changes else revision + ":" + hashlib.sha256(changes).hexdigest()
 
 
 def refine_region_pack(
@@ -326,13 +364,17 @@ def refine_region_pack(
     coast_warp: bool = False,
     reuse_height: bool = False,
     debug: bool = False,
+    mode: RefinementMode = RefinementMode.REDRAW,
+    native_resolution_km: float | None = None,
+    preserve_wavelength_km: float | None = None,
+    depth_cap: bool = False,
 ) -> dict[str, object]:
     """CLI entry: refine a region pack's terrain, write ``refined-out/``.
 
-    ``reuse_height=True`` skips the TD inference and re-extracts the
-    hydrology from the previous ``refined-out/height.meters.npy`` — the
-    iteration loop for drainage/lake semantics changes (a full re-run is
-    deterministic for the same seed but pays the whole inference again).
+    ``reuse_height=True`` validates the input/mode/scale contract and donor
+    checksum, then rebuilds from the saved donor without TD inference.
+    Blend and hydrology preserve the original bed; depth_cap is an explicit
+    blend edit saved separately before hydrology.
     ``debug=True`` adds ``flow-accum.png``, the accumulation field nothing downstream reads
     (20-35 MB of high-entropy 16-bit noise a pack) but which is worth looking at when the
     drainage is being tuned.
@@ -359,6 +401,8 @@ def refine_region_pack(
         terminal_equilibrium_routing,
     )
 
+    if td_repo is not None:
+        td_repo = td_repo.resolve()
     pack_dir = pack_dir.resolve()  # td subprocess runs with cwd=repo —
     # every path handed to it must be absolute or it resolves under the repo
     meta = json.loads((pack_dir / "input" / "meta.json").read_text(encoding="utf-8"))
@@ -366,55 +410,131 @@ def refine_region_pack(
     res = pack_res * REFINE_FACTOR
     tmp = pack_dir / "refine-tmp"
 
-    # Reuse cache: prefer the PRE-equilibrium field (post-heal, before the
-    # terminal-lake rewrite) so the equilibrium verdict re-derives from the
-    # true depression geometry on every reuse — the product height flattens
-    # dried playa floors, which would erase the evidence.
-    cached_pre = pack_dir / "refined-out" / "height.pre-equilibrium.npy"
-    cached = cached_pre if cached_pre.exists() else pack_dir / "refined-out" / "height.meters.npy"
-    if reuse_height:
-        if not cached.exists():
-            raise FileNotFoundError(
-                f"--reuse-height needs a previous full refine — {cached} is missing"
-            )
-        h = np.load(cached).astype(np.float64)
-        if h.shape[0] != res:
-            raise ValueError(f"cached height is {h.shape[0]}², expected {res}² — run a full refine")
-        print(f"[refine] reusing {cached} (TD inference skipped)")
-    else:
-        if td_repo is None:
-            raise ValueError("td_repo is required for a full refine (or pass reuse_height)")
-        n = _export_conditioning(pack_dir, tmp / "fields", coast_warp=coast_warp)
-        extent_km = float(meta["extent_km"]["x"])
-        py = _td_python(td_repo)
-        raw_tif = tmp / "refined.tif"
-        _run_td(py, td_repo, tmp, extent_km, n, raw_tif)
-        subprocess.run(
-            [
-                str(py),
-                str(tmp / "_td_driver.py"),
-                "tonpy",
-                str(raw_tif),
-                str(tmp / "refined.npy"),
-                str(res),
-            ],
-            check=True,
-        )
-        h = np.load(tmp / "refined.npy").astype(np.float64)
+    from scipy.ndimage import label
 
-    land = h > float(meta["sea_level_m"])
+    from dreamulator.map.importer import _resample_by_class
+    from dreamulator.map.region_inputs import file_sha256, read_refinement_inputs
+    from dreamulator.map.river_routing import two_ring_receivers
+
+    mode = RefinementMode(mode)
+    sea_level = float(meta["sea_level_m"])
     km_pp = float(meta["extent_km"]["x"]) / res
-    # Sub-MMU inland water bodies (h≤0, not connected to the ocean) are TD
-    # quantisation noise — heal to land so rivers continue through them to
-    # the real sea or sink; larger ones stay water as endorheic lakes.
-    h, land, inland_big = heal_inland_water(
-        h,
-        land,
-        lake_mmu_cells(km_pp),
-        float(meta["sea_level_m"]),
-        km_per_px=km_pp,
-        min_width_km=LAKE_MIN_WIDTH_KM,
-    )
+    if meta["grid"]["h"] != pack_res:
+        raise ValueError("region build requires a square input grid")
+    if mode != RefinementMode.BLEND and (
+        native_resolution_km is not None or preserve_wavelength_km is not None or depth_cap
+    ):
+        raise ValueError("native scale, preserve wavelength and depth cap require --mode blend")
+    if mode != RefinementMode.REDRAW and coast_warp:
+        raise ValueError("coast warp requires --mode redraw")
+    if mode == RefinementMode.HYDROLOGY and reuse_height:
+        raise ValueError("hydrology reads the original input; omit --reuse-height")
+    # Reject broken forcing even when no diffusion inference is requested.
+    if "refinement_inputs" in meta:
+        read_refinement_inputs(pack_dir / "input", meta["refinement_inputs"])
+    raw_source = np.load(pack_dir / "input/height.meters.npy")
+    if raw_source.shape != (pack_res, pack_res) or not np.isfinite(raw_source).all():
+        raise ValueError("input height must be finite and match the declared grid")
+    source, _ = _resample_by_class(raw_source, raw_source > sea_level, res, res)
+    source = source.astype(np.float32)
+    native_km: float | None = None
+    preserve_km: float | None = None
+    if mode == RefinementMode.BLEND:
+        native_km = native_resolution_km
+        if native_km is None:
+            native_km = float(meta["source"].get("px_km", meta["cell_pitch_km"]))
+        if not math.isfinite(native_km) or native_km <= 0:
+            raise ValueError("native resolution must be positive")
+        preserve_km = (
+            preserve_wavelength_km if preserve_wavelength_km is not None else 4 * native_km
+        )
+        if not math.isfinite(preserve_km) or preserve_km < 4 * km_pp:
+            raise ValueError("preserve wavelength must be at least four output pixels")
+    contract = _cache_contract(pack_dir, meta, mode, native_km, preserve_km, coast_warp, depth_cap)
+    previous = pack_dir / "refined-out"
+    td_revision: str | None = None
+    donor: np.ndarray | None = None
+    if mode != RefinementMode.HYDROLOGY:
+        if reuse_height:
+            old_meta_path = previous / "meta.json"
+            if not old_meta_path.exists():
+                raise FileNotFoundError("--reuse-height needs a previous region build")
+            old_meta = json.loads(old_meta_path.read_text(encoding="utf-8"))
+            if old_meta.get("cache_contract") != contract:
+                raise ValueError("cached mode, input or scale changed; run without --reuse-height")
+            cached = previous / "height.donor.npy"
+            if not cached.exists() or file_sha256(cached) != old_meta.get("stage_sha256", {}).get(
+                cached.name
+            ):
+                raise ValueError("cached donor is missing or damaged; run without --reuse-height")
+            td_revision = old_meta.get("td_revision")
+            if td_repo is not None and _td_revision(td_repo) != td_revision:
+                raise ValueError("terrain-diffusion revision changed; run without --reuse-height")
+            donor = np.load(cached).astype(np.float32)
+            print(f"[refine] reusing {cached} (TD inference skipped)")
+        else:
+            if td_repo is None:
+                raise ValueError("--td is required for redraw or blend (or pass --reuse-height)")
+            td_revision = _td_revision(td_repo)
+            n = _export_conditioning(pack_dir, tmp / "fields", coast_warp=coast_warp)
+            py = _td_python(td_repo)
+            raw_tif = tmp / "refined.tif"
+            _run_td(py, td_repo, tmp, float(meta["extent_km"]["x"]), n, raw_tif)
+            subprocess.run(
+                [
+                    str(py),
+                    str(tmp / "_td_driver.py"),
+                    "tonpy",
+                    str(raw_tif),
+                    str(tmp / "refined.npy"),
+                    str(res),
+                ],
+                check=True,
+            )
+            donor = np.load(tmp / "refined.npy").astype(np.float32)
+        if donor.shape != (res, res) or not np.isfinite(donor).all():
+            raise ValueError("donor height must be finite and match the refined grid")
+    # Assemble a complete product separately; a rejected build leaves the
+    # previous adopted height and cache intact.
+    out = tmp / "product"
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    np.save(out / "height.source.npy", source)
+    if donor is not None:
+        np.save(out / "height.donor.npy", donor)
+    if mode == RefinementMode.BLEND:
+        assert donor is not None and preserve_km is not None
+        delta = detail_difference(source, donor, km_pp, preserve_km)
+        np.save(out / "height.frequency-delta.npy", delta)
+        blended = blend_height(source, delta, km_pp, preserve_km / 2, sea_level)
+        np.save(out / "height.blended.npy", blended)
+        h = cap_depression_depth(blended, source, sea_level) if depth_cap else blended
+        if depth_cap:
+            np.save(out / "height.depth-capped.npy", h)
+    else:
+        if mode == RefinementMode.HYDROLOGY:
+            h = source
+        else:
+            assert donor is not None
+            h = donor
+    h = h.astype(np.float64)
+    geographic_land = h > sea_level
+    land = geographic_land.copy()
+    if mode == RefinementMode.REDRAW:
+        h, land, inland_big = heal_inland_water(
+            h,
+            land,
+            lake_mmu_cells(km_pp),
+            sea_level,
+            km_per_px=km_pp,
+            min_width_km=LAKE_MIN_WIDTH_KM,
+        )
+    else:
+        # Preserve all original elevations. Inland non-land components are
+        # water sinks, while boundary-connected components remain marine.
+        labels, _ = label(~land)
+        edge = np.unique(np.concatenate((labels[0], labels[-1], labels[:, 0], labels[:, -1])))
+        inland_big = (~land) & ~np.isin(labels, edge)
 
     # Extraction weight: the annual runoff channel (Manabe-bucket water
     # balance) when the pack carries it, precipitation for legacy packs —
@@ -450,38 +570,48 @@ def refine_region_pack(
             )
         )
 
-    filled, order, rec = priority_flood(h, land)
+    filled, order, rec = priority_flood(h, land, eps=0.0)
     lakes = lake_footprint(lake_mask(filled, h), filled, h)
     mmu = lake_mmu_cells(km_pp)
     lakes_draw0 = keep_large_lakes(lakes, mmu, LAKE_MIN_WIDTH_KM, km_pp) | inland_big
-    out = pack_dir / "refined-out"
-    out.mkdir(exist_ok=True)
-    # Reuse cache: the field BEFORE the terminal-lake rewrite (see the
-    # loader) — written whenever a rewrite may happen.
+    rec, routing_stats = two_ring_receivers(filled, land, rec, lakes_draw0)
+    # Save the geometry used for routing before the terminal-lake verdict.
     np.save(out / "height.pre-equilibrium.npy", h.astype(np.float32))
     # Terminal-lake equilibrium with through-flow depletion (the shared
     # helper): pass-through lakes deduct their net evaporation from the
     # through-flow; routing stays on the pre-rewrite tree.
-    h, land, lakes_draw, chain_stop, fringe_desc, rec, acc, term_water, lake_stats, lake_records = (
-        terminal_equilibrium_routing(
-            h,
-            land,
-            lakes_draw0,
-            order,
-            rec,
-            weight,
-            precip_mm=precip_r if temp_r is not None else np.zeros_like(land),
-            temp_c=temp_r if temp_r is not None else np.full_like(h, 0.0),
-            runoff_land_mean_mm=run_norm_mm
-            if (temp_r is not None and weight_src == "runoff")
-            else 0.0,
-            mmu_cells=mmu,
-            km_per_px=km_pp,
-            sea_level_m=float(meta["sea_level_m"]),
-            open_water_mm=open_water_r,
-        )
+    (
+        h_rw,
+        land,
+        lakes_draw,
+        chain_stop,
+        fringe_desc,
+        rec,
+        acc,
+        term_water,
+        lake_stats,
+        lake_records,
+    ) = terminal_equilibrium_routing(
+        h,
+        land,
+        lakes_draw0,
+        order,
+        rec,
+        weight,
+        precip_mm=precip_r if temp_r is not None else np.zeros_like(land),
+        temp_c=temp_r if temp_r is not None else np.full_like(h, 0.0),
+        runoff_land_mean_mm=run_norm_mm if (temp_r is not None and weight_src == "runoff") else 0.0,
+        mmu_cells=mmu,
+        km_per_px=km_pp,
+        sea_level_m=float(meta["sea_level_m"]),
+        open_water_mm=open_water_r,
+        keep_rewritten_h=mode == RefinementMode.REDRAW,
     )
-    assert h is not None  # keep_rewritten_h defaults to True here
+    if h_rw is not None:
+        h = h_rw
+    # Route from the saved pre-equilibrium geometry, then cut terminal sinks.
+    # Source-preserving modes leave the physical bed untouched.
+    h = h.astype(np.float32).astype(np.float64)
     thr = (
         river_threshold if river_threshold is not None else RIVER_THRESHOLD_CELLS * factor * factor
     )
@@ -501,8 +631,16 @@ def refine_region_pack(
     lo, hi = float(h.min()), float(h.max())
     span = hi - lo or 1.0
     np.save(out / "height.meters.npy", h.astype(np.float32))
+    Image.fromarray((geographic_land * 255).astype(np.uint8)).save(out / "land.png")
     segs, flows, regimes = river_segments(
-        rivers, rec, acc, km_pp, lake=chain_stop, lake_descend=fringe_desc, month_active=month_act
+        rivers,
+        rec,
+        acc,
+        km_pp,
+        lake=chain_stop,
+        lake_descend=fringe_desc,
+        month_active=month_act,
+        smooth=False,
     )
     np.save(out / "rivers.line.npy", segs)
     np.save(out / "rivers.flow.npy", flows)
@@ -526,10 +664,35 @@ def refine_region_pack(
         )
     sheet_meta: dict[str, object] = {
         "sea_level_m": meta["sea_level_m"],
-        "source": "terrain-diffusion 90m refined",
-        "td_snr": TD_SNR,
-        "td_seed": TD_SEED,
+        "source": {
+            RefinementMode.REDRAW: "terrain-diffusion redrawn terrain",
+            RefinementMode.BLEND: "source terrain with terrain-diffusion detail",
+            RefinementMode.HYDROLOGY: "source terrain with hydrology",
+        }[mode],
+        "mode": mode.value,
+        "cache_contract": contract,
+        "td_revision": td_revision,
+        "adopted_height": "height.meters.npy",
+        "routing_height": "height.pre-equilibrium.npy",
+        "geographic_land": "land.png",
+        "height_encoding": "float32 metres; land.png preserves classification under quantisation",
+        "stage_sha256": {p.name: file_sha256(p) for p in sorted(out.glob("height.*.npy"))},
+        "seam_scope": "crop a fixed parent grid; independent DCT windows are not equivalent",
+        "terrain_edit": {
+            "depth_cap": depth_cap,
+            "inland_heal": mode == RefinementMode.REDRAW,
+            "terminal_floor_rewrite": mode == RefinementMode.REDRAW,
+            "max_adopted_change_from_source_m": float(np.max(np.abs(h - source))),
+        },
+        "td_snr": TD_SNR if donor is not None else None,
+        "td_seed": TD_SEED if donor is not None else None,
         "river_threshold": thr,
+        "hydrology_routing": {
+            "scheme": "two-ring-constrained-v1",
+            "flat_preparation": "zero-epsilon Priority-Flood with equal-height D8 predecessors",
+            "geometry": "receiver links without additional smoothing",
+            **routing_stats,
+        },
         "lake_mmu_cells": mmu,
         "hydrology_weight": weight_src,
         "runoff_normalizer_mm": round(run_norm_mm, 3),
@@ -543,6 +706,16 @@ def refine_region_pack(
             else {"pet": "hamon-annual", "evaporation_factor": LAKE_EVAPORATION_FACTOR}
         ),
     }
+    if mode == RefinementMode.BLEND:
+        adopted_delta = h - blended
+        sheet_meta["terrain_edit"] = {
+            "depth_cap": depth_cap,
+            "inland_heal": False,
+            "terminal_floor_rewrite": False,
+            "edited_pixels": int(np.count_nonzero(adopted_delta)),
+            "max_raise_m": float(adopted_delta.max()),
+            "rms_change_from_blended_m": float(np.sqrt(np.mean(adopted_delta**2))),
+        }
     if month_act is not None:
         sheet_meta["regime"] = {
             "encoding": "0 perennial / 1 non-perennial",
@@ -555,12 +728,21 @@ def refine_region_pack(
         json.dumps(sheet_meta, ensure_ascii=False, indent=1) + "\n",
         encoding="utf-8",
     )
-    # The intermediates are reproducible from the pack — remove the scratch.
-    import shutil
-
+    # Install only after the product and manifest are complete.
+    backup = tmp / "previous"
+    shutil.rmtree(backup, ignore_errors=True)
+    if previous.exists():
+        os.replace(previous, backup)
+    try:
+        os.replace(out, previous)
+    except OSError:
+        if backup.exists():
+            os.replace(backup, previous)
+        raise
     shutil.rmtree(tmp, ignore_errors=True)
     result: dict[str, object] = {
         "res": res,
+        "mode": mode.value,
         "lakes_pct": round(float(lakes_draw.sum() / max(land.sum(), 1) * 100), 1),
         "river_segments": int(len(segs)),
         "height_range_m": [round(lo, 1), round(hi, 1)],

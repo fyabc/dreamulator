@@ -428,6 +428,14 @@ def run_canvas_surface_process(
 
     cfg = config or CanvasSurfaceConfig()
     canvas = _Canvas.load(canvas_dir)
+    window = (canvas.tile + 2 * cfg.halo_px) ** 2
+    if cfg.native:
+        # Refuse before coarse computation or replacing an existing completion manifest.
+        worker_budget(
+            SOLVER_BYTES_PER_CELL * window,
+            requested_workers=workers,
+            cap=len(canvas.chunks),
+        )
     out = canvas_dir / SURFACE_PROCESS_DIR
     work = out / "work"
     for sub in ("stage1", "native", "increments"):
@@ -525,8 +533,11 @@ def run_canvas_surface_process(
             climate={k: np.nan_to_num(np.asarray(v, dtype=np.float64)) for k, v in climate.items()},
             ice=None if ice is None else np.nan_to_num(np.asarray(ice, dtype=np.float64)),
         )
-        window = (canvas.tile + 2 * cfg.halo_px) ** 2
-        n = worker_budget(SOLVER_BYTES_PER_CELL * window) if workers is None else max(1, workers)
+        n = worker_budget(
+            SOLVER_BYTES_PER_CELL * window,
+            requested_workers=workers,
+            cap=len(canvas.chunks),
+        )
         log(f"[erode] native level: {len(canvas.chunks)} chunks on {n} processes")
         worst = 0.0
         t1 = time.time()

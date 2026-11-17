@@ -68,7 +68,7 @@ def guard_check(
     branch: str | None = typer.Option(None, "--branch", "-b", help="Branch to check"),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
-    """Check a world/branch for stale facts (① broken refs + ② input drift)."""
+    """Check template references, input fingerprints, and accepted decision claims."""
     _set_data_dir(data_dir)
     from dreamulator.guard import check_broken_refs, check_decision_records
 
@@ -79,9 +79,16 @@ def guard_check(
         console.print(f"[red]World '{world}' not found[/red]")
         raise typer.Exit(code=1) from None
 
-    findings = [*check_broken_refs(world_dir, branch), *check_decision_records(world_dir, branch)]
+    try:
+        findings = [
+            *check_broken_refs(world_dir, branch),
+            *check_decision_records(world_dir, branch),
+        ]
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        console.print(f"[yellow]Guard checks could not run: {exc}[/yellow]")
+        raise typer.Exit(code=2) from None
     if not findings:
-        console.print("[green]No stale findings — all facts up-to-date.[/green]")
+        console.print("[green]Guard checks passed; no stale references or decision claims.[/green]")
         return
 
     # GUARD-01: not_run = the check could NOT be performed (unbuilt world /
@@ -103,6 +110,10 @@ def guard_check(
         table.add_row(f.kind, f.path, f.layer or "-", f.detail)
     console.print(table)
     console.print(f"[bold]{len(findings)} finding(s)[/bold]")
+    if not_run:
+        raise typer.Exit(code=2)
+    if any(f.kind != "divergence" for f in findings):
+        raise typer.Exit(code=1)
 
 
 def _guard_resolve_world(world: str) -> Path:
@@ -119,8 +130,10 @@ def _guard_resolve_world(world: str) -> Path:
 def guard_accept(
     world: str = typer.Argument(help="World name"),
     adr: str = typer.Argument(help="ADR id or filename, e.g. 0001 or 0001-stellar-parameters"),
-    branch: str | None = typer.Option(None, "--branch", "-b", help="Branch to fingerprint"),
-    limit: int = typer.Option(20, "--limit", help="Max accepted records (reject beyond)"),
+    branch: str | None = typer.Option(
+        None, "--branch", "-b", help="Branch-local decision ledger to accept in"
+    ),
+    limit: int = typer.Option(20, "--limit", min=1, help="Max accepted records (reject beyond)"),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Accept a decision record: proposed → accepted (stamps checked_against + baseline)."""
@@ -130,7 +143,7 @@ def guard_accept(
     world_dir = _guard_resolve_world(world)
     try:
         path = accept(world_dir, branch, adr, limit=limit)
-    except (FileNotFoundError, ValueError) as e:
+    except (FileNotFoundError, ValueError, OSError) as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(code=1) from None
     console.print(f"[green]accepted: {path.name}[/green]")
@@ -140,7 +153,8 @@ def guard_accept(
 def guard_supersede(
     world: str = typer.Argument(help="World name"),
     adr: str = typer.Argument(help="ADR id to supersede"),
-    by: str = typer.Option(..., "--by", help="Newer ADR id that supersedes it"),
+    by: str = typer.Option(..., "--by", help="Newer accepted ADR id that supersedes it"),
+    branch: str | None = typer.Option(None, "--branch", "-b", help="Branch-local ledger"),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Mark a decision record as superseded by a newer one (conclusion body untouched)."""
@@ -149,8 +163,8 @@ def guard_supersede(
 
     world_dir = _guard_resolve_world(world)
     try:
-        path = supersede(world_dir, adr, by)
-    except (FileNotFoundError, ValueError) as e:
+        path = supersede(world_dir, adr, by, branch)
+    except (FileNotFoundError, ValueError, OSError) as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(code=1) from None
     console.print(f"[green]superseded: {path.name} → {by}[/green]")
@@ -160,6 +174,7 @@ def guard_supersede(
 def guard_deprecate(
     world: str = typer.Argument(help="World name"),
     adr: str = typer.Argument(help="ADR id to deprecate"),
+    branch: str | None = typer.Option(None, "--branch", "-b", help="Branch-local ledger"),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Deprecate a decision record whose premise no longer holds."""
@@ -168,8 +183,8 @@ def guard_deprecate(
 
     world_dir = _guard_resolve_world(world)
     try:
-        path = deprecate(world_dir, adr)
-    except (FileNotFoundError, ValueError) as e:
+        path = deprecate(world_dir, adr, branch)
+    except (FileNotFoundError, ValueError, OSError) as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(code=1) from None
     console.print(f"[green]deprecated: {path.name}[/green]")
@@ -178,7 +193,10 @@ def guard_deprecate(
 @guard_app.command("archive")
 def guard_archive(
     world: str = typer.Argument(help="World name"),
-    limit: int = typer.Option(20, "--limit", help="Max accepted records (archive oldest beyond)"),
+    limit: int = typer.Option(
+        20, "--limit", min=0, help="Max accepted records (archive oldest beyond)"
+    ),
+    branch: str | None = typer.Option(None, "--branch", "-b", help="Branch-local ledger"),
     data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
 ) -> None:
     """Force-archive the oldest accepted records until count ≤ limit (harness.md §8.2)."""
@@ -186,7 +204,11 @@ def guard_archive(
     from dreamulator.guard.adr import archive
 
     world_dir = _guard_resolve_world(world)
-    archived = archive(world_dir, limit)
+    try:
+        archived = archive(world_dir, limit, branch)
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
     if not archived:
         console.print("[green]Nothing to archive — count already within limit.[/green]")
         return

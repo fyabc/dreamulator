@@ -3,6 +3,9 @@
 Reads all worlds from data/worlds/ and exports their data as JSON files
 to frontend/public/data/ for static site hosting.
 
+Build jobs are process-local execution state and are not exported. The static
+client rejects startBuildJob and getBuildJob instead of requesting stale job files.
+
 Usage:
     python scripts/release/export_static.py
     python scripts/release/export_static.py --output frontend/public/data
@@ -36,9 +39,9 @@ _ensure_importable()
 from local_branches import local_only_branches  # noqa: E402
 
 from dreamulator import doc_render  # noqa: E402
-from dreamulator.map.models import sanitize_nonfinite  # noqa: E402
+from dreamulator.map.manager import MapManager  # noqa: E402
+from dreamulator.map.models import map_metadata_result, sanitize_nonfinite  # noqa: E402
 from dreamulator.resolver import LayerResolver  # noqa: E402
-from dreamulator.result_contract import result_metadata  # noqa: E402
 
 
 def find_project_root() -> Path:
@@ -248,13 +251,9 @@ def _export_map_data(
     data (elevation PNG, map.yaml → meta.json, cvt_mesh, plates, features)
     to the static output directory.
 
-    Branches without their own ``maps/`` directory inherit the root world's
-    maps at view time.  Branches WITH a maps/ dir are per-file overlays
-    (a climate-fork branch ships only climate products); missing files are
-    filled from the root world's maps dir below, keeping the static export
-    self-contained — the frontend's branch→root 404 fallback depends on
-    host 404 semantics that not every static server honours (vite preview's
-    SPA fallback answers missing files with 200 HTML).
+    MapManager supplies the same complete, branch-first planet list as the API.
+    Each branch export includes inherited planets and fills missing overlay
+    files from root, so reading it does not depend on the host's 404 semantics.
 
     Args:
         world_dir: Path to the world root directory.
@@ -264,36 +263,19 @@ def _export_map_data(
     Returns:
         List of planet IDs that have map data.
     """
-    if branch is not None:
-        maps_dir = world_dir / "branches" / branch / "maps"
-    else:
-        maps_dir = world_dir / "maps"
-    if not maps_dir.exists():
-        return []
+    manager = MapManager(world_dir, branch)
+    root_manager = MapManager(world_dir)
+    planets_with_maps = manager.list_planets_with_maps()
 
-    planets_with_maps: list[str] = []
-
-    for planet_dir in sorted(maps_dir.iterdir()):
-        if not planet_dir.is_dir():
+    for planet_id in planets_with_maps:
+        planet_dir = manager._map_input_dir(planet_id)
+        if planet_dir is None:
             continue
-        # Root worlds: only planet directories have elevation.png — this also
-        # skips non-planet subdirectories such as earth_reference/ (civmap
-        # GeoJSON).  Branch overlays that fork at the climate layer
-        # legitimately lack terrain products (elevation.png, map.yaml —
-        # inherited from root at view time), so for branches
-        # accept any non-empty directory; the per-file copies below simply
-        # skip what isn't there.
-        elevation_png = planet_dir / "elevation.png"
-        if not elevation_png.exists() and (branch is None or not any(planet_dir.iterdir())):
-            continue
-
-        planet_id = planet_dir.name
-        planets_with_maps.append(planet_id)
 
         planet_out = maps_out_dir / planet_id
         planet_out.mkdir(parents=True, exist_ok=True)
 
-        root_planet_dir = world_dir / "maps" / planet_id if branch is not None else None
+        root_planet_dir = root_manager._map_input_dir(planet_id) if branch is not None else None
 
         def _inherit(
             name: str,
@@ -333,7 +315,7 @@ def _export_map_data(
         if map_yaml is not None:
             meta = load_yaml(map_yaml)
             if meta:
-                meta.update(result_metadata())
+                meta = map_metadata_result(meta)
                 with planet_out.joinpath("meta.json").open("w", encoding="utf-8") as f:
                     json.dump(meta, f, ensure_ascii=False, separators=(",", ":"), default=str)
 

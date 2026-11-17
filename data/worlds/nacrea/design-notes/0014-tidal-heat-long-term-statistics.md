@@ -4,6 +4,17 @@ type: design-note
 tags: [satellite, tidal-heating, coupled-ctl, spin-orbit, cassini-state, extinction, extreme-value]
 date: 2026-10-19
 status: accepted   # 参数方案 CTL 0.45、J₂ 0.0008、k₂ 0.20、h₂ 0.40、Q≈445；当代历元 CTL045_J2_08_e2 的 2367 kyr；正典已同步
+checked_against:
+  physics: ""
+  chemistry: ""
+  astronomy: "fe421edc3daf7d5104a9c86733d56de1ee1261b0e41fa2438f4a7453ca83bf6b"
+  geological: "0743a3776ce8651c7d8c43c406deb42c5dbc09c4d675931f4e4659a429147071"
+  climate: "<no-yaml>"
+  ecology: "<no-yaml>"
+  civilization: "f25d0cd65920a64490031592737fa87a0af40bf5023dd30261903484cb0e556f"
+baseline_registered_at: '2026-11-17'
+review_record: 0024-ledger-current-evidence.md
+review_scope: 核查 CTL045、J2 与洛夫数输入；保留已积分时段与长期外推的界限。
 ---
 
 # 0014 — Nacrea 潮汐加热的长期统计

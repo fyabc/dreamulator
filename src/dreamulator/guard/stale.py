@@ -1,15 +1,8 @@
-"""过期检测（stale detection）——守护轴的设定溯源内核（harness.md §7）。
+"""Read-only checks of document references, authored inputs, and accepted claims.
 
-三级检测，从粗到精：
-
-- **① 模板断链**：字段被删/改名 → 渲染残留 ``{{ ... }}``。``SourceUndefined`` 遇到
-  缺失变量原样回显，本模块扫描渲染产物里的残留占位符。
-- **② 输入指纹**：对每层 authored ``input/*.yaml`` 做稳定哈希；ADR 记录
-  ``checked_against``，输入改动 → 指纹不匹配。
-- **③ 渲染 diff**：ADR 的定量声明是模板，重渲染对比基线，区分「结论仍成立」vs
-  「事实漂移」。
-
-P1a 实现 ① 与 ② 的指纹函数；② 的台账比对与 ③ 在 P1b/P1c。全部纯函数、无 RNG、可单测。
+Inputs are fingerprinted per layer. Rendered facts are compared independently
+against the accepted baseline. Missing evidence and failed evaluation are
+reported explicitly, while decision lifecycle writes belong to adr.py.
 """
 
 from __future__ import annotations
@@ -20,10 +13,14 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
-from dreamulator.doc_render import parse_frontmatter, render_body
+import yaml
+from jinja2 import StrictUndefined
+from jinja2.exceptions import TemplateError, UndefinedError
+
+from dreamulator.doc_render import build_environment
 from dreamulator.guard.facts import build_fact_context
+from dreamulator.guard.storage import design_notes_dir, input_files, read_document
 from dreamulator.models.layers import LAYER_ORDER, Layer
-from dreamulator.resolver import LayerResolver
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -39,10 +36,8 @@ __all__ = [
     "write_baseline",
 ]
 
-# Residual ``{{ ... }}`` placeholder in *rendered* output = a template reference
-# whose field no longer exists (or is misspelled).  Nested braces are excluded so
-# a raw ``{{ unclosed`` syntax error (no closing ``}}``) is not misreported.
-# Reused for ③ claim extraction (same ``{{ ... }}`` shape).
+# Extract independent expression claims for compatibility with simple baselines.
+# Control-block templates use the complete rendered body instead.
 _BROKEN_REF_RE = re.compile(r"\{\{[^{}]*\}\}")
 
 # Sentinel fingerprint: the layer has an input dir but no authored ``.yaml``
@@ -50,6 +45,18 @@ _BROKEN_REF_RE = re.compile(r"\{\{[^{}]*\}\}")
 # upstream-derived).  Distinct from ``""`` (unconfigured layer) so the two
 # "nothing to hash" cases are not conflated.
 NO_YAML_FINGERPRINT = "<no-yaml>"
+RENDERED_BODY_KEY = "__rendered_body__"
+_GUARD_ENV = build_environment()
+_GUARD_ENV.undefined = StrictUndefined
+
+
+def render_checked_body(body: str, context: dict[str, Any]) -> str:
+    """Render strictly for validation, including references inside control blocks.
+
+    Display rendering remains permissive. Guard checks must surface missing
+    facts and syntax/filter failures instead of recording fallback text.
+    """
+    return _GUARD_ENV.from_string(body).render(context)
 
 
 @dataclass(frozen=True)
@@ -75,37 +82,40 @@ def layer_input_fingerprint(world_dir: Path, branch: str | None, layer: Layer | 
     """Stable fingerprint of a layer's authored YAML inputs (harness.md §7 ②).
 
     Hashes relative path + content of every ``input/**/*.yaml`` (recursive,
-    sorted) — GUARD-01: the former single-level glob missed authored data in
-    subdirectories (e.g. a conlang ``languages/proto/lexicon.yaml``), so an
-    ADR depending on it kept a stale "unchanged" fingerprint.  ``.md``
-    narrative docs remain deliberately excluded — narrative edits must not
-    invalidate physical conclusions (decided 2026-08-18).
+    sorted), including inherited files and parent files used by YAML merges.
+    Narrative Markdown does not participate in physical input fingerprints.
 
     Returns:
         Hex digest; ``NO_YAML_FINGERPRINT`` when the layer has an input dir but
         no ``.yaml``/``.yml`` files anywhere under it; ``""`` when the layer has
         no effective input dir (unconfigured layer / missing input).
     """
-    resolver = LayerResolver(world_dir, branch)
-    input_dir = resolver.get_input_dir(layer)
-    if input_dir is None or not input_dir.exists():
-        return ""
-
-    yaml_files = sorted(
-        [*input_dir.glob("**/*.yaml"), *input_dir.glob("**/*.yml")],
-        key=lambda p: p.relative_to(input_dir).as_posix(),
-    )
+    layer_name = layer.value if isinstance(layer, Layer) else layer
+    files = input_files(world_dir, branch, layer_name)
+    yaml_files = {name: paths for name, paths in files.items() if name.endswith((".yaml", ".yml"))}
     if not yaml_files:
-        return NO_YAML_FINGERPRINT
+        from dreamulator.guard.storage import scope_dirs
+
+        configured = any(
+            (scope / "layers" / layer_name / "input").exists()
+            for scope in scope_dirs(world_dir, branch)
+        )
+        return NO_YAML_FINGERPRINT if configured else ""
 
     hasher = hashlib.sha256()
-    for path in yaml_files:
-        # Relative path (not bare name): distinguishes same-named files in
-        # different subdirectories and detects moves between them.
-        hasher.update(path.relative_to(input_dir).as_posix().encode("utf-8"))
+    for name, paths in sorted(yaml_files.items()):
+        hasher.update(name.encode("utf-8"))
         hasher.update(b"\x00")
-        hasher.update(path.read_bytes())
-        hasher.update(b"\x00")
+        for index, path in enumerate(paths):
+            content = path.read_bytes()
+            if index:
+                hasher.update(b"<inherited>\x00")
+            hasher.update(content)
+            hasher.update(b"\x00")
+            data = yaml.safe_load(content)
+            # An empty YAML override also inherits, matching load_layer_yaml.
+            if data is not None and not (isinstance(data, dict) and data.get("_inherit")):
+                break
     return hasher.hexdigest()
 
 
@@ -116,51 +126,56 @@ def render_claims(body: str, context: dict[str, Any]) -> dict[str, str]:
     conclusion depends on.  Used to diff against the baseline (see
     ``check_decision_records``).
     """
-    claims: dict[str, str] = {}
-    for template in _BROKEN_REF_RE.findall(body):
-        text, _rendered = render_body(template, context)
-        claims[template] = text
-    return claims
+    rendered = render_checked_body(body, context)
+    if "{%" in body or "{#" in body:
+        # Local loop/set variables cannot be evaluated outside their template.
+        return {RENDERED_BODY_KEY: rendered}
+    return {
+        template: render_checked_body(template, context)
+        for template in _BROKEN_REF_RE.findall(body)
+    }
 
 
-def _baseline_path(world_dir: Path) -> Path:
-    return world_dir / "design-notes" / ".guard-baseline.json"
+def _baseline_path(world_dir: Path, branch: str | None = None) -> Path:
+    return design_notes_dir(world_dir, branch) / ".guard-baseline.json"
 
 
-def read_baseline(world_dir: Path) -> dict[str, dict[str, str]]:
-    """Read the rendered-claims baseline (③), or ``{}`` when absent/corrupt."""
-    path = _baseline_path(world_dir)
+def read_baseline(world_dir: Path, branch: str | None = None) -> dict[str, dict[str, str]]:
+    """Read a claims baseline; reject malformed data rather than hiding it."""
+    path = _baseline_path(world_dir, branch)
     if not path.exists():
         return {}
     try:
         with path.open(encoding="utf-8") as f:
             data = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return data if isinstance(data, dict) else {}
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"Cannot read guard baseline: {exc}") from exc
+    if not isinstance(data, dict) or any(
+        not isinstance(name, str)
+        or not isinstance(claims, dict)
+        or any(not isinstance(k, str) or not isinstance(v, str) for k, v in claims.items())
+        for name, claims in data.items()
+    ):
+        raise ValueError("Guard baseline must map record filenames to string claims")
+    return data
 
 
-def write_baseline(world_dir: Path, baseline: dict[str, dict[str, str]]) -> None:
-    """Persist the rendered-claims baseline (③) — called by ``guard accept``."""
-    path = _baseline_path(world_dir)
+def write_baseline(
+    world_dir: Path, baseline: dict[str, dict[str, str]], branch: str | None = None
+) -> None:
+    """Persist claims with atomic replacement, preserving a valid file on failure."""
+    from dreamulator.guard.storage import atomic_write_text, writable_design_notes_dir
+
+    path = writable_design_notes_dir(world_dir, branch) / ".guard-baseline.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(baseline, f, indent=2, ensure_ascii=False)
-
-
-def _broken_refs_in_line(line: str) -> list[str]:
-    """Extract residual ``{{ ... }}`` placeholders from one rendered line."""
-    return _BROKEN_REF_RE.findall(line)
+    atomic_write_text(path, json.dumps(baseline, indent=2, ensure_ascii=False) + "\n")
 
 
 def check_broken_refs(world_dir: Path, branch: str | None = None) -> list[Finding]:
-    """① broken-ref detection: render every doc + ADR, report residual placeholders.
+    """Check effective Markdown and decision references with strict evaluation.
 
-    Renders each ``layers/*/input/*.md`` and ``design-notes/*.md`` against the
-    fact context; a residual ``{{ ... }}`` means a referenced field was deleted
-    or renamed.  When the fact context is unavailable (unbuilt world), returns
-    a single ``not_run`` finding — the check did NOT pass, it could not run
-    (GUARD-01: an empty list must not read as "verified clean").
+    Missing facts produce broken_ref. Missing context or failed evaluation
+    produces not_run, so a skipped check never appears clean.
     """
     context = build_fact_context(world_dir, branch)
     if context is None:
@@ -177,17 +192,14 @@ def check_broken_refs(world_dir: Path, branch: str | None = None) -> list[Findin
             )
         ]
 
-    resolver = LayerResolver(world_dir, branch)
     findings: list[Finding] = []
 
     for layer in LAYER_ORDER:
-        input_dir = resolver.get_input_dir(layer)
-        if input_dir is None or not input_dir.exists():
-            continue
-        for doc in sorted(input_dir.glob("*.md")):
-            _scan_document(world_dir, doc, layer.value, context, findings)
+        for name, paths in sorted(input_files(world_dir, branch, layer.value).items()):
+            if name.endswith(".md"):
+                _scan_document(world_dir, paths[0], layer.value, context, findings)
 
-    design_dir = world_dir / "design-notes"
+    design_dir = design_notes_dir(world_dir, branch)
     if design_dir.exists():
         for doc in sorted(design_dir.glob("*.md")):
             _scan_document(world_dir, doc, None, context, findings)
@@ -213,74 +225,104 @@ def check_decision_records(world_dir: Path, branch: str | None = None) -> list[F
     - Missing fact context while checkable ADRs exist → one ``not_run``
       finding (the ③ channel could not be evaluated).
     """
-    design_dir = world_dir / "design-notes"
+    design_dir = design_notes_dir(world_dir, branch)
     if not design_dir.exists():
         return []
 
     context = build_fact_context(world_dir, branch)
-    baseline = read_baseline(world_dir)
     findings: list[Finding] = []
-    context_missing_reported = False
+    try:
+        baseline = read_baseline(world_dir, branch)
+    except ValueError as exc:
+        baseline = {}
+        findings.append(Finding("not_run", "design-notes/.guard-baseline.json", None, str(exc)))
 
     for doc in sorted(design_dir.glob("*.md")):
-        raw = doc.read_text(encoding="utf-8")
-        fm, body = parse_frontmatter(raw)
-        rel = f"design-notes/{doc.name}"
-        divergence = fm.get("divergence") == "intentional"
-        div_layers = fm.get("divergence_layers")
-        div_scope: list[str] | None = (
-            [str(x) for x in div_layers] if isinstance(div_layers, list) else None
-        )
-
-        # ② input fingerprint
+        rel = doc.relative_to(world_dir).as_posix()
+        try:
+            fm, body = read_document(doc)
+        except (ValueError, OSError) as exc:
+            findings.append(Finding("not_run", rel, None, str(exc)))
+            continue
+        if fm.get("status") != "accepted":
+            continue
         checked = fm.get("checked_against")
-        if not isinstance(checked, dict):
-            continue
-        for layer, recorded in checked.items():
-            current = layer_input_fingerprint(world_dir, branch, layer)
-            if current != str(recorded):
-                scoped = divergence and (div_scope is None or str(layer) in div_scope)
-                findings.append(
-                    Finding(
-                        kind="divergence" if scoped else "input_changed",
-                        path=rel,
-                        layer=str(layer),
-                        detail=f"input changed: {str(recorded)[:8]}… → {current[:8]}…",
+        if not isinstance(checked, dict) or not checked:
+            findings.append(
+                Finding("not_run", rel, None, "Accepted record has no input fingerprints")
+            )
+        else:
+            divergence = fm.get("divergence") == "intentional"
+            div_scope = fm.get("divergence_layers")
+            for layer, recorded in checked.items():
+                try:
+                    current = layer_input_fingerprint(world_dir, branch, str(layer))
+                except (ValueError, OSError, yaml.YAMLError) as exc:
+                    findings.append(Finding("not_run", rel, str(layer), str(exc)))
+                    continue
+                # Older stamps serialized an empty fingerprint as YAML null.
+                previous = "" if recorded is None else str(recorded)
+                if current != previous:
+                    scoped = divergence and (
+                        div_scope is None or isinstance(div_scope, list) and str(layer) in div_scope
                     )
-                )
+                    findings.append(
+                        Finding(
+                            "divergence" if scoped else "input_changed",
+                            rel,
+                            str(layer),
+                            f"input changed: {previous[:8]}… → {current[:8]}…",
+                        )
+                    )
 
-        # ③ render diff — independent of ②: same input + new engine can still
-        # move the derived facts the conclusion rests on.
         if context is None:
-            if not context_missing_reported:
+            findings.append(
+                Finding(
+                    "not_run", rel, None, "Fact context unavailable; render comparison did not run"
+                )
+            )
+            continue
+        try:
+            current_claims = render_claims(body, context)
+        except (TemplateError, TypeError, ValueError, ArithmeticError) as exc:
+            findings.append(Finding("not_run", rel, None, f"Cannot render decision claims: {exc}"))
+            continue
+        recorded_claims = baseline.get(doc.name)
+        if recorded_claims is None:
+            findings.append(Finding("not_run", rel, None, "Rendered claims baseline is missing"))
+            continue
+        if RENDERED_BODY_KEY in recorded_claims:
+            if recorded_claims[RENDERED_BODY_KEY] != render_checked_body(body, context):
                 findings.append(
                     Finding(
-                        kind="not_run",
-                        path="-",
-                        layer=None,
-                        detail=(
-                            "render-diff check skipped: fact context unavailable "
-                            "(unbuilt world or missing/corrupt system_catalog.yaml)"
-                        ),
+                        "fact_drifted",
+                        rel,
+                        None,
+                        "Rendered decision text differs from its accepted baseline",
                     )
                 )
-                context_missing_reported = True
-            continue
-        if doc.name not in baseline:
-            continue
-        recorded_claims = baseline[doc.name]
-        for template, value in render_claims(body, context).items():
-            recorded = recorded_claims.get(template)
-            if recorded is not None and recorded != value:
-                findings.append(
-                    Finding(
-                        kind="fact_drifted",
-                        path=rel,
-                        layer=None,
-                        detail=f"{template}: {recorded!r} → {value!r}",
-                    )
+        elif RENDERED_BODY_KEY in current_claims:
+            findings.append(
+                Finding(
+                    "not_run", rel, None, "Control-block template needs a full rendered baseline"
                 )
-
+            )
+        elif current_claims.keys() != recorded_claims.keys():
+            findings.append(
+                Finding(
+                    "fact_drifted",
+                    rel,
+                    None,
+                    "Decision claim set differs from its accepted baseline",
+                )
+            )
+        else:
+            for template, value in current_claims.items():
+                recorded = recorded_claims[template]
+                if recorded != value:
+                    findings.append(
+                        Finding("fact_drifted", rel, None, f"{template}: {recorded!r} → {value!r}")
+                    )
     return findings
 
 
@@ -292,24 +334,20 @@ def _scan_document(
     findings: list[Finding],
 ) -> None:
     """Render one document and append any broken-ref findings."""
-    raw = doc.read_text(encoding="utf-8")
-    _fm, body = parse_frontmatter(raw)
-    text, rendered = render_body(body, context)
-    if not rendered:
-        # Context was present (checked by caller) but the template failed to
-        # render (syntax error / sandbox violation) — a different kind of issue,
-        # not a broken field reference.
-        return
-
-    # as_posix(): stable forward-slash paths regardless of host OS separator.
     rel = doc.relative_to(world_dir).as_posix()
-    for line_no, line in enumerate(text.splitlines(), 1):
-        for marker in _broken_refs_in_line(line):
-            findings.append(
-                Finding(
-                    kind="broken_ref",
-                    path=rel,
-                    layer=layer,
-                    detail=f"line {line_no}: unresolved {marker}",
-                )
-            )
+    try:
+        fm, body = read_document(doc)
+    except (ValueError, OSError) as exc:
+        findings.append(Finding("not_run", rel, layer, str(exc)))
+        return
+    if fm.get("status") == "deprecated" or str(fm.get("status", "")).startswith("superseded by "):
+        return
+    rel = doc.relative_to(world_dir).as_posix()
+    try:
+        render_checked_body(body, context)
+    except UndefinedError as exc:
+        findings.append(Finding("broken_ref", rel, layer, f"Unresolved template reference: {exc}"))
+    except (TemplateError, TypeError, ValueError, ArithmeticError) as exc:
+        findings.append(
+            Finding("not_run", rel, layer, f"Document template could not render: {exc}")
+        )

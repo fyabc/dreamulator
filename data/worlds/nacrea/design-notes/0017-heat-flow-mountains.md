@@ -5,11 +5,22 @@ tags: [geology, heat-flow, heat-pipe, lithosphere, mountains, plate-speed, volca
 date: 2026-10-21
 status: accepted   # 作者 2026-10-21 裁决，见 §7
 checked_against:
-  - layers/geological/input/tidal_effects.md:91-98
-  - layers/geological/input/geological_history.md:20-30
-  - layers/geological/input/terrain_config.yaml:130-154, 200-214
-  - layers/geological/input/planets.yaml:24-34, 52-55
-  - design-notes/0014-tidal-heat-long-term-statistics.md:39-48, 97-131, 187-195
+  physics: ""
+  chemistry: ""
+  astronomy: "fe421edc3daf7d5104a9c86733d56de1ee1261b0e41fa2438f4a7453ca83bf6b"
+  geological: "0743a3776ce8651c7d8c43c406deb42c5dbc09c4d675931f4e4659a429147071"
+  climate: "<no-yaml>"
+  ecology: "<no-yaml>"
+  civilization: "f25d0cd65920a64490031592737fa87a0af40bf5023dd30261903484cb0e556f"
+evidence_sources:
+  - "layers/geological/input/tidal_effects.md:91-98"
+  - "layers/geological/input/geological_history.md:20-30"
+  - "layers/geological/input/terrain_config.yaml:130-154, 200-214"
+  - "layers/geological/input/planets.yaml:24-34, 52-55"
+  - "design-notes/0014-tidal-heat-long-term-statistics.md:39-48, 97-131, 187-195"
+baseline_registered_at: '2026-11-17'
+review_record: 0024-ledger-current-evidence.md
+review_scope: 核查板块速度和火山活动输入；热管输热分配仍按近似估算解释。
 ---
 
 # 0017 — Nacrea 的内热怎样排出：热流与高山能否共存

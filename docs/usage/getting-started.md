@@ -227,7 +227,7 @@ uv run dreamulator serve --open
 放进浏览器的 Pyodide 里运行，拖入一张高度图即可得到年均与逐月温度首图，
 不需要后端。第一次运行会从 CDN 下载 Pyodide（约数 MB）；当前只算温度，
 不含降水、风场、洋流与 Köppen。设计与限制见
-[浏览器 playground 提案](../design/proposals/browser-playground.md)。
+[浏览器温度实验台](../design/pipelines/browser-playground.md)。
 
 ## 7. 导出图像
 

@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pytest
 
 from dreamulator.map.td_canvas import CanvasGeometry
 from dreamulator.media.canvas_seam import run_seam_check
@@ -28,6 +29,8 @@ def _make_canvas(
     meta: dict[str, object] = {"geometry": geom.to_dict(), "chunks": [[0, 0]]}
     if conditioning:
         meta["sea_mask"] = {"version": "connected-sea-inland-low-20261031-v1"}
+    if ice is not None:
+        meta["surface_refinement"] = {"zero_ice": "Absent ice chunks have zero enduring ice."}
     (root / "canvas.json").write_text(json.dumps(meta), encoding="utf-8")
     dem = np.zeros((TILE, TILE), dtype=np.int16)
     for (row, col), value in elevations.items():
@@ -56,6 +59,8 @@ def _write_hydro(
     river_flow: float | None,
     geom: CanvasGeometry,
 ) -> None:
+    (root / "hydro").mkdir(parents=True, exist_ok=True)
+    (root / "hydro" / "surface.json").write_text(json.dumps({"surface": "td"}), encoding="utf-8")
     if lake_cells:
         sparse = root / "hydro" / "lakes.sparse"
         sparse.mkdir(parents=True)
@@ -70,12 +75,89 @@ def _write_hydro(
     if river_flow is not None:
         # A segment through the first sample point in the product's own frame.
         px = geom.px_km
-        x = 3.5 * px
-        y = (geom.size_px - 1.0 - 2.5) * px
+        x = 3.0 * px
+        y = (geom.size_px - 3.0) * px
         line = np.asarray([[[x - 2 * px, y], [x + 2 * px, y]]], dtype=np.float32)
         (root / "hydro").mkdir(parents=True, exist_ok=True)
         np.save(root / "hydro" / "rivers.line.npy", line)
         np.save(root / "hydro" / "rivers.flow.npy", np.asarray([river_flow], dtype=np.float32))
+
+
+@pytest.mark.parametrize("increment, expected_sea", [(-0.4, False), (-1.2, True)])
+def test_sea_reads_fractional_surface_and_erosion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, increment: float, expected_sea: bool
+) -> None:
+    from dreamulator.media import canvas_seam as seam
+
+    geom = CanvasGeometry(10.0, 20.0, 6816.97, 16)
+    _make_canvas(tmp_path, geom, {}, conditioning=True)
+    np.save(tmp_path / "chunks/r000_c000.npy", np.full((TILE, TILE), 0.8, dtype=np.float32))
+    increments = tmp_path / "increments"
+    increments.mkdir()
+    np.save(increments / "r000_c000.npy", np.full((TILE, TILE), increment, dtype=np.float32))
+    monkeypatch.setattr(seam, "_increments", lambda _: increments)
+    loc = seam.SeamLocation("test", 2.5, 3.5, (0, 0))
+    sea = seam._anchored_sea_of(tmp_path, {})
+    assert sea is not None
+    assert seam.sample_sea(sea, tmp_path, loc, TILE) is expected_sea
+
+
+def test_ice_absence_requires_zero_declaration(tmp_path: Path) -> None:
+    from dreamulator.media.canvas_seam import SeamLocation, sample_ice
+
+    geom = CanvasGeometry(10.0, 20.0, 6816.97, 16)
+    _make_canvas(tmp_path, geom, {}, ice={})
+    (tmp_path / "surface/ice_chunks/r000_c000.npy").unlink()
+    loc = SeamLocation("test", 2.5, 3.5, (0, 0))
+    assert sample_ice(tmp_path, loc, TILE) == 0
+    meta = json.loads((tmp_path / "canvas.json").read_text(encoding="utf-8"))
+    meta.pop("surface_refinement")
+    (tmp_path / "canvas.json").write_text(json.dumps(meta), encoding="utf-8")
+    assert sample_ice(tmp_path, loc, TILE) is None
+
+
+def test_empty_river_product_requires_flow_file(tmp_path: Path) -> None:
+    from dreamulator.media.canvas_seam import SeamLocation, sample_river
+
+    geom = CanvasGeometry(10.0, 20.0, 6816.97, 16)
+    _make_canvas(tmp_path, geom, {})
+    hydro = tmp_path / "hydro"
+    hydro.mkdir()
+    np.save(hydro / "rivers.line.npy", np.empty((0, 2, 2), dtype=np.float32))
+    loc = SeamLocation("test", 2.5, 3.5, (0, 0))
+    assert sample_river(tmp_path, loc, 0.5) is None
+    np.save(hydro / "rivers.flow.npy", np.empty(0, dtype=np.float32))
+    assert sample_river(tmp_path, loc, 0.5) == (float("inf"), 0.0)
+
+
+def test_river_query_and_window_align_with_a_known_pixel_centre(tmp_path: Path) -> None:
+    import runpy
+    from pathlib import Path
+
+    from dreamulator.media.canvas_seam import SeamLocation, sample_river
+
+    geom = CanvasGeometry(10.0, 20.0, 6816.97, 16)
+    _make_canvas(tmp_path, geom, {})
+    hydro = tmp_path / "hydro"
+    hydro.mkdir()
+    # ChannelGraph stores the centre of pixel (2, 3) as integer grid coordinates.
+    px = geom.px_km
+    line = np.array(
+        [[[3 * px, (geom.size_px - 3) * px], [4 * px, (geom.size_px - 3) * px]]], dtype=np.float32
+    )
+    np.save(hydro / "rivers.line.npy", line)
+    np.save(hydro / "rivers.flow.npy", np.array([30], dtype=np.float32))
+    loc = SeamLocation("test", 2.5, 3.5, (0, 0))
+    result = sample_river(tmp_path, loc, 0.5)
+    assert result is not None
+    assert result[0] == pytest.approx(0, abs=1e-12)
+    assert result[1] == 30
+
+    lat, lon = geom.pixel_to_latlon(np.array(2.5), np.array(3.5))
+    centre = CanvasGeometry(float(lat), float(lon), geom.radius_km, 2)
+    script = Path(__file__).resolve().parents[1] / "scripts/media/render_canvas_seam_products.py"
+    projected = runpy.run_path(str(script))["river_lines"](tmp_path, centre, 23)
+    np.testing.assert_allclose(projected[0, 0], [0, 0], atol=1e-8)
 
 
 def test_seam_check_reports_disagreement_and_gaps(tmp_path: Path) -> None:
@@ -172,6 +254,15 @@ def test_seam_check_reports_disagreement_and_gaps(tmp_path: Path) -> None:
     assert abs(pair["flow_ratio"]["max"] - 1.2) < 1e-6
     # Recorded coordinates re-derive from lat/lon on both canvases.
     assert pair["coord_mismatch_px"] < 1.0
+
+    # Present files from another surface are unavailable for the current comparison.
+    (beta / "hydro/surface.json").write_text(
+        json.dumps({"surface": "surface-process:obsolete"}), encoding="utf-8"
+    )
+    stale = run_seam_check(canvases)["pairs"][0]
+    assert stale["counts"]["water"] == 0
+    assert stale["counts"]["river"] == 0
+    assert stale["flow_ratio"] is None
 
 
 def test_seam_check_flags_landsea_disagreement(tmp_path: Path) -> None:

@@ -180,6 +180,16 @@ def _fill_lake(
 
 
 @numba.njit(cache=True)
+def _record_export(
+    exports: np.ndarray, codes: np.ndarray, source: int, destination: int, volume: float
+) -> None:
+    """Record an existing export at its last routed cell, without changing transport."""
+    if exports.size:
+        category = int(codes[destination]) if destination >= 0 else 3
+        exports[category, source] += volume
+
+
+@numba.njit(cache=True)
 def _route_sediment(
     hflat: np.ndarray,
     order: np.ndarray,
@@ -198,6 +208,8 @@ def _route_sediment(
     p_m_yr: float,
     area_m2: float,
     min_donor: np.ndarray,
+    export_by_cell: np.ndarray,
+    export_codes: np.ndarray,
 ) -> tuple[float, float, float, float]:
     """Upstream-first sediment routing.  Volumes in m x cells (multiply by cell area for m3).
     Returns (deposited_river, filled_lake, exported, playa)."""
@@ -216,6 +228,7 @@ def _route_sediment(
         lab = lake_lbl[i]
         if not mutable[i]:
             exported += v
+            _record_export(export_by_cell, export_codes, i, i, v)
             continue
         if lab > 0:
             if is_outlet[i]:
@@ -230,15 +243,18 @@ def _route_sediment(
                         playa += left
                     elif left > 0.0:  # a lake wholly on ice keeps no sediment
                         exported += left
+                        _record_export(export_by_cell, export_codes, i, i, left)
                     continue
                 v = left
             if r >= 0 and routed[r]:
                 vol[r] += v
             else:
                 exported += v
+                _record_export(export_by_cell, export_codes, i, r, v)
             continue
         if r < 0 or not routed[r]:
             exported += v
+            _record_export(export_by_cell, export_codes, i, r, v)
             continue
         qi = q[i]
         # D dt = G p Qs dt / Q with Qs dt = v * area (m3): thickness in m, v is m x cells

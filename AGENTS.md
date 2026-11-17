@@ -308,6 +308,8 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 
 ### 多 agent 与跨平台约定
 
+- **共享记忆**：开工读 `private/memory/MEMORY.md` 与 `private/today.md`，按索引读相关记录；收工更新必要事实与进度。
+  规范写 `AGENTS.md`，经验写 `private/memory/`，待办写执行台。私有文件缺失时继续工作。
 - **规则只写在 `AGENTS.md`。** 根目录与子目录的 `AGENTS.md` 是 Claude Code、Codex 等工具共用的唯一来源；同目录的
   `CLAUDE.md` 只含 `@AGENTS.md` 导入，不写内容。新建作用域规则时两个文件一起建，`tests/test_agent_instructions.py` 检查成对与导入。
 - **进入子目录先读该目录的 `AGENTS.md`。** Codex 只加载从仓库根到启动目录路径上的文件，在根目录启动时不会自动读到
@@ -493,7 +495,7 @@ cd frontend && npm run build:static:local && npm run preview:static
 | 层级 | 优先参照 | 开源 |
 |------|---------|:--:|
 | 天文 | MESA（恒星演化）、REBOUND（N 体轨道） | ✅ |
-| 地质 | GPlates（板块重建）、Landlab（地表过程）、Fastscape（河流侵蚀） | ✅ |
+| 地质 | GPlates（板块重建）、Landlab（地表过程）、Fastscape（河流侵蚀）、TauDEM（水文路由）、GRASS（连续流线） | ✅ |
 | 气候 | ExoPlaSim（系外行星 GCM）、climlab（Python 气候工具箱）、World Orogen（同类 EBM 验证工装参照，GPL 勿抄码） | ✅ |
 | 生态 | Madingley Model（通用生态系统）、Biblaridion Alien Biosphere（方法论） | ✅ |
 | 文明 | Seshat Databank（历史验证数据）、HANDY（人口-资源 ODE） | ✅ |

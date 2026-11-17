@@ -71,3 +71,23 @@ def test_list_planets_ignores_dirs_without_elevation(tmp_path: Path) -> None:
 
     mgr = MapManager(world_dir)
     assert mgr.list_planets_with_maps() == ["earth"]
+
+
+def test_climate_overlay_is_first_and_diagnostic_directories_are_ignored(tmp_path: Path) -> None:
+    world = tmp_path / "world"
+    _make_map(world / "maps", "a_inherited")
+    _make_map(world / "maps", "z_overlaid")
+    branch_maps = world / "branches" / "climate-dev" / "maps"
+    overlay = branch_maps / "z_overlaid"
+    overlay.mkdir(parents=True)
+    (overlay / "climate_yearly.msgpack").write_bytes(b"yearly")
+    for name in ("empty", "diagnostics", "_baseline", ".cache"):
+        path = branch_maps / name
+        path.mkdir()
+        if name != "empty":
+            (path / "notes.md").write_text("Diagnostic notes.", encoding="utf-8")
+
+    assert MapManager(world, "climate-dev").list_planets_with_maps() == [
+        "z_overlaid",
+        "a_inherited",
+    ]

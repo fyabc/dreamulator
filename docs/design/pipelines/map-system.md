@@ -199,6 +199,57 @@ maps/
 前端 `DecompressionStream` + 既有 msgpack worker 解码（不再主线程 parse 300 MB
 纯 JSON）。大小与旧格式相当（gzip 是主要压缩项，容器格式影响 ±20% 内容依赖）。
 
+## 高程语义与导入契约
+
+地图上的高程有两种存法，单位都是米，只是存储形式不同：
+
+- **CVT 网格**的 `cell.elevation` 直接以米保存高程，海平面由输入声明，默认是 0 m。气候与生态层按米消费，海陆以 `water_class` 为权威判据。
+- **栅格** `elevation.png` 是 16 位归一化 PNG，它的米制刻度写在同目录 `map.yaml` 的 `elevation_min_m` 与
+  `elevation_max_m` 里：米数 = `elevation_min_m` + v ×（`elevation_max_m` − `elevation_min_m`）。旧的 Voronoi
+  网络由 `sample_heightmap` 按这条式子从栅格采样，格子上存的同样是米。
+
+外部高度图的导入以 `ElevationMapping` 为契约，由 `import_heightmap_metres` 执行。解码出的值 v 是图像满刻度的比例
+（8 位图为灰度级除以 255，16 位图除以 65535），映射有三种模式：
+
+| 模式 | 用于 | 米数与海陆 |
+|------|------|-----------|
+| `range` | 带水深的高度图，包括本库自己导出的 `elevation.png` | 米数 = `min_m` + v ×（`max_m` − `min_m`），高于 `sea_level_m` 为陆地；本库导出的图按它的 `map.yaml` 刻度导回，误差不超过一个 16 位台阶 |
+| `threshold` | 只画了陆地的灰度图 | v 不超过 `sea_level` 为海；陆地从阈值处的 0 m 沿传递曲线升到满刻度的 `max_m`，曲线缺省线性，可选 `gamma`；图里没有水深，所有海格取声明的 `seafloor_m`，结果标记为海底是假设值 |
+| `metres` | 值本身就是米的浮点 TIFF | 原样读入，高于 `sea_level_m` 为陆地 |
+
+海陆在源图像素上判定，再分别重采样：海陆掩膜按面积重采样，覆盖过半为陆地的输出格判为陆地；高程按类加权平均，陆格只平均
+陆地样本，海格只平均海洋样本。两者都用正滤波（缩小用盒式，放大用双线性），所以海岸不会被另一侧的值拖偏，也不会因振铃
+翻转。导入结果同时给出陆地占比、一级灰度对应的高度（海岸处与最大值）、海底是否为假设值，以及长宽比不是 2:1 或只有
+8 位等警告。`import-elevation` 端点按这份契约导入，不给映射参数时取 `range` 模式和地图现有的刻度；它把结果写成栅格并更新
+`map.yaml` 刻度与 Voronoi 网络，映射与上述报告记进 `map.yaml` 的 `elevation_import`（见 `save_elevation_metres`）。
+映射参数与浮点图像必须为有限值，缺失像素须先由作者补齐再导入。灰度步长由线性或幂曲线的端点直接计算，
+内存开销不随位深增长，因此 32 位整数 TIFF 也能返回精度报告。
+
+### 导入输入与构建接线
+
+API 导入把原图按 SHA-256 内容哈希保存在地质层 `input/elevation_sources/`，
+`input/elevation_imports.yaml` 按行星编号记录哈希、映射、目标尺寸与溯源。原图是作者输入，
+地图栅格与网格是可重新生成的产物。分支在自己的地质输入中保存覆盖，未覆盖文件按继承链读取。
+参照世界的 root 不接受导入，继承地质层的气候分支也不能覆盖地形。
+
+地质引擎优先读取该行星的导入声明，校验原图哈希，再生成带邻接关系与面积的 CVT 网格。
+它复用 `generate_cvt_mesh` 与标准行星参数解析，半径来自该行星的正典输入。
+高程与海陆从同一个等距圆柱像素采样，避免在海岸混合两类高度；这是包含像素采样，
+不是对每个球面格子的面积求积。网格海陆面积与栅格像素比例因此属于不同口径。
+
+导入像素声明的所有非陆地格都作为水域，本入口尚不区分内陆湖与开阔海洋，也不推测板块构造史。
+构建写出空板块表，移除会遮蔽新 CVT 网格的旧 Voronoi 表。海平面同步到地图元数据与气候配置，
+气候读取网格的 `water_class`，不会把海底高度当作大气下边界。
+
+导入声明与原图纳入地质构建的过期判定，重新导入后下游会重算。删除地图后可以从输入重建；
+原图缺失、哈希不匹配或声明无效时明确失败，不以已有旧网格掩盖输入问题。
+外部安装的地球和太阳系参照网格仍使用 `elevation_source: imported` 的专用保护路径。
+普通上传无需手改这个全局开关，导入声明按行星生效。
+
+操作与验收见[地图工作流](../../usage/map-workflow.md#71-后端导入链验收)，
+前端旅程由[前端入口提案](../proposals/frontend-entry.md)维护。
+陆地偏置图和 `import_heightmap` 的归一化结果是概率场，不属于高程契约。
+
 ## 后端模块
 
 | 模块 | 说明 | 关键参考 |
@@ -207,7 +258,8 @@ maps/
 | `map/elevation_codec.py` | 高度图 PNG ↔ numpy 编解码 | Pillow 16-bit PNG I/O |
 | `map/voronoi_generator.py` | 高度图采样（`sample_heightmap`；Voronoi 生成 + Lloyd 已迁至 `cvt_mesh.py` / `plate_generator.py`） | [Red Blob Games](https://www.redblobgames.com/x/2022-voronoi-maps-tutorial/)、scipy.spatial.Voronoi |
 | `map/terrain_synthesizer.py` | 程序化地形合成（双峰基底 + 边界效应 + 热点 + fBm） | [Red Blob Games](https://www.redblobgames.com/maps/terrain/) 地形生成方法论 |
-| `map/importer.py` | 外部高度图导入（Gaea/World Machine 输出格式解码） | — |
+| `map/elevation_input.py` | 原图保留、导入声明与构建网格采样 | SHA-256 内容寻址与分支继承 |
+| `map/importer.py` | 外部高度图导入：格式解码，以及按 `ElevationMapping` 转成米的导入契约（见上节） | — |
 | `map/manager.py` | 地图 CRUD + 分支继承 + 同步 | dreamulator LayerResolver |
 
 ## API
@@ -230,6 +282,31 @@ maps/
   **月序约定：索引 0 = 三月**（引擎年从春分起算，前端月份标签按此排列）。
 - `climate-yearly` 返回 `climate_yearly.msgpack` 原始字节（N 个 per-cell UCC 连续
   描述量，float32 + uint8 状态码；字段与元数据约定见 climate-pipeline.md §11）。
+
+### 地图结果元数据与静态一致性
+
+API 的 `meta` 端点与静态站的 `meta.json` 共用
+`src/dreamulator/map/models.py` 中的 `map_metadata_result`。
+该函数用 `MapMetadata` 校验已知字段并补齐默认值，同时保留地图 YAML 中额外的生成来源字段。
+日期统一输出为 JSON 字符串，非有限数值统一输出为 `null`。
+`MapManager` 的模型读取入口继续服务内部计算，`get_map_metadata_result` 专门提供传输结果。
+
+公共元数据由 `src/dreamulator/result_contract.py` 定义。当前格式版本为字符串 `"3"`，
+参考年为 365.25 天，参考月为参考年的十二分之一。这些声明在传输时覆盖地图 YAML 中的同名字段，
+不改变输入文件。前端的 API 与静态客户端共用 `MapResultMetadata` 类型读取元数据。
+
+月度和年度气候文件均原样传输，文件内部的格式版本、数据来源、缺值状态及时间口径保持原样。
+公共元数据描述参考单位；具体年度文件的总量仍须按自身的 `p_total_basis` 解读，
+当地窗口总量与参考年总量的区别见[气候管线](climate-pipeline.md#11-图层导出与输出格式)。
+静态地图导出跳过名称以 `_` 或 `.` 开头的内部目录，避免将诊断快照作为行星发布。
+API 和静态导出共用 `MapManager.list_planets_with_maps` 的完整行星列表。列表先列出分支有地图产品的行星，
+再按名称列出从父世界继承的其余行星，同一行星只出现一次。只有气候产品的分支目录也能参加列表；
+空目录和只有诊断笔记的目录不会参加列表。静态导出为所有继承行星复制有效数据，
+即使分支没有自己的地图目录，也会写出完整的 `maps.json` 和相应文件。
+
+`tests/test_result_transport.py` 用真实高程 PNG、月度文件和引擎生成的年度 UCC 文件验证传输。
+测试覆盖根世界、分支继承和年度覆写，要求 API 与静态元数据完全相等、三个数据文件逐字节相等，
+并检查缓存响应、年度总量、海洋的不适用状态和冻结陆地的缺值状态。
 
 ## 前端组件
 

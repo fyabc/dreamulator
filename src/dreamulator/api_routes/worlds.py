@@ -6,16 +6,21 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Any
 
 import yaml
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from dreamulator import doc_render
+from dreamulator.build_jobs import BuildBusyError, BuildJob, BuildSummary, build_jobs
 from dreamulator.engine.ephemeris import sky_ephemeris
 from dreamulator.guard.facts import load_entities
 from dreamulator.world_manager import WorldManager
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
+
+    from dreamulator.engine.base import BaseEngine
+    from dreamulator.engine.progress import PipelineEvent
 
 router = APIRouter(prefix="/api/worlds", tags=["worlds"])
 
@@ -723,53 +728,103 @@ class BuildRequest(BaseModel):
     force: bool = Field(default=False, description="Re-run even if outputs exist")
 
 
-@router.post("/{world_name}/build")
-def build_world(world_name: str, req: BuildRequest | None = None) -> dict[str, Any]:
-    """Run the simulation pipeline for a world."""
+def _prepare_build(
+    world_name: str, req: BuildRequest
+) -> tuple[Path, Callable[[Callable[[PipelineEvent], None]], BuildSummary]]:
+    """Validate requests before reserving a background writer."""
     from dreamulator.engine import get_all_engines
     from dreamulator.engine.pipeline import run_pipeline
+    from dreamulator.models.layers import get_layer_index
+    from dreamulator.resolver import LayerResolver
 
     try:
         world_dir = _manager.world_dir(world_name)
         config = _manager.load_world(world_name)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        if req.branch and (req.branch in {".", ".."} or "/" in req.branch or "\\" in req.branch):
+            raise HTTPException(status_code=422, detail="Invalid branch name")
+        resolver = LayerResolver(world_dir, req.branch)
+        fork = resolver.get_fork_layer()
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if req.branch is None and (config.reference_anchor or world_name == "earth"):
+        raise HTTPException(
+            status_code=409, detail="Reference world roots are read-only; build a branch"
+        )
+    engines: list[type[BaseEngine]] = get_all_engines()
+    available = {
+        engine.name
+        for engine in engines
+        if fork is None or get_layer_index(engine.layer) >= get_layer_index(fork)
+    }
+    if req.engine is not None and req.engine not in available:
+        raise HTTPException(status_code=422, detail=f"Engine '{req.engine}' is unavailable")
 
-    engines = get_all_engines()
-    if not engines:
-        return {"status": "no_engines", "message": "No engines registered"}
-
-    branch = req.branch if req else None
-    only_engine = req.engine if req else None
-    force = req.force if req else False
-
-    try:
+    def run(on_progress: Callable[[PipelineEvent], None]) -> BuildSummary:
+        if not engines:
+            return BuildSummary(status="no_engines")
         results = run_pipeline(
             engines,
             world_dir,
             config.seed.seed,
-            force=force,
-            only_engine=only_engine,
-            branch=branch,
+            force=req.force,
+            only_engine=req.engine,
+            branch=req.branch,
+            on_progress=on_progress,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Build failed: {e}") from e
+        failed = [result for result in results if not result.success]
+        return BuildSummary(
+            status="failed" if failed else "success",
+            engines_run=len(results),
+            success=len(results) - len(failed),
+            failed=len(failed),
+            errors=[warning for result in failed for warning in result.warnings],
+        )
 
-    success_count = sum(1 for r in results if r.success)
-    fail_count = sum(1 for r in results if not r.success)
+    return world_dir, run
 
-    errors: list[str] = []
-    for r in results:
-        if not r.success:
-            errors.extend(r.warnings)
 
-    return {
-        "status": "success" if fail_count == 0 else "failed",
-        "engines_run": len(results),
-        "success": success_count,
-        "failed": fail_count,
-        "errors": errors,
-    }
+def _reserve_build(world_dir: Path, req: BuildRequest) -> BuildJob:
+    try:
+        return build_jobs.reserve(world_dir, branch=req.branch, engine=req.engine, force=req.force)
+    except BuildBusyError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.post("/{world_name}/build")
+def build_world(world_name: str, req: BuildRequest | None = None) -> dict[str, Any]:
+    """Run synchronously, sharing the writer reservation with background builds."""
+    req = req or BuildRequest()
+    world_dir, run = _prepare_build(world_name, req)
+    job = _reserve_build(world_dir, req)
+    finished = build_jobs.execute(job.id, run)
+    if finished.error is not None:
+        raise HTTPException(status_code=500, detail=f"Build failed: {finished.error}")
+    assert finished.result is not None
+    if finished.result.status == "no_engines":
+        return {"status": "no_engines", "message": "No engines registered"}
+    return finished.result.model_dump(mode="json")
+
+
+@router.post("/{world_name}/build-jobs", response_model=BuildJob, status_code=202)
+def start_build_job(
+    world_name: str, background_tasks: BackgroundTasks, req: BuildRequest | None = None
+) -> BuildJob:
+    """Accept a build; the client polls its real stage boundaries."""
+    req = req or BuildRequest()
+    world_dir, run = _prepare_build(world_name, req)
+    job = _reserve_build(world_dir, req)
+    background_tasks.add_task(build_jobs.execute, job.id, run)
+    return job
+
+
+@router.get("/{world_name}/build-jobs/{job_id}", response_model=BuildJob)
+def get_build_job(world_name: str, job_id: str) -> BuildJob:
+    """Read a recent job, scoped to this world and server process."""
+    try:
+        world_dir = _manager.world_dir(world_name)
+        return build_jobs.get(world_dir, job_id)
+    except (FileNotFoundError, KeyError) as error:
+        raise HTTPException(status_code=404, detail="Build job not found") from error
 
 
 @router.post("/{world_name}/geography-raster")

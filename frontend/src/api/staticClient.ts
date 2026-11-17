@@ -5,6 +5,8 @@
  * Only supports read operations; write operations throw.
  */
 
+import type { BuildJob } from './buildJobs'
+import type { MapResultMetadata } from './resultContract'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 
@@ -176,6 +178,8 @@ export const staticApi = {
 
   // Build and simulation — not available in static mode
   buildWorld: () => notAvailable('buildWorld'),
+  startBuildJob: async (): Promise<BuildJob> => notAvailable('startBuildJob'),
+  getBuildJob: async (): Promise<BuildJob> => notAvailable('getBuildJob'),
 
   // Data access (branch-aware: fetches from branches/{branch}/ when branch is set)
   getStellarSystem: (name: string, branch?: string | null) =>
@@ -293,6 +297,7 @@ export const staticApi = {
   // ---- Map read operations (branch-aware with root fallback) ----
 
   listMapPlanets: async (name: string, branch?: string | null): Promise<string[]> => {
+    // The exported index includes inherited planets in the API's branch-first order.
     const result = await fetchBranchAwareJson<string[]>(
       name,
       branch,
@@ -303,7 +308,7 @@ export const staticApi = {
   },
 
   getMapMeta: async (name: string, planetId: string, branch?: string | null) => {
-    const result = await fetchBranchAwareJson<any>(
+    const result = await fetchBranchAwareJson<MapResultMetadata>(
       name,
       branch,
       `/maps/${planetId}/meta.json`,

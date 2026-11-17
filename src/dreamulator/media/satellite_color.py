@@ -617,7 +617,13 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
             f"no heightfield in {gaea_dir} (need rivers-h.exr or height.meters.npy)"
         )
 
-    biome_codes = np.load(pack_dir / "biome.codes.npy")
+    standalone = meta.get("source", {}).get("kind") == "external-heightmap"
+    biome_path = pack_dir / "biome.codes.npy"
+    biome_codes = (
+        np.zeros((int(meta["grid"]["h"]), int(meta["grid"]["w"])), dtype=np.uint8)
+        if standalone and not biome_path.exists()
+        else np.load(biome_path)
+    )
     factor, rem = divmod(n, biome_codes.shape[0])
     if rem != 0 or biome_codes.shape[0] * factor != n:
         raise ValueError(
@@ -626,7 +632,11 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
             "(gaea build at out_res × 2^k)"
         )
     biome_codes = upsample_nearest(biome_codes, factor)
-    legend = {int(k): v for k, v in meta["climate"]["biome"]["legend"].items()}
+    legend = (
+        {int(k): v for k, v in meta["climate"].get("biome", {}).get("legend", {}).items()}
+        if standalone
+        else {int(k): v for k, v in meta["climate"]["biome"]["legend"].items()}
+    )
 
     # Boundary de-quantization: warp engine-sourced channels so Voronoi
     # polygon edges become organic ecotones (see WARP_* constants).
@@ -635,15 +645,23 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
     # Fallback for packs exported before v3.1: measured nacrea pitch ≈ 180 px @ 8K.
     cell_px = cell_pitch_km / km_per_px if cell_pitch_km > 0 else 180.0 * n / 8192.0
     biome_codes = apply_boundary_warp(biome_codes, cell_px, order=0).astype(np.uint8)
+
+    def optional_external_field(name: str, missing: float) -> np.ndarray:
+        path = pack_dir / name
+        if standalone and not path.exists():
+            return np.full((n, n), missing, dtype=np.float32)
+        return upsample_nearest(np.load(path), factor)
+
+    # Missing ecology stays unclassified; absent ice has no visual overlay.
     ice_grid = apply_boundary_warp(
-        np.nan_to_num(upsample_nearest(np.load(pack_dir / "ice.m.npy"), factor), nan=0.0),
+        np.nan_to_num(optional_external_field("ice.m.npy", 0.0), nan=0.0),
         cell_px,
         order=1,
     )
     # NPP warped identically so its variation tracks the warped biome
     # boundaries (both describe the same climate cells).
     npp_grid = apply_boundary_warp(
-        upsample_nearest(np.load(pack_dir / "npp.gc_m2_yr.npy"), factor),
+        optional_external_field("npp.gc_m2_yr.npy", np.nan),
         cell_px,
         order=1,
     )

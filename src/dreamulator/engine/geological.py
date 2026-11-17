@@ -8,7 +8,7 @@ through the standard BaseEngine interface.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from dreamulator.engine.base import BaseEngine, EngineResult
 from dreamulator.models.layers import Layer
@@ -16,6 +16,7 @@ from dreamulator.models.layers import Layer
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from dreamulator.map.models import ElevationImportSource
     from dreamulator.map.pipeline_types import TerrainImportRecipe, TerrainPipelineConfig
 
 logger = logging.getLogger(__name__)
@@ -56,13 +57,27 @@ class GeologicalEngine(BaseEngine):
     # Both optional: absent terrain_config falls back to planet-derived
     # defaults; absent geography.yaml = unauthored (random) continents.
     input_files: list[str] = []
-    optional_input_files = ["terrain_config.yaml", "geography.yaml", "tidal_heat_history.yaml"]
+    optional_input_files = [
+        "terrain_config.yaml", "geography.yaml", "tidal_heat_history.yaml", "elevation_imports.yaml"
+    ]  # fmt: skip
     output_files = [
         "maps/{planet_id}/elevation.png",
         "maps/{planet_id}/cvt_mesh.msgpack.gz",
         "maps/{planet_id}/plates.json",
         "maps/{planet_id}/map.yaml",
     ]
+
+    def __init__(self, world_dir: Path, seed: int, **kwargs: Any) -> None:
+        super().__init__(world_dir, seed, **kwargs)
+        from dreamulator.map.elevation_input import SOURCE_MANIFEST, load_elevation_sources
+
+        self.optional_input_files = list(type(self).optional_input_files)
+        try:
+            sources = load_elevation_sources(self.find_input(SOURCE_MANIFEST))
+        except ValueError:
+            # Malformed contracts are reported as an EngineResult by run().
+            sources = {}
+        self.optional_input_files.extend(source.relative_path for source in sources.values())
 
     def run(
         self, parameters: dict[str, object] | None = None, *, force: bool = False
@@ -95,6 +110,17 @@ class GeologicalEngine(BaseEngine):
         planet_id = str(pars.get("planet_id", "")) or self._detect_planet_id()
         output_dir = self.maps_output_dir / planet_id
         output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Authored image inputs are per planet. They take precedence over generated terrain
+        # and can reconstruct a deleted mesh, unlike externally installed reference meshes.
+        from dreamulator.map.elevation_input import SOURCE_MANIFEST, load_elevation_sources
+
+        try:
+            source = load_elevation_sources(self.find_input(SOURCE_MANIFEST)).get(planet_id)
+            if source is not None:
+                return self._build_elevation_import(config, planet_id, source, warnings)
+        except ValueError as e:
+            return EngineResult(engine_name=self.name, success=False, warnings=warnings + [str(e)])
 
         # ---- Imported data guard ----
         # Worlds whose terrain is imported from real data (earth: ETOPO1 +
@@ -243,7 +269,74 @@ class GeologicalEngine(BaseEngine):
 
     def outputs_exist(self) -> bool:
         """Check if geological outputs already exist in maps/ directory."""
+        from dreamulator.map.elevation_input import SOURCE_MANIFEST, load_elevation_sources
+
+        try:
+            sources = load_elevation_sources(self.find_input(SOURCE_MANIFEST))
+        except ValueError:
+            return False
+        if any(self.find_input(source.relative_path) is None for source in sources.values()):
+            return False
         return bool(self.output_paths())
+
+    def _build_elevation_import(
+        self,
+        config: TerrainPipelineConfig,
+        planet_id: str,
+        source: ElevationImportSource,
+        warnings: list[str],
+    ) -> EngineResult:
+        from dreamulator.map.cvt_mesh import generate_cvt_mesh
+        from dreamulator.map.elevation_input import (
+            read_elevation_source,
+            sample_elevation_import,
+            validate_elevation_input_target,
+        )
+        from dreamulator.map.export import MESH_FILENAME, save_cvt_mesh
+        from dreamulator.map.manager import MapManager
+        from dreamulator.map.models import MapMetadata
+
+        validate_elevation_input_target(self.world_dir, self._branch_name())
+        imported = read_elevation_source(source, self.find_input(source.relative_path))
+        mesh = generate_cvt_mesh(config)
+        sample_elevation_import(mesh, imported)
+        output_dir = self.maps_output_dir / planet_id
+        mgr = MapManager(self.world_dir, self._branch_name())
+        mapping = source.provenance.mapping
+        assert mapping is not None
+        metadata = MapMetadata(
+            planet_id=planet_id,
+            width=imported.metres.shape[1],
+            height=imported.metres.shape[0],
+            sea_level_m=0.0 if mapping.mode == "threshold" else mapping.sea_level_m,
+            voronoi_seed=config.seed,
+            voronoi_num_cells=mesh.num_cells,
+            cvt_jitter_sigma=config.jitter_sigma,
+            cvt_lloyd_iterations=config.lloyd_iterations,
+            elevation_import=source.provenance,
+        )
+        mgr.save_map_metadata(planet_id, metadata)
+        mgr.save_elevation_metres(planet_id, imported.metres)
+        save_cvt_mesh(output_dir / MESH_FILENAME, mesh)
+        mgr.save_plates(planet_id, [])
+        # A legacy network would shadow the new CVT mesh in MapManager.get_voronoi().
+        (output_dir / "voronoi.json").unlink(missing_ok=True)
+        return EngineResult(
+            engine_name=self.name,
+            success=True,
+            output_files=[
+                f"maps/{planet_id}/{name}"
+                for name in ("elevation.png", MESH_FILENAME, "plates.json", "map.yaml")
+            ],
+            warnings=warnings + imported.warnings,
+            metadata={
+                "planet_id": planet_id,
+                "elevation_source": "imported",
+                "source_sha256": source.sha256,
+                "num_nodes": mesh.num_cells,
+                "radius_km": config.radius_km,
+            },
+        )
 
     def output_paths(self) -> list[Path]:
         """Resolved geological outputs: any mesh file under maps/.

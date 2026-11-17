@@ -204,7 +204,7 @@ def tiled_month_active(
     ctx = _ctx_of(store)
     ctx.increments = store.increments
     keys = list(ctx.keys)
-    n_work = _default_workers(ctx.tile) if workers is None else max(1, workers)
+    n_work = _default_workers(ctx.tile, workers, cap=len(ctx.keys))
     months = int(runoff_monthly_pack.shape[-1])
     t0 = time.time()
 

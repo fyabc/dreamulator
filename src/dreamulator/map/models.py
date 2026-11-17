@@ -7,7 +7,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+
+from dreamulator.result_contract import result_metadata
 
 if TYPE_CHECKING:
     import numpy as np
@@ -49,6 +51,49 @@ class MapProjection(StrEnum):
     EQUIRECTANGULAR = "equirectangular"
 
 
+class ElevationMapping(BaseModel):
+    """How an imported image's values become metres: the import contract.
+
+    Decoded values ``v`` are fractions of the image's full scale (grey level / 255 for 8-bit,
+    / 65535 for 16-bit).  Three modes:
+
+    - ``range``: the image carries the sea floor; metres = ``min_m`` + v · (``max_m`` − ``min_m``),
+      land where metres > ``sea_level_m``.  This is the convention of the map's own
+      ``elevation.png`` (normalised PNG plus ``map.yaml`` min/max), so a map's export comes back
+      unchanged.
+    - ``threshold``: a land-only map; v ≤ ``sea_level`` is sea and land rises from 0 m at the
+      threshold to ``max_m`` at full scale along ``curve`` (``linear``, or ``gamma`` with
+      exponent ``gamma``).  The image has no depth, so every sea cell is set to ``seafloor_m``
+      and the result is marked as carrying an assumed sea floor.
+    - ``metres``: a float TIFF whose values already are metres; land where > ``sea_level_m``.
+    """
+
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    mode: Literal["range", "threshold", "metres"] = "range"
+    min_m: float = Field(default=-11_000.0, description="range: metres at value 0")
+    max_m: float = Field(default=9_000.0, description="range/threshold: metres at full scale")
+    sea_level: float = Field(
+        default=0.0, ge=0.0, lt=1.0, description="threshold: sea at or below this fraction"
+    )
+    sea_level_m: float = Field(default=0.0, description="range/metres: land above this height")
+    curve: Literal["linear", "gamma"] = "linear"
+    gamma: float = Field(default=1.0, gt=0.0, description="threshold: exponent of the curve")
+    seafloor_m: float = Field(
+        default=-3800.0,
+        lt=0.0,
+        description="threshold: depth given to every sea cell (an assumption: the image has none)",
+    )
+
+    @model_validator(mode="after")
+    def validate_scale(self) -> ElevationMapping:
+        if self.mode == "range" and self.max_m <= self.min_m:
+            raise ValueError("range mapping needs max_m > min_m")
+        if self.mode == "threshold" and self.max_m <= 0.0:
+            raise ValueError("threshold mapping needs max_m > 0")
+        return self
+
+
 class ElevationImportProvenance(BaseModel):
     """Provenance of an externally imported elevation heightmap.
 
@@ -63,8 +108,33 @@ class ElevationImportProvenance(BaseModel):
     output_resolution: list[int] = Field(default_factory=list)
     was_resampled: bool = False
     range_normalized: list[float] = Field(default_factory=list)
+    mapping: ElevationMapping | None = None
+    range_m: list[float] = Field(default_factory=list)
+    land_fraction: float | None = None
+    seafloor_assumed: bool = False
+    level_step_m: dict[str, float] | None = None
     notes: str | None = None
     imported_at: datetime = Field(default_factory=datetime.now)
+
+
+class ElevationImportSource(BaseModel):
+    """Retained image and its decoding contract, stored in geological input."""
+
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    provenance: ElevationImportProvenance
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> ElevationImportSource:
+        if self.provenance.mapping is None:
+            raise ValueError("retained elevation source needs an explicit mapping")
+        size = self.provenance.output_resolution
+        if len(size) != 2 or min(size) <= 0:
+            raise ValueError("retained elevation source needs a positive [width, height]")
+        return self
+
+    @property
+    def relative_path(self) -> str:
+        return f"elevation_sources/{self.sha256}.bin"
 
 
 class MapMetadata(BaseModel):
@@ -111,6 +181,19 @@ class MapMetadata(BaseModel):
     #: Set when the elevation raster was imported from an external tool
     #: (absent for pipeline-generated terrain).
     elevation_import: ElevationImportProvenance | None = None
+
+
+def map_metadata_result(data: dict[str, Any]) -> dict[str, Any]:
+    """Serialize the shared API/static metadata result without dropping provenance.
+
+    Known map fields use model validation and defaults. Additional generation
+    fields remain available, while shared version/time declarations come from
+    the result contract rather than potentially stale values in map.yaml.
+    """
+    metadata = MapMetadata.model_validate(data)
+    extra = TypeAdapter(dict[str, Any]).dump_python(data, mode="json")
+    result = {**extra, **metadata.model_dump(mode="json"), **result_metadata()}
+    return {key: sanitize_nonfinite(value) for key, value in result.items()}
 
 
 # ---------------------------------------------------------------------------

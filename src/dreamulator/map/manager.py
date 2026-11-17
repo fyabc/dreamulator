@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import yaml
 
 from dreamulator.resolver import LayerResolver
@@ -24,12 +25,11 @@ from .models import (
     TectonicPlate,
     VectorLayerMeta,
     VoronoiNetwork,
+    map_metadata_result,
 )
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import numpy as np
 
 
 class MapManager:
@@ -143,6 +143,17 @@ class MapManager:
             return None
         return MapMetadata.model_validate(data)
 
+    def get_map_metadata_result(self, planet_id: str) -> dict[str, Any] | None:
+        """Load metadata for transport, with contract defaults and provenance."""
+        map_dir = self._map_input_dir(planet_id)
+        if map_dir is None or not (map_dir / "map.yaml").exists():
+            return None
+        with (map_dir / "map.yaml").open(encoding="utf-8") as stream:
+            data = yaml.safe_load(stream)
+        if data is None:
+            return None
+        return map_metadata_result(data)
+
     def save_map_metadata(self, planet_id: str, metadata: MapMetadata) -> None:
         """Save map metadata for a planet."""
         map_dir = self._ensure_input_dir(planet_id)
@@ -203,6 +214,24 @@ class MapManager:
         png_path = map_dir / "elevation.png"
         with png_path.open("wb") as f:
             f.write(encode_elevation(elevation, min_m, max_m))
+
+    def save_elevation_metres(self, planet_id: str, metres: np.ndarray) -> tuple[float, float]:
+        """Save a heightmap given in metres; returns the (min, max) written to ``map.yaml``.
+
+        The stored raster stays the normalised 16-bit ``elevation.png``; its scale is the
+        map's ``elevation_min_m``/``elevation_max_m``, which this sets to whole metres just
+        outside the data so nothing is clipped.  One 16-bit level is then (max − min) / 65535.
+        """
+        lo = float(np.floor(np.nanmin(metres)))
+        hi = float(np.ceil(np.nanmax(metres)))
+        if hi <= lo:
+            hi = lo + 1.0
+        metadata = self.get_map_metadata(planet_id) or MapMetadata(planet_id=planet_id)
+        metadata.elevation_min_m = lo
+        metadata.elevation_max_m = hi
+        self.save_map_metadata(planet_id, metadata)
+        self.save_elevation(planet_id, (np.asarray(metres, np.float64) - lo) / (hi - lo))
+        return lo, hi
 
     # -------------------------------------------------------------------
     # Voronoi network
@@ -332,13 +361,29 @@ class MapManager:
         ordered: list[str] = []
         seen: set[str] = set()
 
-        def _collect(maps_root: Path) -> None:
+        def _collect(maps_root: Path, *, overlay: bool = False) -> None:
+            # Climate forks can supply only a subset of the map products.
+            # A known product distinguishes an overlay from a diagnostic directory.
+            overlay_files = (
+                "map.yaml",
+                "climate_monthly.msgpack",
+                "climate_yearly.msgpack",
+                "cvt_mesh.msgpack.gz",
+                "cvt_mesh.json",
+                "voronoi.json",
+                "plates.json",
+                "temperature.png",
+                "koppen.json",
+            )
             names = sorted(
                 d.name
                 for d in maps_root.iterdir()
                 if d.is_dir()
                 and not d.name.startswith(("_", "."))  # skip hidden/temp dirs (e.g. _baseline)
-                and (d / "elevation.png").exists()
+                and (
+                    (d / "elevation.png").exists()
+                    or (overlay and any((d / filename).is_file() for filename in overlay_files))
+                )
             )
             for name in names:
                 if name not in seen:
@@ -350,7 +395,7 @@ class MapManager:
         if self.branch is not None:
             branch_maps = self.world_dir / "branches" / self.branch / "maps"
             if branch_maps.exists():
-                search_roots.append(branch_maps)
+                _collect(branch_maps, overlay=True)
         root_maps = self.world_dir / "maps"
         if root_maps.exists():
             search_roots.append(root_maps)

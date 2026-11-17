@@ -244,7 +244,7 @@ def sample_elevation(canvas_root: Path, loc: SeamLocation, tile: int) -> float |
 
 
 def sample_ice(canvas_root: Path, loc: SeamLocation, tile: int) -> float | None:
-    """Ice thickness metres at the sample point; 0 when the block has no ice.
+    """Ice metres at the point; absent blocks require an explicit zero-ice declaration.
 
     None means the canvas ships no ice product at all (no
     ``surface/ice_chunks/``), which leaves the bedrock caliber *unverified*
@@ -257,10 +257,11 @@ def sample_ice(canvas_root: Path, loc: SeamLocation, tile: int) -> float | None:
     ci, cj = loc.chunk
     path = ice_dir / f"r{ci:03d}_c{cj:03d}.npy"
     if not path.exists():
-        return 0.0
+        meta = json.loads((canvas_root / "canvas.json").read_text(encoding="utf-8"))
+        return 0.0 if (meta.get("surface_refinement") or {}).get("zero_ice") else None
     row, col = _local_index(loc, tile)
     if not (0 <= row < tile and 0 <= col < tile):
-        return 0.0
+        return None
     return float(np.load(path, mmap_mode="r")[row, col])
 
 
@@ -299,7 +300,7 @@ def _anchored_sea_of(
             name = f"r{ci:03d}_c{cj:03d}.npy"
             arr = np.asarray(np.load(canvas_root / "chunks" / name))
             if inc is not None:
-                arr = arr.astype(np.int32) + np.load(inc / name)
+                arr = arr.astype(np.result_type(arr.dtype, np.float32)) + np.load(inc / name)
             return arr
 
         sea = canvas_anchored_sea(
@@ -321,7 +322,15 @@ def sample_sea(
     if not path.exists():
         return None
     row, col = _local_index(loc, tile)
-    water = np.asarray(np.load(path)) <= 0.0
+    elevation = sample_elevation(canvas_root, loc, tile)
+    if elevation is None:
+        return None
+    # The connectivity and the local water test must consume the same surface.
+    water = np.asarray(np.load(path))
+    inc = _increments(canvas_root)
+    if inc is not None:
+        water = water.astype(np.result_type(water.dtype, np.float32)) + np.load(inc / path.name)
+    water = water <= 0.0
     return bool(sea.mask(loc.chunk, water)[row, col])
 
 
@@ -340,6 +349,15 @@ def sample_lake(canvas_root: Path, loc: SeamLocation, tile: int) -> bool | None:
     return bool(np.isin(flat, data["idx"]).any())
 
 
+def _hydrology_current(canvas_root: Path) -> bool:
+    """Only products bound to the currently selected surface can be compared."""
+    from dreamulator.media.canvas_surface_process import read_surface_tag, surface_tag
+
+    return read_surface_tag(canvas_root / "hydro") == surface_tag(
+        canvas_root, _increments(canvas_root)
+    )
+
+
 def sample_river(
     canvas_root: Path, loc: SeamLocation, reach_km: float
 ) -> tuple[float, float] | None:
@@ -349,16 +367,17 @@ def sample_river(
     decide presence; the flow is reported so the two sides can be compared.
     """
     line_path = canvas_root / "hydro" / "rivers.line.npy"
-    if not line_path.exists():
+    flow_path = canvas_root / "hydro" / "rivers.flow.npy"
+    if not line_path.exists() or not flow_path.exists():
         return None
     geom = _canvas_geometry(canvas_root)
     segs = np.load(line_path).astype(np.float64)
     if segs.size == 0:
-        return None
+        return float("inf"), 0.0
     # Same SW-origin canvas km frame as the product (cell_xyz_km).
     px = geom.px_km
-    x = loc.col_px * px
-    y = (geom.size_px - 1.0 - loc.row_px) * px
+    x = (loc.col_px - 0.5) * px
+    y = (geom.size_px - 0.5 - loc.row_px) * px
     a, b = segs[:, 0], segs[:, 1]
     ab = b - a
     length2 = np.einsum("ij,ij->i", ab, ab)
@@ -367,8 +386,7 @@ def sample_river(
     proj = a + t[:, None] * ab
     dist = np.hypot(proj[:, 0] - x, proj[:, 1] - y)
     nearest = int(np.argmin(dist))
-    flows_path = canvas_root / "hydro" / "rivers.flow.npy"
-    flow = float(np.load(flows_path)[nearest]) if flows_path.exists() else float("nan")
+    flow = float(np.load(flow_path, mmap_mode="r")[nearest])
     return float(dist[nearest]), flow
 
 
@@ -450,7 +468,7 @@ def _pair_report(
                 )
 
         lakes = [
-            sample_lake(root, loc, tile)
+            sample_lake(root, loc, tile) if _hydrology_current(root) else None
             for root, loc, tile in zip(roots, (left, right), tiles, strict=True)
         ]
         if all(v is not None for v in lakes):
@@ -459,7 +477,7 @@ def _pair_report(
                 report.water_disagree += 1
 
         rivers = [
-            sample_river(root, loc, river_reach_km)
+            sample_river(root, loc, river_reach_km) if _hydrology_current(root) else None
             for root, loc in zip(roots, (left, right), strict=True)
         ]
         if all(v is not None for v in rivers):
@@ -488,6 +506,7 @@ def run_seam_check(
     measure" cannot be confused.
     """
 
+    _increments.cache_clear()
     pairs, fmt = load_seam_pairs(canvases_root)
     have_chunks = sorted(
         child.name

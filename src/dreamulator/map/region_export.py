@@ -804,6 +804,16 @@ def export_region_pack(
             sea_level_m,
             out_dir,
         )
+    if include_climate and climate_monthly is not None:
+        from dreamulator.map.region_inputs import write_world_refinement_inputs
+
+        meta["refinement_inputs"] = write_world_refinement_inputs(
+            out_dir, mesh, window, *climate_monthly, indices_fine, provenance=source or {}
+        )
+    if "refinement_inputs" in meta:
+        from dreamulator.map.region_inputs import REFINEMENT_GEOMETRY_KEYS
+
+        meta["refinement_inputs"]["geometry"] = {key: meta[key] for key in REFINEMENT_GEOMETRY_KEYS}
     (out_dir / "meta.json").write_text(
         json.dumps(meta, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",

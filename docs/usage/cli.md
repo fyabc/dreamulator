@@ -219,7 +219,7 @@ dreamulator climate info earth --branch climate-dev
 ## 数据包（data）
 
 `data fetch` 从**版本化开发数据包**下载并安装某个世界的「基础地形」（被 git 忽略、导入自真实数据的
-高程 + 板块 + 水陆分类），是新机器从干净 checkout 构建 `earth`（或其分支）的首选入口。
+高程、板块和水陆分类），是新机器从干净 checkout 准备地球参照数据的首选入口。`earth` 主世界保持真实观测状态，气候计算在分支上执行。
 
 ```bash
 # 首选路径：一次下载基础地形，之后直接构建
@@ -234,9 +234,11 @@ dreamulator data fetch earth --branch climate-dev --from /path/to/earth-terrain-
 
 - 按世界/分支的 `terrain_import` 配方（分辨率 / mesh 节点数 / seed）计算**兼容性指纹**，在
   `data/dev-data/index.json`（git 提交的固定索引）里查匹配包；找不到就明确报错并给出原始导入恢复命令。
-- 下载后校验包 SHA-256 与 manifest 内逐文件 SHA-256，拒绝越界路径 / 链接，先在临时目录解包再原子安装，
-  只写 `maps/<planet>/` 下的四个基础地形文件（不覆盖 YAML 源配置）。
-- 本地已有**不同参数**的基础地形时明确拒绝（不静默替换）；重复 fetch 幂等。
+- 下载需要 GitHub CLI（`gh`）。未安装时，命令会说明原因，并提示从发布页下载后使用 `--from` 安装。
+- 安装前校验包摘要、清单摘要、兼容性指纹以及逐文件摘要和大小。包内必须恰好声明目标行星的四个基础地形文件；清单版本、网格格式和配方必须一致，网格不能含气候字段。
+- 安装先在临时目录解包和校验，再逐文件原子替换 `maps/<planet>/` 下的基础地形。安装不覆盖 `layers/` 下的源配置，四个文件的替换不构成一次目录事务。
+- 本地网格的种子或节点数与配方不同时，命令会拒绝覆盖。已有网格包含观测或模型气候数据时，命令也会拒绝安装，以保留现有参考；可以在独立数据目录准备基础地形。重复安装相同基础地形保持文件摘要一致。
+- 安装后的提示会保留 `--data-dir`。直接准备 `earth` 主世界时，后续计算提示会指向 `climate-dev` 分支。
 
 `build` 在缺少已导入地形时，若索引确有匹配包，会提示 `data fetch` 命令（否则给原始导入命令）。
 没有 `data fetch` 的机器仍可用 `climate import-elevation` 走真实数据导入（见上一节「导入真实高程」）。
@@ -290,34 +292,25 @@ uv run dreamulator sky nacrea --from satellite_nacrea     --at 61.979 --targets 
 dreamulator guard check nacrea [--branch <b>] [--data-dir <dir>]
 ```
 
-三级检测，从粗到精（harness.md §7）：
+命令检查模板引用、决策登记的输入和接受时的事实基线。输入不变时，也会比较事实。检查通过返回退出码 0；发现输入或事实变化返回 1；缺少产物、指纹或基线，或者模板无法求值时返回 2。
 
-| 级别 | 检测什么 | 判定 |
-|------|---------|------|
-| ① 模板断链 | 渲染文档/ADR 后残留 `{{ ... }}` | 字段被删/改名 → 硬约束 |
-| ② 输入指纹 | ADR frontmatter `checked_against` vs 当前层 yaml 哈希 | 输入改了 → 需复核 |
-| ③ 渲染 diff | ADR 定量声明（模板）重渲染 vs 基线 | 事实漂移 → 结论需复核 |
-
-意图感知：`divergence: intentional` 的记录报 info（已知覆写），不报 stale。
+`divergence: intentional` 只将声明过的输入变化转为提示，事实漂移仍需复核。完整判定和继承规则见[守护台账技术参考](../design/pipelines/guard-ledger.md)。
 
 ### 决策记录台账（ADR）
 
+ADR 是保存问题、依据和结论的决策记录。新记录放在世界或分支的设计笔记目录，以 `00NN-<slug>.md` 命名，并使用 `status: proposed`。
+
 ```bash
-dreamulator guard accept nacrea 0001              # proposed → accepted（写 checked_against + 基线）
-dreamulator guard supersede nacrea 0001 --by 0002 # 标记被 0002 取代（正文不动）
-dreamulator guard deprecate nacrea 0001           # 弃用（前提失效但历史保留）
-dreamulator guard archive nacrea --limit 20       # 归档最旧的 accepted，直至 ≤ 上限
+dreamulator guard accept nacrea 0001
+dreamulator guard accept nacrea 0001 --branch variant
+dreamulator guard supersede nacrea 0001 --by 0002
+dreamulator guard deprecate nacrea 0001
+dreamulator guard archive nacrea --limit 20
 ```
 
-- ADR 落在 `data/worlds/<world>/design-notes/00NN-<slug>.md`，frontmatter 带 `status` 字段。
-- 状态机：`proposed → accepted / deprecated / superseded by <编号>`。
-- **永不编辑 accepted 的结论正文**——推翻走 `supersede`（git 记历史，文档不写「旧值→新值」）。
-- `accept` 自动写入 `checked_against`（astronomy + geological 的 yaml 指纹）与渲染基线
-  `design-notes/.guard-baseline.json`（③ 的比对基准）。
+接受命令先验证事实，再保存输入指纹和模板基线。已经接受的记录没有变化时，重复接受不会写文件；需要变更结论时，先另写并接受新记录，再以替代命令关联两者。替代记录必须已经存在且已接受。
 
-**容量上限 + 强制剪枝**（harness.md §8.2，借鉴 Hermes）：台账默认上限 **20 条 accepted**
-（`accept --limit` / `archive --limit` 可调）。`accept` 在台账已满时**拒绝写入**（而非静默追加），
-先 `guard archive` 把最旧的 accepted 标 `deprecated` 归档腾位。
+归档命令只隐藏超出容量的已接受记录，仍保留其结论并继续检查变化。弃用表示作者裁决前提失效。所有台账写命令都支持 `--branch`；写入分支前，该分支需要自己的设计笔记目录，继承的父世界记录保持原样。
 
 ---
 
@@ -413,6 +406,52 @@ Terrain Definition 有 Height ≤ 10 km、Width ≤ 2400 km 上限，深海沟�
 喂给 Gaea 时区域 span 建议 ≤ 2350 km；操作配方见
 [gaea-video-chain.md](gaea-video-chain.md)。
 
+#### 独立局部高度图
+
+局部图可以直接生成区域包。源图需要是正方形，图像上方代表北方。`--px-km` 指定源像素的千米尺度，
+所以窗口边长由源图像素数乘该尺度决定；`--out-res` 只改变包内分辨率。
+
+```bash
+dreamulator region pack --from-image local.png --px-km 0.35 \
+    --z-range=-200,3000 --climate-file local-climate.yaml \
+    --lat -41 --lon 174 --out-res 3072 -o exports/local-pack
+dreamulator region build exports/local-pack --td <terrain-diffusion-repo>
+dreamulator render exports/local-pack --style survey -o exports/local-survey
+```
+
+`--z-range` 把整数图的全量程映射为米值。也可以改用 `--mapping-file mapping.yaml`，
+其字段与[高程导入契约](../design/pipelines/map-system.md)的映射模型相同。
+已经带米值的浮点 TIFF 使用 `mode: metres`；无海底图使用 `mode: threshold`，
+并声明海面灰度阈值、陆地曲线、最高高程和假设海底深度。两种映射入口互斥。
+
+月气候文件提供 12 个地表月均温和月降水量。月份按顺序排列，每月按 365.25 / 12 天计，
+全年按 365.25 天计。温度使用摄氏度，降水使用毫米，降水不得为负。
+
+```yaml
+temperature_basis: surface
+description: 作者指定的均匀地表气候情景。
+temperature_C: [8, 9, 12, 15, 18, 21, 23, 22, 19, 15, 11, 8]
+precipitation_mm: [80, 70, 80, 90, 100, 110, 110, 100, 90, 80, 80, 80]
+```
+
+空间气候可以把两个列表换成相对于 YAML 所在目录的 `.npy` 文件名，数组形状必须同为
+`(N, N, 12)`。这张粗气候网格覆盖整幅局部图，上方同样代表北方，分辨率可以不同于高程图。
+若现有气候描述的是低地温度，需要先换算成各处地表温度；TD 条件转换只会做一次海平面温度还原。
+当前入口要求海平面为 0 m，并要求显式输出到一个新包。它与世界名、分支、星球和 `--span-km` 互斥。
+
+`--lat`、`--lon` 和 `--radius-km` 指定局部图放置到方位等距平面的假设；半径缺省为 6371 km。
+包记录这项假设、高程映射、输入哈希和气候说明。包内已有高程、基本配色、年温度、年降水、
+年径流、月径流和湖冰月数。生态分类、生产力、陆冰厚度和能量型湖面蒸发需要额外输入，
+本入口不生成这些通道。制图可以显示地形与水文；卫星着色的未分类陆地显示为中性色。
+
+#### 可移交的细化输入
+
+带月气候的世界包和独立局部包都保存五个 TD 条件场与 12 个月径流。
+细化和 `--reuse-height` 从包内读取这些输入，因此移交完整包后可以脱离母世界运行。
+输入清单校验形状、单位、时间口径和文件哈希，并检查月径流之和是否等于年径流。
+有清单却缺文件或校验失败时会报错。旧世界包仍按原路径读取母世界，
+已有外部实验包可以读取自身的两个月气候数组。
+
 ### 全球画布链（canvas）
 
 每块大陆整块生成为一张 90 m 分块画布（S1），可选地做二次侵蚀与沉积，在画布上做外存水文（S2），再裁出区域
@@ -507,17 +546,27 @@ Köppen 与群系各一份 uint8 类别码 `.npy` 加调色板配色 PNG。
 共用同一正方形输出网格，套准由构造保证。技术参考见
 [design/pipelines/region-pack.md](../design/pipelines/region-pack.md)。
 
-### terrain-diffusion 细化 + 水文（region build）
+### 区域构建（region build）
 
-地形链第②步的主方法（引擎粗条件场 → 90 m 地貌重生成 → 排水/河网/湖）：
+区域包可以用 TD 重绘地形、在原图上混合细节，或直接提取原图水文。
+默认模式为 `redraw`，输出网格为包网格的两倍。
 
 ```bash
-dreamulator region build data/worlds/nacrea/packs/nacrea-15_-100_550km     --td <terrain-diffusion-repo>
-# 写 <pack>/refined-out/；推理在外部 td venv（安装见 terrain-chain 手册）
+dreamulator region build <pack> --mode redraw --td <terrain-diffusion-repo>
+dreamulator region build <pack> --mode blend --td <terrain-diffusion-repo> \
+    --native-resolution-km 0.36
+dreamulator region build <pack> --mode blend --native-resolution-km 0.36 --reuse-height
+dreamulator region build <pack> --mode hydrology
 ```
 
-550 km 约 2.5 分钟。模型机制与能力边界见
-[usage/terrain-chain.md](terrain-chain.md) 第②步。
+`--native-resolution-km` 声明混合输入的有效原生尺度，默认使用图像像素尺度或 CVT 平均格距。
+`--preserve-wavelength-km` 声明可信长波边界，默认是四个原生像素长度。
+`--cap-depression-depth` 显式限制新增洼地深度，修整结果单独保存。
+`--reuse-height` 校验模式、输入与尺度后复用 TD 供体，改变这些条件时需要重新构建。
+`--river-threshold` 调整河道起点，`--debug` 增加汇流诊断图。
+
+最终高程统一写入 `refined-out/height.meters.npy`，供探针和渲染读取；各阶段高程与身份记录保存在同目录。
+模式、缓存与接缝的详细约定见[地形视频链](terrain-chain.md#②-区域构建与细节模式)。
 
 ### 制图（render --style survey|relief|biome|hand|medieval）
 

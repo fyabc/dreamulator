@@ -176,6 +176,14 @@ PISM 的固定范围崩解选项提供这一简化边界的参照。
 用于连接来源地表与已求解冰面。高阶应力、滑动及多模式耦合属于相应动力学的适用范围。
 原生延拓的非负冰厚与每个连通冰体的体积仍独立核对。
 
+一种保持零冰厚的数值体积校正是按连通冰体归一化。令未经校正的像素冰厚为h，
+像素面积为a，目标体积为V，则在`sum(a h) > 0`时取`α = V / sum(a h)`，
+并令`h_corrected = α h`。当V非负时，这一操作同时保持非负性和零冰厚，
+体积按定义等于V；它仍会改变局部冰厚，地表起伏与覆盖阈值因此需要分别验收。
+这一操作属于数值延拓校正，不代表积累、消融或冰流。向所有像素的高程加入同一偏移
+则可能把极薄的流动尾部抬到覆冰展示阈值以上，形成由求解格支撑决定的可见薄冰。
+两种数值方案的采用范围由冰面提案维护。
+
 实现为`canvas_ice_surface.py`的`subgrid_ice_surface_level`与`subgrid_ice_relaxation_fraction`，
 固定气候储量接口位于`ice_mass_balance.py`。生产范围、短时响应与来源语义见画布管线第2.5.9节。
 
@@ -273,14 +281,25 @@ d = 0.353 AU），绝对阈值 240 W/m² 相当于其 S₀ 的 29%（地球只�
 ### 4.1 推导
 
 完美塑性近似（perfect-plastic approximation）：冰的变形在底部剪应力达到屈服
-值 τ_d 时发生，且到处都达到（冰盖内部应力近似塑性极限）。对厚度 h(x)、
-x 为到冰缘距离的一维柱体，driving stress 与底部阻力平衡：
+值 τ_d 时发生，且到处都达到（冰盖内部应力近似塑性极限）。令h(x)为冰厚，
+b(x)为基岩高程，s(x) = b(x) + h(x)为冰面高程。x从冰缘沿流线向内增加时，
+驱动应力与底部阻力的平衡为：
 
 ```
-ρ_i·g·h·(dh/dx) = τ_d   →   h·dh = (τ_d/ρ_i·g)·dx   →   h² = 2·τ_d·x/(ρ_i·g)
+ρ_i·g·h·(ds/dx) = τ_d
+dh/dx = τ_d/(ρ_i·g·h) − db/dx
+```
 
+只有平床的`db/dx = 0`时，冰面坡度才等于冰厚梯度。以冰缘h(0) = 0为边界条件积分，可得：
+
+```
 h(x) = √(2·τ_d·x / (ρ_i·g))        （固定驱动应力的完美塑性剖面）
 ```
+
+距冰缘的距离和冰厚不能单独确定粗糙山地上的驱动应力。Reeh（1982）的三维塑性重建
+明确讨论床面地形，PISM的浅冰实现则使用实际冰面坡度并参数化基岩粗糙度。
+平床剖面作为冰缘形状闭合时，其带宽还限制了数值处理的范围，不能把该范围直接解释为冰流响应长度。
+小冰体的大部分冰量可能位于这一范围内；带宽缩短虽可减少移除量，也会增高带限支留下的厚冰崖。
 
 剖面的几何特征是抛物线形穹丘：边缘薄、向中心按 √x 增厚，与实测冰盖剖面一致
 （Cuffey & Paterson 2010 ch. 8）。**世界重力直接进入分母**——重力更大的世界，
@@ -380,3 +399,7 @@ h_cap = min((bed − snowline)·0.5, cap_max)    （snowline = 1200 m, cap_max =
     thickness in three-dimensional images. *Journal of Microscopy*, 185, 67–75.
     [doi:10.1046/j.1365-2818.1997.1340694.x](https://doi.org/10.1046/j.1365-2818.1997.1340694.x)。
     局地厚度定义为覆盖该点的最大内切球直径。
+19. Reeh, N. (1982). A Plasticity Theory Approach to the Steady-State Shape of a Three-Dimensional
+    Ice Sheet. *Journal of Glaciology*, 28, 431–455.
+    [原文](https://www.cambridge.org/core/journals/journal-of-glaciology/article/plasticity-theory-approach-to-the-steadystate-shape-of-a-threedimensional-ice-sheet/94C3B58F89AC51972613D72D0B42E93D)。
+    文章区分平床与任意基岩地形，并将冰面高程及已知边界作为塑性重建的输入。

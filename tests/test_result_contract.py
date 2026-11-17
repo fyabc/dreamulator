@@ -28,16 +28,10 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 def test_result_metadata_has_format_version_and_time() -> None:
     meta = result_metadata()
-    assert meta["format_version"] == FORMAT_VERSION == "2"
+    assert meta["format_version"] == FORMAT_VERSION == "3"
     time = meta["time"]
     assert time["reference_year_days"] == REFERENCE_YEAR_DAYS == 365.25
     assert time["reference_month_days"] == REFERENCE_MONTH_DAYS == 365.25 / 12.0
-
-
-def test_export_static_injects_metadata() -> None:
-    src = (_PROJECT_ROOT / "scripts/release/export_static.py").read_text(encoding="utf-8")
-    assert "from dreamulator.result_contract import result_metadata" in src
-    assert "meta.update(result_metadata())" in src
 
 
 def test_client_delegations_are_defined_in_static_client() -> None:

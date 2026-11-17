@@ -19,6 +19,25 @@ from dreamulator.map import td_canvas_build as tb
 from dreamulator.world_manager import WorldManager
 
 
+def test_canvas_reports_memory_failure_as_a_command_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dreamulator.media.canvas_pipeline import CanvasStore
+
+    store = SimpleNamespace(work=tmp_path, surface="td", chunks=[(0, 0)])
+    monkeypatch.setattr(cli, "_targets", lambda *a: [tmp_path])
+    monkeypatch.setattr(CanvasStore, "load", lambda *a, **k: store)
+
+    def rejected_fill(*args: Any, **kwargs: Any) -> None:
+        raise MemoryError("Insufficient memory: 9 GiB required, 4 GiB budget")
+
+    monkeypatch.setattr("dreamulator.media.canvas_pipeline.run_canvas_fill", rejected_fill)
+    result = CliRunner().invoke(cli.canvas_app, ["hydrology", str(tmp_path)])
+    assert result.exit_code == 2
+    assert "Insufficient memory" in result.output and "4 GiB budget" in result.output
+    assert "Traceback" not in result.output
+
+
 def _canvas_metadata() -> dict[str, Any]:
     return {
         "geometry": {"ncell": 8},

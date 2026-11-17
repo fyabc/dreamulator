@@ -9,7 +9,7 @@ import yaml
 
 from dreamulator.doc_render import parse_frontmatter
 from dreamulator.guard.adr import accept, archive, count_accepted, deprecate, supersede
-from dreamulator.guard.stale import read_baseline
+from dreamulator.guard.stale import RENDERED_BODY_KEY, read_baseline
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -74,13 +74,17 @@ def test_accept_records_baseline_claims(tmp_path: Path) -> None:
     accept(world, None, "0001")
 
     baseline = read_baseline(world)
-    assert baseline["0001-test.md"] == {"{{ entities.star_sol.luminosity_sol }}": "1.0"}
+    assert baseline["0001-test.md"] == {
+        "{{ entities.star_sol.luminosity_sol }}": "1.0",
+        RENDERED_BODY_KEY: "x 1.0 y\n",
+    }
 
 
 def test_supersede_marks_status(tmp_path: Path) -> None:
     world = _make_world(tmp_path)
     _write_adr(world, "0001-test.md", "accepted")
 
+    _write_adr(world, "0002-new.md", "accepted")
     supersede(world, "0001", "0002-new")
 
     assert _status(world, "0001-test.md") == "superseded by 0002-new"
@@ -176,6 +180,7 @@ def test_accept_idempotent_reaccept_at_limit(tmp_path: Path) -> None:
     """Re-accepting an already-accepted record does not hit the capacity limit."""
     world = _make_world(tmp_path)
     for i in range(3):
-        _write_adr(world, f"000{i + 1}-r.md", "accepted")
+        _write_adr(world, f"000{i + 1}-r.md", "proposed")
+        accept(world, None, f"000{i + 1}", limit=3)
 
     accept(world, None, "0001", limit=3)  # no raise
