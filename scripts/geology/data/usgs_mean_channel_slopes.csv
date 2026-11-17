@@ -1,0 +1,59 @@
+station,basin,use,usgs_site_no,nhd_station_name,nhd_comid,slope_m_m,status
+Tombigbee at Aberdeen,Mobile,calibration,02437500,"TOMBIGBEE RIVER AT ABERDEEN, MS",18697793,0.000010000,slope_at_dataset_floor
+Buttahatchee near Caledonia,Mobile,calibration,02439500,"BUTTAHATCHEE RIVER NR CALEDONIA, MS",18673774,0.000010000,slope_at_dataset_floor
+Tombigbee at Columbus,Mobile,calibration,02441500,"TOMBIGBEE RIVER AT COLUMBUS, MS",933160078,0.000230990,eligible
+Sipsey near Elrod,Mobile,calibration,02446500,"SIPSEY RIVER NR ELROD, AL",166759201,0.000010000,slope_at_dataset_floor
+Tombigbee near Coatopa,Mobile,calibration,,,,,unresolved_station_identity
+Tombigbee near Leroy,Mobile,calibration,02470000,"TOMBIGBEE RIVER NEAR LEROY, AL.",21640756,0.000010000,slope_at_dataset_floor
+Scioto at LaRue,Scioto,calibration,03217500,Scioto River at La Rue OH,5211691,0.000393700,eligible
+Scioto near Prospect,Scioto,calibration,03219500,Scioto River near Prospect OH,5215353,0.000786160,eligible
+Scioto near Dublin,Scioto,excluded,,,,,excluded_engineered_section
+Scioto at Columbus,Scioto,calibration,03227500,Scioto River at Columbus OH,5218167,0.000010000,slope_at_dataset_floor
+Scioto near Circleville,Scioto,calibration,03230000,Scioto River near Circleville OH,5217231,0.000065450,eligible
+Scioto at Chillicothe,Scioto,calibration,03231500,Scioto River at Chillicothe OH,3486865,0.000253210,eligible
+French Broad at Rosman,Tennessee,calibration,03439000,"FRENCH BROAD RIVER AT ROSMAN, NC",22165090,0.002246370,eligible
+French Broad at Calvert,Tennessee,calibration,03439500,"FRENCH BROAD AT CALVERT, NC",22165028,0.001044690,eligible
+Catheys near Brevard,Tennessee,calibration,03440000,"CATHEYS CREEK NEAR BREVARD, NC",22164828,0.010993720,eligible
+Davidson near Brevard,Tennessee,calibration,03441000,"DAVIDSON RIVER NEAR BREVARD, NC",22164500,0.005170450,eligible
+French Broad at Bent Creek,Tennessee,calibration,03448000,"FRENCH BROAD RIVER AT BENT CREEK, NC",22162190,0.000679010,eligible
+French Broad at Hot Springs,Tennessee,calibration,03454500,"FRENCH BROAD RIVER AT HOT SPRINGS, NC",22161878,0.003454700,eligible
+French Broad near Newport,Tennessee,calibration,03455000,"FRENCH BROAD RIVER NEAR NEWPORT, TN",22162876,0.000010000,slope_at_dataset_floor
+Watauga near Sugar Grove,Tennessee,calibration,03479000,"WATAUGA RIVER NEAR SUGAR GROVE, NC",19743430,0.001961850,eligible
+Noland near Bryson City,Tennessee,excluded,,,,,excluded_engineered_section
+Tennessee at Knoxville,Tennessee,calibration,03497000,"TENNESSEE RIVER AT KNOXVILLE, TENNESSEE",22131233,0.000010000,slope_at_dataset_floor
+St Joseph near Blakeslee,St Lawrence,calibration,04177500,St Joseph River near Blakeslee OH,15677187,0.000093810,eligible
+Maumee at Antwerp,St Lawrence,calibration,04183500,Maumee River at Antwerp OH,15669979,0.000154320,eligible
+Tiffin at Stryker,St Lawrence,calibration,04185000,Tiffin River at Stryker OH,15662050,0.000010000,slope_at_dataset_floor
+Tiffin near Brunersburg,St Lawrence,calibration,04185500,Tiffin River near Brunersburg OH,15662960,0.000701940,eligible
+Auglaize near Fort Jennings,St Lawrence,calibration,04186500,Auglaize River near Fort Jennings OH,15651789,0.001311170,eligible
+Ottawa at Allentown,St Lawrence,calibration,04187500,Ottawa River at Allentown OH,15652479,0.000990740,eligible
+Ottawa at Kalida,St Lawrence,calibration,04188000,Ottawa River at Kalida OH,15651659,0.000448590,eligible
+Blanchard near Findlay,St Lawrence,calibration,04189000,Blanchard River near Findlay OH,15644224,0.000826180,eligible
+Blanchard at Glendorf,St Lawrence,calibration,04189500,Blanchard River at Glandorf OH,15644750,0.000010000,slope_at_dataset_floor
+Blanchard near Dupont,St Lawrence,calibration,04190000,Blanchard River near Dupont OH,15644770,0.000010000,slope_at_dataset_floor
+Auglaize near Defiance,St Lawrence,calibration,04191500,Auglaize River near Defiance OH,15650317,0.000010000,slope_at_dataset_floor
+Maumee near Defiance,St Lawrence,calibration,04192500,Maumee River near Defiance OH,15640871,0.000424400,eligible
+Maumee at Waterville,St Lawrence,calibration,04193500,Maumee River at Waterville OH,15634673,0.000010000,slope_at_dataset_floor
+Yellowstone at Corwin Springs,Yellowstone,validation,06191500,Yellowstone River at Corwin Springs MT,4369760,0.005422590,eligible
+Yellowstone at Billings,Yellowstone,validation,06214500,Yellowstone River at Billings MT,4342992,0.004341920,eligible
+Wind near Dubois,Yellowstone,validation,06218500,"WIND RIVER NEAR DUBOIS, WY",12898110,0.004990000,eligible
+Wind near Burris,Yellowstone,validation,06222000,"WIND RIVER NEAR BURRIS, WY",12900964,0.003978880,eligible
+Wind near Crowheart,Yellowstone,validation,06225500,"WIND RIVER NEAR CROWHEART, WY",12901126,0.002759460,eligible
+Wind at Riverton,Yellowstone,validation,06228000,"WIND RIVER AT RIVERTON, WY",12902364,0.002305280,eligible
+Popo Agie near Riverton,Yellowstone,validation,,,,,unresolved_station_identity
+Bighorn at Thermopolis,Yellowstone,validation,06259500,"BIGHORN RIVER AT THERMOPOLIS, WYO.",12845388,0.000051020,eligible
+North Fork Owl near Anchor,Yellowstone,validation,06262000,"NORTH FORK OWL CREEK NEAR ANCHOR, WY",12843328,0.020114970,eligible
+Owl near Thermopolis,Yellowstone,validation,06264000,"OWL CREEK NEAR THERMOPOLIS, WY",12845000,0.006851160,eligible
+Gooseberry near Grass Creek,Yellowstone,validation,06266000,"GOOSEBERRY CREEK NEAR GRASS CREEK, WYO.",12845566,0.037192980,eligible
+Bighorn at Manderson,Yellowstone,validation,06269500,BIGHORN R AT MANDERSON WYO,12840586,0.001621480,eligible
+Medicine Lodge near Hyattville,Yellowstone,validation,06273000,"MEDICINE LODGE CREEK NEAR HYATTVILLE, WYO.",12829264,0.012601490,eligible
+Greybull at Meeteetse,Yellowstone,validation,06276500,"GREYBULL RIVER AT MEETEETSE, WY",12816853,0.008133730,eligible
+Greybull near Basin,Yellowstone,validation,06277500,"GREYBULL RIVER NEAR BASIN, WYO.",12817227,0.004395120,eligible
+Bighorn at Kane,Yellowstone,validation,06279500,"BIGHORN RIVER AT KANE, WY",12802828,0.000010000,slope_at_dataset_floor
+Bighorn near St Xavier,Yellowstone,validation,06287000,"Bighorn River near St. Xavier, MT",12781155,0.004372230,eligible
+Bighorn near Hardin,Yellowstone,validation,06288500,Bighorn River near Hardin MT,12778137,0.002093330,eligible
+Little Bighorn at Stateline,Yellowstone,validation,06289000,Little Bighorn River at State Line nr Wyola MT,12771343,0.011215390,eligible
+Little Bighorn below Pass Creek,Yellowstone,validation,06290500,Little Bighorn R bl Pass Cr nr Wyola MT,12770619,0.002954710,eligible
+Little Bighorn near Crow Agency,Yellowstone,validation,06293500,Little Bighorn River nr Crow Agency MT,12770005,0.000881250,eligible
+Bighorn near Custer,Yellowstone,validation,,,,,unresolved_station_identity
+Yellowstone near Sidney,Yellowstone,validation,06329500,Yellowstone River near Sidney MT,21871785,0.001261680,eligible

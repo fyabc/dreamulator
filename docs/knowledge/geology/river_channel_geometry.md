@@ -30,6 +30,26 @@ $$Q = \frac{A_{\rm ref}\,R_0\,\Delta x^2}{T_{\rm yr}}.$$
 
 $A_{\rm ref}$ 是参考径流格数，$R_0$ 是每地球年的参考径流深度，以米计；$\Delta x$ 是投影像素间距，以米计；$T_{\rm yr}=365.25\times86400$ s。本库参考径流为每地球年 300 mm。它不是当前世界的平均径流，也不能随窗口裁切重新归一化。该式复用现有投影面积口径；球面面积的修正属于上游汇流口径，需要另行处理。
 
+## 用坡度与阻力估算平均水深
+
+曼宁公式用断面大小、顺河方向的坡度和水流阻力估算平均流速。在流量稳定、河段水深变化较小的近似下，它写作
+
+$$U=\frac{R^{2/3}\sqrt{S}}{n},\qquad Q=WDU.$$
+
+$R$ 是水力半径，即有水断面的面积除以河水接触河床和河岸的周长，单位为 m。$S$ 是顺河方向每米长度的高差，单位为 m/m；它不是山坡侧面的坡度。在近似均匀流中，河床坡度可以近似代表控制水流的能量坡度。$n$ 是曼宁阻力系数，单位为 s/m$^{1/3}$，属于观测拟合量，包含河床粗糙度等阻力因素。
+
+宽浅河道可以近似取 $R\approx D$，于是平均水深为
+
+$$D=\left(\frac{nQ}{W\sqrt{S}}\right)^{3/5}.$$
+
+HyG 数据研究在河宽与水深之比大于 10 时采用这个水力半径近似，并指出天然河流常见的曼宁系数约为 0.02 至 0.08 s/m$^{1/3}$。这一范围不是所有河床都适用的常数。公式本身不能区分河床材料、植被和回水影响，地球上的系数用于不同重力或流体条件时仍需检查。[HyG 论文](https://www.nature.com/articles/s41597-024-03916-7)说明了阻力估计与坡度资料的限制。
+
+本库的研究助手 `scripts/geology/manning_channel_depth.py` 接受独立提供的流量、河宽和纵向坡度，只从标定断面拟合一个有效阻力系数。使用估算河宽时，该系数也吸收了河宽误差，不能解释为独立测出的河床材料参数。研究对比由 `scripts/media/check_manning_channel_depth.py` 提供，既保留原流量幂律，也在与曼宁候选相同的标定样本上重新拟合幂律，避免把改变样本带来的改善全部归给坡度。
+
+坡度观测与水深观测必须独立。研究助手使用 NHDPlusv2 的平滑河段坡度，通过 USGS 站点编号与断面表对照；[HyG 数据](https://zenodo.org/records/10425392)和其[公开坡度表](https://github.com/then6702/HyG/blob/52eebf1c685d1665466ec88a588684d139b332ab/lists/USGS_slope_reach.txt)提供来源。NHDPlusv2 把最小坡度限制为 $10^{-5}$ m/m，这类值无法区分真实坡度与数值下限，因此单独排除并登记。历史断面与现代河段的时间差、无法确认的站点和缺失坡度也需要记录，不能拿由实测水深反算的坡度检验同一个水深。
+
+该助手遇到有流量却没有正坡度的输入时不产生水深估计，也不凭空加一个微小坡度。对极缓河段、回水区和宽浅近似不成立的断面，需要独立的约束。年均水深估计也不能直接替代满岸槽深或基岩下切量。
+
 ## 河口库存需要记录实际出口
 
 侵蚀模型移走的地形体积，一部分在河道和湖盆中沉积，另一部分离开当前计算域。计算域边框、不可侵蚀表面、失去接收格的路径，以及非陆地基准面都可能形成输出。非陆地基准面也可能是内陆水体，因此总输出量不能直接称为入海泥沙量。
@@ -44,6 +64,7 @@ $A_{\rm ref}$ 是参考径流格数，$R_0$ 是每地球年的参考径流深度
 
 - Leopold, L. B. 与 Maddock, T.（1953）。[The Hydraulic Geometry of Stream Channels and Some Physiographic Implications](https://pubs.usgs.gov/pp/0252/report.pdf)。USGS Professional Paper 252，第 16 页和第 54 页。
 - Lin 等（2020）。[Global Estimates of Reach-Level Bankfull River Width Leveraging Big Data Geospatial Analysis](https://doi.org/10.1029/2019GL086405)。该文研究满岸河宽，可用于核对其流量统计与年均断面的区别。
+- Enzminger 等（2024）。[HyG: A hydraulic geometry dataset derived from historical stream gage measurements across the conterminous US](https://www.nature.com/articles/s41597-024-03916-7)。介绍独立河段坡度、宽浅水力半径近似、阻力系数与坡度下限的影响。
 - Liang 等（2015）。[A reduced-complexity model for river delta formation, Part 1](https://esurf.copernicus.org/articles/3/67/2015/)。介绍 DeltaRCM 的水沙路由与河道反馈。
 - Landlab。[ErosionDeposition 组件](https://landlab.readthedocs.io/en/latest/generated/api/landlab.components.erosion_deposition.erosion_deposition.html)。介绍 Davy 与 Lague（2009）的侵蚀、输运和沉积账本。
 - pyDeltaRCM。[泥沙路由实现](https://github.com/DeltaRCM/pyDeltaRCM/blob/develop/pyDeltaRCM/sed_tools.py)。可以核对砂泥分类、泥沙输入和地形反馈。
