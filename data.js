@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794937048676,
+  "lastUpdate": 1794939960416,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2183,6 +2183,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00025855238368915385",
             "extra": "mean: 3.599194200000966 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "a6cd3852226be869ad4f8535b74559e985daed5c",
+          "message": "fix(ci): spawn-only canvas pools and width-stable CLI tree test\n\nfork() aborts once the parent has used GNU OpenMP (numba), which made the\nsurface-process and canvas pool tests fail deterministically on Linux. The\npools now default to spawn on every platform; DREAMULATOR_START_METHOD still\nallows an explicit override.\n\ntest_cli_tree relied on Click's terminal_width, but Rich reads COLUMNS; pin it\nlike test_cli_sky already does so a narrow CI environment cannot collapse the\nhelp table.\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-18T02:25:23+08:00",
+          "tree_id": "cc6598578e15162b88c88377a9e2dca1a2c6bc99",
+          "url": "https://github.com/fyabc/dreamulator/commit/a6cd3852226be869ad4f8535b74559e985daed5c"
+        },
+        "date": 1794939959725,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.6121269684756726,
+            "unit": "iter/sec",
+            "range": "stddev: 0.061511702244726706",
+            "extra": "mean: 1.6336480035999954 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 6.800104412883474,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04197567084591904",
+            "extra": "mean: 147.05656549999446 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.9980417690576417,
+            "unit": "iter/sec",
+            "range": "stddev: 0.5302246016971303",
+            "extra": "mean: 333.5510566666737 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1574.8343982973067,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006834622198722951",
+            "extra": "mean: 634.9873999965894 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 311.51984175844507,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007680093843391862",
+            "extra": "mean: 3.2100683999942703 msec\nrounds: 5"
           }
         ]
       }
