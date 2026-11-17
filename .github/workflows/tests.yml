@@ -49,6 +49,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pin the interpreter: pygplates (validation extra) ships wheels only up
+      # to cp313. The runner's default python3 is newer and would fall back to
+      # a source build that needs OpenGL dev headers we don't install.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
@@ -66,6 +73,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pin the interpreter: pygplates (validation extra) ships wheels only up
+      # to cp313. The runner's default python3 is newer and would fall back to
+      # a source build that needs OpenGL dev headers we don't install.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
@@ -80,6 +94,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Pin the interpreter: pygplates (validation extra) ships wheels only up
+      # to cp313. The runner's default python3 is newer and would fall back to
+      # a source build that needs OpenGL dev headers we don't install.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - uses: astral-sh/setup-uv@v4
         with:
@@ -98,6 +119,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Pin the interpreter: pygplates (validation extra) ships wheels only up
+      # to cp313. The runner's default python3 is newer and would fall back to
+      # a source build that needs OpenGL dev headers we don't install.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - uses: astral-sh/setup-uv@v4
         with:
