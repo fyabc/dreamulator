@@ -46,6 +46,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      # Numba writes its @njit(cache=True) files here; caching them across runs
+      # removes the cold JIT compile that dominates the first heavy test.
+      NUMBA_CACHE_DIR: ${{ runner.temp }}/numba-cache
     steps:
       - uses: actions/checkout@v4
 
@@ -59,6 +63,15 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
+
+      # Numba validates each cache entry against the kernel source, so a hit
+      # from an older commit is safe; key only on the interpreter and lock.
+      - name: Restore numba cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/numba-cache
+          key: numba-${{ runner.os }}-py312-${{ hashFiles('uv.lock') }}
+          restore-keys: numba-${{ runner.os }}-py312-
 
       - name: Install dependencies
         run: uv sync --frozen --all-extras

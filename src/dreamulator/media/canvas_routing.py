@@ -249,9 +249,10 @@ def tiled_two_ring_routing(
     ctx = cft._ctx_of(store)
     n = cft._default_workers(store.tile, workers, cap=len(ctx.keys))
     cft.drop_kinds(store, "order", "flat_rank")
-    cft._pool_map(_base_chunk, list(layout.keys), ctx, n)
-    cft.drop_kinds(store, "dist")
-    proposed = sum(cft._pool_map(_candidate_chunk, list(layout.keys), ctx, n))
+    with cft._pool_scope(ctx, n) as pool:
+        cft._pool_map(_base_chunk, list(layout.keys), ctx, n, pool)
+        cft.drop_kinds(store, "dist")
+        proposed = sum(cft._pool_map(_candidate_chunk, list(layout.keys), ctx, n, pool))
     rows, width = layout.shape
     free = available_memory_bytes()
     if free is not None:

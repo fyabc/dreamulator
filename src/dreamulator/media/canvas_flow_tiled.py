@@ -253,7 +253,7 @@ def _init(ctx: _Ctx) -> None:
     _CTX = ctx
 
 
-def _pool_scope(ctx: _Ctx, workers: int) -> Any:
+def _pool_scope(ctx: _Ctx, workers: int, pool: Any = None) -> Any:
     """A pool anchored for a whole stage, or ``None`` for the serial path.
 
     Workers cost about a second each to start (they import numba), so a stage
@@ -264,6 +264,9 @@ def _pool_scope(ctx: _Ctx, workers: int) -> Any:
 
     @contextlib.contextmanager
     def scope() -> Any:
+        if pool is not None:
+            yield pool
+            return
         if workers <= 1:
             _init(ctx)
             yield None
@@ -278,8 +281,8 @@ def _pool_scope(ctx: _Ctx, workers: int) -> Any:
             mp_context=mp.get_context(_start_method()),
             initializer=_init,
             initargs=(ctx,),
-        ) as pool:
-            yield pool
+        ) as executor:
+            yield executor
 
     return scope()
 

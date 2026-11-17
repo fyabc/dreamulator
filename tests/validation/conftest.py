@@ -17,7 +17,7 @@ from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
 def build_validation_mesh(
     num_bands: int = 12,
-    cells_per_band: int = 12,
+    cells_per_band: int = 8,
     ocean_bands: tuple[int, ...] = (),
     all_land: bool = False,
 ) -> CVTMesh:

@@ -29,6 +29,7 @@ from dreamulator.media.canvas_flow_tiled import (
     _ctx_of,
     _default_workers,
     _pool_map,
+    _pool_scope,
     _store_of,
     drop_kinds,
     flow_path,
@@ -220,18 +221,24 @@ def _component_tables(res: list[Any], kind: str) -> tuple[Components, list[tuple
 
 
 def tiled_components(
-    store: CanvasStore, kind: str, *, workers: int | None = None, ctx: _Ctx | None = None
+    store: CanvasStore,
+    kind: str,
+    *,
+    workers: int | None = None,
+    ctx: _Ctx | None = None,
+    pool: Any = None,
 ) -> Components:
     """Label the ``flow/<kind>`` masks as one canvas (4-connected); write ``flow/lbl_<kind>``."""
     ctx = ctx or _ctx_of(store)
     layout = ChunkLayout(ctx.tile, ctx.keys)
     n_work = _default_workers(ctx.tile, workers, cap=len(ctx.keys))
-    res = _pool_map(_label_chunk, [(k, kind) for k in layout.keys], ctx, n_work)
-    components, tables = _component_tables(res, kind)
-    # Fork workers need only the per-chunk lookup tables. The local summaries and
-    # temporary union-find arrays otherwise remain resident in every worker.
-    del res
-    _pool_map(_relabel_chunk, tables, ctx, n_work)
+    with _pool_scope(ctx, n_work, pool) as p:
+        res = _pool_map(_label_chunk, [(k, kind) for k in layout.keys], ctx, n_work, p)
+        components, tables = _component_tables(res, kind)
+        # Workers need only the per-chunk lookup tables. The local summaries and
+        # temporary union-find arrays otherwise remain resident in every worker.
+        del res
+        _pool_map(_relabel_chunk, tables, ctx, n_work, p)
     return components
 
 
@@ -326,25 +333,26 @@ def tiled_geometry_lakes(
     ctx.increments = store.increments
     n = _default_workers(ctx.tile, workers, cap=len(ctx.keys))
     keys = list(ctx.keys)
-    _pool_map(_depth_masks, keys, ctx, n)
-    deep = tiled_components(store, "deep", workers=n, ctx=ctx)
-    wet = tiled_components(store, "wet", workers=n, ctx=ctx)
-    core_ids = np.flatnonzero(deep.size >= max(LAKE_MIN_CELLS, 1))
-    core_ids = core_ids[core_ids > 0]
-    seeded = np.zeros(wet.count + 1, dtype=bool)
-    for ids in _pool_map(_seeded_wet, [(k, core_ids) for k in keys], ctx, n):
-        seeded[ids] = True
-    seeded[0] = False
-    extent = np.minimum(wet.rmax - wet.rmin + 1, wet.cmax - wet.cmin + 1)
-    min_px = LAKE_MIN_WIDTH_KM / max(km_per_px, 1e-9)
-    keep = seeded & (wet.size >= max(mmu_cells, 1)) & (extent >= min_px)
-    keep[0] = False
-    keep_ids = np.flatnonzero(keep)
-    inland = inland_by_chunk(store)
-    _pool_map(_lake_mask_chunk, [(k, keep_ids, inland.get(k)) for k in keys], ctx, n)
-    lakes = tiled_components(store, "lakes0", workers=n, ctx=ctx)
-    # The depth masks and their labels only served the lake seeding above.
-    drop_kinds(store, "wet", "deep", "lbl_wet", "lbl_deep")
+    with _pool_scope(ctx, n) as pool:
+        _pool_map(_depth_masks, keys, ctx, n, pool)
+        deep = tiled_components(store, "deep", workers=n, ctx=ctx, pool=pool)
+        wet = tiled_components(store, "wet", workers=n, ctx=ctx, pool=pool)
+        core_ids = np.flatnonzero(deep.size >= max(LAKE_MIN_CELLS, 1))
+        core_ids = core_ids[core_ids > 0]
+        seeded = np.zeros(wet.count + 1, dtype=bool)
+        for ids in _pool_map(_seeded_wet, [(k, core_ids) for k in keys], ctx, n, pool):
+            seeded[ids] = True
+        seeded[0] = False
+        extent = np.minimum(wet.rmax - wet.rmin + 1, wet.cmax - wet.cmin + 1)
+        min_px = LAKE_MIN_WIDTH_KM / max(km_per_px, 1e-9)
+        keep = seeded & (wet.size >= max(mmu_cells, 1)) & (extent >= min_px)
+        keep[0] = False
+        keep_ids = np.flatnonzero(keep)
+        inland = inland_by_chunk(store)
+        _pool_map(_lake_mask_chunk, [(k, keep_ids, inland.get(k)) for k in keys], ctx, n, pool)
+        lakes = tiled_components(store, "lakes0", workers=n, ctx=ctx, pool=pool)
+        # The depth masks and their labels only served the lake seeding above.
+        drop_kinds(store, "wet", "deep", "lbl_wet", "lbl_deep")
     if log is not None:
         log(
             f"[lakes] cores {core_ids.size}, wet components {wet.count}, kept {keep_ids.size}, "

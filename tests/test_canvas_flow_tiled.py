@@ -34,10 +34,10 @@ def test_component_summaries_are_released_before_relabelling(
     original_map = lakes._pool_map
     summaries: list[weakref.ReferenceType] = []
 
-    def checked_map(fn, items, ctx, workers):
+    def checked_map(fn, items, ctx, workers, pool=None):
         if fn is lakes._relabel_chunk:
             assert summaries and all(ref() is None for ref in summaries)
-        result = original_map(fn, items, ctx, workers)
+        result = original_map(fn, items, ctx, workers, pool)
         if fn is lakes._label_chunk:
             for row in result:
                 for array in row[2:]:
