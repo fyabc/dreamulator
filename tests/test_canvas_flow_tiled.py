@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import multiprocessing as mp
 import weakref
 from typing import TYPE_CHECKING
 
@@ -117,12 +116,15 @@ def _make_canvas(root: Path, missing: tuple[int, int] | None) -> None:
     np.save(root / "climate" / "temperature.C.npy", np.full((n, n), 22.0, dtype=np.float32))
 
 
+# Only spawn: fork after GNU OpenMP initialization is aborted by libgomp, and
+# earlier tests in the same worker can initialize it. Spawn covers the pool path.
 @pytest.mark.parametrize(
     ("missing", "workers", "start"),
     [
-        c
-        for c in ((None, 1, "fork"), ((1, 2), 1, "fork"), ((1, 2), 3, "fork"), (None, 3, "spawn"))
-        if c[2] in mp.get_all_start_methods()
+        (None, 1, "spawn"),
+        ((1, 2), 1, "spawn"),
+        ((1, 2), 3, "spawn"),
+        (None, 3, "spawn"),
     ],
 )
 def test_tiled_flow_fields_match_the_in_memory_oracle(

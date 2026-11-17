@@ -586,11 +586,14 @@ Priority-Flood 与汇流（`route`，并行填洼），再做隐式河流功率�
 原生块上。原生级在每个
 2048² 分块外加 256 像素重叠边，在 90 m 上以固定 80 kyr 步长运行 4 Myr，不削坡，锚定到窗口自身在两倍粗网格间距
 上的低通，所以只清理粗级看不到的亚格子凹坑；各窗口的增量按线性权重融合。原生级各块在进程池里并行
-（Linux 用 fork，Windows 用 spawn），每个进程单线程，结果与进程数无关。进程数由 `utils/resources.py` 的
+（缺省在所有平台都用 spawn 启动，环境变量 `DREAMULATOR_START_METHOD` 可强制指定其他方式），
+每个进程单线程，结果与进程数无关。不用 fork 是因为进程池的初始化代码会导入 numba，
+一旦父进程用过 GNU OpenMP，libgomp 会直接终止 fork 出的子进程（"Terminating: fork() called
+from a process already using GNU OpenMP"）。进程数由 `utils/resources.py` 的
 `worker_budget` 决定：取 CPU 配额（亲和掩码与 cgroup `cpu.max`）与「可用内存的一半 ÷ 单进程峰值」中的较小者，
 单进程峰值按每格 `SOLVER_BYTES_PER_CELL`（1400 字节，实测 2560² 窗口约 8.6 GB）估算；可用内存在 Linux 上取
-`/proc/meminfo` 与 cgroup 额度减去不可回收用量中的较小者，Windows 上取 `GlobalMemoryStatusEx`。这个单进程峰值取自进程的常驻内存，Linux 上 fork 出的进程与父进程共享的页面也计在内，
-world-west 59 进程实测的不可回收内存合计约 101 GB（每进程约 1.7 GB），所以估算偏保守；spawn 方式没有共享页，Windows 上的
+`/proc/meminfo` 与 cgroup 额度减去不可回收用量中的较小者，Windows 上取 `GlobalMemoryStatusEx`。这个单进程峰值取自进程的常驻内存；world-west 59 进程实测的不可回收内存合计约 101 GB（每进程约 1.7 GB），
+当时用 fork 启动，Linux 上子进程与父进程共享的页面也计在内，所以估算偏保守。缺省的 spawn 方式没有共享页，
 真实峰值待实测后再收紧。
 
 产品写在 `surface_process/`：`increments/rXXX_cYYY.npy` 是 int16 米值的逐块增量（最终地表减 TD 块，陆地
@@ -638,8 +641,8 @@ Priority-Flood 的算法本体、物理判据与文献讲解在知识库
 `summary/`，阶段二只读摘要构建全局图，阶段三逐块写 `final/`；内存占用与分块大小同阶，
 与画布总像素数无关。时间上三阶段共 O(N log N)（N 为画布像素数）：阶段一与阶段二的堆
 操作每格常数次，阶段三按「标签到水位」的查表单遍改写。阶段一与阶段三各块互不依赖，
-在进程池里并行（`workers`，缺省取可用核数与 16 的较小者）。Linux 用 fork，Windows 与 macOS
-用 spawn（环境变量 `DREAMULATOR_START_METHOD` 可强制指定）；每个子进程启动时只收到一份画布级
+在进程池里并行（`workers`，缺省取可用核数与 16 的较小者）。缺省在所有平台都用 spawn
+启动（环境变量 `DREAMULATOR_START_METHOD` 可强制指定其他方式）；每个子进程启动时只收到一份画布级
 上下文，阶段三的流域水位由父进程按块切成小表随任务下发，父进程在启动阶段三之前释放全局流域图。
 子进程只写本块文件并返回校验和，校验账本由父进程统一追加，结果与进程数和启动方式无关。spawn
 会在子进程里重新导入主模块，自写脚本调用 `run_canvas_fill` 时必须放在

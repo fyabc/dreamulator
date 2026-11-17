@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import multiprocessing as mp
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -292,7 +291,11 @@ def test_surface_option_rejects_a_missing_product(tmp_path: Path) -> None:
         CanvasStore.load(root, surface="eroded")
 
 
-_START_METHODS = [m for m in ("fork", "spawn") if m in mp.get_all_start_methods()]
+# Only spawn: the serial pass above initializes numba's GNU OpenMP in this
+# process, and libgomp hard-aborts a later fork() ("Terminating: fork() called
+# from a process already using GNU OpenMP"). The fork override stays available
+# for callers that fork before any OpenMP use; it cannot be exercised in-process.
+_START_METHODS = ["spawn"]
 
 
 @pytest.mark.parametrize("start_method", _START_METHODS)

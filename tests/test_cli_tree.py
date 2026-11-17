@@ -8,9 +8,14 @@ from typer.testing import CliRunner
 
 from dreamulator.cli import app
 
+# Rich reads COLUMNS, not Click's terminal_width; without it a narrow CI
+# environment collapses the help table and the box-drawing regex finds nothing
+# (same convention as test_cli_sky.py).
+runner = CliRunner(env={"COLUMNS": "120"})
+
 
 def _help(*path: str) -> str:
-    res = CliRunner().invoke(app, [*path, "--help"], terminal_width=120)
+    res = runner.invoke(app, [*path, "--help"], terminal_width=120)
     assert res.exit_code == 0, res.output
     return res.output
 

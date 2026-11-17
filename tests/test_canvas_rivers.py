@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import multiprocessing as mp
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -87,16 +86,18 @@ def test_canvas_rivers(tmp_path: Path) -> None:
     assert len(lakes["lakes"]) > 0 and all("verdict" in lk for lk in lakes["lakes"])
 
 
-_START_METHODS = [m for m in ("fork", "spawn") if m in mp.get_all_start_methods()]
+# Only spawn: the fill stages import numba in this process, and libgomp aborts a
+# later fork() once GNU OpenMP is initialized. The fork override remains for
+# callers that fork before any OpenMP use; it cannot be exercised in-process.
+_START_METHODS = ["spawn"]
 
 
 @pytest.mark.parametrize("start_method", _START_METHODS)
 def test_fill_is_independent_of_the_worker_count(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, start_method: str
 ) -> None:
-    # Stages 1 and 3 run per chunk in a process pool (fork on Linux, spawn on
-    # Windows); the files and the checksum ledger must match the serial run
-    # byte for byte.
+    # Stages 1 and 3 run per chunk in a process pool; the files and the
+    # checksum ledger must match the serial run byte for byte.
     monkeypatch.setenv("DREAMULATOR_START_METHOD", start_method)
     outputs = []
     for workers in (1, 3):
