@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794939960416,
+  "lastUpdate": 1794942938537,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2242,6 +2242,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00007680093843391862",
             "extra": "mean: 3.2100683999942703 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "39e4ea2b0fc6d97a2ef792baa7a80cae0708a9cf",
+          "message": "perf(canvas): reuse one process pool per tiled stage\n\ntiled_graded built a ProcessPoolExecutor on every seam round, so each round\npaid ~1 s per worker to re-import numba; the 4x4 canvas case drops from 15.3 s\nto about 2.5 s. tiled_accumulation shares a pool across its two maps.\n\nRetry chunk renames and reads on Windows sharing violations (EACCES/EPERM/\nEBUSY): a reader holding the old file blocks os.replace, which made canvas\ntests and Windows runs fail intermittently.\n\nMark the 96 h GCM stitch test slow (~100 s) and print the 20 slowest tests in\nCI.\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-18T03:15:00+08:00",
+          "tree_id": "18f1f38e88822a6132bf06a1200739ef787a663b",
+          "url": "https://github.com/fyabc/dreamulator/commit/39e4ea2b0fc6d97a2ef792baa7a80cae0708a9cf"
+        },
+        "date": 1794942938051,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.43879578222624405,
+            "unit": "iter/sec",
+            "range": "stddev: 0.09506061559512104",
+            "extra": "mean: 2.2789644761999965 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 5.042996487189498,
+            "unit": "iter/sec",
+            "range": "stddev: 0.047531409532801994",
+            "extra": "mean: 198.29480400001387 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.2713864595341993,
+            "unit": "iter/sec",
+            "range": "stddev: 0.6978402559728653",
+            "extra": "mean: 440.25973466667284 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1183.1583560348752,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00007173891227772519",
+            "extra": "mean: 845.1954000065598 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 246.7356868625784,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00006788800362999828",
+            "extra": "mean: 4.0529200000037235 msec\nrounds: 5"
           }
         ]
       }
