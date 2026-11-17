@@ -90,15 +90,34 @@ def _ring(a: np.ndarray) -> np.ndarray:
     )
 
 
+#: Retries for a chunk read that hits a stale handle, and the backoff between them.
+_LOAD_RETRIES = 8
+_LOAD_BACKOFF_S = 0.05
+
+#: A Windows reader holding the old file blocks the rename, and a reader can be
+#: refused while the rename is in flight; both clear in milliseconds.
+_SHARING_ERRNOS = (errno.EACCES, errno.EPERM, errno.EBUSY)
+
+
 def _atomic_save(path: Path, a: np.ndarray) -> None:
     """Write then rename: a concurrent reader sees the old file or the new one, never half."""
     import os
+    import time
 
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
     with open(tmp, "wb") as f:
         np.save(f, a)
-    os.replace(tmp, path)
+    delay = _LOAD_BACKOFF_S
+    for attempt in range(_LOAD_RETRIES):
+        try:
+            os.replace(tmp, path)
+            return
+        except OSError as exc:
+            if exc.errno not in _SHARING_ERRNOS or attempt == _LOAD_RETRIES - 1:
+                raise
+            time.sleep(delay)
+            delay *= 2
 
 
 def save_chunk(store: CanvasStore, kind: str, key: tuple[int, int], a: np.ndarray) -> None:
@@ -109,20 +128,17 @@ def save_chunk(store: CanvasStore, kind: str, key: tuple[int, int], a: np.ndarra
     _atomic_save(flow_path(store, kind, key, "ring.npy"), _ring(a))
 
 
-#: Retries for a chunk read that hits a stale handle, and the backoff between them.
-_LOAD_RETRIES = 8
-_LOAD_BACKOFF_S = 0.05
-
-
 def load_npy(path: Path, *, mmap_mode: Literal["r"] | None = None) -> np.ndarray:
-    """Load a chunk file, retrying while a network filesystem reports a stale handle.
+    """Load a chunk file, retrying while the file is briefly unavailable.
 
     Chunk files are published by writing a temporary and renaming it, which is atomic on a
     local filesystem: a concurrent reader gets either the old inode or the new one.  On a
     network filesystem (the shared CPFS mount these canvases live on) a client whose cached
     directory entry still points at the replaced inode gets ESTALE instead, and the whole
-    stage died on it after an hour of a world-sized run.  The rename has already happened, so
-    re-resolving the path and reading again returns the new file; the backoff doubles.
+    stage died on it after an hour of a world-sized run.  On Windows a reader can be refused
+    with EACCES while another process replaces the target, and the writer's rename can be
+    refused while a reader holds the old file.  In both cases the rename has already happened
+    or is about to, so retrying after a short backoff returns the new file.
     """
     import time
 
@@ -130,8 +146,11 @@ def load_npy(path: Path, *, mmap_mode: Literal["r"] | None = None) -> np.ndarray
     for attempt in range(_LOAD_RETRIES):
         try:
             return np.asarray(np.load(path, mmap_mode=mmap_mode))
-        except OSError as exc:  # ESTALE, and the ENOENT a rename can show on the same mount
-            if exc.errno not in (errno.ESTALE, errno.ENOENT) or attempt == _LOAD_RETRIES - 1:
+        except OSError as exc:  # ESTALE, the ENOENT a rename can show, and Windows sharing
+            if (
+                exc.errno not in (errno.ESTALE, errno.ENOENT, *_SHARING_ERRNOS)
+                or attempt == _LOAD_RETRIES - 1
+            ):
                 raise
             time.sleep(delay)
             delay *= 2
@@ -234,7 +253,46 @@ def _init(ctx: _Ctx) -> None:
     _CTX = ctx
 
 
-def _pool_map(fn: Callable[[Any], Any], items: list[Any], ctx: _Ctx, workers: int) -> list[Any]:
+def _pool_scope(ctx: _Ctx, workers: int) -> Any:
+    """A pool anchored for a whole stage, or ``None`` for the serial path.
+
+    Workers cost about a second each to start (they import numba), so a stage
+    that maps many times — the seam rounds of ``tiled_graded`` — keeps one pool
+    instead of building a new one per round.
+    """
+    import contextlib
+
+    @contextlib.contextmanager
+    def scope() -> Any:
+        if workers <= 1:
+            _init(ctx)
+            yield None
+            return
+        import multiprocessing as mp
+        from concurrent.futures import ProcessPoolExecutor
+
+        from dreamulator.media.canvas_pipeline import _start_method
+
+        with ProcessPoolExecutor(
+            max_workers=workers,
+            mp_context=mp.get_context(_start_method()),
+            initializer=_init,
+            initargs=(ctx,),
+        ) as pool:
+            yield pool
+
+    return scope()
+
+
+def _pool_map(
+    fn: Callable[[Any], Any],
+    items: list[Any],
+    ctx: _Ctx,
+    workers: int,
+    pool: Any = None,
+) -> list[Any]:
+    if pool is not None:
+        return list(pool.map(fn, items, chunksize=1))
     if workers <= 1 or len(items) < 2:
         _init(ctx)
         return [fn(it) for it in items]
@@ -474,27 +532,28 @@ def tiled_graded(
     layout = ChunkLayout(ctx.tile, ctx.keys)
     n = _default_workers(ctx.tile, workers, cap=len(ctx.keys))
     keys = list(layout.keys)
-    _pool_map(_final_rings, keys, ctx, n)
-    _pool_map(_graded_seed, keys, ctx, n)
-    pending = set(keys)
-    rounds = 0
-    while pending:
-        rounds += 1
-        todo = sorted(pending)
-        moved = _pool_map(_graded_round, todo, ctx, n)
-        pending = set()
-        for key, m in zip(todo, moved, strict=True):
-            if not m:
-                continue
-            ci, cj = key
-            for di in (-1, 0, 1):
-                for dj in (-1, 0, 1):
-                    nk = (ci + di, cj + dj)
-                    if nk != key and nk in layout.keyset:
-                        pending.add(nk)
-        if log is not None:
-            log(f"[flow] graded flats: seam round {rounds}, {len(pending)} chunks to revisit")
-    _pool_map(_graded_levels, keys, ctx, n)
+    with _pool_scope(ctx, n) as pool:
+        _pool_map(_final_rings, keys, ctx, n, pool)
+        _pool_map(_graded_seed, keys, ctx, n, pool)
+        pending = set(keys)
+        rounds = 0
+        while pending:
+            rounds += 1
+            todo = sorted(pending)
+            moved = _pool_map(_graded_round, todo, ctx, n, pool)
+            pending = set()
+            for key, m in zip(todo, moved, strict=True):
+                if not m:
+                    continue
+                ci, cj = key
+                for di in (-1, 0, 1):
+                    for dj in (-1, 0, 1):
+                        nk = (ci + di, cj + dj)
+                        if nk != key and nk in layout.keyset:
+                            pending.add(nk)
+            if log is not None:
+                log(f"[flow] graded flats: seam round {rounds}, {len(pending)} chunks to revisit")
+        _pool_map(_graded_levels, keys, ctx, n, pool)
     if not keep_dist:
         drop_kinds(store, "dist")
     return rounds
@@ -780,32 +839,35 @@ def tiled_accumulation(
     n = _default_workers(t, workers, cap=len(ctx.keys))
     t0 = time.time()
     (store.work / "flow" / ctx.acc_kind).mkdir(parents=True, exist_ok=True)
-    res = _pool_map(_acc_stage1, list(ctx.keys), ctx, n)
-    ring = _ring_index(t)
-    ring_pos = {int(c): p for p, c in enumerate(ring)}  # first position of each ring cell
-    exits: dict[tuple[int, int], np.ndarray] = {}
-    links: list[tuple[tuple[int, int], int, tuple[int, int], int, float, float]] = []
-    for key, src, tk, ti, amt, lev, ex in res:
-        exits[key] = ex
-        links.extend(zip([key] * len(src), src, tk, ti, amt, lev, strict=True))
-    node_of = {(lk[0], lk[1]): li for li, lk in enumerate(links)}
-    next_link = np.full(len(links), -1, dtype=np.int64)
-    for li, (_sk, _si, tk, ti, _a, _lv) in enumerate(links):
-        e = int(exits[tk][ring_pos[ti]])
-        if e >= 0:
-            next_link[li] = node_of.get((tk, e), -1)
-    total = np.array([lk[4] for lk in links], dtype=np.float64)
-    from dreamulator.media.canvas_routing import downstream_order
+    with _pool_scope(ctx, n) as pool:
+        res = _pool_map(_acc_stage1, list(ctx.keys), ctx, n, pool)
+        ring = _ring_index(t)
+        ring_pos = {int(c): p for p, c in enumerate(ring)}  # first position of each ring cell
+        exits: dict[tuple[int, int], np.ndarray] = {}
+        links: list[tuple[tuple[int, int], int, tuple[int, int], int, float, float]] = []
+        for key, src, tk, ti, amt, lev, ex in res:
+            exits[key] = ex
+            links.extend(zip([key] * len(src), src, tk, ti, amt, lev, strict=True))
+        node_of = {(lk[0], lk[1]): li for li, lk in enumerate(links)}
+        next_link = np.full(len(links), -1, dtype=np.int64)
+        for li, (_sk, _si, tk, ti, _a, _lv) in enumerate(links):
+            e = int(exits[tk][ring_pos[ti]])
+            if e >= 0:
+                next_link[li] = node_of.get((tk, e), -1)
+        total = np.array([lk[4] for lk in links], dtype=np.float64)
+        from dreamulator.media.canvas_routing import downstream_order
 
-    for li in downstream_order(next_link)[::-1]:
-        nl = int(next_link[li])
-        if nl >= 0:
-            total[nl] += total[li]
-    inflow: dict[tuple[int, int], tuple[list[int], list[float]]] = {k: ([], []) for k in ctx.keys}
-    for li, (_sk, _si, tk, ti, _a, _lv) in enumerate(links):
-        inflow[tk][0].append(ti)
-        inflow[tk][1].append(float(total[li]))
-    _pool_map(_acc_stage3, [(k, *inflow[k]) for k in ctx.keys], ctx, n)
+        for li in downstream_order(next_link)[::-1]:
+            nl = int(next_link[li])
+            if nl >= 0:
+                total[nl] += total[li]
+        inflow: dict[tuple[int, int], tuple[list[int], list[float]]] = {
+            k: ([], []) for k in ctx.keys
+        }
+        for li, (_sk, _si, tk, ti, _a, _lv) in enumerate(links):
+            inflow[tk][0].append(ti)
+            inflow[tk][1].append(float(total[li]))
+        _pool_map(_acc_stage3, [(k, *inflow[k]) for k in ctx.keys], ctx, n, pool)
     if log is not None:
         log(
             f"[flow] accumulation {weight_kind}: {len(links)} border links, "

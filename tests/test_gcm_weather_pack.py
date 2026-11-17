@@ -82,6 +82,7 @@ def test_detect_skips_a_low_without_a_closed_contour() -> None:
     assert not detect_candidates(shallow, np.zeros_like(shallow), None, geom, DetectionParams())
 
 
+@pytest.mark.slow  # ~100 s: the 96 h track is the heaviest case in the default suite
 def test_stitch_links_a_moving_low_and_measures_its_motion() -> None:
     geom = GridGeometry(LAT, LON, RADIUS_KM)
     params = DetectionParams(rotation_scale=1.0)

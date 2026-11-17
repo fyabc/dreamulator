@@ -587,7 +587,9 @@ Priority-Flood 与汇流（`route`，并行填洼），再做隐式河流功率�
 2048² 分块外加 256 像素重叠边，在 90 m 上以固定 80 kyr 步长运行 4 Myr，不削坡，锚定到窗口自身在两倍粗网格间距
 上的低通，所以只清理粗级看不到的亚格子凹坑；各窗口的增量按线性权重融合。原生级各块在进程池里并行
 （缺省在所有平台都用 spawn 启动，环境变量 `DREAMULATOR_START_METHOD` 可强制指定其他方式），
-每个进程单线程，结果与进程数无关。不用 fork 是因为进程池的初始化代码会导入 numba，
+每个进程单线程，结果与进程数无关。一个阶段只建立一个进程池：接缝交换要跑多轮，
+每轮重建进程池会让每个 worker 重新导入 numba，几秒的启动开销乘以轮数比计算本身还大。
+不用 fork 是因为进程池的初始化代码会导入 numba，
 一旦父进程用过 GNU OpenMP，libgomp 会直接终止 fork 出的子进程（"Terminating: fork() called
 from a process already using GNU OpenMP"）。进程数由 `utils/resources.py` 的
 `worker_budget` 决定：取 CPU 配额（亲和掩码与 cgroup `cpu.max`）与「可用内存的一半 ÷ 单进程峰值」中的较小者，
