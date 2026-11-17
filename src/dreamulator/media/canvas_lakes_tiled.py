@@ -80,7 +80,20 @@ def _label_chunk(task: tuple[Any, ...]) -> tuple[Any, ...]:
     np.save(local_path, lbl)
     if n == 0:
         z = np.zeros(0, dtype=np.int64)
-        return key, 0, z, z, z, z, z, z, lbl[0], lbl[-1], lbl[:, 0], lbl[:, -1]
+        return (
+            key,
+            0,
+            z,
+            z,
+            z,
+            z,
+            z,
+            z,
+            lbl[0].copy(),
+            lbl[-1].copy(),
+            lbl[:, 0].copy(),
+            lbl[:, -1].copy(),
+        )
     flat = lbl.ravel()
     cells = np.flatnonzero(flat)
     lab = flat[cells]
@@ -139,14 +152,8 @@ def _relabel_chunk(task: tuple[Any, ...]) -> None:
     p.unlink()
 
 
-def tiled_components(
-    store: CanvasStore, kind: str, *, workers: int | None = None, ctx: _Ctx | None = None
-) -> Components:
-    """Label the ``flow/<kind>`` masks as one canvas (4-connected); write ``flow/lbl_<kind>``."""
-    ctx = ctx or _ctx_of(store)
-    layout = ChunkLayout(ctx.tile, ctx.keys)
-    n_work = _default_workers(ctx.tile, workers, cap=len(ctx.keys))
-    res = _pool_map(_label_chunk, [(k, kind) for k in layout.keys], ctx, n_work)
+def _component_tables(res: list[Any], kind: str) -> tuple[Components, list[tuple[Any, ...]]]:
+    """Merge local summaries; keep temporary global arrays out of the relabelling pool."""
     offset: dict[tuple[int, int], int] = {}
     total = 0
     for r in res:
@@ -200,9 +207,8 @@ def tiled_components(
         if r[1]:
             tab[1:] = gid[roots[offset[r[0]] + np.arange(1, r[1] + 1)]]
         tables.append((r[0], kind, tab))
-    _pool_map(_relabel_chunk, tables, ctx, n_work)
     sel = comp_roots[order]
-    return Components(
+    components = Components(
         count=int(comp_roots.size),
         size=np.concatenate([[0], size[sel]]),
         rmin=np.concatenate([[0], rmin[sel]]),
@@ -210,6 +216,23 @@ def tiled_components(
         cmin=np.concatenate([[0], cmin[sel]]),
         cmax=np.concatenate([[0], cmax[sel]]),
     )
+    return components, tables
+
+
+def tiled_components(
+    store: CanvasStore, kind: str, *, workers: int | None = None, ctx: _Ctx | None = None
+) -> Components:
+    """Label the ``flow/<kind>`` masks as one canvas (4-connected); write ``flow/lbl_<kind>``."""
+    ctx = ctx or _ctx_of(store)
+    layout = ChunkLayout(ctx.tile, ctx.keys)
+    n_work = _default_workers(ctx.tile, workers, cap=len(ctx.keys))
+    res = _pool_map(_label_chunk, [(k, kind) for k in layout.keys], ctx, n_work)
+    components, tables = _component_tables(res, kind)
+    # Fork workers need only the per-chunk lookup tables. The local summaries and
+    # temporary union-find arrays otherwise remain resident in every worker.
+    del res
+    _pool_map(_relabel_chunk, tables, ctx, n_work)
+    return components
 
 
 # ---------------------------------------------------------------------------

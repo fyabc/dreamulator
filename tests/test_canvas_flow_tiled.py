@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import multiprocessing as mp
+import weakref
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -17,6 +18,39 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 T = 128
+
+
+def test_component_summaries_are_released_before_relabelling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dreamulator.media import canvas_lakes_tiled as lakes
+    from dreamulator.media.canvas_flow_tiled import load_chunk, save_chunk
+
+    root = tmp_path / "canvas"
+    root.mkdir()
+    _make_canvas(root, None)
+    store = CanvasStore.load(root)
+    for key in store.chunks:
+        save_chunk(store, "empty", key, np.zeros((T, T), dtype=np.uint8))
+    original_map = lakes._pool_map
+    summaries: list[weakref.ReferenceType] = []
+
+    def checked_map(fn, items, ctx, workers):
+        if fn is lakes._relabel_chunk:
+            assert summaries and all(ref() is None for ref in summaries)
+        result = original_map(fn, items, ctx, workers)
+        if fn is lakes._label_chunk:
+            for row in result:
+                for array in row[2:]:
+                    assert array.base is None  # Empty summaries must not retain a whole tile.
+                    summaries.append(weakref.ref(array))
+        return result
+
+    monkeypatch.setattr(lakes, "_pool_map", checked_map)
+    comps = lakes.tiled_components(store, "empty", workers=1)
+    assert comps.count == 0
+    for key in store.chunks:
+        assert not load_chunk(store, "lbl_empty", key).any()
 
 
 @pytest.mark.parametrize("workers", [None, 1, 3])

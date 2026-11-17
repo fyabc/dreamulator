@@ -7,7 +7,7 @@
 - **根目录** — 总览、路线图、竞品分析、审计计划
 - [`pipelines/`](pipelines/) — **已实现管线技术参考**（`scripts/dev/check_doc_refs.py` 的审计对象）
 - [`proposals/`](proposals/) — **设计提案 + 方法论**（未来子系统、未实现）
-- [`audit/`](audit/) — 审计结果。最新的 [wave7](audit/wave7-proposal-hygiene.md) 检查设计提案的公开整洁度；wave6 核查 GCM 与气候引擎，wave5 核查对外设定文案。
+- [`audit/`](audit/) — 审计结果。[wave10](audit/wave10-canvas-seam-products.md)核查接缝输入准备与工具判定；[wave9](audit/wave9-canvas-seam-readiness.md)核查跨画布接缝的产品与阶段来源；[wave8](audit/wave8-ridge-canvas-acceptance.md)核查洋脊现状和画布验收范围；[wave7](audit/wave7-proposal-hygiene.md)检查设计提案的公开整洁度。
 
 ## 文档列表
 

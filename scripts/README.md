@@ -154,6 +154,9 @@ Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
   [--render …]`；OptiX>CUDA>CPU 自动降级，seed 固定）。
 - `diagnose_river_directions.py` 只读导出的河线，以线段长度加权统计八方向对齐，按批处理大文件；
   `--plane-control` 用旋转解析斜坡检查现有 D8 与河线导出，`--plot` 生成验收图。
+- `render_canvas_seam_products.py` 将两张画布的活动地表、冰厚、湖泊与河段画到同一个地理窗口，
+  用于目视核查接缝。使用 `uv run python scripts/media/render_canvas_seam_products.py <left> <right>
+  --lat <纬度> --lon <经度> --output exports/canvas-seams/window.png`。
 
 ## dev/ — 开发工具（5 个）
 
@@ -162,8 +165,9 @@ Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
 - `profile_build.py` — 构建性能剖析（产出 `build_profile.json`，见 `docs/design/profiling.md`）。
 - `prepare_civmap_data.py` — 文明地图底图数据下载与预处理。
 - `generate_planet_heightmap.py` — 外部高度图生成（世界创作辅助，配合地图导入工作流）。
-- `check_canvas_seams.py` — S4 跨画布接缝一致性检查（按 `seam_pairs.json` 取样两侧画布的高程、
-  湖、河与流量；退出码 0/1/2 分别表示通过、阈值超限、有配对点无法测量）。
+- `check_canvas_seams.py` 按 `seam_pairs.json` 取样两侧画布的高程、冰厚、海陆、湖泊、河段与流量。
+  缺少必需测量时退出码为 2；测量完整但有实际分歧或阈值超限时为 1；其余为 0。
+  未提供数值阈值时，退出码 0 只表示取样完成。
 
 ## 约定
 

@@ -13,9 +13,10 @@ Usage::
     uv run python scripts/dev/check_canvas_seams.py data/worlds/nacrea/canvases/gcm-t42-712
     uv run python scripts/dev/check_canvas_seams.py <dir> --max-delta-m 60 --json out.json
 
-Exit codes: 0 when every pair is fully measured and inside the given
-thresholds; 1 when a threshold is breached; 2 when some pair could not be
-measured (a missing chunk or hydro product is "unverified", never "agreed").
+Exit codes: 0 when every category is fully measured and supplied thresholds
+hold; without numeric thresholds this only confirms measurement coverage.
+Code 1 reports threshold, coordinate or categorical disagreement; 2 reports
+missing coverage, including a requested flow ratio with no paired flow sample.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ import json
 import sys
 from pathlib import Path
 
-from dreamulator.media.canvas_seam import run_seam_check
+from dreamulator.media.canvas_seam import COORD_TOLERANCE_PX, run_seam_check
 
 
 def _fmt(value: float | None) -> str:
@@ -81,7 +82,7 @@ def main() -> None:
     print(header)
     print("-" * len(header))
 
-    incomplete = False
+    incomplete = not pairs
     breached: list[str] = []
     for pair in pairs:
         assert isinstance(pair, dict)
@@ -92,7 +93,20 @@ def main() -> None:
         name = " + ".join(pair["canvases"])
         n = int(pair["samples"])
         elev_n = int(counts["elevation"])
-        if elev_n < n:
+        if n == 0 or any(
+            int(counts[k]) < n for k in ("elevation", "bedrock", "landsea", "water", "river")
+        ):
+            incomplete = True
+        if float(pair["coord_mismatch_px"]) > COORD_TOLERANCE_PX:
+            breached.append(f"{name}: recorded coordinates do not match canvas geometry")
+        for field, label in (
+            ("landsea_disagree", "land/sea"),
+            ("water_disagree", "lake presence"),
+            ("river_disagree", "river presence"),
+        ):
+            if int(pair[field]):
+                breached.append(f"{name}: {pair[field]} {label} disagreements")
+        if args.max_flow_ratio is not None and not flow:
             incomplete = True
         flow_text = _fmt(flow["max"]) if flow else "—"
         print(
@@ -146,17 +160,25 @@ def main() -> None:
         print(f"\nreport written to {args.json}")
 
     if breached:
-        print("\nFAILED thresholds:")
+        print("\nFAILED seam checks:")
         for line in breached:
             print(f"  {line}")
-        sys.exit(1)
     if incomplete:
         print(
-            "\nINCOMPLETE: at least one pair has samples without terrain on both sides. "
-            "A missing chunk is unverified, not agreement."
+            "\nINCOMPLETE: at least one required seam category has no complete paired samples. "
+            "Missing terrain, ice, sea or current hydrology is unverified; a requested flow "
+            "ratio also requires a two-sided river-flow sample."
         )
         sys.exit(2)
-    print("\nAll seam pairs fully measured and within thresholds.")
+    if breached:
+        sys.exit(1)
+    if all(v is None for v in (args.max_delta_m, args.max_bed_delta_m, args.max_flow_ratio)):
+        print(
+            "\nSampling complete. No numeric thresholds were provided; "
+            "this is a measurement report."
+        )
+    else:
+        print("\nAll seam categories fully measured and within the supplied thresholds.")
 
 
 if __name__ == "__main__":
