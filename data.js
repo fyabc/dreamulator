@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794942938537,
+  "lastUpdate": 1794945117065,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2301,6 +2301,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00006788800362999828",
             "extra": "mean: 4.0529200000037235 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "79ec03a88a028fa52ca591311c0dfc97c2a6ca70",
+          "message": "perf(tests): shrink heavy fixtures and reuse pools and numba cache\n\nGrid reductions keep every assertion non-vacuous: validation meshes keep 12\nlatitude bands but 8 longitude cells, the cache-replay fixtures drop to 150\nand 800 nodes, and the parallel-flood surface is 90x97 (still ragged at every\ntile size).\n\nLakes labelling and two-ring routing now share one pool per stage through the\npool scope introduced for tiled_graded. CI keeps numba's JIT cache in\nactions/cache keyed by interpreter and uv.lock, since a cold compile dominates\nthe first heavy test on the runner.\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-18T03:51:00+08:00",
+          "tree_id": "b769aab05b168b430fb789bad34d142e04a6e2ec",
+          "url": "https://github.com/fyabc/dreamulator/commit/79ec03a88a028fa52ca591311c0dfc97c2a6ca70"
+        },
+        "date": 1794945116487,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.345973227900094,
+            "unit": "iter/sec",
+            "range": "stddev: 0.09844102444765487",
+            "extra": "mean: 2.8903970577999987 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.443835135395869,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05378623075313129",
+            "extra": "mean: 225.03085050001914 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.874795393033042,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8535838192589136",
+            "extra": "mean: 533.3915389999978 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 818.2727505990589,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001227351636313083",
+            "extra": "mean: 1.2220864000028087 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 198.37174094583054,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00008168165028241179",
+            "extra": "mean: 5.041040599996904 msec\nrounds: 5"
           }
         ]
       }
