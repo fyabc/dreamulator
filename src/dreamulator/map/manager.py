@@ -361,13 +361,29 @@ class MapManager:
         ordered: list[str] = []
         seen: set[str] = set()
 
-        def _collect(maps_root: Path) -> None:
+        def _collect(maps_root: Path, *, overlay: bool = False) -> None:
+            # Climate forks can supply only a subset of the map products.
+            # A known product distinguishes an overlay from a diagnostic directory.
+            overlay_files = (
+                "map.yaml",
+                "climate_monthly.msgpack",
+                "climate_yearly.msgpack",
+                "cvt_mesh.msgpack.gz",
+                "cvt_mesh.json",
+                "voronoi.json",
+                "plates.json",
+                "temperature.png",
+                "koppen.json",
+            )
             names = sorted(
                 d.name
                 for d in maps_root.iterdir()
                 if d.is_dir()
                 and not d.name.startswith(("_", "."))  # skip hidden/temp dirs (e.g. _baseline)
-                and (d / "elevation.png").exists()
+                and (
+                    (d / "elevation.png").exists()
+                    or (overlay and any((d / filename).is_file() for filename in overlay_files))
+                )
             )
             for name in names:
                 if name not in seen:
@@ -379,7 +395,7 @@ class MapManager:
         if self.branch is not None:
             branch_maps = self.world_dir / "branches" / self.branch / "maps"
             if branch_maps.exists():
-                search_roots.append(branch_maps)
+                _collect(branch_maps, overlay=True)
         root_maps = self.world_dir / "maps"
         if root_maps.exists():
             search_roots.append(root_maps)

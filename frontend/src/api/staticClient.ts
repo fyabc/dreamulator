@@ -297,6 +297,7 @@ export const staticApi = {
   // ---- Map read operations (branch-aware with root fallback) ----
 
   listMapPlanets: async (name: string, branch?: string | null): Promise<string[]> => {
+    // The exported index includes inherited planets in the API's branch-first order.
     const result = await fetchBranchAwareJson<string[]>(
       name,
       branch,

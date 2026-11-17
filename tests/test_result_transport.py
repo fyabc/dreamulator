@@ -55,6 +55,64 @@ def monthly_arrays() -> tuple[np.ndarray, np.ndarray]:
     return t, p
 
 
+@pytest.mark.parametrize("case", ["root", "inherited", "empty", "climate_overlay", "new_planet"])
+def test_multiplanet_map_lists_and_files_match_api_and_static(
+    exporter: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    from PIL import Image
+
+    worlds = tmp_path / "worlds"
+    world = worlds / "probe"
+    write_yaml(world / "world.yaml", {"name": "probe"})
+    for i, planet in enumerate(("a_inherited", "z_overlaid")):
+        folder = world / "maps" / planet
+        write_yaml(folder / "map.yaml", {"planet_id": planet, "width": 6, "height": 3})
+        Image.fromarray(np.full((3, 6), 33000 + i, dtype=np.uint16)).save(folder / "elevation.png")
+        (folder / "climate_monthly.msgpack").write_bytes(msgpack.packb({"source": planet}))
+    branch = None if case == "root" else "climate-dev"
+    expected = ["a_inherited", "z_overlaid"]
+    if branch:
+        branch_dir = world / "branches" / branch
+        write_yaml(branch_dir / "branch.yaml", {"name": branch, "fork_layer": "climate"})
+        if case == "empty":
+            (branch_dir / "maps").mkdir()
+        if case == "climate_overlay":
+            folder = branch_dir / "maps" / "z_overlaid"
+            folder.mkdir(parents=True)
+            (folder / "climate_monthly.msgpack").write_bytes(msgpack.packb({"source": "branch"}))
+            expected = ["z_overlaid", "a_inherited"]
+        if case == "new_planet":
+            folder = branch_dir / "maps" / "b_new"
+            write_yaml(folder / "map.yaml", {"planet_id": "b_new", "width": 6, "height": 3})
+            Image.fromarray(np.full((3, 6), 35000, dtype=np.uint16)).save(folder / "elevation.png")
+            (folder / "climate_monthly.msgpack").write_bytes(msgpack.packb({"source": "new"}))
+            expected = ["b_new", "a_inherited", "z_overlaid"]
+
+    monkeypatch.setattr(maps_module, "_manager", WorldManager(worlds))
+    app = FastAPI()
+    app.include_router(maps_module.router)
+    output = tmp_path / "static" / "maps"
+    assert exporter._export_map_data(world, output, branch) == expected
+    assert json.loads((output / "maps.json").read_text(encoding="utf-8")) == expected
+    query = {"branch": branch} if branch else {}
+    with TestClient(app) as client:
+        response = client.get("/api/worlds/probe/maps", params=query)
+        assert response.status_code == 200
+        assert response.json()["data"] == expected
+        for planet in expected:
+            base = f"/api/worlds/probe/maps/{planet}"
+            assert client.get(base + "/meta", params=query).json() == json.loads(
+                (output / planet / "meta.json").read_text(encoding="utf-8")
+            )
+            for endpoint, filename in (
+                ("elevation", "elevation.png"),
+                ("climate-monthly", "climate_monthly.msgpack"),
+            ):
+                response = client.get(base + "/" + endpoint, params=query)
+                assert response.status_code == 200
+                assert response.content == (output / planet / filename).read_bytes()
+
+
 @pytest.mark.parametrize("branch", [None, "gcm"])
 @pytest.mark.parametrize("own_yearly", [False, True])
 def test_real_climate_files_match_api_and_static(

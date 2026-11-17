@@ -508,6 +508,7 @@ const readApi = {
 
   // ---- Map read operations ----
 
+  // Both backends return the complete, branch-first map list.
   listMapPlanets: (name: string, branch?: string | null) =>
     isStaticMode()
       ? staticApi.listMapPlanets(name, branch)
