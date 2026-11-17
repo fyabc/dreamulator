@@ -2,7 +2,7 @@
 title: "橙矮星环境下的宜居保护（耀斑生存 + 撞击概率）"
 type: design
 tags: [flare, magnetic-shielding, impact, habitability]
-status: accepted
+status: superseded by 0024-ledger-current-evidence
 checked_against:
   physics: ''
   chemistry: ''

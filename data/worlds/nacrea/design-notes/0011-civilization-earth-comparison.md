@@ -4,6 +4,17 @@ type: design-note
 tags: [civilization, geology, earth-comparison, science-enlightenment, space-age, magnetic]
 date: 2026-10-07
 status: accepted
+checked_against:
+  physics: ""
+  chemistry: ""
+  astronomy: "fe421edc3daf7d5104a9c86733d56de1ee1261b0e41fa2438f4a7453ca83bf6b"
+  geological: "0743a3776ce8651c7d8c43c406deb42c5dbc09c4d675931f4e4659a429147071"
+  climate: "<no-yaml>"
+  ecology: "<no-yaml>"
+  civilization: "f25d0cd65920a64490031592737fa87a0af40bf5023dd30261903484cb0e556f"
+baseline_registered_at: '2026-11-17'
+review_record: 0024-ledger-current-evidence.md
+review_scope: 保留设计档案和历史 EBM 气候表；现今气候来源按 0013 解释。
 ---
 
 # 0011 — 对外设定的地球对比框架（档案）

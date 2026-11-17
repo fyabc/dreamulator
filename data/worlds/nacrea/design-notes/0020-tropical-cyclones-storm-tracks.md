@@ -5,10 +5,21 @@ tags: [climate, tropical-cyclone, storm-track, gcm, canon]
 date: 2026-10-24
 status: accepted   # 作者裁决 2026-10-23：选甲
 checked_against:
-  - layers/climate/input/atmospheric_dynamics.md
-  - layers/climate/input/climate_zones.md
-  - docs/knowledge/climatology/day_length_effects.md §5
-  - docs/design/pipelines/gcm-weather-pack.md
+  physics: ""
+  chemistry: ""
+  astronomy: "fe421edc3daf7d5104a9c86733d56de1ee1261b0e41fa2438f4a7453ca83bf6b"
+  geological: "0743a3776ce8651c7d8c43c406deb42c5dbc09c4d675931f4e4659a429147071"
+  climate: "<no-yaml>"
+  ecology: "<no-yaml>"
+  civilization: "f25d0cd65920a64490031592737fa87a0af40bf5023dd30261903484cb0e556f"
+evidence_sources:
+  - "layers/climate/input/atmospheric_dynamics.md"
+  - "layers/climate/input/climate_zones.md"
+  - "docs/knowledge/climatology/day_length_effects.md §5"
+  - "docs/design/pipelines/gcm-weather-pack.md"
+baseline_registered_at: '2026-11-17'
+review_record: 0024-ledger-current-evidence.md
+review_scope: 保留每当地轨道年约七个气旋的创作设定与 GCM 风暴轴的证据范围。
 ---
 
 # 0020 — 热带气旋与风暴轴

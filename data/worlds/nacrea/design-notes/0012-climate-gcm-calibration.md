@@ -4,6 +4,17 @@ type: design-note
 tags: [climate, gcm, exoplasim, greenhouse, co2, calibration, chaotic-co2]
 date: 2026-10-14
 status: accepted
+checked_against:
+  physics: ""
+  chemistry: ""
+  astronomy: "fe421edc3daf7d5104a9c86733d56de1ee1261b0e41fa2438f4a7453ca83bf6b"
+  geological: "0743a3776ce8651c7d8c43c406deb42c5dbc09c4d675931f4e4659a429147071"
+  climate: "<no-yaml>"
+  ecology: "<no-yaml>"
+  civilization: "f25d0cd65920a64490031592737fa87a0af40bf5023dd30261903484cb0e556f"
+baseline_registered_at: '2026-11-17'
+review_record: 0024-ledger-current-evidence.md
+review_scope: 核查正典配置和已有定标范围；原生统计与地表统计分别解释。
 ---
 
 # 0012 — 气候 GCM 定标与温室转移函数

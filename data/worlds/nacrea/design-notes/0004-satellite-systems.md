@@ -2,7 +2,7 @@
 title: "其他行星的卫星系统设计"
 type: design
 tags: [satellite, astronomy, formation]
-status: accepted
+status: superseded by 0024-ledger-current-evidence
 checked_against:
   physics: ''
   chemistry: ''

@@ -5,9 +5,20 @@ tags: [geography, continents, oceans, straits, shelves, mountains, earth-compari
 date: 2026-10-22
 status: accepted
 checked_against:
-  - layers/geological/input/physical_geography.md
-  - layers/geological/input/geography.md
-  - maps/satellite_nacrea/cvt_mesh.msgpack.gz（seed=42，200k 格，2026-10-22 构建）
+  physics: ""
+  chemistry: ""
+  astronomy: "fe421edc3daf7d5104a9c86733d56de1ee1261b0e41fa2438f4a7453ca83bf6b"
+  geological: "0743a3776ce8651c7d8c43c406deb42c5dbc09c4d675931f4e4659a429147071"
+  climate: "<no-yaml>"
+  ecology: "<no-yaml>"
+  civilization: "f25d0cd65920a64490031592737fa87a0af40bf5023dd30261903484cb0e556f"
+evidence_sources:
+  - "layers/geological/input/physical_geography.md"
+  - "layers/geological/input/geography.md"
+  - "maps/satellite_nacrea/cvt_mesh.msgpack.gz（seed=42，200k 格，2026-10-22 构建）"
+baseline_registered_at: '2026-11-17'
+review_record: 0024-ledger-current-evidence.md
+review_scope: 保留 2026-10-22 快照与测量方法；重生成后的数字需要同口径重测。
 ---
 
 # 0018 — Nacrea 自然地理清单：测量方法、口径与地球对比
