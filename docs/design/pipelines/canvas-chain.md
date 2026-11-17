@@ -603,6 +603,16 @@ world-west 59 进程实测的不可回收内存合计约 101 GB（每进程约 1
 发现地表不一致，`run_canvas_fill` 拒绝混用缓存，命令行入口则自动整体重算，S3 裁窗在 `hydro/` 的地表与自己不一致时
 先补跑 S2。
 
+#### 可选泥沙出口诊断
+
+纯求解器 `run_surface_process` 接受 `track_sediment_exports=True`，并在 `SurfaceProcessResult.exported_sediment_m3` 返回形状为 `(4, 行数, 列数)` 的累计出口体积，单位为 m³。默认关闭时该字段为 `None`。分类顺序由 `SEDIMENT_EXPORT_CATEGORIES` 给出，分别是非陆地基准面 `nonland_baselevel`、陆地边框 `grid_frame`、不可侵蚀表面 `protected_surface` 和缺失接收格 `unresolved_receiver`。
+
+记录位置是该次输出离开路由的格子，分类依据是实际接收位置。四类体积之和对应原账本的 `exported_km3` 乘以十亿。体积采用当前侵蚀模型的地形等效口径，累计时间是本次模拟的时段；记录没有推断现代输沙率，也没有把非陆地基准面直接判为连通外海。诊断只记录现有输运，保留原地表、流量和账本的计算次序。
+
+诊断另外分配每格 33 字节的体积与分类存储，转换为 m³ 时原地乘以像素面积。申请这部分存储前会检查可用内存，超过其一半时拒绝运行。该选项目前用于单网格研究，没有进入 `canvas erode` 的默认输出，也没有对分流域窗口或重叠的原生窗口进行合并。跨窗口库存需要先处理归属与重复计算。
+
+河宽研究与出口小样本检查由 `scripts/media/check_channel_geometry.py` 提供，它读取保存的河线和气候，生成对比图与独立报告，不安装地形增量。河槽与河口的后续实施条件见[二次侵蚀提案第 6.2 节](../proposals/canvas-erosion-deposition.md#62-河槽尺度与河口库存)。
+
 ## 3. S2：外存水文
 
 ### 3.1 边界

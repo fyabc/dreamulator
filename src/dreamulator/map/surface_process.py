@@ -85,6 +85,14 @@ class SurfaceProcessParams:
     parallel_flood: bool = True
 
 
+SEDIMENT_EXPORT_CATEGORIES = (
+    "nonland_baselevel",
+    "grid_frame",
+    "protected_surface",
+    "unresolved_receiver",
+)
+
+
 @dataclass
 class SurfaceProcessResult:
     """Final surface, routing state on it, and the ledgers (km³)."""
@@ -96,6 +104,7 @@ class SurfaceProcessResult:
     terminal: np.ndarray
     discharge_m3_yr: np.ndarray
     snaps: list[tuple[float, np.ndarray]] = field(default_factory=list)
+    exported_sediment_m3: np.ndarray | None = None
 
 
 def route(
@@ -221,6 +230,7 @@ def run_surface_process(
     anchor: np.ndarray | None = None,
     two_sided_mask: np.ndarray | None = None,
     open_water_mm: np.ndarray | None = None,
+    track_sediment_exports: bool = False,
     snap_times: tuple[float, ...] = (),
     max_steps: int = 100_000,
     log: Callable[[str], None] | None = None,
@@ -232,6 +242,9 @@ def run_surface_process(
     ``age_yr`` is each cell's incision time (it erodes only during its last
     ``age_yr`` years); ``anchor`` is the surface whose long-wavelength mean
     is kept; ``open_water_mm`` is the annual lake evaporation (else Hamon).
+    ``track_sediment_exports`` records cumulative solid-equivalent export volume
+    at the last routed cell, split by :data:`SEDIMENT_EXPORT_CATEGORIES`. The
+    records are inventories over this simulation, not modern sediment fluxes.
     """
     p = params or SurfaceProcessParams()
     area = px_m * px_m
@@ -248,6 +261,22 @@ def run_surface_process(
     frame[:, 0] = frame[:, -1] = True
     mutable = land & ~frame if erodible is None else land & ~frame & erodible
     routed = land & ~frame
+    export_codes = np.empty(0, dtype=np.int8)
+    export_by_cell = np.empty((0, 0), dtype=np.float64)
+    if track_sediment_exports:
+        from dreamulator.utils.resources import available_memory_bytes
+
+        available = available_memory_bytes()
+        diagnostic_bytes = h.size * (4 * 8 + 1)
+        if available is not None and diagnostic_bytes > available // 2:
+            raise MemoryError("Insufficient memory for the optional sediment-export grids.")
+        # A non-land base level need not be the connected ocean. The caller must
+        # retain that distinction before using these volumes for river-mouth growth.
+        export_codes = np.full(h.size, 3, dtype=np.int8)
+        export_codes[~land.ravel()] = 0
+        export_codes[(land & frame).ravel()] = 1
+        export_codes[(routed & ~mutable).ravel()] = 2
+        export_by_cell = np.zeros((len(SEDIMENT_EXPORT_CATEGORIES), h.size))
     lowpass = _LowPass(mutable, p.anchor_sigma_km * 1000.0 / px_m)
     target_c = None if anchor is None else lowpass.coarse(np.asarray(anchor, dtype=np.float64))
     if target_c is not None:
@@ -318,6 +347,8 @@ def run_surface_process(
             1.0,
             area,
             min_donor,
+            export_by_cell,
+            export_codes,
         )
         led["dep_river"] += dr
         led["dep_lake"] += dl
@@ -371,6 +402,10 @@ def run_surface_process(
         sed_in, 1e-12
     )
     ledger["uplift_rate_last_mm_yr"] = u_last
+    exported_m3 = None
+    if track_sediment_exports:
+        export_by_cell *= area
+        exported_m3 = export_by_cell.reshape((len(SEDIMENT_EXPORT_CATEGORIES), *h.shape))
     return SurfaceProcessResult(
         h=h,
         steps=step,
@@ -379,4 +414,5 @@ def run_surface_process(
         terminal=r["terminal"],
         discharge_m3_yr=r["q"],
         snaps=snaps,
+        exported_sediment_m3=exported_m3,
     )
