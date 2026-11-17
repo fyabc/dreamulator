@@ -49,7 +49,7 @@ jobs:
     env:
       # Numba writes its @njit(cache=True) files here; caching them across runs
       # removes the cold JIT compile that dominates the first heavy test.
-      NUMBA_CACHE_DIR: ${{ runner.temp }}/numba-cache
+      NUMBA_CACHE_DIR: ${{ github.workspace }}/.numba-cache
     steps:
       - uses: actions/checkout@v4
 
@@ -69,7 +69,7 @@ jobs:
       - name: Restore numba cache
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/numba-cache
+          path: ${{ github.workspace }}/.numba-cache
           key: numba-${{ runner.os }}-py312-${{ hashFiles('uv.lock') }}
           restore-keys: numba-${{ runner.os }}-py312-
 

@@ -31,6 +31,7 @@ desktop.ini
 htmlcov/
 .pytest_cache/
 .mypy_cache/
+.numba-cache/
 _cache/
 koppen_obs.json
 
