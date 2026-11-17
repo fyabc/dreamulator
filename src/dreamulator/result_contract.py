@@ -15,11 +15,9 @@ from __future__ import annotations
 # added, removed, or re-typed; the consistency fixture asserts the exporter and
 # the frontend readers agree with it.
 #
-# v2 (2026-10): world.json layers entries gained the build-status fields
-# (input_source / input_doc_count / derived_fresh / last_build_time,
-# computed by world_layer_status at API + export time); cell biome gained
-# the "lake" sentinel value.
-FORMAT_VERSION = "2"
+# Map results expose the same version, time basis, normalized defaults, and
+# generation provenance through both API and static exports.
+FORMAT_VERSION = "3"
 
 # Time convention (climate-pipeline.md §1): annual rates are per a 365.25-day
 # reference year; monthly fields are that reference year / 12.

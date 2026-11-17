@@ -1,4 +1,5 @@
 import { isStaticMode } from './mode'
+import type { MapResultMetadata } from './resultContract'
 import { staticApi } from './staticClient'
 import type { BuildJob, BuildOptions, BuildSummary } from './buildJobs'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
@@ -517,7 +518,7 @@ const readApi = {
   getMapMeta: (name: string, planetId: string, branch?: string | null) =>
     isStaticMode()
       ? staticApi.getMapMeta(name, planetId, branch)
-      : fetchJson<any>(
+      : fetchJson<MapResultMetadata>(
           `/worlds/${name}/maps/${planetId}/meta${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 

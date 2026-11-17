@@ -29,7 +29,7 @@
 - `browser-playground.md` — 已实现的浏览器温度实验台，说明运行时、规则网格、温度内核、输入限制与原型验收。
 - `world-generation-pipeline.md` — 世界生成管线总览（阶段 1–12 目录 + 层级映射 + Gaea 指针）
 - `geological-pipeline.md` — 地质层生成管线技术参考（CVT 网格、板块构造、地形合成、封闭盆地湖泊、极地冰盖、导出）
-- `map-system.md` — 地图子系统（球面 CVT 网格、板块构造、地形、气候、导出）
+- `map-system.md` — 地图子系统，包含球面网格、地形、气候和公共结果元数据，并说明 API 与静态站的真实文件一致性验证。
 - `climate-pipeline.md` — 气候层实现架构与参数，包含 GCM 球面统计、有限面积长期降水、高频状态与 TD 气候消费。
 - `ecology-pipeline.md` — 生态层 pipeline（海陆判据、Whittaker 群系含湖泊哨兵、Miami NPP、可驯化标签、土纲、生物地理分区）
 - `civilization-pipeline.md` — 文明层 pipeline（宜居/农业分类与评分、湖滨淡水修正、摇篮候选发现）

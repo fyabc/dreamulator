@@ -154,10 +154,10 @@ def get_map_meta(
 ) -> dict[str, Any]:
     """Get map metadata for a planet."""
     mgr = _mgr_reading(_get_map_manager(world_name, branch), planet_id, "map.yaml")
-    meta = mgr.get_map_metadata(planet_id)
+    meta = mgr.get_map_metadata_result(planet_id)
     if meta is None:
         raise HTTPException(status_code=404, detail=f"No map metadata for '{planet_id}'")
-    return meta.model_dump(mode="json")
+    return meta
 
 
 @router.get("/{world_name}/maps/{planet_id}/elevation")

@@ -6,6 +6,7 @@
  */
 
 import type { BuildJob } from './buildJobs'
+import type { MapResultMetadata } from './resultContract'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 
@@ -306,7 +307,7 @@ export const staticApi = {
   },
 
   getMapMeta: async (name: string, planetId: string, branch?: string | null) => {
-    const result = await fetchBranchAwareJson<any>(
+    const result = await fetchBranchAwareJson<MapResultMetadata>(
       name,
       branch,
       `/maps/${planetId}/meta.json`,

@@ -39,9 +39,8 @@ _ensure_importable()
 from local_branches import local_only_branches  # noqa: E402
 
 from dreamulator import doc_render  # noqa: E402
-from dreamulator.map.models import sanitize_nonfinite  # noqa: E402
+from dreamulator.map.models import map_metadata_result, sanitize_nonfinite  # noqa: E402
 from dreamulator.resolver import LayerResolver  # noqa: E402
-from dreamulator.result_contract import result_metadata  # noqa: E402
 
 
 def find_project_root() -> Path:
@@ -277,7 +276,7 @@ def _export_map_data(
     planets_with_maps: list[str] = []
 
     for planet_dir in sorted(maps_dir.iterdir()):
-        if not planet_dir.is_dir():
+        if not planet_dir.is_dir() or planet_dir.name.startswith(("_", ".")):
             continue
         # Root worlds: only planet directories have elevation.png — this also
         # skips non-planet subdirectories such as earth_reference/ (civmap
@@ -336,7 +335,7 @@ def _export_map_data(
         if map_yaml is not None:
             meta = load_yaml(map_yaml)
             if meta:
-                meta.update(result_metadata())
+                meta = map_metadata_result(meta)
                 with planet_out.joinpath("meta.json").open("w", encoding="utf-8") as f:
                     json.dump(meta, f, ensure_ascii=False, separators=(",", ":"), default=str)
 

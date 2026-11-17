@@ -283,6 +283,27 @@ API 导入把原图按 SHA-256 内容哈希保存在地质层 `input/elevation_s
 - `climate-yearly` 返回 `climate_yearly.msgpack` 原始字节（N 个 per-cell UCC 连续
   描述量，float32 + uint8 状态码；字段与元数据约定见 climate-pipeline.md §11）。
 
+### 地图结果元数据与静态一致性
+
+API 的 `meta` 端点与静态站的 `meta.json` 共用
+`src/dreamulator/map/models.py` 中的 `map_metadata_result`。
+该函数用 `MapMetadata` 校验已知字段并补齐默认值，同时保留地图 YAML 中额外的生成来源字段。
+日期统一输出为 JSON 字符串，非有限数值统一输出为 `null`。
+`MapManager` 的模型读取入口继续服务内部计算，`get_map_metadata_result` 专门提供传输结果。
+
+公共元数据由 `src/dreamulator/result_contract.py` 定义。当前格式版本为字符串 `"3"`，
+参考年为 365.25 天，参考月为参考年的十二分之一。这些声明在传输时覆盖地图 YAML 中的同名字段，
+不改变输入文件。前端的 API 与静态客户端共用 `MapResultMetadata` 类型读取元数据。
+
+月度和年度气候文件均原样传输，文件内部的格式版本、数据来源、缺值状态及时间口径保持原样。
+公共元数据描述参考单位；具体年度文件的总量仍须按自身的 `p_total_basis` 解读，
+当地窗口总量与参考年总量的区别见[气候管线](climate-pipeline.md#11-图层导出与输出格式)。
+静态地图导出跳过名称以 `_` 或 `.` 开头的内部目录，避免将诊断快照作为行星发布。
+
+`tests/test_result_transport.py` 用真实高程 PNG、月度文件和引擎生成的年度 UCC 文件验证传输。
+测试覆盖根世界、分支继承和年度覆写，要求 API 与静态元数据完全相等、三个数据文件逐字节相等，
+并检查缓存响应、年度总量、海洋的不适用状态和冻结陆地的缺值状态。
+
 ## 前端组件
 
 ### 页面结构

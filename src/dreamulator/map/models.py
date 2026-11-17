@@ -7,7 +7,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+
+from dreamulator.result_contract import result_metadata
 
 if TYPE_CHECKING:
     import numpy as np
@@ -179,6 +181,19 @@ class MapMetadata(BaseModel):
     #: Set when the elevation raster was imported from an external tool
     #: (absent for pipeline-generated terrain).
     elevation_import: ElevationImportProvenance | None = None
+
+
+def map_metadata_result(data: dict[str, Any]) -> dict[str, Any]:
+    """Serialize the shared API/static metadata result without dropping provenance.
+
+    Known map fields use model validation and defaults. Additional generation
+    fields remain available, while shared version/time declarations come from
+    the result contract rather than potentially stale values in map.yaml.
+    """
+    metadata = MapMetadata.model_validate(data)
+    extra = TypeAdapter(dict[str, Any]).dump_python(data, mode="json")
+    result = {**extra, **metadata.model_dump(mode="json"), **result_metadata()}
+    return {key: sanitize_nonfinite(value) for key, value in result.items()}
 
 
 # ---------------------------------------------------------------------------

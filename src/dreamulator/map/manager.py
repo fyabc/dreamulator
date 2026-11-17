@@ -25,6 +25,7 @@ from .models import (
     TectonicPlate,
     VectorLayerMeta,
     VoronoiNetwork,
+    map_metadata_result,
 )
 
 if TYPE_CHECKING:
@@ -141,6 +142,17 @@ class MapManager:
         if data is None:
             return None
         return MapMetadata.model_validate(data)
+
+    def get_map_metadata_result(self, planet_id: str) -> dict[str, Any] | None:
+        """Load metadata for transport, with contract defaults and provenance."""
+        map_dir = self._map_input_dir(planet_id)
+        if map_dir is None or not (map_dir / "map.yaml").exists():
+            return None
+        with (map_dir / "map.yaml").open(encoding="utf-8") as stream:
+            data = yaml.safe_load(stream)
+        if data is None:
+            return None
+        return map_metadata_result(data)
 
     def save_map_metadata(self, planet_id: str, metadata: MapMetadata) -> None:
         """Save map metadata for a planet."""
