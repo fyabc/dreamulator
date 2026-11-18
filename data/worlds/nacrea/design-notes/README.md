@@ -50,3 +50,4 @@ Nacrea 世界严格遵循 Dreamulator 的**自变量/因变量分离**原则：
 | [0022](0022-insolation-recalibration.md) | Nacrea 辐照重标定：记录恒星质量杠杆、年长锁定与大气组成的最终裁决；现行气候定标引用 0012，裁决前的候选表和实施预案保存在文首历史块。 | accepted |
 | [0023](0023-world-island-dissected-highland.md) | 世界岛中央是深切高地：画布二次侵蚀第一轮锚定 200k 网格平均、按造山剖面回放推出有效下切时间（中位约 20 Myr），结果近似青藏东南式深谷山地；对外设定随全量重生成切换 | accepted |
 | [0024](0024-ledger-current-evidence.md) | 形成史、卫星系统与宜居保护采用现行依据，其余十一条记录登记复核范围与机器检查基线。 | accepted |
+| [0025](0025-abrupt-climate-events.md) | 最近 25 万年的瞬发气候事件：长期变冷背景下的暖期与罕见冷事件、时间线、社会响应与考古信号；当前历元处于激变期起点之前。 | accepted |
