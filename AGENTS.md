@@ -435,7 +435,7 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 
 ```bash
 cd frontend && npm run build:static:local && npm run preview:static
-# 打开 http://localhost:4173，确认页面功能正常、控制台无 404
+# 打开 http://localhost:8026，确认页面功能正常、控制台无 404
 ```
 
 > 本地静态导出/预览前，先在 `data/worlds` 上构建（`uv run dreamulator build ...` 或

@@ -21,6 +21,7 @@ import ProbePanel from '../viewers/packs/ProbePanel'
 import RegionalExtractView from '../viewers/packs/RegionalExtractView'
 import PackElevationDownload from '../viewers/packs/PackElevationDownload'
 import RegionRefinementPanel from '../viewers/packs/RegionRefinementPanel'
+import TerrainCompute from '../viewers/packs/TerrainCompute'
 import type { PackMeta, PackSummary, ProbeResult, RiverData } from '../viewers/packs/types'
 import type { PackWindow } from '../viewers/packs/packCoords'
 
@@ -173,17 +174,16 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
     return { url: opt.endpoint === 'topo' ? packTopoUrl(pack, original) : packImageUrl(pack, opt.path) }
   }, [availableBases, baseId, pack, original])
 
-  // Static mode: the pack root is a local-only directory — nothing to show.
-  // All hooks have run by this point, so the conditional return is safe.
   if (staticMode) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="bg-space-panel border border-space-border rounded-lg p-6 text-sm text-gray-400 max-w-md">
+      <div className="flex justify-center p-4 md:pt-24">
+        <div className="h-fit max-w-md space-y-3 rounded-lg border border-space-border bg-space-panel p-6 text-sm text-gray-400">
           <div className="flex items-center justify-between gap-3 mb-2">
             <h1 className="font-semibold text-gray-200">{t('packs.pickPrompt')}</h1>
             <MapHelpLink section="packs" label={t('packs.help')} />
           </div>
           <p>{t('packs.staticModeHint')}</p>
+          <TerrainCompute />
         </div>
       </div>
     )
@@ -291,12 +291,12 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
             {pack && meta?.height_source && <PackElevationDownload key={`${pack}:${original ? 'input' : meta.height_source}`}
               pack={pack} source={original ? 'input' : meta.height_source} input={meta.input} summary={summary} />}
             {meta?.height_source === null && <p className="text-xs text-gray-400">{t('packs.export.noNumeric')}</p>}
-            {pack && !pack.startsWith('web-region-') && <RegionRefinementPanel source={{ kind: 'pack', pack }} globalReturn={regionReturn}
+            <TerrainCompute>{pack && !pack.startsWith('web-region-') && <RegionRefinementPanel source={{ kind: 'pack', pack }} globalReturn={regionReturn}
               resultUrl={(result) => {
                 const params = new URLSearchParams(searchParams)
                 params.set('pack', result)
                 return `/packs?${params}`
-              }} />}
+              }} />}</TerrainCompute>
           </aside>
         )}
         <div className="relative isolate min-h-0 min-w-0 flex-1">

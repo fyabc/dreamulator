@@ -83,6 +83,11 @@ export interface RegionRefinementPlan {
   native_scale_km: number | null
 }
 
+export interface RegionDevice {
+  kind: 'gpu' | 'cpu' | 'unavailable'
+  name: string | null
+}
+
 export interface RegionRefinementJob {
   id: string
   plan: RegionRefinementPlan

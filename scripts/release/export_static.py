@@ -7,7 +7,8 @@ Build jobs are process-local execution state and are not exported. The static
 client rejects startBuildJob and getBuildJob instead of requesting stale job files.
 Local region packs and their numeric elevation endpoint are not exported. The
 browser extracts static regional heightmaps from the published global PNGs.
-Refinement plans and jobs require the local runtime and are not exported.
+Refinement plans, jobs and the local compute device require the local runtime
+and are not exported. The browser detects its own WebGPU adapter.
 
 Usage:
     python scripts/release/export_static.py

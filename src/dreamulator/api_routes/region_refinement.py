@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Annotated, Literal
@@ -17,7 +18,7 @@ from dreamulator.build_jobs import BuildBusyError
 from dreamulator.map.export import find_mesh_file
 from dreamulator.map.manager import MapManager
 from dreamulator.map.region_export import read_radius_km, region_window
-from dreamulator.media.terrain_refine import REFINE_FACTOR, _td_python
+from dreamulator.media.terrain_refine import REFINE_FACTOR, _td_python, td_compute_device
 from dreamulator.region_jobs import (
     MAX_SPAN_KM,
     PACK_SIZES,
@@ -57,7 +58,7 @@ class RegionPackSource(BaseModel):
 RegionSource = Annotated[RegionSelection | RegionPackSource, Field(discriminator="kind")]
 
 
-def _environment() -> Path:
+def _configured_td() -> Path:
     if not sys.platform.startswith("linux"):
         raise HTTPException(503, "The web refinement runner currently requires Linux")
     location = os.environ.get("DREAMULATOR_TD_DIR")
@@ -72,6 +73,25 @@ def _environment() -> Path:
         raise HTTPException(
             503, "The configured Terrain Diffusion Python environment is missing"
         ) from exc
+    return td
+
+
+class RegionDevice(BaseModel):
+    kind: Literal["gpu", "cpu", "unavailable"]
+    name: str | None = None
+
+
+@router.get("/device")
+def region_device() -> RegionDevice:
+    try:
+        name = td_compute_device(_configured_td())
+    except (HTTPException, OSError, ValueError, subprocess.SubprocessError):
+        return RegionDevice(kind="unavailable")
+    return RegionDevice(kind="gpu", name=name) if name else RegionDevice(kind="cpu")
+
+
+def _environment() -> Path:
+    td = _configured_td()
     available = available_memory_bytes()
     if available is None or available // 2 < RSS_LIMIT:
         raise HTTPException(503, "Web refinement requires at least 16 GiB of available RAM")

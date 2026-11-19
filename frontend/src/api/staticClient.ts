@@ -182,6 +182,7 @@ export const staticApi = {
   startBuildJob: async (): Promise<BuildJob> => notAvailable('startBuildJob'),
   getBuildJob: async (): Promise<BuildJob> => notAvailable('getBuildJob'),
   getPackElevation: async (): Promise<Blob> => notAvailable('getPackElevation'),
+  getRegionDevice: async () => notAvailable('getRegionDevice'),
   planRegionRefinement: async () => notAvailable('planRegionRefinement'),
   startRegionRefinement: async () => notAvailable('startRegionRefinement'),
   getRegionRefinement: async () => notAvailable('getRegionRefinement'),

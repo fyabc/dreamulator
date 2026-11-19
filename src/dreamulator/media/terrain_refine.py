@@ -13,6 +13,8 @@ import math
 import os
 import shutil
 import subprocess
+from functools import lru_cache
+from threading import Lock
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -114,6 +116,45 @@ def _td_python(td_repo: Path) -> Path:
         f"terrain-diffusion venv not found under {td_repo / '.venv'} — see the manual's "
         "setup section (uv venv + CUDA wheels, external to this project)"
     )
+
+
+def _td_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env.pop("PYTORCH_CUDA_ALLOC_CONF", None)
+    env.pop("PYTORCH_ALLOC_CONF", None)
+    return env
+
+
+_td_probe_lock = Lock()
+
+
+def td_compute_device(td_repo: Path) -> str | None:
+    """Read the default CUDA device from the same environment as TD inference."""
+    with _td_probe_lock:
+        return _probe_td_device(td_repo)
+
+
+@lru_cache(maxsize=4)
+def _probe_td_device(td_repo: Path) -> str | None:
+    result = subprocess.run(
+        [
+            str(_td_python(td_repo)),
+            "-c",
+            "import json, torch; "
+            "print(json.dumps(torch.cuda.get_device_name(0) if torch.cuda.is_available() "
+            "else None))",
+        ],
+        cwd=td_repo,
+        env=_td_env(),
+        capture_output=True,
+        encoding="utf-8",
+        timeout=15,
+        check=True,
+    )
+    name: object = json.loads(result.stdout)
+    if name is None or isinstance(name, str) and name.strip():
+        return name
+    raise ValueError("Invalid Terrain Diffusion device response")
 
 
 def _pack_map_dir(meta: dict[str, Any]) -> Path:
@@ -289,9 +330,7 @@ def _run_td(py: Path, td_repo: Path, tmp: Path, span_km: float, n: int, out_tif:
     tiff_dir = tmp / "cond"
     # The subprocess owns a different torch installation. Allocator settings
     # from the host's torch can be unsupported by that installation.
-    env = os.environ.copy()
-    env.pop("PYTORCH_CUDA_ALLOC_CONF", None)
-    env.pop("PYTORCH_ALLOC_CONF", None)
+    env = _td_env()
     subprocess.run(
         [
             str(py),

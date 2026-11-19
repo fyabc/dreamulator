@@ -80,6 +80,8 @@ jobs:
 
       - name: Build static site
         working-directory: frontend
+        env:
+          VITE_TD_EXAMPLE_URL: ${{ vars.VITE_TD_EXAMPLE_URL }}
         run: npx vite build --mode static
 
       - name: Setup Pages

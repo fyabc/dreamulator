@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -48,6 +49,30 @@ def setup(tmp_path, monkeypatch):
     app = FastAPI()
     app.include_router(routes.router)
     return TestClient(app), root, pack, td_repo
+
+
+@pytest.mark.parametrize("name, kind", [("NVIDIA L20", "gpu"), (None, "cpu")])
+def test_local_compute_device(setup, monkeypatch, name, kind):
+    client, _, _, td_repo = setup
+
+    def probe(repo):
+        assert repo == td_repo
+        return name
+
+    monkeypatch.setattr(routes, "td_compute_device", probe)
+    assert client.get(f"{PREFIX}/device").json() == {"kind": kind, "name": name}
+
+
+def test_unavailable_compute_device(setup, monkeypatch):
+    client, _, _, _ = setup
+
+    def timeout(_repo):
+        raise subprocess.TimeoutExpired("td-device", 15)
+
+    monkeypatch.setattr(routes, "td_compute_device", timeout)
+    assert client.get(f"{PREFIX}/device").json() == {"kind": "unavailable", "name": None}
+    monkeypatch.delenv("DREAMULATOR_TD_DIR")
+    assert client.get(f"{PREFIX}/device").json() == {"kind": "unavailable", "name": None}
 
 
 def test_pack_preflight(setup, monkeypatch):

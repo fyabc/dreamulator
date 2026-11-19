@@ -13,7 +13,7 @@ import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 import i18n from '../i18n'
 import type { CVTMesh, CVTVertex, CVTRegion, VoronoiCell } from '../viewers/map/types'
-import type { PackHeightSource, PackMeta, PackSummary, ProbeResult, RegionRefinementJob,
+import type { PackHeightSource, PackMeta, PackSummary, ProbeResult, RegionDevice, RegionRefinementJob,
   RegionRefinementPlan, RegionRefinementSource, RiverData } from '../viewers/packs/types'
 import type { SkyBackground, SkyCulture, SkyEphemerisResult } from '../viewers/sky/types'
 
@@ -726,6 +726,7 @@ const readApi = {
       `/packs/${encodeURIComponent(pack)}/probe?lat=${lat}&lon=${lon}`,
     ),
 
+  getRegionDevice: () => isStaticMode() ? staticApi.getRegionDevice() : fetchJson<RegionDevice>('/region-refinement/device'),
   planRegionRefinement: (source: RegionRefinementSource) => isStaticMode() ? staticApi.planRegionRefinement()
     : fetchJson<RegionRefinementPlan>('/region-refinement/plan', { method: 'POST', body: JSON.stringify(source) }),
   startRegionRefinement: (source: RegionRefinementSource) => isStaticMode() ? staticApi.startRegionRefinement()

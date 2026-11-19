@@ -10,7 +10,7 @@
     "build:static:local": "uv run python ../scripts/release/export_static.py && tsc && vite build --mode static-local",
     "export": "uv run python ../scripts/release/export_static.py",
     "preview": "vite preview",
-    "preview:static": "vite preview --mode static-local",
+    "preview:static": "vite preview --mode static-local --port 8026 --strictPort",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "type-check": "tsc --noEmit"
   },
@@ -23,6 +23,7 @@
     "i18next": "^26.3.6",
     "katex": "^0.16.47",
     "leaflet": "^1.9.4",
+    "onnxruntime-web": "1.31.1",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-i18next": "^17.0.11",
