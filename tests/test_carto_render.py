@@ -76,6 +76,20 @@ def test_lut_rgb_sea_through_depth_channel() -> None:
     assert (rgb[0, 1] <= rgb[0, 0] + 1e-6).all()
 
 
+def test_lut_rgb_keeps_zero_depth_water_blue_at_the_sea_datum() -> None:
+    height = np.array([[150.0, 150.0]])
+    sea = np.array([[True, False]])
+    rgb = cr._lut_rgb(height, sea, np.zeros_like(height), (-6000.0, 4000.0), 150.0)
+    assert rgb[0, 0, 2] > rgb[0, 0, 1]
+    assert rgb[0, 1, 1] > rgb[0, 1, 2]
+
+
+def test_lut_rgb_handles_missing_depth_in_an_explicit_sea_mask() -> None:
+    height = np.array([[np.nan]])
+    sea = np.array([[True]])
+    assert np.isfinite(cr._lut_rgb(height, sea, height, (-6000.0, 4000.0))).all()
+
+
 def test_compose_rgb_ranges_and_sea_ink() -> None:
     rgb = cr.compose_rgb(_inputs(), (-6000.0, 4000.0), res=N)
     assert rgb.shape == (N, N, 3)

@@ -415,9 +415,9 @@ def _palette_range_m(meta: dict[str, Any]) -> tuple[float, float]:
     return (lo, hi)
 
 
-def _sources_etag(paths: list[Path]) -> str:
-    """Weak Etag over (size, mtime) of every existing source file."""
-    parts = []
+def _topo_etag(paths: list[Path]) -> str:
+    """Weak ETag over the topo renderer version and its source files."""
+    parts = ["topo-v2"]
     for p in paths:
         if p.is_file():
             st = p.stat()
@@ -448,7 +448,7 @@ def pack_topo(pack: str, request: Request) -> Response:
         gaea / "lake.png",
         pack_dir / "input" / "biome.codes.npy",
     ]
-    etag = _sources_etag(source_files)
+    etag = _topo_etag(source_files)
     headers = {"ETag": etag, "Cache-Control": "no-cache"}
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=headers)
@@ -466,8 +466,14 @@ def pack_topo(pack: str, request: Request) -> Response:
     from dreamulator.media.carto_render import compose_rgb
     from dreamulator.media.satellite_color import load_inputs
 
+    meta = _input_meta(pack_dir)
     inputs = load_inputs(pack_dir / "input", gaea)
-    rgb = compose_rgb(inputs, _palette_range_m(_input_meta(pack_dir)), res=inputs.height_m.shape[0])
+    rgb = compose_rgb(
+        inputs,
+        _palette_range_m(meta),
+        res=inputs.height_m.shape[0],
+        sea_level_m=float(meta["sea_level_m"]),
+    )
     buf = io.BytesIO()
     Image.fromarray((np.clip(rgb, 0.0, 1.0) * 255.0).round().astype(np.uint8)).save(buf, "PNG")
     content = buf.getvalue()

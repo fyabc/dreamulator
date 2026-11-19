@@ -10,10 +10,11 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api, packImageUrl, packTopoUrl } from '../api/client'
 import { isStaticMode } from '../api/mode'
+import MapHelpLink from '../components/map/MapHelpLink'
 import type { LonLat } from '../viewers/map/utils/mapCoords'
 import PackMap from '../viewers/packs/PackMap'
 import PackStatusBar from '../viewers/packs/PackStatusBar'
@@ -53,6 +54,8 @@ function windowOf(meta: PackMeta): PackWindow {
 export default function PackViewerPage() {
   const { t } = useTranslation('map')
   const staticMode = isStaticMode()
+  const { state } = useLocation()
+  const regionReturn = typeof state?.regionReturn === 'string' ? state.regionReturn : null
 
   const [searchParams, setSearchParams] = useSearchParams()
   const [packs, setPacks] = useState<PackSummary[] | null>(null)
@@ -82,7 +85,7 @@ export default function PackViewerPage() {
     setPin(null)
     setProbe(null)
     setProbeError(null)
-    setSearchParams(name ? { pack: name } : {}, { replace: true })
+    setSearchParams(name ? { pack: name } : {}, { replace: true, state })
   }
 
   useEffect(() => {
@@ -134,7 +137,11 @@ export default function PackViewerPage() {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <div className="bg-space-panel border border-space-border rounded-lg p-6 text-sm text-gray-400 max-w-md">
-          {t('packs.staticModeHint')}
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <h1 className="font-semibold text-gray-200">{t('packs.pickPrompt')}</h1>
+            <MapHelpLink section="packs" label={t('packs.help')} />
+          </div>
+          <p>{t('packs.staticModeHint')}</p>
         </div>
       </div>
     )
@@ -168,10 +175,16 @@ export default function PackViewerPage() {
     <div className="flex flex-col h-[calc(100vh-56px)] md:h-screen">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 bg-space-panel/80 border-b border-space-border">
-        <div className="flex items-center gap-2">
+        {regionReturn && (
+          <Link to={regionReturn} className="text-xs text-neon-cyan hover:underline" title={t('packs.hint.back')}>
+            {t('regionWindow.back')}
+          </Link>
+        )}
+        <label className="flex items-center gap-2">
           <span className="text-xs text-gray-500">{t('packs.pickPrompt')}</span>
           <select
             value={pack ?? ''}
+            title={t('packs.hint.pick')}
             onChange={(e) => selectPack(e.target.value || null)}
             className="bg-space-surface border border-space-border rounded px-2 py-1 text-xs text-gray-200"
           >
@@ -183,65 +196,76 @@ export default function PackViewerPage() {
               </option>
             ))}
           </select>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">{t('packs.base')}</span>
-          <select
-            value={baseId}
-            onChange={(e) => setBaseId(e.target.value)}
-            className="bg-space-surface border border-space-border rounded px-2 py-1 text-xs text-gray-200"
-          >
-            {availableBases.map((b) => (
-              <option key={b.id} value={b.id}>
-                {t(`packs.baseOptions.${b.id}`)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <label className={checkboxCls}>
-          <input type="checkbox" checked={graticuleOn} onChange={(e) => setGraticuleOn(e.target.checked)} />
-          {t('packs.graticule')}
         </label>
 
         {summary && (
-          <span className="ml-auto text-xs text-gray-600 font-mono">
+          <span className="ml-auto text-xs text-gray-600 font-mono" title={t('packs.hint.source')}>
             {summary.world}
             {summary.branch ? ` · ${summary.branch}` : ''} · {summary.mtime}
           </span>
         )}
+        <div className={summary ? undefined : 'ml-auto'}>
+          <MapHelpLink section="packs" label={t('packs.help')} />
+        </div>
       </div>
 
-      {/* Map */}
-      <div className="flex-1 min-h-0 relative">
-        {win ? (
-          <>
-            <PackMap
-              window={win}
-              base={base}
-              rivers={rivers}
-              graticuleOn={graticuleOn}
-              pin={pin}
-              onHover={setHover}
-              onProbe={onProbe}
-            />
-            <div className="absolute top-3 right-3 z-500 flex flex-col gap-2 items-end pointer-events-auto">
-              <ProbePanel
-                point={pin}
-                probe={probe}
-                loading={probeLoading}
-                error={probeError}
-                meta={meta}
-                spanKm={summary?.span_km ?? null}
-              />
-            </div>
-          </>
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-500">
-            {packs === null ? '…' : t('packs.noMeta')}
-          </div>
+      <div className="flex min-h-0 flex-1 flex-col bg-space-bg md:flex-row">
+        {win && (
+          <aside aria-label={t('label.layerSettings')}
+            className="flex shrink-0 flex-wrap items-center gap-3 border-b border-space-border bg-space-panel p-3 md:block md:w-48 md:space-y-3 md:border-b-0 md:border-r">
+            <h2 className="hidden text-xs font-semibold uppercase tracking-wide text-gray-500 md:block">
+              {t('label.layerSettings')}
+            </h2>
+            <label className="flex items-center gap-2 md:block md:space-y-1">
+              <span className="text-xs text-gray-400">{t('packs.base')}</span>
+              <select
+                value={baseId}
+                title={t('packs.hint.base')}
+                onChange={(e) => setBaseId(e.target.value)}
+                className="rounded border border-space-border bg-space-surface px-2 py-1 text-xs text-gray-200 md:w-full"
+              >
+                {availableBases.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {t(`packs.baseOptions.${b.id}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={checkboxCls} title={t('packs.hint.graticule')}>
+              <input type="checkbox" checked={graticuleOn} onChange={(e) => setGraticuleOn(e.target.checked)} />
+              {t('packs.graticule')}
+            </label>
+          </aside>
         )}
+        <div className="relative isolate min-h-0 min-w-0 flex-1">
+          {win ? (
+            <>
+              <PackMap
+                window={win}
+                base={base}
+                rivers={rivers}
+                graticuleOn={graticuleOn}
+                pin={pin}
+                onHover={setHover}
+                onProbe={onProbe}
+              />
+              <div className="absolute top-3 right-3 z-[500] flex flex-col gap-2 items-end pointer-events-auto">
+                <ProbePanel
+                  point={pin}
+                  probe={probe}
+                  loading={probeLoading}
+                  error={probeError}
+                  meta={meta}
+                  spanKm={summary?.span_km ?? null}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-500">
+              {packs === null ? '…' : t('packs.noMeta')}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Status bar */}

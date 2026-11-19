@@ -6,6 +6,8 @@
  */
 
 import { useMemo } from 'react'
+import { projectRegionOutline } from '../../viewers/map/regionWindow'
+import type { LonLat } from '../../viewers/map/utils/mapCoords'
 import type {
   VoronoiCell,
   CVTMesh,
@@ -31,6 +33,7 @@ interface MapSvgOverlayProps {
   // Visual state (read-only — no event handlers)
   hoveredCell: number | null
   selectedCells: Set<number>
+  regionBoundary?: readonly LonLat[] | null
 
   /** Ocean current arrow opacity (0 = hidden). */
   currentOpacity?: number
@@ -58,6 +61,7 @@ export default function MapSvgOverlay({
   cvtMesh,
   hoveredCell,
   selectedCells,
+  regionBoundary,
   currentOpacity = 0,
   windOpacity = 0,
   monthlyWindEast = null,
@@ -65,6 +69,10 @@ export default function MapSvgOverlay({
   month = 0,
   showGraticule = true,
 }: MapSvgOverlayProps) {
+  const regionOutline = useMemo(() => regionBoundary
+    ? projectRegionOutline(regionBoundary, project, viewWidth, zoom)
+    : null, [regionBoundary, project, viewWidth, zoom])
+
   // Build vertex lookup from CVT mesh: vertex idx → {lon, lat}
   const vertexLookup = useMemo(() => {
     if (!cvtMesh) return null
@@ -410,6 +418,16 @@ export default function MapSvgOverlay({
       <g className="pointer-events-none">{currentArrowElements}</g>
       <g className="pointer-events-none">{windArrowElements}</g>
       <g className="pointer-events-none">{highlightElements}</g>
+      {regionOutline && (
+        <g data-region-outline="" fill="none" strokeDasharray="5 3" strokeLinejoin="round">
+          {regionOutline.offsets.map((offset) => (
+            <g key={offset} transform={`translate(${offset} 0)`}>
+              <path d={regionOutline.path} stroke="#171923" strokeWidth={4} />
+              <path d={regionOutline.path} stroke="#fff" strokeWidth={2} />
+            </g>
+          ))}
+        </g>
+      )}
     </svg>
   )
 }

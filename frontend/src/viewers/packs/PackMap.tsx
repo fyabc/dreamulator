@@ -24,7 +24,7 @@ import type { RiverData } from './types'
 
 interface PackMapProps {
   window: PackWindow
-  /** Base image URL, or null while loading (paper placeholder). */
+  /** Base image URL, or null while loading. */
   base: { url: string; opacity?: number } | null
   rivers: RiverData | null
   graticuleOn: boolean
@@ -283,7 +283,7 @@ export default function PackMap({
 
   return (
     <>
-      <div ref={containerRef} className="absolute inset-0 cursor-crosshair bg-[#1a1f2b]" />
+      <div ref={containerRef} className="absolute inset-0 cursor-crosshair !bg-space-bg" />
       {baseLoading && (
         <div className="absolute top-3 left-14 z-[500] pointer-events-none">
           <span className="inline-block animate-pulse bg-space-panel/90 border border-space-border rounded px-2 py-1 text-xs text-neon-cyan font-mono">

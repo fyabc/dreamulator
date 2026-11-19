@@ -23,6 +23,7 @@ import SunControl from '../components/map/SunControl'
 import TimeControl from '../components/map/TimeControl'
 import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import ClimateLegend from '../components/map/ClimateLegend'
+import RegionWindowPanel from '../components/map/RegionWindowPanel'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import useRafCoalesced from '../viewers/map/useRafCoalesced'
 import { buildCellKDTree, type KDTree3D } from '../components/map/utils/kdtree'
@@ -34,6 +35,7 @@ import FlowParticles from '../components/map/FlowParticles'
 import ImportElevationButton from '../components/map/ImportElevationButton'
 import GeographyRasterButton from '../components/map/GeographyRasterButton'
 import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
+import { readRegionBoundary, REGION_WINDOW_PARAM } from '../viewers/map/regionWindow'
 
 // ---------------------------------------------------------------------------
 // Page
@@ -83,6 +85,9 @@ export default function GlobeViewerPage() {
   // Stable empty set — clean mode suppresses hover/selection highlights without
   // changing cell-picking state underneath.
   const emptySelection = useMemo(() => new Set<number>(), [])
+  const rawWindow = searchParams.get(REGION_WINDOW_PARAM)
+  const regionBoundary = useMemo(() => readRegionBoundary(rawWindow, planetRadiusM / 1000),
+    [rawWindow, planetRadiusM])
 
   const globeProjectRef = useRef<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number; ex: number; ey: number; nx: number; ny: number } | null) | null>(null)
   const globePointProjectRef = useRef<PointProjector | null>(null)
@@ -266,7 +271,9 @@ export default function GlobeViewerPage() {
           <select
             value={selectedPlanet}
             onChange={(e) => {
-              const qs = searchParams.toString()
+              const next = new URLSearchParams(searchParams)
+              next.delete(REGION_WINDOW_PARAM)
+              const qs = next.toString()
               navigate(`/worlds/${worldName}/globe/${e.target.value}${qs ? `?${qs}` : ''}`)
             }}
             className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
@@ -304,6 +311,11 @@ export default function GlobeViewerPage() {
       )}
       {awaitingBuild && !cleanMode && (
         <AwaitingBuildBanner world={worldName} branch={selectedBranch} />
+      )}
+      {!cleanMode && selectedPlanet && (elevation || cvtMesh) && (
+        <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
+          branch={selectedBranch} radiusKm={planetRadiusM / 1000}
+          selectedPoint={selectedCells.size === 1 ? selectedCellData : null} />
       )}
       {!cleanMode && cvtMesh && (
         <ClimateLegend layer={activeMainLayer} mesh={cvtMesh} monthlyMode={monthlyMode}
@@ -357,6 +369,7 @@ export default function GlobeViewerPage() {
                 regions={globeRegions}
                 hoveredCellId={cleanMode ? null : hoveredCell}
                 selectedCellIds={cleanMode ? emptySelection : selectedCells}
+                regionBoundary={cleanMode ? null : regionBoundary}
                 sunLongitudeDeg={sunLongitudeDeg}
                 solarDeclinationDeg={solarDeclination}
                 dayNight={dayNightEnabled}
@@ -567,6 +580,7 @@ export default function GlobeViewerPage() {
               regions={globeRegions}
               hoveredCellId={cleanMode ? null : hoveredCell}
               selectedCellIds={cleanMode ? emptySelection : selectedCells}
+              regionBoundary={cleanMode ? null : regionBoundary}
               sunLongitudeDeg={sunLongitudeDeg}
               solarDeclinationDeg={solarDeclination}
               dayNight={dayNightEnabled}

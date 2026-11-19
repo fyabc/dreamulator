@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { HELP_SECTIONS, type HelpSection } from '../components/map/helpContent'
 
 /** Simple markdown-like renderer for inline formatting. */
@@ -119,8 +119,8 @@ export default function HelpPage() {
             const isActive = s.id === activeSection
             return (
               <li key={s.id}>
-                <a
-                  href={`#${s.id}`}
+                <Link
+                  to={{ hash: `#${s.id}` }}
                   className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
                     isActive
                       ? 'bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20'
@@ -129,7 +129,7 @@ export default function HelpPage() {
                 >
                   <span className="text-base flex-shrink-0">{s.icon}</span>
                   <span className="truncate">{t(s.title)}</span>
-                </a>
+                </Link>
               </li>
             )
           })}

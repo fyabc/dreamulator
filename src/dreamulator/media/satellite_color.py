@@ -666,17 +666,22 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
         order=1,
     )
 
-    # Depth masks are in heightfield units (0..1 over the TD span) in Gaea
-    # builds; programmatic runs only write the masks they have — missing
-    # files read as zero (flat sea, no depth channels, no wear/deposits).
+    # Gaea and the programmatic chain encode depth masks over the TD span.
     def mask16_or_zero(name: str) -> np.ndarray:
         p = gaea_dir / name
         return _read_mask16(p) if p.exists() else np.zeros((n, n), dtype=np.float32)
 
+    sea_level_m = float(meta["sea_level_m"])
     sea = (
         _read_mask_bool(gaea_dir / "sea-water.png")
         if (gaea_dir / "sea-water.png").exists()
-        else height_m <= 0.0
+        else height_m <= sea_level_m
+    )
+    sea_depth_path = gaea_dir / "sea-depth.png"
+    sea_depth_m = (
+        _read_mask16(sea_depth_path) * span_m
+        if sea_depth_path.exists()
+        else np.where(sea, np.maximum(sea_level_m - height_m, 0.0), 0.0)
     )
     rivers_path = gaea_dir / "rivers.png"
     rivers = _read_mask_bool(rivers_path) if rivers_path.exists() else np.zeros((n, n), dtype=bool)
@@ -707,7 +712,7 @@ def load_inputs(pack_dir: Path, gaea_dir: Path) -> ColorizeInputs:
         biome_codes=biome_codes,
         biome_legend=legend,
         sea_water=sea,
-        sea_depth_m=mask16_or_zero("sea-depth.png") * span_m,
+        sea_depth_m=sea_depth_m,
         rivers=rivers,
         river_depth_m=mask16_or_zero("rivers-depth.png") * span_m,
         flow=mask16_or_zero("flow.png"),

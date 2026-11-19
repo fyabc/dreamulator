@@ -347,20 +347,37 @@
         }
       ]
     },
-    "packs": {
-      "title": "Region Packs (sub-maps)",
+    "regionSelection": {
+      "title": "Region selection",
       "entries": [
         {
-          "title": "Overview",
-          "content": "The Region packs page (sidebar “Region packs”) browses terrain video-chain packs: a server-rendered topo-style base (refined terrain + flat lake/sea fills, no sheet furniture) with vector rivers (√-law widths, non-perennial dashes), exact lon/lat on hover, and click-to-probe cell values (elevation, biome, Köppen class, water masks, river accumulation and perennial regime). Local API mode only — packs live under the world data directory packs/ (local data) and never ship with the static site."
+          "title": "Set the centre and size",
+          "content": "Open **Select region** on the global map or globe. Enter the centre latitude and longitude in degrees. Positive latitude is north, and positive longitude is east. The side length is the physical size of a square region, not the resolution: 550 km means a 550 × 550 km region.\n\nYou can also select one map cell and choose **Use selected point**. On desktop, hold Ctrl or Command and click; on a touchscreen, tap the map. This fills in the cell centre and leaves the side length unchanged."
         },
         {
-          "title": "QA workflow",
-          "content": "When chasing a rendering issue: find the spot on the sub-map → click → copy the `--lat … --lon …` arguments → paste them straight into `dreamulator region pack/refine/carto` to re-export that window. The graticule lines share the printed topo sheet's ink, so on-screen positions line up with the rendered sheet."
+          "title": "Save, revisit or clear the selection",
+          "content": "**Save selection** stores the centre and side length in the URL. Both the global map and globe mark the area with a white dashed outline with a dark border, separate from cell highlights. Reopening the URL or switching views keeps the selection. **Clear selection** removes the outline and the saved selection without deleting any maps. Saving does not build, refine or export a map."
         },
         {
-          "title": "Data & conventions",
-          "content": "The default base is the full-resolution topo composite (compose_rgb, rendered on demand and cached); alternates: satellite preview, albedo, hypsometric, Köppen, biomes. The probe returns refined-grid (4096²) elevation and input-grid (2048²) class codes; river accumulation is relative upstream cells (not m³/s). Window geometry converts kilometres to degrees with the planet radius from the meta — the exact inverse of the export window."
+          "title": "Open an existing regional map",
+          "content": "In local server mode, **Existing regional maps** lists maps for the current world, body and branch. Picking one fills in its exact centre and side length. You can then open the map and use **Back to the global selection** to return. If no existing map matches the centre and side length, the selection is still saved. The static site can save and restore selections, but it cannot open local regional maps."
+        }
+      ]
+    },
+    "packs": {
+      "title": "Regional maps",
+      "entries": [
+        {
+          "title": "Open a regional map",
+          "content": "Open **Regional maps** from the sidebar or from an existing region on the global map. The map selector lists the source world, centre coordinates and side length. Regional maps are generated data stored locally and are not published with the static site. If none exist, use `dreamulator region pack` to prepare one and `dreamulator serve` to view it."
+        },
+        {
+          "title": "Browse and change the display",
+          "content": "Drag to pan and scroll or pinch to zoom. The **Layer Settings** panel contains **Base** and **Graticule**. The terrain base uses the global map's terrain palette, with deeper ocean shown in darker blue. Depending on the available files, you can also show a satellite preview, albedo (how much light the surface reflects), Köppen climate classes or biomes. **Graticule** toggles the latitude and longitude lines. Changing the display does not modify the map data."
+        },
+        {
+          "title": "Inspect a location",
+          "content": "Hover over the map to see coordinates. Click a location to check its elevation and any available climate, biome or water data. Elevation is reported in metres. River accumulation is a relative measure of the upstream cells, not a discharge in cubic metres per second. When river data are present, dashed river lines indicate channels that do not flow year-round. You can copy the inspected coordinates from the panel."
         }
       ]
     },

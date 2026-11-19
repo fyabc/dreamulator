@@ -445,6 +445,12 @@ export const HELP_SECTIONS: HelpSection[] = [
     render: (t) => entryKeys('mapTime', 3).map(({ title, content }) => ({ title: t(title), content: t(content) })),
   },
   {
+    id: 'region-selection',
+    title: 'help:section.regionSelection.title',
+    icon: '📍',
+    render: (t) => entryKeys('regionSelection', 3).map(({ title, content }) => ({ title: t(title), content: t(content) })),
+  },
+  {
     id: 'stellar-viewer',
     title: 'help:section.stellarViewer.title',
     icon: '🔭',

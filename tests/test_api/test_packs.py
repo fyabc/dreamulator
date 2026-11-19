@@ -272,6 +272,35 @@ def test_topo_png_renders_composite_with_water_ink(client: TestClient) -> None:
     assert r2.status_code == 304
 
 
+@pytest.mark.parametrize("sea_level_m", [0.0, 150.0])
+def test_topo_png_derives_blue_ocean_from_input_elevation(
+    tmp_path: Path, client: TestClient, sea_level_m: float
+) -> None:
+    pack_dir = tmp_path / PACK
+    (pack_dir / "refined-out" / "height.meters.npy").unlink()
+    input_dir = pack_dir / "input"
+    heights = np.repeat(np.array([-4000.0, -100.0, 80.0, 250.0], dtype=np.float32), GRID // 4)
+    np.save(input_dir / "height.meters.npy", np.tile(heights, (GRID, 1)))
+    meta_path = input_dir / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta.update(
+        sea_level_m=sea_level_m,
+        elevation_m_global=[-6000.0, 4000.0],
+        height_png_range_m=[-4000.0, 250.0],
+        height_gaea_png_range_m=[-400.0, 250.0],
+    )
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+    response = client.get(f"/api/packs/{PACK}/topo.png")
+    assert response.status_code == 200
+    rgb = np.asarray(Image.open(io.BytesIO(response.content)))
+    deep, shallow, near_datum, land = rgb[GRID // 2, [0, 2, 4, 6]]
+    assert deep[2] > deep[1] and shallow[2] > shallow[1]
+    assert deep[2] < shallow[2]
+    assert (near_datum[2] > near_datum[1]) == (sea_level_m > 80.0)
+    assert land[1] > land[2]
+
+
 def test_rivers_json_shifts_to_centre_origin(client: TestClient) -> None:
     r = client.get(f"/api/packs/{PACK}/rivers.json")
     assert r.status_code == 200

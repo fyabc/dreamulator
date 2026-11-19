@@ -59,6 +59,7 @@ interface MapViewerProps {
   onCellClick?: (cellId: number, ctrlKey: boolean) => void
   hoveredCell: number | null
   selectedCells: Set<number>
+  regionBoundary?: readonly LonLat[] | null
   /** Subsolar longitude in degrees (day/night overlay). */
   sunLongitudeDeg?: number
   /** Solar declination in degrees (day/night overlay). */
@@ -121,6 +122,7 @@ export default function MapViewer({
   onCellClick,
   hoveredCell,
   selectedCells,
+  regionBoundary,
   sunLongitudeDeg = 0,
   solarDeclinationDeg = 0,
   dayNight = false,
@@ -655,6 +657,7 @@ export default function MapViewer({
         cvtMesh={cvtMesh}
         hoveredCell={hoveredCell}
         selectedCells={selectedCells}
+        regionBoundary={regionBoundary}
         currentOpacity={particleMode ? 0 : layers?.currents ?? 0}
         windOpacity={particleMode ? 0 : layers?.winds ?? 0}
         monthlyWindEast={monthlyWindEast}

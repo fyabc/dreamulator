@@ -18,12 +18,13 @@
 import { Suspense, useRef, useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, Stars } from '@react-three/drei'
+import { Line, OrbitControls, Stars } from '@react-three/drei'
 import * as THREE from 'three'
 
 import { sunDirection } from './utils/solar'
 import { measureFromStart } from '../utils/perf'
 import type { PointProjector } from './map/types'
+import type { LonLat } from './map/utils/mapCoords'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -66,6 +67,7 @@ interface GlobeViewerProps {
   hoveredCellId?: number | null
   /** Selected cell IDs (yellow highlight). */
   selectedCellIds?: Set<number>
+  regionBoundary?: readonly LonLat[] | null
   /** Sun longitude in degrees (0 = noon at prime meridian). */
   sunLongitudeDeg?: number
   /** Solar declination (subsolar latitude) in degrees — varies with season. */
@@ -296,6 +298,31 @@ function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonPro
 // Scene
 // ---------------------------------------------------------------------------
 
+function RegionOutline({ boundary }: { boundary: readonly LonLat[] }) {
+  const { points, dashSize } = useMemo(() => {
+    const radius = SPHERE_RADIUS * 1.004
+    const points = boundary.map(({ lon, lat }) => {
+      const theta = THREE.MathUtils.degToRad(lon)
+      const phi = THREE.MathUtils.degToRad(lat)
+      const radial = radius * Math.cos(phi)
+      return new THREE.Vector3(radial * Math.cos(theta), radius * Math.sin(phi), -radial * Math.sin(theta))
+    })
+    const length = points.slice(1).reduce((total, point, index) => total + point.distanceTo(points[index]), 0)
+    return { points, dashSize: length / 28 }
+  }, [boundary])
+
+  if (dashSize <= 0) return null
+
+  return (
+    <group name="region-outline">
+      <Line points={points} dashed dashSize={dashSize} gapSize={dashSize * 0.6}
+        color="#171923" lineWidth={4} depthWrite={false} transparent toneMapped={false} renderOrder={1} />
+      <Line points={points} dashed dashSize={dashSize} gapSize={dashSize * 0.6}
+        color="#fff" lineWidth={2} depthWrite={false} transparent toneMapped={false} renderOrder={2} />
+    </group>
+  )
+}
+
 interface GlobeSceneProps {
   texture: THREE.Texture | null
   renderComposite?: (renderer: THREE.WebGLRenderer) => void
@@ -307,6 +334,7 @@ interface GlobeSceneProps {
   regions?: GlobeRegion[]
   hoveredCellId?: number | null
   selectedCellIds?: Set<number>
+  regionBoundary?: readonly LonLat[] | null
   sunLongitudeDeg?: number
   solarDeclinationDeg?: number
   dayNight?: boolean
@@ -333,7 +361,7 @@ interface NorthAnimState {
 
 function GlobeScene({
   texture, renderComposite, distanceRef, onCellHover, onCellClick, onHoverOut,
-  vertices, regions, hoveredCellId, selectedCellIds,
+  vertices, regions, hoveredCellId, selectedCellIds, regionBoundary,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
   autoSpin = false, chrome = true, interactive = true,
   globeProjectRef, globePointProjectRef,
@@ -642,6 +670,7 @@ function GlobeScene({
       {/* Cell polygon highlights */}
       {HoverHighlight}
       {SelectionHighlights}
+      {regionBoundary && <RegionOutline boundary={regionBoundary} />}
 
       {chrome && <Graticule />}
       {chrome && <PolarAxis />}
@@ -689,7 +718,7 @@ function TransitionPrompt({ progress, label }: { progress: number; label: string
 export default function GlobeViewer({
   texture, renderComposite, onTransition, transitionLabel,
   onCellHover, onCellClick, onHoverOut, onDistanceChange,
-  vertices, regions, hoveredCellId, selectedCellIds,
+  vertices, regions, hoveredCellId, selectedCellIds, regionBoundary,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
   autoSpin = false, chrome = true, interactive = true, frameless = false,
   globeProjectRef, globePointProjectRef,
@@ -733,6 +762,7 @@ export default function GlobeViewer({
             onHoverOut={onHoverOut}
             vertices={vertices} regions={regions}
             hoveredCellId={hoveredCellId} selectedCellIds={selectedCellIds}
+            regionBoundary={regionBoundary}
             sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg}
             dayNight={dayNight}
             autoSpin={autoSpin}

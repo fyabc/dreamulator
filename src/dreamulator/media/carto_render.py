@@ -87,6 +87,7 @@ HILLSHADE_STRUCT_WEIGHT = 0.4  # share of the structural layer in the blend
 #: between stops and the stack (shade + paper grain) washes it further;
 #: reference sheets run visibly richer colour than the raw LUT mix.
 COLOR_SATURATION = 1.30
+SHALLOWEST_BLUE_DEPTH_M = 10.0
 
 #: Sheet furniture type sizes (pt) — the "readable at arm's length" tier;
 #: a hand-drawn sheet keeps its furniture this large relative to contours.
@@ -279,7 +280,11 @@ LEGEND_LADDER_M = [
 
 
 def _lut_rgb(
-    height_m: np.ndarray, sea: np.ndarray, sea_depth_m: np.ndarray, rng_m: tuple[float, float]
+    height_m: np.ndarray,
+    sea: np.ndarray,
+    sea_depth_m: np.ndarray,
+    rng_m: tuple[float, float],
+    sea_level_m: float = 0.0,
 ) -> np.ndarray:
     """Hypsometric tint per pixel from the shared adaptive-terrain palette.
 
@@ -291,18 +296,17 @@ def _lut_rgb(
     min-anchored deep-blue gradient only lands in the ocean on the full
     range, which is exactly why the clamped grid must not drive it).
     """
-    lut = build_adaptive_terrain_lut(rng_m[0], rng_m[1], sea_level=0.0)
     lo, hi = rng_m
-    # Sea-level pin: land cells round UP so 0…+20 m never quantises into
-    # the −10 m shallow-sea bin (one LUT step ≈ 20 m on planet-wide
-    # anchors); sea cells are depth-keyed below and always shallow-blue.
-    frac = (height_m - lo) / (hi - lo) * (len(lut) - 1)
-    idx = np.where(height_m >= 0, np.ceil(frac), np.rint(frac))
+    lut = build_adaptive_terrain_lut(lo, hi, sea_level_m)
+    scale = (len(lut) - 1) / (hi - lo or 1.0)
+    idx = np.ceil((np.maximum(height_m, sea_level_m) - lo) * scale)
     # Missing chunks (a window near a canvas edge) are NaN: floor them to
     # the first LUT bin here — the caller paints them as no-data paper.
     idx = np.clip(np.nan_to_num(idx, nan=0.0), 0, len(lut) - 1)
     rgb = lut[idx.astype(np.int32)] / 255.0
-    sea_idx = np.clip(np.rint((-sea_depth_m - lo) / (hi - lo) * (len(lut) - 1)), 0, len(lut) - 1)
+    sea_elev = sea_level_m - np.maximum(sea_depth_m, SHALLOWEST_BLUE_DEPTH_M)
+    sea_idx = np.clip(np.floor((sea_elev - lo) * scale), 0, len(lut) - 1)
+    np.nan_to_num(sea_idx, copy=False, nan=0.0)
     rgb[sea] = lut[sea_idx[sea].astype(np.int32)] / 255.0
     return np.asarray(rgb)
 
@@ -413,6 +417,7 @@ def compose_rgb(
     *,
     res: int = 2048,
     hand: bool = False,
+    sea_level_m: float = 0.0,
 ) -> np.ndarray:
     """The raster underlay as an (h, w, 3) float 0..1 image.
 
@@ -439,7 +444,7 @@ def compose_rgb(
         else None
     )
 
-    rgb = _lut_rgb(height, sea, sea_depth, rng_m)
+    rgb = _lut_rgb(height, sea, sea_depth, rng_m, sea_level_m)
     # Multiply the two-scale relief into the land only (paper LDR pipeline —
     # same doctrine as the Blender leg's Standard view: the tint table is the
     # colour authority; survey convention keeps water flat ink).
@@ -478,7 +483,7 @@ def compose_rgb(
 
     _paint_intertidal(
         rgb,
-        height,
+        height - sea_level_m if sea_level_m else height,
         INTERTIDAL_M,
         sea,
         inputs.km_per_px * f,
