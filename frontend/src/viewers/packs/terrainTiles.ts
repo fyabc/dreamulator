@@ -7,6 +7,16 @@ export interface Rect {
 
 export const minTerrainSpanKm = 45
 export const maxTerrainSpanKm = 184
+const conditionKm = 23
+const pixelsPerCell = 256
+export const conditioningPadding = 64
+export const latentScale = 8
+export const synthesisPadding = 6 * latentScale
+export const tileSize = 64
+export const coarseStride = 48
+export const latentStride = 32
+export const decoderSize = 512
+export const decoderStride = 384
 
 export interface Tile {
   row: number
@@ -29,6 +39,37 @@ export function coveringTiles(rect: Rect, size: number, stride: number): Tile[] 
 
 export const unionTiles = (tiles: Tile[]) => [...new Map(tiles.map((tile) => [tileKey(tile), tile])).values()]
 export const tileKey = ({ row, col }: Tile) => `${row},${col}`
+
+export function latentArea({ row, col }: Tile) {
+  return square(row * latentStride, col * latentStride, tileSize)
+}
+
+export function coarseArea({ row, col }: Tile) {
+  return square(row - 1, col - 1, 4)
+}
+
+export function decoderInputArea({ row, col }: Tile) {
+  return square(row * decoderStride / latentScale, col * decoderStride / latentScale, decoderSize / latentScale)
+}
+
+export function supportsTerrainSpan(spanKm: number) {
+  return spanKm >= minTerrainSpanKm && spanKm <= maxTerrainSpanKm
+}
+
+export function makeTerrainPlan(spanKm: number) {
+  if (!supportsTerrainSpan(spanKm)) throw new Error('TD window out of range')
+  const inputSize = Math.round(spanKm / conditionKm)
+  const size = inputSize * pixelsPerCell
+  const origin = conditioningPadding * pixelsPerCell
+  const padded = square(origin - synthesisPadding, origin - synthesisPadding, size + 2 * synthesisPadding)
+  const low = square(padded.top / latentScale, padded.left / latentScale, (size + 2 * synthesisPadding) / latentScale)
+  const decoder = coveringTiles(padded, decoderSize, decoderStride)
+  const final = unionTiles([...decoder.map(decoderInputArea), low].flatMap((rect) => coveringTiles(rect, tileSize, latentStride)))
+  const initial = unionTiles(final.flatMap((tile) => coveringTiles(latentArea(tile), tileSize, latentStride)))
+  const coarse = unionTiles(initial.flatMap((tile) => coveringTiles(coarseArea(tile), tileSize, coarseStride)))
+  const totals = { coarse: coarse.length, base: initial.length + final.length, decoder: decoder.length }
+  return { size, inputSize, totals, padded, low, decoder, final, initial, coarse }
+}
 
 export function tileWeights(size: number) {
   const middle = (size - 1) / 2

@@ -385,7 +385,11 @@
         },
         {
           "title": "Generate and compare terrain locally",
-          "content": "On a local site configured with Terrain Diffusion, open a selection with monthly climate or a square regional map with refinement inputs. Open **Generate refined terrain**, then confirm the window and grid size. You can cancel before saving, and refreshing does not restart the job. Refinement redraws valleys and coastlines, but saves the result separately. Open **Compare and download result** to switch between original and generated elevation without moving the map. Downloads follow the displayed terrain source. The static site does not run refinement."
+          "content": "On a local site configured with Terrain Diffusion, open a selection with monthly climate or a square regional map with refinement inputs. Open **Generate refined terrain**, then confirm the window and grid size. You can cancel before saving, and refreshing does not restart the job. Refinement redraws valleys and coastlines, but saves the result separately. Open **Compare and download result** to switch between original and generated elevation without moving the map. Downloads follow the displayed terrain source."
+        },
+        {
+          "title": "Refine terrain in the browser",
+          "content": "Open **Generate refined terrain (browser experiment)** to see the source row spacing, model input, and expected output. The model redraws terrain from the selected elevation and shows the result separately from the original. For a quick first run, return to the global map and select a smaller area. Each stage has its own tile count and time per tile. All selection sizes use the same model files: the first download is about 1.14 GB, and later runs can reuse the browser cache."
         }
       ]
     },

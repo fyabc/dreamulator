@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { checkedAsset, coarseCondition, makeTerrainPlan, terrainGrid } from './terrainRefinement'
-import { coveringTiles, square, stitchTiles, terrainNoise } from './terrainTiles'
+import { checkedAsset, coarseCondition } from './terrainRefinement'
+import { coveringTiles, makeTerrainPlan, square, stitchTiles, terrainNoise } from './terrainTiles'
 
 describe('browser terrain model loading', () => {
   const base = new URL('https://example.test/models/')
@@ -105,11 +105,11 @@ describe('browser terrain model loading', () => {
 })
 
 describe('browser terrain refinement inputs', () => {
-  it('preserves the native 256 decoded pixels per coarse cell and bounds window size', () => {
-    expect(terrainGrid(46)).toBe(512)
-    expect(terrainGrid(184)).toBe(2048)
-    for (const span of [NaN, 0, 20, 500]) expect(() => terrainGrid(span)).toThrow(/out of range/)
+  it('shares the same input grid, output size and tile counts between the budget and the runner', () => {
+    for (const span of [NaN, Infinity, 0, 20, 500]) expect(() => makeTerrainPlan(span)).toThrow(/out of range/)
     const plan = makeTerrainPlan(46)
+    expect(plan).toMatchObject({ inputSize: 2, size: 512, totals: { coarse: 4, base: 100, decoder: 9 } })
+    expect(makeTerrainPlan(184)).toMatchObject({ inputSize: 8, size: 2048 })
     expect(plan.padded.right - plan.padded.left).toBe(512 + 96)
     expect(plan.low.right - plan.low.left).toBe((512 + 96) / 8)
     expect(plan.initial.length).toBeGreaterThan(plan.final.length)

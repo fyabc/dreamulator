@@ -3,20 +3,11 @@ import type { InferenceSession, Tensor } from 'onnxruntime-web'
 import { sampleCoarseTile, type CoarseSchedule } from './coarseTerrain'
 import { type ElevationRaster, resizeElevation } from './elevationRaster'
 import { openTerrainModelCache, saveTerrainModel } from './terrainModelCache'
-import { coveringTiles, maxTerrainSpanKm, minTerrainSpanKm, square, stitchTiles, terrainNoise, tileKey, unionTiles,
+import { coarseArea, coarseStride, conditioningPadding, decoderInputArea, decoderSize, decoderStride,
+  latentArea, latentScale, latentStride, makeTerrainPlan, stitchTiles, synthesisPadding, terrainNoise, tileKey, tileSize,
   type Rect, type Tile } from './terrainTiles'
 import type { WebGpuDevice } from './webGpuDevice'
 
-const conditionKm = 23
-const conditioningPadding = 64
-const pixelsPerCell = 256
-const latentScale = 8
-const synthesisPadding = 6 * latentScale
-const tileSize = 64
-const coarseStride = 48
-const latentStride = 32
-const decoderSize = 512
-const decoderStride = 384
 const initialAngle = Math.fround(Math.atan(80 / 0.5))
 const secondAngle = Math.fround(Math.atan(0.35 / 0.5))
 const seed = 42
@@ -118,35 +109,6 @@ export async function checkedAsset(base: URL, name: string, hash: string, signal
   if (cache) progress?.saving?.()
   const reusable = cache ? await saveTerrainModel(cache, key, data, signal) : false
   return { data, reusable }
-}
-
-function latentArea({ row, col }: Tile) {
-  return square(row * latentStride, col * latentStride, tileSize)
-}
-
-function coarseArea({ row, col }: Tile) {
-  return square(row - 1, col - 1, 4)
-}
-
-function decoderInputArea({ row, col }: Tile) {
-  return square(row * decoderStride / latentScale, col * decoderStride / latentScale, decoderSize / latentScale)
-}
-
-export function terrainGrid(spanKm: number) {
-  if (!Number.isFinite(spanKm) || spanKm < minTerrainSpanKm || spanKm > maxTerrainSpanKm) throw new Error('TD window out of range')
-  return Math.round(spanKm / conditionKm) * pixelsPerCell
-}
-
-export function makeTerrainPlan(spanKm: number) {
-  const size = terrainGrid(spanKm)
-  const origin = conditioningPadding * pixelsPerCell
-  const padded = square(origin - synthesisPadding, origin - synthesisPadding, size + 2 * synthesisPadding)
-  const low = square(padded.top / latentScale, padded.left / latentScale, (size + 2 * synthesisPadding) / latentScale)
-  const decoder = coveringTiles(padded, decoderSize, decoderStride)
-  const final = unionTiles([...decoder.map(decoderInputArea), low].flatMap((rect) => coveringTiles(rect, tileSize, latentStride)))
-  const initial = unionTiles(final.flatMap((tile) => coveringTiles(latentArea(tile), tileSize, latentStride)))
-  const coarse = unionTiles(initial.flatMap((tile) => coveringTiles(coarseArea(tile), tileSize, coarseStride)))
-  return { size, padded, low, decoder, final, initial, coarse }
 }
 
 export function coarseCondition(raster: ElevationRaster, tile: Tile, sea: number, manifest: Pick<Manifest, 'means' | 'stds' | 'snr'>) {
@@ -264,8 +226,9 @@ export async function refineTerrain(
       ort.env.wasm.wasmPaths = { wasm: new URL(wasmUrl, globalThis.location.href).href }
       ort.env.webgpu.adapter = device.adapter
     }
-    const stage = async <Result>(name: TerrainStage, total: number, compute: (session: InferenceSession, step: () => Promise<void>) => Promise<Result>) => {
+    const stage = async <Result>(name: TerrainStage, compute: (session: InferenceSession, step: () => Promise<void>) => Promise<Result>) => {
       let done = 0
+      const total = plan.totals[name]
       const asset = manifest.models[name]
       const initialise = async () => {
         const { data, reusable } = await checkedAsset(base, `${name}.onnx`, asset.sha256, signal, {
@@ -291,8 +254,8 @@ export async function refineTerrain(
         })
       } finally { await session.release() }
     }
-    const source = resizeElevation(input, plan.size / pixelsPerCell, plan.size / pixelsPerCell)
-    const coarse = await stage('coarse', plan.coarse.length, async (session, step) => {
+    const source = resizeElevation(input, plan.inputSize, plan.inputSize)
+    const coarse = await stage('coarse', async (session, step) => {
       const tiles = new Map<string, Float32Array>()
       for (const tile of plan.coarse) {
         const initial = terrainNoise(seed + 1, tile.row * coarseStride, tile.col * coarseStride, tileSize, 6)
@@ -310,7 +273,7 @@ export async function refineTerrain(
       }
       return tiles
     })
-    const latent = await stage('base', plan.initial.length + plan.final.length, async (session, step) => {
+    const latent = await stage('base', async (session, step) => {
       const make = async (tiles: Tile[], angle: number, noiseSeed: number, previous?: Map<string, Float32Array>) => {
         const result = new Map<string, Float32Array>()
         const cosine = round(Math.cos(angle))
@@ -329,7 +292,7 @@ export async function refineTerrain(
       }
       return make(plan.final, secondAngle, seed + 5820, await make(plan.initial, initialAngle, seed + 5819))
     })
-    const residual = await stage('decoder', plan.decoder.length, async (session, step) => {
+    const residual = await stage('decoder', async (session, step) => {
       const result = new Map<string, Float32Array>()
       const area = decoderSize * decoderSize
       const sine = round(Math.sin(initialAngle))

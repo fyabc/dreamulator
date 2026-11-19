@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
@@ -6,7 +6,7 @@ import { isStaticMode } from '../../api/mode'
 import type { ElevationRaster } from './elevationRaster'
 import { getWebGpuDevice, type WebGpuDevice } from './webGpuDevice'
 import type { TerrainProgress, TerrainStage } from './terrainRefinement'
-import { maxTerrainSpanKm, minTerrainSpanKm } from './terrainTiles'
+import { makeTerrainPlan, maxTerrainSpanKm, minTerrainSpanKm, supportsTerrainSpan } from './terrainTiles'
 
 const modelUrl = import.meta.env.VITE_TD_MODEL_URL?.trim()
 const modelHash = import.meta.env.VITE_TD_MODEL_SHA256?.trim().toLowerCase()
@@ -17,6 +17,7 @@ const button = 'rounded border border-space-border bg-space-surface px-2 py-1 te
 interface BrowserInput {
   raster: ElevationRaster | null
   spanKm: number
+  sourceRowSpacingKm: number | null
   seaLevel: number
   onResult: (result: { raster: ElevationRaster; manifestSha256: string }) => void
 }
@@ -101,12 +102,38 @@ function BrowserProgress({ state }: { state: ProgressState | Extract<RunState, {
   </div>
 }
 
+function BrowserBudget({ plan, spanKm, sourceRowSpacingKm }: {
+  plan: ReturnType<typeof makeTerrainPlan>; spanKm: number; sourceRowSpacingKm: number | null
+}) {
+  const { t, i18n } = useTranslation('map', { keyPrefix: 'packs.compute.budget' })
+  const number = new Intl.NumberFormat(i18n.resolvedLanguage, { maximumSignificantDigits: 3 })
+  const rows = [
+    { key: 'window', value: t('kilometres', { km: number.format(spanKm) }) },
+    { key: 'sourceGrid', value: sourceRowSpacingKm === null ? null : t('kilometres', { km: number.format(sourceRowSpacingKm) }) },
+    { key: 'inputGrid', value: t('inputValue', { size: plan.inputSize, km: number.format(spanKm / plan.inputSize) }) },
+    { key: 'outputGrid', value: t('outputValue', { size: plan.size }) },
+    { key: 'outputSpacing', value: t('metres', { metres: number.format(spanKm * 1000 / plan.size) }) },
+    { key: 'coarseTiles', value: t('tileCount', { count: plan.totals.coarse }) },
+    { key: 'baseTiles', value: t('tileCount', { count: plan.totals.base }) },
+    { key: 'decoderTiles', value: t('tileCount', { count: plan.totals.decoder }) },
+  ]
+  return <div className="rounded border border-space-border bg-space-surface p-2">
+    <p className="font-medium text-gray-200">{t('title')}</p>
+    <dl className="mt-1 space-y-0.5">
+      {rows.map(({ key, value }) => value !== null && <div key={key} className="flex items-baseline justify-between gap-2">
+        <dt>{t(key)}</dt>
+        <dd className="whitespace-nowrap text-right tabular-nums text-gray-200">{value}</dd>
+      </div>)}
+    </dl>
+  </div>
+}
+
 function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefined; input: BrowserInput }) {
   const { t } = useTranslation('map', { keyPrefix: 'packs.compute' })
   const controller = useRef<AbortController | null>(null)
   const [state, setState] = useState<RunState>({ kind: 'idle' })
   const busy = state.kind === 'running' || state.kind === 'cancelling'
-  const supportedSpan = input.spanKm >= minTerrainSpanKm && input.spanKm <= maxTerrainSpanKm
+  const plan = useMemo(() => supportsTerrainSpan(input.spanKm) ? makeTerrainPlan(input.spanKm) : null, [input.spanKm])
   const configured = modelUrl && modelHash && /^[a-f0-9]{64}$/.test(modelHash) && loadRefinement
   useEffect(() => () => {
     controller.current?.abort()
@@ -115,7 +142,7 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
 
   const run = async () => {
     if (gpu?.kind !== 'hardware' || !configured || !modelUrl || !modelHash || !loadRefinement || !input.raster ||
-      !supportedSpan || controller.current) return
+      !plan || controller.current) return
     const task = new AbortController()
     controller.current = task
     const startedAt = performance.now()
@@ -166,10 +193,11 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
     <div className="mt-2 space-y-2">
       {!configured ? <p>{t('notPublished')}</p> : <>
         <p>{t('browserHint')}</p>
-        {!supportedSpan && <p>{t('windowLimit', { min: minTerrainSpanKm, max: maxTerrainSpanKm })}</p>}
+        {!plan && <p>{t('windowLimit', { min: minTerrainSpanKm, max: maxTerrainSpanKm })}</p>}
+        {plan && !busy && <BrowserBudget plan={plan} spanKm={input.spanKm} sourceRowSpacingKm={input.sourceRowSpacingKm} />}
         {gpu !== undefined && gpu?.kind !== 'hardware' && <p>{t('requiresHardware')}</p>}
         <div className="flex flex-wrap gap-2">
-          <button type="button" className={button} disabled={busy || !supportedSpan || !input.raster || gpu?.kind !== 'hardware'} onClick={() => void run()}>{t('run')}</button>
+          <button type="button" className={button} disabled={busy || !plan || !input.raster || gpu?.kind !== 'hardware'} onClick={() => void run()}>{t('run')}</button>
           {busy && <button type="button" className={button} disabled={state.kind === 'cancelling'} onClick={cancel}>{t('cancel')}</button>}
         </div>
         {(busy || state.kind === 'error') && <BrowserProgress state={state} />}

@@ -116,7 +116,8 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
             return <Link key={name} className="block break-all text-neon-cyan hover:underline" to={`/packs?${params}`}
               state={{ regionReturn: globalReturn }}>{t('regionWindow.openPack', { name })}</Link>
           })}
-          <TerrainCompute browser={{ raster: preview?.raster ?? null, spanKm, seaLevel: sea, onResult: (result) => {
+          <TerrainCompute browser={{ raster: preview?.raster ?? null, spanKm, seaLevel: sea,
+            sourceRowSpacingKm: preview && preview.sourceHeight > 1 ? stepKm : null, onResult: (result) => {
             setResult(result)
             setShowRefined(true)
           } }}>{!isStaticMode() && <RegionRefinementPanel source={{ kind: 'world', world, planet, branch, lat, lon, span_km: spanKm }}
