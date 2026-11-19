@@ -204,5 +204,14 @@
   },
   "confirm": {
     "deleteWorld": "Delete world \"{{name}}\"?"
+  },
+  "start": {
+    "import": "Import my map",
+    "importDesc": "You already have a heightmap: choose it, state its units, check the coast, then open the world.",
+    "template": "Create from a template",
+    "templateDesc": "Start from an Earth-like or minimal template, then edit the star, planet and land layout.",
+    "explore": "Explore example worlds",
+    "exploreDesc": "Browse the maps, climate and seasons of existing worlds.",
+    "continueLabel": "Continue with your last world"
   }
 }

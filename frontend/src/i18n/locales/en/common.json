@@ -12,7 +12,8 @@
     "viewer3d": "3D View",
     "packs": "Region packs",
     "playground": "Climate lab",
-    "sky": "Sky view"
+    "sky": "Sky view",
+    "import": "Import map"
   },
   "action": {
     "back": "← Back",

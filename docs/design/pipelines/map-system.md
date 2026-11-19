@@ -219,11 +219,24 @@ maps/
 
 海陆在源图像素上判定，再分别重采样：海陆掩膜按面积重采样，覆盖过半为陆地的输出格判为陆地；高程按类加权平均，陆格只平均
 陆地样本，海格只平均海洋样本。两者都用正滤波（缩小用盒式，放大用双线性），所以海岸不会被另一侧的值拖偏，也不会因振铃
-翻转。导入结果同时给出陆地占比、一级灰度对应的高度（海岸处与最大值）、海底是否为假设值，以及长宽比不是 2:1 或只有
-8 位等警告。`import-elevation` 端点按这份契约导入，不给映射参数时取 `range` 模式和地图现有的刻度；它把结果写成栅格并更新
+翻转。导入结果同时给出陆地占比、一级灰度对应的高度（海岸处与最大值）和海底是否为假设值，并提醒作者注意 8 位图的精度。
+`import-elevation` 端点按这份契约导入，不给映射参数时取 `range` 模式和地图现有的刻度；它把结果写成栅格并更新
 `map.yaml` 刻度与 Voronoi 网络，映射与上述报告记进 `map.yaml` 的 `elevation_import`（见 `save_elevation_metres`）。
 映射参数与浮点图像必须为有限值，缺失像素须先由作者补齐再导入。灰度步长由线性或幂曲线的端点直接计算，
 内存开销不随位深增长，因此 32 位整数 TIFF 也能返回精度报告。
+
+全球高度图必须使用等距圆柱投影，宽度恰好是高度的两倍；源图最多为 4096 × 2048 像素，文件不得超过 64 MiB。
+参考 [web-exoplasim 的导入规格](https://github.com/ryoung48/web-exoplasim/blob/main/docs/climate/custom-terrain.md)，
+两个端点均在解码像素前检查文件大小与图像尺寸。此限制针对全球上传，不影响地理锚定栅格、命令行区域数据包或已有高程输入的重建。
+
+导入前的只读预览由 `POST /api/elevation-preview`（`preview_elevation_import`）提供。它与 `import-elevation` 走同一套解码、
+映射与按类重采样，不写任何文件。请求给出 `world` 与 `planet_id` 时，接口先校验导入目标，再采用该地图的分辨率；不给映射参数时
+沿用地图现有刻度。世界尚未创建时不给目标，输出保持原图尺寸，映射取契约默认值。返回内容是与导入相同的报告，另加
+`mapping_source`（映射来自请求、地图还是契约默认）和一张宽度不超过 720 像素的显示网格：米制高程按小端 float32、海陆
+按 uint8 存放，两者都以 base64 编码，由 `preview_grid` 用导入时的按类重采样缩小。显示网格只供界面绘制海岸与读数，统计量
+按完整输出栅格计算。两个接口都返回 `land_area_fraction`，即按每行球面面积加权的陆地占比（`land_area_fraction`
+函数）；`land_fraction` 仍是等距圆柱像素的比例，两者在高纬陆地多时差别明显。PNG 超过 Pillow 的像素上限
+（缺省约 1.79 亿像素）时，解码在读像素前就拒绝，接口返回说明像素数与上限的输入错误。
 
 ### 导入输入与构建接线
 
@@ -266,7 +279,8 @@ API 导入把原图按 SHA-256 内容哈希保存在地质层 `input/elevation_s
 
 地图后端路由全部在 `api_routes/maps.py`，前缀 `/api/worlds/{w}/maps/{p}`，按功能分组：
 元数据与栅格图层（elevation PNG / climate-monthly）、CVT 网格（`cvt-mesh`）、矢量数据
-（voronoi / plates）、写操作（elevation / import-elevation / generate / DELETE）。
+（voronoi / plates）、写操作（elevation / import-elevation / generate / DELETE）。导入预览不属于某个已有世界，
+路由为 `/api/elevation-preview`，同样只在 API 模式提供。
 
 **端点的权威参考**：`dreamulator serve` 后访问 `http://localhost:8000/docs`——FastAPI
 从路由代码自动生成的 OpenAPI 交互文档，与实现 by-construction 同步（手写端点表会漂移，

@@ -18,7 +18,7 @@
 import { Suspense, useRef, useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, Stars, Text } from '@react-three/drei'
+import { OrbitControls, Stars } from '@react-three/drei'
 import * as THREE from 'three'
 
 import { sunDirection } from './utils/solar'
@@ -179,6 +179,31 @@ function Graticule() {
 
 const AXIS_R = SPHERE_RADIUS * 1.08
 
+function PoleLabel({ label, height, color }: { label: 'N' | 'S'; height: number; color: string }) {
+  const canvas = useMemo(() => {
+    const image = document.createElement('canvas')
+    image.width = image.height = 64
+    const context = image.getContext('2d')
+    if (!context) return null
+    context.font = '48px sans-serif'
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    context.fillStyle = '#fff'
+    context.fillText(label, 32, 32)
+    return image
+  }, [label])
+
+  if (!canvas) return null
+  return (
+    <mesh position={[0, height, 0]}>
+      <planeGeometry args={[0.16, 0.16]} />
+      <meshBasicMaterial color={color} side={THREE.DoubleSide} transparent depthWrite={false}>
+        <canvasTexture attach="map" args={[canvas]} />
+      </meshBasicMaterial>
+    </mesh>
+  )
+}
+
 function PolarAxis() {
   const axisPoints = useMemo(() => new Float32Array([0, -AXIS_R, 0, 0, AXIS_R, 0]), [])
   return (
@@ -193,12 +218,12 @@ function PolarAxis() {
         <coneGeometry args={[0.025, 0.08, 8, 4]} />
         <meshBasicMaterial color="#e53935" />
       </mesh>
-      <Text position={[0, AXIS_R + 0.1, 0]} fontSize={0.12} color="#e53935" anchorX="center" anchorY="middle" font={undefined}>N</Text>
+      <PoleLabel label="N" height={AXIS_R + 0.1} color="#e53935" />
       <mesh position={[0, -AXIS_R, 0]} rotation={[Math.PI, 0, 0]}>
         <coneGeometry args={[0.025, 0.08, 8, 4]} />
         <meshBasicMaterial color="#42a5f5" />
       </mesh>
-      <Text position={[0, -AXIS_R - 0.1, 0]} fontSize={0.12} color="#42a5f5" anchorX="center" anchorY="middle" font={undefined}>S</Text>
+      <PoleLabel label="S" height={-AXIS_R - 0.1} color="#42a5f5" />
     </group>
   )
 }

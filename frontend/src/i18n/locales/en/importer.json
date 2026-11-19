@@ -1,0 +1,166 @@
+{
+  "title": "Import my map",
+  "intro": "Choose a global equirectangular heightmap, say how its grey values or numbers become metres, check the coast and height preview, and confirm. Nothing is created or changed before you confirm.",
+  "modalTitle": "Import a heightmap",
+  "modalTarget": "Target: world {{world}}, planet {{planet}}, branch {{branch}}",
+  "step": {
+    "target": "1. Where the map goes",
+    "file": "2. Choose a heightmap",
+    "mapping": "3. Say what the values mean",
+    "preview": "4. Check the preview",
+    "confirm": "5. Confirm the import"
+  },
+  "target": {
+    "new": "Create a new world",
+    "existing": "Import into an existing world",
+    "newHelp": "On confirm a world is created from the chosen template and the heightmap is written into its geological input. If the import fails, the new world is removed again.",
+    "existingHelp": "The heightmap is written into the geological input of the chosen world or branch and replaces its elevation. Reference worlds such as Earth have a read-only root; pick a branch that forks at the geological layer or earlier.",
+    "world": "World",
+    "planet": "Planet",
+    "branch": "Branch",
+    "rootBranch": "main line (root)",
+    "pickWorldOption": "Choose…",
+    "pickWorld": "Choose the world to import into first.",
+    "noPlanet": "This world has no planet to import into.",
+    "name": "World name",
+    "nameHelp": "Letters, digits, hyphens and underscores only, up to 64 characters; it is also the data folder name.",
+    "nameRequired": "Enter a name for the new world.",
+    "nameInvalid": "Use letters, digits, hyphens and underscores, starting with a letter or digit.",
+    "nameTaken": "A world named {{name}} already exists; choose another name.",
+    "template": "Template"
+  },
+  "template": {
+    "earthlike": "Earth-like planet (earthlike)",
+    "earthlikeHelp": "A rocky planet in the habitable zone of a G-type star, with an Earth-like atmosphere and rotation, ready for a climate run.",
+    "minimal": "Minimal world (minimal)",
+    "minimalHelp": "A bare starting point; you fill in the star and planet parameters yourself."
+  },
+  "help": {
+    "file": "Choose a 2:1 heightmap covering the whole planet, up to 4096 × 2048 pixels and 64 MiB. Use an equirectangular projection: the left and right edges are longitude −180° and +180°, and the top and bottom edges are the poles. Supported formats include 8-bit or 16-bit PNG, 16-bit TIFF, and 32-bit float TIFF.",
+    "regional": "Regional map import is planned. It will require a latitude and longitude window and support local terrain refinement, not global climate calculations.",
+    "mapping": "The same grey image can mean different things. Choose the description that fits this image, then fill in its numbers; the preview is recomputed from what you enter.",
+    "min_m": "Height represented by the darkest value (0).",
+    "max_m_range": "Height represented by the brightest value (full scale).",
+    "sea_level_m": "Places above this height are land, the rest is sea. Usually 0 m.",
+    "sea_level": "Grey value as a fraction of full scale, between 0 and 1. Pixels at or below it are sea; 0.05 makes the darkest 5% sea.",
+    "max_m_threshold": "Height of the brightest land. Land starts at 0 m on the coast.",
+    "seafloor_m": "The image has no ocean depth, so every sea pixel gets this depth. It is an assumption and is recorded with the import.",
+    "curve": "Linear maps grey to height evenly; a power curve makes lowlands flatter and mountains steeper.",
+    "gamma": "Above 1 flattens lowlands; below 1 raises them faster.",
+    "notes": "Optional: where the image comes from or what it is for; saved with the import record.",
+    "confirm": "On confirm the original image and this declaration are saved in the world's geological input and the map elevation updates at once. Climate and other downstream results use the new terrain after the next build."
+  },
+  "mode": {
+    "range": {
+      "label": "Grey includes the sea floor (range map)",
+      "desc": "Black is the deepest sea floor, white the highest mountain, with heights in proportion between."
+    },
+    "threshold": {
+      "label": "Only the land is drawn (threshold map)",
+      "desc": "Everything below a grey value is sea and has no depth in the image; land rises from 0 m on the coast to the height of white."
+    },
+    "metres": {
+      "label": "Values are already metres (float TIFF)",
+      "desc": "Pixel values are heights in metres; nothing is converted."
+    }
+  },
+  "field": {
+    "min_m": "Height of black",
+    "max_m_range": "Height of white",
+    "max_m_threshold": "Height of white",
+    "sea_level_m": "Sea level",
+    "sea_level": "Sea/land grey threshold",
+    "seafloor_m": "Assumed sea floor depth",
+    "curve": "Height curve",
+    "gamma": "Exponent",
+    "notes": "Notes"
+  },
+  "unit": {
+    "fraction": "(0–1)"
+  },
+  "note": {
+    "greyLevel": "about grey {{grey}} / {{levels}}"
+  },
+  "curve": {
+    "linear": "linear",
+    "gamma": "power"
+  },
+  "defaults": {
+    "contract": "Starting values are the import rule's defaults.",
+    "map": "Starting values keep this map's current height scale.",
+    "request": "The preview uses the values you entered."
+  },
+  "view": {
+    "mapped": "Converted heights",
+    "source": "Original",
+    "coast": "Show coastline",
+    "sourceUnavailable": "The browser cannot show this format (for example TIFF) directly. Use “Converted heights”.",
+    "sourceNote": "The original is shown by the browser; 16-bit images appear as 8-bit grey here and cannot be read for values."
+  },
+  "preview": {
+    "hoverHint": "Move the pointer over the preview to read latitude, longitude and height.",
+    "readout": "{{lat}}, {{lon}}: {{metres}} m, {{kind}}",
+    "land": "land",
+    "sea": "sea",
+    "gridNote": "The preview is shown at {{w}} × {{h}}; the statistics below use the imported {{ow}} × {{oh}} raster."
+  },
+  "legend": {
+    "sea": "sea {{min}} to {{max}}",
+    "land": "land {{min}} to {{max}}",
+    "coast": "coastline"
+  },
+  "report": {
+    "format": "File format",
+    "sourceSize": "Original size",
+    "outputSize": "Size after import",
+    "sizeFromMap": "uses the target map's resolution",
+    "sizeFromSource": "keeps the original size",
+    "resampled": ", resampled",
+    "range": "Height range",
+    "landArea": "Land share of the planet's surface",
+    "landPixels": "Land share of image pixels",
+    "levelStep": "Height of one grey level",
+    "levelStepValue": "{{coast}} m near the coast, up to {{max}} m",
+    "landNote": "On an equirectangular map a pixel covers less ground nearer the poles, so the pixel share is not the planet's surface share. The surface share weights each row by its real area.",
+    "seafloorAssumed": "The image has no ocean depth; all sea is set to {{depth}}. This is an assumption, not data."
+  },
+  "warning": {
+    "eightBit": "This is an 8-bit image with only {{levels}} grey levels; one level is about {{coast}} m near the coast and up to {{max}} m. A 16-bit or float image is better.",
+    "eightBitPlain": "This is an 8-bit image with only 256 grey levels. A 16-bit or float image is better."
+  },
+  "status": {
+    "readingDefaults": "Reading the image and defaults…",
+    "previewing": "Updating the preview…",
+    "waitPreview": "You can confirm once the preview matches what you entered.",
+    "importing": "Importing…"
+  },
+  "action": {
+    "chooseFile": "Choose file",
+    "chooseOther": "Choose another file",
+    "showAdvanced": "Advanced: height curve",
+    "hideAdvanced": "Hide advanced settings",
+    "confirm": "Confirm import",
+    "cancel": "Cancel",
+    "backHome": "← Back to home"
+  },
+  "error": {
+    "notNumber": "Enter a number.",
+    "maxAboveMin": "The height of white must be above the height of black.",
+    "maxPositive": "The height of white must be above 0 m.",
+    "seaLevelFraction": "Enter a fraction from 0 up to (not including) 1.",
+    "seafloorNegative": "The sea floor must be below 0 m.",
+    "gammaPositive": "The exponent must be above 0.",
+    "previewFailed": "The preview could not be made.",
+    "previewKeepsValues": "Everything you entered is kept. The preview retries when you change a value or choose another file.",
+    "importFailed": "The import did not finish; the world was not changed.",
+    "templateNoPlanet": "Template {{template}} has no planet to import into.",
+    "aspect": "This image is {{w}} × {{h}} pixels. Choose a whole-planet map exactly twice as wide as it is tall.",
+    "dimensions": "This image exceeds {{w}} × {{h}} pixels. Downscale the global map while keeping its 2:1 aspect ratio.",
+    "fileSize": "This file exceeds {{mib}} MiB. Downscale the image or export it with compression.",
+    "unreadable": "The heightmap could not be read. Export a valid PNG or TIFF file and try again."
+  },
+  "static": {
+    "unavailable": "The static site only browses published worlds; importing a map needs a local dreamulator serve.",
+    "browse": "Browse published worlds"
+  }
+}

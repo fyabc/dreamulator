@@ -16,11 +16,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
 import type { ImportElevationResult } from '../../components/map/ImportElevationButton'
+import type { ImportedState } from '../../api/elevationImport'
+import { saveLastWorld } from '../../utils/lastWorld'
 import { LAYER_HELP } from '../../components/map/helpContent'
 import { initialLayerState, activeMainLayerId } from '../../components/map/layerStateInit'
 import type { LayerState } from '../../components/map/MapLayerPanel'
@@ -91,6 +93,8 @@ export interface PlanetViewState {
   metaError: boolean
   elevError: boolean
   cvtMeshError: boolean
+  /** The map has a stored heightmap but no mesh yet (imported, not built). */
+  awaitingBuild: boolean
 
   // --- Raster + mesh data ---
   elevation: Float32Array | null
@@ -586,32 +590,48 @@ export function usePlanetViewState(
   const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const handleImported = useCallback(
     (r: ImportElevationResult) => {
-      if (r.ok) {
-        for (const key of ['elevationBlob', 'voronoi', 'cvtMesh', 'plates', 'mapMeta']) {
-          queryClient.invalidateQueries({
-            queryKey: [key, worldName, selectedPlanet, selectedBranch],
-          })
-        }
-        const res = r.output_resolution
-          ? t('msg.outputResolution', { w: r.output_resolution[0], h: r.output_resolution[1] })
-          : ''
-        const stale = r.stale_layers?.length
-          ? t('msg.staleLayers', { layers: r.stale_layers.join(t('msg.listSeparator')) })
-          : ''
-        setImportMsg({
-          ok: true,
-          text: t('msg.importedHeightmap', {
-            format: r.source_format ?? t('msg.sourceFormatFallback'),
-            resolution: res,
-            stale: stale,
-          }),
+      for (const key of ['elevationBlob', 'voronoi', 'cvtMesh', 'plates', 'mapMeta']) {
+        queryClient.invalidateQueries({
+          queryKey: [key, worldName, selectedPlanet, selectedBranch],
         })
-      } else {
-        setImportMsg({ ok: false, text: t('msg.importFailed', { detail: r.detail ?? t('msg.importFailedFallback') }) })
       }
+      const res = t('msg.outputResolution', { w: r.output_resolution[0], h: r.output_resolution[1] })
+      const stale = r.stale_layers?.length
+        ? t('msg.staleLayers', { layers: r.stale_layers.join(t('msg.listSeparator')) })
+        : ''
+      setImportMsg({
+        ok: true,
+        text: t('msg.importedHeightmap', {
+          format: r.source_format,
+          resolution: res,
+          land: `${(r.land_area_fraction * 100).toFixed(1)}%`,
+          stale: stale,
+        }),
+      })
     },
     [queryClient, worldName, selectedPlanet, selectedBranch],
   )
+
+  // A finished import journey hands its result over in router state; show it
+  // once, then drop the state so a refresh does not repeat the banner.
+  const location = useLocation()
+  useEffect(() => {
+    const imported = (location.state as ImportedState | null)?.imported
+    if (!imported || imported.world !== worldName) return
+    handleImported(imported.result)
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [location.state, location.pathname, location.search, worldName, handleImported, navigate])
+
+  // Remember where the author was, so the home page can offer to return.
+  useEffect(() => {
+    if (!worldName || !selectedPlanet) return
+    saveLastWorld({
+      world: worldName,
+      planetId: selectedPlanet,
+      branch: selectedBranch,
+      path: `${location.pathname}${location.search}`,
+    })
+  }, [worldName, selectedPlanet, selectedBranch, location.pathname, location.search])
 
   return {
     selectedBranch, setSelectedBranch,
@@ -623,6 +643,7 @@ export function usePlanetViewState(
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination,
     selectedPlanet, mapPlanets, meta, metaError, elevError, cvtMeshError,
+    awaitingBuild: !!elevation && !!meta && cvtMeshError,
     bodyByName, currentPlanetName, planetRadiusM, axialTiltDeg,
     worldPlanetsError, platesError,
     elevation, elevationDims, cvtMesh: cvtMesh ?? null, voronoiCells, cellIdMap,

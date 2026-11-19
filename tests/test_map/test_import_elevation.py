@@ -15,6 +15,8 @@ from dreamulator.map.models import ElevationImportProvenance
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from fastapi import FastAPI
+
 
 def _png_bytes() -> bytes:
     grid = np.linspace(0.0, 1.0, 64 * 32).reshape(32, 64)
@@ -279,3 +281,201 @@ def test_import_endpoint_applies_the_mapping(tmp_path: Path) -> None:
         assert bad.status_code == 400
     finally:
         maps_module._manager = old
+
+
+# ---------------------------------------------------------------------------
+# Read-only preview (frontend entry stage B)
+# ---------------------------------------------------------------------------
+
+
+def test_land_area_fraction_weights_rows_by_sphere_area() -> None:
+    from dreamulator.map.importer import land_area_fraction
+
+    land = np.zeros((4, 8), dtype=bool)
+    land[0] = True  # the polar band 90..45 N: (1 - sin 45°) / 2 of the sphere
+    assert land.mean() == pytest.approx(0.25)
+    assert land_area_fraction(land) == pytest.approx((1 - np.sqrt(0.5)) / 2)
+    assert land_area_fraction(np.ones((5, 10), dtype=bool)) == pytest.approx(1.0)
+
+
+def test_preview_grid_keeps_small_maps_and_resamples_large_ones_by_class() -> None:
+    from dreamulator.map.importer import preview_grid
+
+    metres = np.full((40, 80), -3000.0)
+    land = np.zeros((40, 80), dtype=bool)
+    metres[:, :40], land[:, :40] = 2000.0, True
+    same, same_land = preview_grid(metres, land, max_width=80)
+    assert same is metres and same_land is land
+    small, small_land = preview_grid(metres, land, max_width=20)
+    assert small.shape == small_land.shape == (10, 20)
+    assert small_land[:, :10].all() and not small_land[:, 10:].any()
+    # per-class means: the coast column is not dragged toward the other side
+    assert small[small_land].min() == pytest.approx(2000.0)
+    assert small[~small_land].max() == pytest.approx(-3000.0)
+
+
+def _preview_app() -> FastAPI:
+    from fastapi import FastAPI
+
+    from dreamulator.api_routes import maps as maps_module
+
+    app = FastAPI()
+    app.include_router(maps_module.router)
+    app.include_router(maps_module.preview_router)
+    return app
+
+
+def _tree(root: Path) -> dict[str, bytes]:
+    return {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+
+def test_preview_matches_the_import_and_writes_nothing(tmp_path: Path) -> None:
+    import base64
+
+    from fastapi.testclient import TestClient
+
+    from dreamulator.api_routes import maps as maps_module
+    from dreamulator.world_manager import WorldManager
+    from tests.test_api.test_world_documents import _write_yaml
+
+    worlds = tmp_path / "worlds"
+    _write_yaml(
+        worlds / "w" / "maps" / "p" / "map.yaml", {"planet_id": "p", "width": 32, "height": 16}
+    )
+    old = maps_module._manager
+    maps_module._manager = WorldManager(worlds)
+    try:
+        client = TestClient(_preview_app())
+        grey = np.zeros((32, 64), dtype=np.uint8)
+        grey[:, :32] = 255
+        form = {"mode": "threshold", "sea_level": "0.05", "max_m": "4000", "seafloor_m": "-2500"}
+        before = _tree(worlds)
+        preview = client.post(
+            "/api/elevation-preview?world=w&planet_id=p",
+            files={"file": ("map.png", _png8(grey), "image/png")},
+            data=form,
+        )
+        assert preview.status_code == 200, preview.text
+        assert _tree(worlds) == before  # a preview never writes
+        body = preview.json()
+        assert body["resolution_from"] == "map" and body["output_resolution"] == [32, 16]
+        assert body["mapping_source"] == "request"
+        grid = body["preview"]
+        metres = np.frombuffer(base64.b64decode(grid["metres_f32"]), "<f4")
+        land = np.frombuffer(base64.b64decode(grid["land_u8"]), np.uint8)
+        assert metres.size == land.size == grid["width"] * grid["height"] == 32 * 16
+        assert set(np.unique(metres)) == {-2500.0, 4000.0}
+        assert body["land_area_fraction"] == pytest.approx(0.5)
+
+        imported = client.post(
+            "/api/worlds/w/maps/p/import-elevation",
+            files={"file": ("map.png", _png8(grey), "image/png")},
+            data=form,
+        ).json()
+        shared = ("mapping", "range_m", "land_fraction", "land_area_fraction")
+        shared += ("seafloor_assumed", "level_step_m", "warnings", "output_resolution")
+        for key in shared:
+            assert body[key] == imported[key], key
+    finally:
+        maps_module._manager = old
+
+
+def test_preview_without_a_world_uses_source_size_and_contract_defaults(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from dreamulator.api_routes import maps as maps_module
+    from dreamulator.map.models import ElevationMapping
+    from dreamulator.world_manager import WorldManager
+
+    worlds = tmp_path / "worlds"
+    worlds.mkdir()
+    old = maps_module._manager
+    maps_module._manager = WorldManager(worlds)
+    try:
+        client = TestClient(_preview_app())
+        r = client.post(
+            "/api/elevation-preview", files={"file": ("map.png", _png_bytes(), "image/png")}
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["resolution_from"] == "source" and body["output_resolution"] == [64, 32]
+        assert body["mapping_source"] == "contract"
+        assert body["mapping"] == ElevationMapping().model_dump()
+        assert list(worlds.iterdir()) == []
+        bad = client.post(
+            "/api/elevation-preview",
+            files={"file": ("map.png", b"not an image", "image/png")},
+        )
+        assert bad.status_code == 400
+        missing = client.post(
+            "/api/elevation-preview?world=nope&planet_id=p",
+            files={"file": ("map.png", _png_bytes(), "image/png")},
+        )
+        assert missing.status_code == 404
+    finally:
+        maps_module._manager = old
+
+
+@pytest.mark.parametrize(
+    ("kind", "status_code", "detail"),
+    [
+        ("regional", 400, "Global heightmap must be 2:1 (received 64x48)"),
+        ("oversized", 400, "Global heightmap dimensions exceed 4096x2048"),
+        ("oversized_tiff", 400, "Global heightmap dimensions exceed 4096x2048"),
+        ("too_many_bytes", 413, "Global heightmap file exceeds 1 MiB"),
+    ],
+)
+def test_global_upload_limits_apply_before_decoding_or_writing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str, status_code: int, detail: str
+) -> None:
+    from io import BytesIO
+
+    from fastapi.testclient import TestClient
+    from PIL import Image
+
+    from dreamulator.api_routes import maps as maps_module
+    from dreamulator.world_manager import WorldManager
+    from tests.test_api.test_world_documents import _write_yaml
+
+    worlds = tmp_path / "worlds"
+    _write_yaml(
+        worlds / "w" / "maps" / "p" / "map.yaml", {"planet_id": "p", "width": 32, "height": 16}
+    )
+    monkeypatch.setattr(maps_module, "_manager", WorldManager(worlds))
+    filename = "map.png"
+    if kind == "regional":
+        payload = _png8(np.zeros((48, 64), dtype=np.uint8))
+    elif kind == "oversized":
+        payload = _png8(np.zeros((2049, 4098), dtype=np.uint8))
+    elif kind == "oversized_tiff":
+        filename = "map.tiff"
+        output = BytesIO()
+        Image.new("F", (64, 2049)).save(output, format="TIFF")
+        payload = output.getvalue()
+    else:
+        monkeypatch.setattr(maps_module, "GLOBAL_HEIGHTMAP_MAX_MIB", 1)
+        payload = _png_bytes().ljust(1024**2 + 1, b"\0")
+
+    def unexpected_decode(*args: object) -> None:
+        pytest.fail("rejected uploads must not reach the metric decoder")
+
+    monkeypatch.setattr(maps_module, "_run_metric_import", unexpected_decode)
+    before = _tree(worlds)
+    with TestClient(_preview_app()) as client:
+        for path in ("/api/elevation-preview", "/api/worlds/w/maps/p/import-elevation"):
+            response = client.post(path, files={"file": (filename, payload)})
+            assert response.status_code == status_code, response.text
+            assert response.json()["detail"] == detail
+    assert _tree(worlds) == before
+
+
+def test_oversized_png_is_a_clear_input_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from PIL import Image
+
+    from dreamulator.map.importer import import_heightmap_metres
+    from dreamulator.map.models import ElevationMapping
+
+    # Pillow raises above twice MAX_IMAGE_PIXELS; shrink the limit instead of building a huge PNG.
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 100)
+    with pytest.raises(ValueError, match=r"PNG has 2048 pixels, above the import limit of 200 "):
+        import_heightmap_metres(_png_bytes(), ElevationMapping())

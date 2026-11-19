@@ -2,6 +2,13 @@ import { isStaticMode } from './mode'
 import type { MapResultMetadata } from './resultContract'
 import { staticApi } from './staticClient'
 import type { BuildJob, BuildOptions, BuildSummary } from './buildJobs'
+import { mappingFormFields } from './elevationImport'
+import type {
+  ElevationImportResponse,
+  ElevationImportTarget,
+  ElevationMapping,
+  ElevationPreviewResponse,
+} from './elevationImport'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 import i18n from '../i18n'
@@ -309,6 +316,25 @@ async function fetchBlob(url: string): Promise<Blob> {
   return response.blob()
 }
 
+/** POST a file plus form fields; throws with the server's `detail` on failure. */
+async function fetchForm<T>(
+  url: string,
+  file: File,
+  fields: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<T> {
+  const formData = new FormData()
+  formData.append('file', file)
+  for (const [key, value] of Object.entries(fields)) formData.append(key, value)
+  const response = await fetch(`${API_BASE}${url}`, { method: 'POST', body: formData, signal })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }))
+    const detail = typeof error.detail === 'string' ? error.detail : JSON.stringify(error.detail)
+    throw new Error(detail || `HTTP ${response.status}`)
+  }
+  return (await response.json()) as T
+}
+
 /** Write operations that are only available in API mode. */
 const liveOnlyApi = {
   createWorld: (name: string, template: string = 'minimal', seed?: number) =>
@@ -350,14 +376,51 @@ const liveOnlyApi = {
     }).then((r) => r.json())
   },
 
-  importElevation: (world: string, planetId: string, file: File, branch?: string | null) => {
-    const formData = new FormData()
-    formData.append('file', file)
+  /**
+   * Import a heightmap under an explicit mapping.  A null mapping lets the
+   * backend choose (the map's own scale); the response `mapping` is what was used.
+   */
+  importElevation: (
+    world: string,
+    planetId: string,
+    file: File,
+    branch?: string | null,
+    mapping: ElevationMapping | null = null,
+    notes?: string,
+  ) => {
+    const fields = mappingFormFields(mapping)
+    if (notes) fields.notes = notes
     const params = branch ? `?branch=${encodeURIComponent(branch)}` : ''
-    return fetch(`/api/worlds/${world}/maps/${planetId}/import-elevation${params}`, {
-      method: 'POST',
-      body: formData,
-    }).then((r) => r.json())
+    return fetchForm<ElevationImportResponse>(
+      `/worlds/${encodeURIComponent(world)}/maps/${encodeURIComponent(planetId)}/import-elevation${params}`,
+      file,
+      fields,
+    )
+  },
+
+  /**
+   * Preview an import without writing anything.  Without a target (a world
+   * that does not exist yet) the output keeps the source size.
+   */
+  previewElevationImport: (
+    file: File,
+    mapping: ElevationMapping | null,
+    target: ElevationImportTarget | null = null,
+    signal?: AbortSignal,
+  ) => {
+    const qs = new URLSearchParams()
+    if (target) {
+      qs.set('world', target.world)
+      qs.set('planet_id', target.planetId)
+      if (target.branch) qs.set('branch', target.branch)
+    }
+    const query = qs.toString() ? `?${qs.toString()}` : ''
+    return fetchForm<ElevationPreviewResponse>(
+      `/elevation-preview${query}`,
+      file,
+      mappingFormFields(mapping),
+      signal,
+    )
   },
 
   uploadGeographyRaster: (world: string, file: File, branch?: string | null) => {
@@ -770,6 +833,11 @@ export const api = {
     isStaticMode()
       ? Promise.reject(new Error('Not available in static mode'))
       : liveOnlyApi.importElevation(...args),
+
+  previewElevationImport: (...args: Parameters<typeof liveOnlyApi.previewElevationImport>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.previewElevationImport(...args),
 
   uploadGeographyRaster: (...args: Parameters<typeof liveOnlyApi.uploadGeographyRaster>) =>
     isStaticMode()

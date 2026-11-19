@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 from dreamulator import __version__
 from dreamulator.api_routes.civmap import router as civmap_router
 from dreamulator.api_routes.guard import router as guard_router
+from dreamulator.api_routes.maps import preview_router as elevation_preview_router
 from dreamulator.api_routes.maps import router as maps_router
 from dreamulator.api_routes.narrate import router as narrate_router
 from dreamulator.api_routes.packs import router as packs_router
@@ -35,6 +36,7 @@ app.add_middleware(
 app.include_router(worlds_router)
 app.include_router(narrate_router)
 app.include_router(maps_router)
+app.include_router(elevation_preview_router)
 app.include_router(civmap_router)
 app.include_router(guard_router)
 app.include_router(packs_router)

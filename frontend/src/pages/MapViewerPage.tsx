@@ -46,7 +46,7 @@ export default function MapViewerPage() {
     dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
     selectedPlanet, mapPlanets, meta, bodyByName, currentPlanetName, planetRadiusM,
     worldPlanetsError, platesError,
-    elevation, cvtMesh, voronoiCells,
+    elevation, cvtMesh, voronoiCells, awaitingBuild,
     monthlyThematic, monthlyData, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, hoveredCell, handleCellHover, selectedCells,
     selectCell, clearSelection,
@@ -179,6 +179,11 @@ export default function MapViewerPage() {
       </div>
       )}
 
+      {awaitingBuild && !cleanMode && (
+        <div className="bg-sky-900/20 border-b border-sky-700/30 px-4 py-2 text-sm text-sky-200 text-center" data-testid="awaiting-build">
+          {t('label.awaitingBuild')}
+        </div>
+      )}
       {/* Error banner */}
       {worldPlanetsError && (
         <div className="bg-red-900/20 border-b border-red-700/30 px-4 py-2 text-sm text-red-300 text-center">

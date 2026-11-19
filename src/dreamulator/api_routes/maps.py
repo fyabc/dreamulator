@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
+from PIL import Image
 from pydantic import BaseModel, Field
 
 from dreamulator.world_manager import WorldManager
@@ -15,10 +17,21 @@ from ..map.manager import MapManager
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from dreamulator.map.models import RasterLayerMeta, VectorLayerMeta
+    from dreamulator.map.importer import MetricImport
+    from dreamulator.map.models import (
+        ElevationMapping,
+        MapMetadata,
+        RasterLayerMeta,
+        VectorLayerMeta,
+    )
 
 router = APIRouter(prefix="/api/worlds", tags=["maps"])
+#: Routes that do not belong to one world (the import preview runs before a world exists).
+preview_router = APIRouter(prefix="/api", tags=["maps"])
 _manager = WorldManager()
+GLOBAL_HEIGHTMAP_MAX_WIDTH = 4096
+GLOBAL_HEIGHTMAP_MAX_HEIGHT = GLOBAL_HEIGHTMAP_MAX_WIDTH // 2
+GLOBAL_HEIGHTMAP_MAX_MIB = 64
 
 
 # ---------------------------------------------------------------------------
@@ -442,48 +455,19 @@ async def import_elevation(
     is an assumption and any warnings about the image. The original image and contract are
     retained in geological input; the next build samples them onto a CVT mesh for climate.
     """
-    from ..map.elevation_input import save_elevation_source, validate_elevation_input_target
-    from ..map.importer import import_heightmap_metres
-    from ..map.models import ElevationImportProvenance, ElevationMapping
+    from ..map.elevation_input import save_elevation_source
+    from ..map.importer import land_area_fraction
+    from ..map.models import ElevationImportProvenance
 
     mgr = _get_map_manager(world_name, branch)
-    try:
-        validate_elevation_input_target(mgr.world_dir, branch)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    meta = mgr.get_map_metadata(planet_id)
-    fields: dict[str, Any] = {
-        k: v
-        for k, v in {
-            "mode": mode, "min_m": min_m, "max_m": max_m, "sea_level": sea_level,
-            "sea_level_m": sea_level_m, "curve": curve, "gamma": gamma, "seafloor_m": seafloor_m,
-        }.items()
-        if v is not None
-    }  # fmt: skip
-    if not fields and meta is not None:
-        fields = {
-            "mode": "range",
-            "min_m": meta.elevation_min_m,
-            "max_m": meta.elevation_max_m,
-            "sea_level_m": meta.sea_level_m,
-        }
-    try:
-        mapping = ElevationMapping.model_validate(fields)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-    data = await file.read()
-    filename = file.filename or ""
-    try:
-        result = import_heightmap_metres(
-            data,
-            mapping,
-            filename=filename,
-            target_width=meta.width if meta else None,
-            target_height=meta.height if meta else None,
+    meta, mapping, _ = _import_target_and_mapping(
+        mgr, branch, planet_id, _mapping_fields(
+            mode, min_m, max_m, sea_level, sea_level_m, curve, gamma, seafloor_m
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    )  # fmt: skip
+    data = await _read_global_heightmap(file)
+    filename = file.filename or ""
+    result = _run_metric_import(data, filename, mapping, meta)
 
     provenance = ElevationImportProvenance(
         source_format=result.source_format,
@@ -530,10 +514,191 @@ async def import_elevation(
         "range_m": [float(result.metres.min()), float(result.metres.max())],
         "stored_scale_m": [lo, hi],
         "land_fraction": result.land_fraction,
+        "land_area_fraction": land_area_fraction(result.land),
         "seafloor_assumed": result.seafloor_assumed,
         "level_step_m": result.level_step_m,
         "warnings": result.warnings,
         "stale_layers": stale_layers,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Elevation import: shared mapping resolution and the read-only preview
+# ---------------------------------------------------------------------------
+
+
+def _mapping_fields(
+    mode: str | None,
+    min_m: float | None,
+    max_m: float | None,
+    sea_level: float | None,
+    sea_level_m: float | None,
+    curve: str | None,
+    gamma: float | None,
+    seafloor_m: float | None,
+) -> dict[str, Any]:
+    """The mapping fields a request actually sent."""
+    return {
+        k: v
+        for k, v in {
+            "mode": mode, "min_m": min_m, "max_m": max_m, "sea_level": sea_level,
+            "sea_level_m": sea_level_m, "curve": curve, "gamma": gamma, "seafloor_m": seafloor_m,
+        }.items()
+        if v is not None
+    }  # fmt: skip
+
+
+def _import_target_and_mapping(
+    mgr: MapManager | None, branch: str | None, planet_id: str | None, fields: dict[str, Any]
+) -> tuple[MapMetadata | None, ElevationMapping, str]:
+    """Validate the import target and resolve the mapping the import will use.
+
+    With no mapping fields, an existing map keeps its own scale (``range`` over its
+    ``elevation_min_m``/``elevation_max_m``); without a map the contract defaults apply.
+    Returns the target's map metadata, the mapping and where the mapping came from
+    (``request``, ``map`` or ``contract``).
+    """
+    from ..map.elevation_input import validate_elevation_input_target
+    from ..map.models import ElevationMapping
+
+    meta = None
+    if mgr is not None:
+        try:
+            validate_elevation_input_target(mgr.world_dir, branch)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        if planet_id is not None:
+            meta = mgr.get_map_metadata(planet_id)
+    source = "request" if fields else "contract"
+    if not fields and meta is not None:
+        fields = {
+            "mode": "range",
+            "min_m": meta.elevation_min_m,
+            "max_m": meta.elevation_max_m,
+            "sea_level_m": meta.sea_level_m,
+        }
+        source = "map"
+    try:
+        mapping = ElevationMapping.model_validate(fields)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return meta, mapping, source
+
+
+async def _read_global_heightmap(file: UploadFile) -> bytes:
+    """Reject unsupported global uploads before decoding pixel arrays."""
+    max_bytes = GLOBAL_HEIGHTMAP_MAX_MIB * 1024**2
+    too_large = f"Global heightmap file exceeds {GLOBAL_HEIGHTMAP_MAX_MIB} MiB"
+    if file.size is not None and file.size > max_bytes:
+        raise HTTPException(status_code=413, detail=too_large)
+    data = await file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise HTTPException(status_code=413, detail=too_large)
+    dimension_limit = (
+        f"Global heightmap dimensions exceed "
+        f"{GLOBAL_HEIGHTMAP_MAX_WIDTH}x{GLOBAL_HEIGHTMAP_MAX_HEIGHT}"
+    )
+    try:
+        with Image.open(BytesIO(data), formats=["PNG", "TIFF"]) as image:
+            width, height = image.size
+    except Image.DecompressionBombError as e:
+        raise HTTPException(status_code=400, detail=dimension_limit) from e
+    except (OSError, ValueError, SyntaxError) as e:
+        raise HTTPException(status_code=400, detail="Cannot read a PNG or TIFF heightmap") from e
+    if width > GLOBAL_HEIGHTMAP_MAX_WIDTH or height > GLOBAL_HEIGHTMAP_MAX_HEIGHT:
+        raise HTTPException(status_code=400, detail=dimension_limit)
+    if width != 2 * height:
+        raise HTTPException(
+            status_code=400, detail=f"Global heightmap must be 2:1 (received {width}x{height})"
+        )
+    return data
+
+
+def _run_metric_import(
+    data: bytes, filename: str, mapping: ElevationMapping, meta: MapMetadata | None
+) -> MetricImport:
+    """Decode and map an uploaded image at the target map's resolution (400 on bad input)."""
+    from ..map.importer import import_heightmap_metres
+
+    try:
+        return import_heightmap_metres(
+            data,
+            mapping,
+            filename=filename,
+            target_width=meta.width if meta else None,
+            target_height=meta.height if meta else None,
+        )
+    except (OSError, ValueError, SyntaxError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+#: Width of the preview grid returned by the elevation preview.
+PREVIEW_MAX_WIDTH = 720
+
+
+@preview_router.post("/elevation-preview")
+async def preview_elevation_import(
+    file: UploadFile = File(...),
+    world: str | None = None,
+    planet_id: str | None = None,
+    branch: str | None = None,
+    mode: str | None = Form(None),
+    min_m: float | None = Form(None),
+    max_m: float | None = Form(None),
+    sea_level: float | None = Form(None),
+    sea_level_m: float | None = Form(None),
+    curve: str | None = Form(None),
+    gamma: float | None = Form(None),
+    seafloor_m: float | None = Form(None),
+) -> dict[str, Any]:
+    """Preview an elevation import without writing anything.
+
+    The image goes through the same decoding, mapping and per-class resampling as
+    ``import-elevation``.  With ``world`` and ``planet_id`` the target is validated and the
+    output takes that map's resolution and, when no mapping fields are sent, its scale; without
+    them (a world that does not exist yet) the output keeps the source size and the contract
+    defaults.  The response carries the import summary plus a display grid of at most
+    ``PREVIEW_MAX_WIDTH`` pixels: heights in metres as little-endian float32 and the land mask
+    as uint8, both base64 encoded, row-major from the north-west corner.
+    """
+    import base64
+
+    import numpy as np
+
+    from ..map.importer import land_area_fraction, preview_grid
+
+    mgr = _get_map_manager(world, branch) if world else None
+    meta, mapping, mapping_source = _import_target_and_mapping(
+        mgr, branch, planet_id if world else None, _mapping_fields(
+            mode, min_m, max_m, sea_level, sea_level_m, curve, gamma, seafloor_m
+        )
+    )  # fmt: skip
+    data = await _read_global_heightmap(file)
+    result = _run_metric_import(data, file.filename or "", mapping, meta)
+    grid, grid_land = preview_grid(result.metres, result.land, PREVIEW_MAX_WIDTH)
+    metres_f32 = np.ascontiguousarray(grid, "<f4").tobytes()
+    land_u8 = np.ascontiguousarray(grid_land, np.uint8).tobytes()
+    return {
+        "ok": True,
+        "source_format": result.source_format,
+        "source_resolution": [result.source_width, result.source_height],
+        "output_resolution": list(result.metres.shape[::-1]),
+        "resolution_from": "map" if meta is not None else "source",
+        "was_resampled": result.was_resampled,
+        "mapping": mapping.model_dump(),
+        "mapping_source": mapping_source,
+        "range_m": [float(result.metres.min()), float(result.metres.max())],
+        "land_fraction": result.land_fraction,
+        "land_area_fraction": land_area_fraction(result.land),
+        "seafloor_assumed": result.seafloor_assumed,
+        "level_step_m": result.level_step_m,
+        "warnings": result.warnings,
+        "preview": {
+            "width": int(grid.shape[1]),
+            "height": int(grid.shape[0]),
+            "metres_f32": base64.b64encode(metres_f32).decode(),
+            "land_u8": base64.b64encode(land_u8).decode(),
+        },
     }
 
 

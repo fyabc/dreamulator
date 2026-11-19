@@ -9,6 +9,7 @@
  * | `map`     | Map viewer + globe (layers, controls, labels) | `map:layer.terrain` |
  * | `worlds`  | World management (CRUD, build, branch) | `worlds:action.newWorld` |
  * | `help`    | Help page (sections, content) — future |
+ * | `importer` | Heightmap import journey (mapping, preview, confirm) | `importer:mode.range.label` |
  *
  * ## Adding a new language
  *
@@ -41,6 +42,7 @@ import civmapZh from './locales/zh-CN/civmap.json'
 import helpZh from './locales/zh-CN/help.json'
 import playgroundZh from './locales/zh-CN/playground.json'
 import skyZh from './locales/zh-CN/sky.json'
+import importerZh from './locales/zh-CN/importer.json'
 import commonEn from './locales/en/common.json'
 import mapEn from './locales/en/map.json'
 import worldsEn from './locales/en/worlds.json'
@@ -48,6 +50,7 @@ import civmapEn from './locales/en/civmap.json'
 import helpEn from './locales/en/help.json'
 import playgroundEn from './locales/en/playground.json'
 import skyEn from './locales/en/sky.json'
+import importerEn from './locales/en/importer.json'
 
 /** Languages with at least partial translation coverage. */
 export const SUPPORTED_LANGUAGES = [
@@ -73,13 +76,13 @@ function getInitialLanguage(): string {
 
 i18n.use(initReactI18next).init({
   resources: {
-    'zh-CN': { common: commonZh, map: mapZh, worlds: worldsZh, civmap: civmapZh, help: helpZh, playground: playgroundZh, sky: skyZh },
-    en: { common: commonEn, map: mapEn, worlds: worldsEn, civmap: civmapEn, help: helpEn, playground: playgroundEn, sky: skyEn },
+    'zh-CN': { common: commonZh, map: mapZh, worlds: worldsZh, civmap: civmapZh, help: helpZh, playground: playgroundZh, sky: skyZh, importer: importerZh },
+    en: { common: commonEn, map: mapEn, worlds: worldsEn, civmap: civmapEn, help: helpEn, playground: playgroundEn, sky: skyEn, importer: importerEn },
   },
   lng: getInitialLanguage(),
   fallbackLng: 'zh-CN',
   defaultNS: 'common',
-  ns: ['common', 'map', 'worlds', 'civmap', 'help', 'playground', 'sky'],
+  ns: ['common', 'map', 'worlds', 'civmap', 'help', 'playground', 'sky', 'importer'],
   interpolation: { escapeValue: false }, // React already escapes
   returnNull: false,
   // Show keys in development so missing translations are obvious.

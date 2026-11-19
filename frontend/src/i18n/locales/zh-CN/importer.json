@@ -1,0 +1,166 @@
+{
+  "title": "导入我的地图",
+  "intro": "选择一张全球等距圆柱高度图，说明图中的灰度或数值怎样换算成米，检查海岸和高程预览，确认后才会保存。确认之前不会创建世界，也不会改动任何文件。",
+  "modalTitle": "导入高度图",
+  "modalTarget": "目标：世界 {{world}}，行星 {{planet}}，分支 {{branch}}",
+  "step": {
+    "target": "1. 地图放到哪里",
+    "file": "2. 选择高度图",
+    "mapping": "3. 说明数值的含义",
+    "preview": "4. 检查预览",
+    "confirm": "5. 确认导入"
+  },
+  "target": {
+    "new": "新建一个世界",
+    "existing": "导入到已有世界",
+    "newHelp": "确认时按所选模板创建世界，再把高度图写入它的地质输入。导入失败时，刚创建的世界会被删除。",
+    "existingHelp": "高度图写入所选世界或分支的地质输入，替换原有高程。真实地球等参照世界的根目录是只读的，需要选择一个从地质层或更早分叉的分支。",
+    "world": "世界",
+    "planet": "行星",
+    "branch": "分支",
+    "rootBranch": "主线（根目录）",
+    "pickWorldOption": "请选择…",
+    "pickWorld": "请先选择要导入的世界。",
+    "noPlanet": "这个世界没有可导入的行星。",
+    "name": "世界名称",
+    "nameHelp": "只用英文字母、数字、短横线和下划线，最长 64 个字符；它也是数据目录名。",
+    "nameRequired": "请填写新世界的名称。",
+    "nameInvalid": "名称只能包含英文字母、数字、短横线和下划线，并以字母或数字开头。",
+    "nameTaken": "已经有名为 {{name}} 的世界，请换一个名称。",
+    "template": "模板"
+  },
+  "template": {
+    "earthlike": "类地行星（earthlike）",
+    "earthlikeHelp": "G 型恒星宜居带中的岩石行星，大气和自转与地球相近，适合直接计算气候。",
+    "minimal": "最简世界（minimal）",
+    "minimalHelp": "只含必要设定的空白起点，恒星和行星参数需要自行补充。"
+  },
+  "help": {
+    "file": "请选择覆盖整个行星的 2:1 高度图，最大为 4096 × 2048 像素，文件不超过 64 MiB。图像使用等距圆柱投影，左右边缘对应经度 −180° 和 +180°，上下边缘对应北极和南极。支持 8 位或 16 位 PNG、16 位 TIFF 和 32 位浮点 TIFF。",
+    "regional": "区域地图导入后续开放。届时需指定经纬度范围，可用于局部地形细化，不能用于计算全球气候。",
+    "mapping": "同一张灰度图可以有不同含义。先选择最符合这张图的说法，再填写对应的数值；预览会按你的填写重新计算。",
+    "min_m": "图中最黑处（数值 0）代表的高度。",
+    "max_m_range": "图中最白处（满量程）代表的高度。",
+    "sea_level_m": "高于这个高度的位置算陆地，其余是海洋。通常是 0 m。",
+    "sea_level": "灰度占满量程的比例，0 到 1 之间。不高于这个比例的像素算海洋，例如 0.05 表示最暗的 5% 是海。",
+    "max_m_threshold": "最白处代表的陆地最高点。海岸处的陆地从 0 m 开始。",
+    "seafloor_m": "这张图没有海洋深度，所有海洋像素都会设为这个深度。它是一个假设，会写进导入记录。",
+    "curve": "线性表示灰度均匀对应高度；幂函数可以让低地更平、山地更陡。",
+    "gamma": "大于 1 时低地更平缓，小于 1 时低地抬升更快。",
+    "notes": "可选：这张图的来源或用途，会随导入记录保存。",
+    "confirm": "确认后，原图和这份数值说明会保存在世界的地质输入中，地图高程立即更新。气候等下游结果要在重新构建后才会使用新地形。"
+  },
+  "mode": {
+    "range": {
+      "label": "灰度包含海底（量程图）",
+      "desc": "黑色是最深的海底，白色是最高的山，中间按比例换算。"
+    },
+    "threshold": {
+      "label": "只画了陆地（阈值图）",
+      "desc": "低于某个灰度的部分都是海，图中没有海洋深度；陆地从海岸的 0 m 升到白色的最高点。"
+    },
+    "metres": {
+      "label": "数值已经是米（浮点 TIFF）",
+      "desc": "像素值就是以米为单位的高度，不需要换算。"
+    }
+  },
+  "field": {
+    "min_m": "最黑处的高度",
+    "max_m_range": "最白处的高度",
+    "max_m_threshold": "最白处的高度",
+    "sea_level_m": "海平面高度",
+    "sea_level": "海陆分界灰度",
+    "seafloor_m": "假设的海底深度",
+    "curve": "高度曲线",
+    "gamma": "幂指数",
+    "notes": "备注"
+  },
+  "unit": {
+    "fraction": "（0–1）"
+  },
+  "note": {
+    "greyLevel": "约等于灰度 {{grey}} / {{levels}}"
+  },
+  "curve": {
+    "linear": "线性",
+    "gamma": "幂函数"
+  },
+  "defaults": {
+    "contract": "初始值是导入规则的默认值。",
+    "map": "初始值沿用这张地图现有的高程刻度。",
+    "request": "预览按你填写的数值计算。"
+  },
+  "view": {
+    "mapped": "换算后的高程",
+    "source": "原图",
+    "coast": "显示海岸线",
+    "sourceUnavailable": "浏览器无法直接显示这种格式（例如 TIFF）。请查看“换算后的高程”。",
+    "sourceNote": "原图由浏览器直接显示，16 位图在这里只显示为 8 位灰度，不能用来读数。"
+  },
+  "preview": {
+    "hoverHint": "把鼠标移到预览图上，可以读取该处的经纬度和高度。",
+    "readout": "{{lat}}，{{lon}}：{{metres}} m，{{kind}}",
+    "land": "陆地",
+    "sea": "海洋",
+    "gridNote": "预览图缩小到 {{w}} × {{h}} 显示；下方统计按导入后的 {{ow}} × {{oh}} 栅格计算。"
+  },
+  "legend": {
+    "sea": "海洋 {{min}} 至 {{max}}",
+    "land": "陆地 {{min}} 至 {{max}}",
+    "coast": "海岸线"
+  },
+  "report": {
+    "format": "文件格式",
+    "sourceSize": "原图尺寸",
+    "outputSize": "导入后尺寸",
+    "sizeFromMap": "沿用目标地图的分辨率",
+    "sizeFromSource": "保持原图尺寸",
+    "resampled": "，已重新采样",
+    "range": "高程范围",
+    "landArea": "陆地占行星表面",
+    "landPixels": "陆地占图像像素",
+    "levelStep": "一级灰度对应的高度",
+    "levelStepValue": "海岸附近 {{coast}} m，最大 {{max}} m",
+    "landNote": "等距圆柱图越靠近两极，一个像素代表的面积越小，所以像素占比不等于行星表面占比。行星表面占比按每一行的实际面积加权。",
+    "seafloorAssumed": "这张图没有海洋深度，所有海洋都按 {{depth}} 处理。这是假设，不是数据。"
+  },
+  "warning": {
+    "eightBit": "这是 8 位图，只有 {{levels}} 级灰度；海岸附近一级约 {{coast}} m，最大一级约 {{max}} m。建议改用 16 位或浮点图。",
+    "eightBitPlain": "这是 8 位图，只有 256 级灰度。建议改用 16 位或浮点图。"
+  },
+  "status": {
+    "readingDefaults": "正在读取图像和默认值…",
+    "previewing": "正在更新预览…",
+    "waitPreview": "预览与当前填写一致后才能确认。",
+    "importing": "正在导入…"
+  },
+  "action": {
+    "chooseFile": "选择文件",
+    "chooseOther": "换一个文件",
+    "showAdvanced": "高级设置：高度曲线",
+    "hideAdvanced": "收起高级设置",
+    "confirm": "确认导入",
+    "cancel": "取消",
+    "backHome": "← 返回首页"
+  },
+  "error": {
+    "notNumber": "请填写一个数字。",
+    "maxAboveMin": "最白处的高度必须高于最黑处。",
+    "maxPositive": "最白处的高度必须大于 0 m。",
+    "seaLevelFraction": "请填写 0 到 1 之间的比例（不含 1）。",
+    "seafloorNegative": "海底深度必须低于 0 m。",
+    "gammaPositive": "幂指数必须大于 0。",
+    "previewFailed": "无法生成预览。",
+    "previewKeepsValues": "已填写的内容都保留着。修改数值或换一个文件后会自动重试。",
+    "importFailed": "导入没有完成，世界没有被修改。",
+    "templateNoPlanet": "模板 {{template}} 没有行星，无法导入高度图。",
+    "aspect": "这张图是 {{w}} × {{h}} 像素。请选择覆盖整个行星且宽度恰好是高度两倍的地图。",
+    "dimensions": "这张图超过 {{w}} × {{h}} 像素。请在保持 2:1 的前提下缩小全球地图。",
+    "fileSize": "文件超过 {{mib}} MiB。请缩小图像或使用压缩格式重新导出。",
+    "unreadable": "无法读取高度图。请重新导出有效的 PNG 或 TIFF 文件。"
+  },
+  "static": {
+    "unavailable": "静态站只能浏览已发布的世界，导入地图需要在本机运行 dreamulator serve。",
+    "browse": "浏览已发布的世界"
+  }
+}

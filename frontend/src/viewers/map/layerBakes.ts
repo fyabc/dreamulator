@@ -236,6 +236,12 @@ interface MakeTextureOpts {
 function makeTexture(
   buf: Uint8Array, width: number, height: number, opts?: MakeTextureOpts,
 ): THREE.DataTexture {
+  // A layer that was not baked keeps its 1x1 transparent placeholder even when
+  // other layers are full size (a map with an elevation raster but no mesh).
+  if (buf.length < width * height * 4) {
+    width = 1
+    height = 1
+  }
   const tex = new THREE.DataTexture(buf as unknown as BufferSource, width, height, THREE.RGBAFormat)
   tex.wrapS = THREE.ClampToEdgeWrapping
   tex.wrapT = THREE.ClampToEdgeWrapping
@@ -266,6 +272,37 @@ function sequentialColor(value: number, scale: typeof NPP_SCALE): [number, numbe
     }
   }
   return scale[0].color
+}
+
+/**
+ * Hypsometric colour for one height (adaptive NOAA ETOPO1 ocean + ESRI Natural
+ * Earth land LUT), shared by the per-cell palettes and the raster fallback.
+ */
+function makeTerrainColor(
+  elevMinM: number,
+  elevMaxM: number,
+  seaLevel: number,
+  waterDepthFactor: number,
+): (elevM: number, isOcean: boolean) => [number, number, number] {
+  const terrainLut = generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel)
+  const lutSize = terrainLut.length / 4
+  const elevRange = elevMaxM - elevMinM || 1
+  return function terrainColor(elevM: number, isOcean: boolean): [number, number, number] {
+    // Dry below-sea-level basins (Turpan −154 m) are land, not ocean: clamp land
+    // cells to the sea surface so they tint green/brown instead of blue.
+    const effElev = isOcean ? elevM : Math.max(elevM, seaLevel)
+    const idx = Math.round(((effElev - elevMinM) / elevRange) * (lutSize - 1))
+    const clampedIdx = Math.max(0, Math.min(lutSize - 1, idx))
+    const i = clampedIdx * 4
+    let r = terrainLut[i], g = terrainLut[i + 1], b = terrainLut[i + 2]
+    // Water depth darkening — matches pre-refactor bakeTerrainBase behaviour.
+    if (isOcean && effElev < seaLevel) {
+      const depthFrac = Math.min(1, (seaLevel - effElev) / Math.max(1, seaLevel - elevMinM))
+      const f = 1 - waterDepthFactor * depthFrac
+      r = Math.round(r * f); g = Math.round(g * f); b = Math.round(b * f)
+    }
+    return [r, g, b]
+  }
 }
 
 function buildCellPalettes(
@@ -325,26 +362,7 @@ function buildCellPalettes(
   }
   const NPP_MAX = nppMax > 0 ? nppMax : 1425
 
-  // Build adaptive hypsometric LUT (NOAA ETOPO1 ocean + ESRI Natural Earth land).
-  const terrainLut = generateAdaptiveTerrainScale(elevMinM, elevMaxM, seaLevel)
-  const lutSize = terrainLut.length / 4
-  const elevRange = elevMaxM - elevMinM || 1
-  function terrainColor(elevM: number, isOcean: boolean): [number, number, number] {
-    // Dry below-sea-level basins (Turpan −154 m) are land, not ocean: clamp land
-    // cells to the sea surface so they tint green/brown instead of blue.
-    const effElev = isOcean ? elevM : Math.max(elevM, seaLevel)
-    const idx = Math.round(((effElev - elevMinM) / elevRange) * (lutSize - 1))
-    const clampedIdx = Math.max(0, Math.min(lutSize - 1, idx))
-    const i = clampedIdx * 4
-    let r = terrainLut[i], g = terrainLut[i + 1], b = terrainLut[i + 2]
-    // Water depth darkening — matches pre-refactor bakeTerrainBase behaviour.
-    if (isOcean && effElev < seaLevel) {
-      const depthFrac = Math.min(1, (seaLevel - effElev) / Math.max(1, seaLevel - elevMinM))
-      const f = 1 - waterDepthFactor * depthFrac
-      r = Math.round(r * f); g = Math.round(g * f); b = Math.round(b * f)
-    }
-    return [r, g, b]
-  }
+  const terrainColor = makeTerrainColor(elevMinM, elevMaxM, seaLevel, waterDepthFactor)
 
   const plateIds = [...new Set(cvtMesh.cells.map((c) => c.plate_id).filter(Boolean))]
   const palette = new Map<string, [number, number, number]>()
@@ -608,6 +626,48 @@ function bakeCoastlineMask(
  * Bake a per-cell layer at FULL resolution (alpha=0 where no cell colour).
  * Samples every pixel of the full-res cell-id map.
  */
+/**
+ * Terrain, land/sea and coastline layers straight from the elevation raster,
+ * for maps that have no CVT mesh yet (an imported heightmap before its first
+ * build).  Land is the import contract's rule: height above the sea level.
+ */
+function bakeRasterTerrain(inp: BakeInputs): { terrain: Uint8Array; landsea: Uint8Array; coast: Uint8Array } {
+  const { elevation, width, height, elevMinM, elevMaxM, seaLevel, waterDepthFactor, flipHorizontal } = inp
+  const n = width * height
+  const terrain = new Uint8Array(n * 4)
+  const landsea = new Uint8Array(n * 4)
+  const coast = new Uint8Array(n * 4)
+  const land = new Uint8Array(n)
+  const span = elevMaxM - elevMinM
+  const color = makeTerrainColor(elevMinM, elevMaxM, seaLevel, waterDepthFactor)
+  for (let i = 0; i < n; i++) {
+    const m = elevMinM + elevation[i] * span
+    const isLand = m > seaLevel
+    land[i] = isLand ? 1 : 0
+    const c = color(m, !isLand)
+    terrain[i * 4] = c[0]; terrain[i * 4 + 1] = c[1]; terrain[i * 4 + 2] = c[2]; terrain[i * 4 + 3] = 255
+    const ls = isLand ? [76, 175, 80] : [21, 101, 192]
+    landsea[i * 4] = ls[0]; landsea[i * 4 + 1] = ls[1]; landsea[i * 4 + 2] = ls[2]; landsea[i * 4 + 3] = 255
+  }
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x
+      if (!land[i]) continue
+      const left = y * width + ((x - 1 + width) % width)
+      const right = y * width + ((x + 1) % width)
+      const edge = !land[left] || !land[right] || (y > 0 && !land[i - width]) || (y < height - 1 && !land[i + width])
+      if (edge) {
+        coast[i * 4] = 20; coast[i * 4 + 1] = 20; coast[i * 4 + 2] = 20; coast[i * 4 + 3] = 255
+      }
+    }
+  }
+  return {
+    terrain: flipBuffer(terrain, width, height, flipHorizontal),
+    landsea: flipBuffer(landsea, width, height, flipHorizontal),
+    coast: flipBuffer(coast, width, height, flipHorizontal),
+  }
+}
+
 function bakeCellLayer(
   colors: Map<number, [number, number, number]>,
   width: number,
@@ -938,6 +998,13 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     precipitationErrorBuf = bakeCellLayer(palettes.precipitationError, width, height, cellIdMap, flipHorizontal)
     pressureBuf = bakeCellLayer(palettes.pressure, width, height, cellIdMap, flipHorizontal)
     slpBuf = bakeCellLayer(palettes.slp, width, height, cellIdMap, flipHorizontal)
+    kw = width; kh = height
+  } else if (inp.elevation.length === width * height && width > 0) {
+    // No mesh yet: show the stored heightmap itself; mesh-only layers stay empty.
+    const raster = bakeRasterTerrain(inp)
+    terrainThemBuf = raster.terrain
+    landseaThemBuf = raster.landsea
+    coastlinesBuf = raster.coast
     kw = width; kh = height
   }
 

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { isStaticMode } from '../api/mode'
 import { api } from '../api/client'
 import StarfieldBackground from '../components/StarfieldBackground'
+import { loadLastWorld } from '../utils/lastWorld'
 
 /**
  * Circuit-node decoration between "dream" and "ulator".
@@ -116,6 +117,17 @@ export default function HomePage() {
     queryFn: api.listWorlds,
   })
 
+  // Return to the last world after a refresh, if it still exists on the server.
+  const lastWorld = staticMode ? null : loadLastWorld()
+  const showLastWorld = !!(lastWorld && worlds?.includes(lastWorld.world))
+
+  // Three ways in, by what the author already has (frontend-entry proposal §3).
+  const startActions = [
+    { key: 'import', to: '/import', primary: true, icon: '🗺️' },
+    { key: 'template', to: '/worlds?create=1', primary: false, icon: '🪐' },
+    { key: 'explore', to: '/worlds', primary: false, icon: '🔭' },
+  ] as const
+
   return (
     <div className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-20 md:pt-28">
       {/* Background */}
@@ -155,6 +167,44 @@ export default function HomePage() {
 
         {/* Separator line */}
         <div className="mx-auto mb-10 h-px w-48 bg-gradient-to-r from-transparent via-neon-cyan/30 to-transparent" />
+
+        {/* Start: three entry actions (API mode) */}
+        {!staticMode && (
+          <section className="mb-6 text-left" data-testid="start-actions">
+            {showLastWorld && lastWorld && (
+              <Link
+                to={lastWorld.path}
+                data-testid="continue-last-world"
+                className="block glass-panel p-4 mb-4 hover:border-neon-cyan/30 transition-colors"
+              >
+                <span className="text-xs text-gray-500">{t('worlds:start.continueLabel')}</span>
+                <span className="block text-neon-cyan font-semibold">
+                  {lastWorld.world}
+                  {lastWorld.branch ? <span className="text-gray-400 font-normal"> · {lastWorld.branch}</span> : null}
+                </span>
+              </Link>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {startActions.map((a) => (
+                <Link key={a.key} to={a.to} className="block group" data-testid={`start-${a.key}`}>
+                  <div
+                    className={`glass-panel p-5 h-full group-hover:translate-y-[-2px] transition-all duration-300 ${
+                      a.primary ? 'border-neon-cyan/40 bg-neon-cyan/5' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg">{a.icon}</span>
+                      <h3 className={`text-lg font-semibold ${a.primary ? 'text-neon-cyan neon-glow-subtle' : 'text-gray-200'}`}>
+                        {t(`worlds:start.${a.key}`)}
+                      </h3>
+                    </div>
+                    <p className="text-sm text-gray-400 mt-1">{t(`worlds:start.${a.key}Desc`)}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Quick-entry menu cards */}
         <nav className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">

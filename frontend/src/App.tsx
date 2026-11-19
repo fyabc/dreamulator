@@ -18,6 +18,7 @@ const CivMapEditorPage = lazy(() => import('./pages/CivMapEditorPage'))
 const PackViewerPage = lazy(() => import('./pages/PackViewerPage'))
 const HelpPage = lazy(() => import('./pages/HelpPage'))
 const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage'))
+const ImportPage = lazy(() => import('./pages/ImportPage'))
 
 const PageFallback = () => (
   <div className="flex items-center justify-center min-h-[60vh]">
@@ -37,6 +38,7 @@ function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<HomePage />} />
             <Route path="world-info" element={<Navigate to="/worlds" replace />} />
+            <Route path="import" element={<ImportPage />} />
             <Route path="worlds" element={<WorldList />} />
             <Route path="worlds/:worldName" element={<WorldDetail />} />
             <Route path="worlds/:worldName/map" element={<MapViewerPage />} />

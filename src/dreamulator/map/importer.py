@@ -24,6 +24,7 @@ from __future__ import annotations
 import io
 import logging
 import math
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -199,6 +200,36 @@ def import_heightmap_metres(
     )
 
 
+def land_area_fraction(land: np.ndarray) -> float:
+    """Share of the sphere's surface that is land on a global equirectangular raster.
+
+    Row ``i`` spans latitudes from ``90 - 180 i / H`` to ``90 - 180 (i + 1) / H`` degrees, so its
+    share of the sphere is half the difference of the sines of its edges.  The plain pixel mean
+    (``land_fraction``) over-counts high latitudes, where a pixel covers less ground.
+    """
+    h = land.shape[0]
+    edges = np.radians(90.0 - 180.0 * np.arange(h + 1) / h)
+    weights = 0.5 * (np.sin(edges[:-1]) - np.sin(edges[1:]))
+    return float(np.sum(land.mean(axis=1) * weights))
+
+
+def preview_grid(
+    metres: np.ndarray, land: np.ndarray, max_width: int = 720
+) -> tuple[np.ndarray, np.ndarray]:
+    """A display-sized copy of an imported heightmap, resampled the same way as the import.
+
+    Heights and the land mask go through the import's per-class resampling, so a preview pixel
+    is land when at least half of its footprint is land and its height averages only samples of
+    its own class.  The grid only serves the preview; the reported statistics use full size.
+    """
+    h, w = metres.shape
+    if w <= max_width:
+        return metres, land
+    width = max_width
+    height = max(1, round(h * width / w))
+    return _resample_by_class(metres, land, width, height)
+
+
 def _threshold_curve(v: np.ndarray, mapping: ElevationMapping) -> np.ndarray:
     """Land metres above the sea threshold: 0 m at the threshold, ``max_m`` at full scale."""
     u = np.clip((v - mapping.sea_level) / (1.0 - mapping.sea_level), 0.0, 1.0)
@@ -300,7 +331,19 @@ def _decode(data: bytes, filename: str) -> tuple[str, np.ndarray]:
 def _decode_png(data: bytes) -> tuple[str, np.ndarray]:
     """Decode a PNG heightmap to normalised [0, 1]."""
     buf = io.BytesIO(data)
-    img = Image.open(buf)
+    try:
+        img = Image.open(buf)
+    except Image.DecompressionBombError as e:
+        # Pillow refuses images above twice Image.MAX_IMAGE_PIXELS before decoding them;
+        # say so plainly instead of failing as an unexpected error.
+        size = re.search(r"\((\d+) pixels\)", str(e))
+        limit = re.search(r"limit of (\d+) pixels", str(e))
+        found = f"{size.group(1)} pixels" if size else "too many pixels"
+        cap = limit.group(1) if limit else str(2 * (Image.MAX_IMAGE_PIXELS or 0))
+        raise ValueError(
+            f"PNG has {found}, above the import limit of {cap} pixels; "
+            "downscale the image before importing"
+        ) from e
 
     if img.mode == "I;16":
         arr = np.array(img, dtype=np.uint16).astype(np.float64) / _UINT16_MAX_F

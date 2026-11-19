@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
@@ -9,7 +9,9 @@ import StarfieldBackground from '../components/StarfieldBackground'
 export default function WorldList() {
   const { t } = useTranslation('worlds')
   const queryClient = useQueryClient()
-  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [searchParams] = useSearchParams()
+  // `?create=1` (the home page's "create from a template") opens the dialog directly.
+  const [showCreateDialog, setShowCreateDialog] = useState(() => searchParams.get('create') === '1' && !isStaticMode())
   const [newWorldName, setNewWorldName] = useState('')
   const [newWorldTemplate, setNewWorldTemplate] = useState('minimal')
   const staticMode = isStaticMode()

@@ -57,7 +57,7 @@ export default function GlobeViewerPage() {
     particleMode, setParticleMode,
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
-    selectedPlanet, mapPlanets, meta, metaError, elevError, cvtMeshError,
+    selectedPlanet, mapPlanets, meta, metaError, elevError, cvtMeshError, awaitingBuild,
     bodyByName, planetRadiusM,
     elevation, elevationDims, cvtMesh, voronoiCells, cellIdMap,
     monthlyThematic, monthlyData, monthlyMonth, yearlyData, uccTexture,
@@ -300,7 +300,12 @@ export default function GlobeViewerPage() {
           {importMsg.text}
         </div>
       )}
-      {(metaError || elevError || cvtMeshError) && (
+      {awaitingBuild && !cleanMode && (
+        <div className="bg-sky-900/20 border-b border-sky-700/30 px-4 py-2 text-sm text-sky-200 text-center" data-testid="awaiting-build">
+          {t('label.awaitingBuild')}
+        </div>
+      )}
+      {(metaError || elevError || (cvtMeshError && !awaitingBuild)) && (
         <div className="bg-red-900/20 border-b border-red-700/30 px-4 py-2 text-sm text-red-300 text-center">
           {t('label.dataLoadFailed')}
         </div>

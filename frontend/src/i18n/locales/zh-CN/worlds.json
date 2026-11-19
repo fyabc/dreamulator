@@ -204,5 +204,14 @@
   },
   "confirm": {
     "deleteWorld": "确定删除世界 \"{{name}}\"？"
+  },
+  "start": {
+    "import": "导入我的地图",
+    "importDesc": "已经有高度图：选图、说明单位、检查海岸，然后进入世界。",
+    "template": "从模板创建世界",
+    "templateDesc": "从类地行星或最简模板开始，再修改恒星、行星和海陆设定。",
+    "explore": "探索示例世界",
+    "exploreDesc": "浏览已有世界的地图、气候与季节变化。",
+    "continueLabel": "继续上次的世界"
   }
 }
