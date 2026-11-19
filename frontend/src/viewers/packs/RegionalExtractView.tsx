@@ -15,7 +15,7 @@ import { lonLatToKm } from './packCoords'
 import PackMap from './PackMap'
 import PackStatusBar from './PackStatusBar'
 import { useRegionElevation, type ElevationInput } from './useRegionElevation'
-import type { ElevationRaster } from './elevationRaster'
+import type { ElevationFormat, ElevationRaster } from './elevationRaster'
 
 interface Props {
   world: string
@@ -68,20 +68,33 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
     ? { kind: 'global', blob: elevation.data, min, max, window } : null, [meta.data, elevation.data, min, max, window])
   const height = useRegionElevation(decoded)
   const preview = height.ready?.kind === 'preview' ? height.ready : null
-  const base = usePreviewImage(preview?.raster ?? null, min, max, sea)
+  const [result, setResult] = useState<{ raster: ElevationRaster; manifestSha256: string } | null>(null)
+  const refined = result?.raster
+  const [showRefined, setShowRefined] = useState(false)
+  const displayed = (showRefined ? refined : null) ?? preview?.raster ?? null
+  const base = usePreviewImage(displayed, min, max, sea)
   const stepKm = Math.PI * radiusKm / Math.max(1, (preview?.sourceHeight ?? 1) - 1)
   const defaultSize = Math.max(1, Math.min(2048, Math.floor(spanKm / stepKm)))
   const [hover, setHover] = useState<LonLat | null>(null)
   const [pin, setPin] = useState<LonLat | null>(null)
-  const pinHeight = pin && preview ? (() => {
+  const pinHeight = pin && displayed ? (() => {
     const { x, y } = lonLatToKm(pin, window)
-    const { width, height, values } = preview.raster
+    const { width, height, values } = displayed
     if (Math.abs(x) > spanKm / 2 || Math.abs(y) > spanKm / 2) return null
     const col = Math.min(width - 1, Math.floor((x / spanKm + 0.5) * width))
     const row = Math.min(height - 1, Math.floor((0.5 - y / spanKm) * height))
     return values[row * width + col]
   })() : null
   const missing = meta.isError || elevation.isError || (elevation.isSuccess && !elevation.data)
+  const downloadRefined = (format: ElevationFormat) => {
+    if (!result) return
+    height.download(`${world}-${planet}-${lat}_${lon}-refined`, null, format, {
+      world, planet, branch, source: 'browser_terrain_diffusion', conditioning: 'elevation_only', seed: 42,
+      model_manifest_sha256: result.manifestSha256,
+      projection: window.projection, center_lat: lat, center_lon: lon, radius_km: radiusKm,
+      extent_km: { x: spanKm, y: spanKm }, sea_level_m: sea, pixel_size_m: spanKm * 1000 / result.raster.width,
+    }, result.raster)
+  }
 
   return (
     <div className="flex h-[calc(100dvh-56px)] flex-col md:h-screen">
@@ -94,8 +107,8 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
       <div className="flex min-h-0 flex-1 flex-col bg-space-bg md:flex-row">
         <aside className="max-h-[38dvh] shrink-0 space-y-3 overflow-auto border-b border-space-border bg-space-panel p-3 text-xs text-gray-400 md:max-h-none md:w-60 md:border-b-0 md:border-r">
           <div className="space-y-1">
-            <p className="font-medium text-gray-200">{t('packs.export.global')}</p>
-            <p>{t('packs.export.globalHint')}</p>
+            <p className="font-medium text-gray-200">{t(showRefined ? 'packs.refinement.adopted' : 'packs.export.global')}</p>
+            <p>{t(showRefined ? 'packs.compute.refinedHint' : 'packs.export.globalHint')}</p>
           </div>
           {matches.map(({ name }) => {
             const params = new URLSearchParams(regionParams)
@@ -103,14 +116,31 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
             return <Link key={name} className="block break-all text-neon-cyan hover:underline" to={`/packs?${params}`}
               state={{ regionReturn: globalReturn }}>{t('regionWindow.openPack', { name })}</Link>
           })}
-          <TerrainCompute>{!isStaticMode() && <RegionRefinementPanel source={{ kind: 'world', world, planet, branch, lat, lon, span_km: spanKm }}
+          <TerrainCompute browser={{ raster: preview?.raster ?? null, spanKm, seaLevel: sea, onResult: (result) => {
+            setResult(result)
+            setShowRefined(true)
+          } }}>{!isStaticMode() && <RegionRefinementPanel source={{ kind: 'world', world, planet, branch, lat, lon, span_km: spanKm }}
             globalReturn={globalReturn} resultUrl={(pack) => {
               const params = new URLSearchParams(regionParams)
               params.set('pack', pack)
               return `/packs?${params}`
             }} />}</TerrainCompute>
+          {refined && <div className="space-y-2 rounded border border-space-border p-2">
+            <p role="status">{t('packs.compute.resultSize', { width: refined.width, height: refined.height,
+              metres: Math.round(spanKm * 1000 / refined.width) })}</p>
+            <label className="flex flex-wrap items-center gap-2">{t('packs.refinement.compare')}
+              <select className="rounded border border-space-border bg-space-surface p-1" value={showRefined ? 'result' : 'input'}
+                onChange={(event) => setShowRefined(event.target.value === 'result')}>
+                <option value="input">{t('packs.refinement.original')}</option>
+                <option value="result">{t('packs.refinement.adopted')}</option>
+              </select>
+            </label>
+            <RegionElevationDownload fixedSize defaultSize={null} sourceStepKm={spanKm / refined.width} extentKm={spanKm}
+              downloadLabel={t('packs.compute.download')} exporting={height.exporting} failed={height.failed}
+              onDownload={(_, format) => downloadRefined(format)} />
+          </div>}
           {preview && <details className="rounded border border-space-border p-2">
-            <summary className="cursor-pointer font-medium text-neon-cyan">{t('packs.export.title')}</summary>
+            <summary className="cursor-pointer font-medium text-neon-cyan">{t(refined ? 'packs.compute.exportOriginal' : 'packs.export.title')}</summary>
             <div className="mt-2">
               <RegionElevationDownload defaultSize={defaultSize} sourceStepKm={stepKm} extentKm={spanKm}
                 exporting={height.exporting} failed={height.failed} onDownload={(size, format) => height.download(

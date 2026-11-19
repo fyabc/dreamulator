@@ -81,7 +81,8 @@ jobs:
       - name: Build static site
         working-directory: frontend
         env:
-          VITE_TD_EXAMPLE_URL: ${{ vars.VITE_TD_EXAMPLE_URL }}
+          VITE_TD_MODEL_URL: ${{ vars.VITE_TD_MODEL_URL }}
+          VITE_TD_MODEL_SHA256: ${{ vars.VITE_TD_MODEL_SHA256 }}
         run: npx vite build --mode static
 
       - name: Setup Pages

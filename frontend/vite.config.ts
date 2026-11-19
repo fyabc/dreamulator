@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
     base: env.VITE_BASE_PATH || '/',
 
     plugins: [react()],
+    worker: { format: 'es' },
 
     // Inject build-time constants so version numbers never go stale.
     define: {

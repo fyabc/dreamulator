@@ -3,16 +3,25 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
 import { isStaticMode } from '../../api/mode'
-import { generateAdaptiveTerrainScale } from '../map/utils/colorScales'
 import type { ElevationRaster } from './elevationRaster'
 import { getWebGpuDevice, type WebGpuDevice } from './webGpuDevice'
+import type { TerrainProgress, TerrainStage } from './terrainRefinement'
+import { maxTerrainSpanKm, minTerrainSpanKm } from './terrainTiles'
 
-const exampleUrl = import.meta.env.VITE_TD_EXAMPLE_URL?.trim()
-const loadCoarse = import.meta.env.VITE_STATIC_MODE === 'true' && import.meta.env.VITE_TD_EXAMPLE_URL
-  ? () => import('./coarseTerrain') : null
+const modelUrl = import.meta.env.VITE_TD_MODEL_URL?.trim()
+const modelHash = import.meta.env.VITE_TD_MODEL_SHA256?.trim().toLowerCase()
+const loadRefinement = import.meta.env.VITE_STATIC_MODE === 'true' && import.meta.env.VITE_TD_MODEL_URL
+  ? () => import('./runTerrainRefinement') : null
 const button = 'rounded border border-space-border bg-space-surface px-2 py-1 text-neon-cyan disabled:opacity-50'
 
-export default function TerrainCompute({ children }: { children?: ReactNode }) {
+interface BrowserInput {
+  raster: ElevationRaster | null
+  spanKm: number
+  seaLevel: number
+  onResult: (result: { raster: ElevationRaster; manifestSha256: string }) => void
+}
+
+export default function TerrainCompute({ browser, children }: { browser?: BrowserInput; children?: ReactNode }) {
   const { t } = useTranslation('map', { keyPrefix: 'packs.compute' })
   const staticMode = isStaticMode()
   const local = useQuery({ queryKey: ['region-compute-device'], queryFn: api.getRegionDevice,
@@ -35,45 +44,108 @@ export default function TerrainCompute({ children }: { children?: ReactNode }) {
       <p className="font-medium text-gray-200">{t('title')}</p>
       <p role="status" className="mt-1 break-words">{label} · {name}{kind && ` (${kind})`}</p>
     </div>
-    {staticMode ? <CoarseExample gpu={gpu} /> : children}
+    {staticMode ? browser && <BrowserRefinement gpu={gpu} input={browser} /> : children}
   </section>
 }
 
 const kinds = { software: 'software', unknown: 'unknownKind' } as const
 
-type RunState = { kind: 'idle' | 'loading' | 'cancelled' | 'error' } | { kind: 'running'; done: number; total: number }
+type ProgressState = {
+  kind: 'running' | 'cancelling'
+  progress: TerrainProgress
+  startedAt: number
+  phaseStartedAt: number
+  cacheUnavailable: boolean
+}
+type RunState = ProgressState | { kind: 'idle' | 'cancelled' } |
+  { kind: 'error'; progress: TerrainProgress } | { kind: 'completed'; elapsed: number; cacheUnavailable: boolean }
 
-function CoarseExample({ gpu }: { gpu: WebGpuDevice | null | undefined }) {
+const stageNumber: Record<TerrainStage, number> = { coarse: 1, base: 2, decoder: 3 }
+
+function elapsedTime(milliseconds: number) {
+  const seconds = Math.floor(Math.max(0, milliseconds) / 1000)
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+function BrowserProgress({ state }: { state: ProgressState | Extract<RunState, { kind: 'error' }> }) {
+  const { t, i18n } = useTranslation('map', { keyPrefix: 'packs.compute' })
+  const [now, setNow] = useState(() => performance.now())
+  useEffect(() => {
+    if (state.kind === 'error') return
+    const timer = window.setInterval(() => setNow(performance.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [state.kind])
+
+  const { progress } = state
+  const phase = t(`phase.${progress.phase}`)
+  const heading = progress.stage ? t('stageProgress', { stage: t(`stage.${progress.stage}`), phase, step: stageNumber[progress.stage] }) : phase
+  if (state.kind === 'error') {
+    return <p role="alert" className="text-red-300">{t('failedAt', { heading })} {t('error')}</p>
+  }
+
+  const number = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 1 })
+  return <div className="space-y-1 border-t border-space-border pt-2">
+    <p role="status" className="text-gray-200">{state.kind === 'cancelling' ? t('cancelling') : heading}</p>
+    {state.kind === 'running' && (progress.phase === 'download' || progress.phase === 'cacheRead') && <>
+      <p>{t('received', { received: number.format(progress.received / 1e6), total: number.format(progress.total / 1e6),
+        percent: Math.floor(progress.received / progress.total * 100) })}</p>
+      <progress className="w-full accent-neon-cyan" aria-label={phase} value={progress.received} max={progress.total} />
+    </>}
+    {state.kind === 'running' && progress.phase === 'initialize' && <p>{t('initializeHint')}</p>}
+    {state.kind === 'running' && progress.phase === 'tiles' && <>
+      <p>{progress.done === progress.total ? t('tilesComplete', progress) : t('tilesActive', { ...progress, next: progress.done + 1 })}</p>
+      <progress className="w-full accent-neon-cyan" aria-label={phase} value={progress.done} max={progress.total} />
+    </>}
+    <p>{t('elapsed', { run: elapsedTime(now - state.startedAt), phase: elapsedTime(now - state.phaseStartedAt) })}</p>
+    {state.cacheUnavailable && <p className="text-amber-200">{t('cacheUnavailable')}</p>}
+  </div>
+}
+
+function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefined; input: BrowserInput }) {
   const { t } = useTranslation('map', { keyPrefix: 'packs.compute' })
   const controller = useRef<AbortController | null>(null)
   const [state, setState] = useState<RunState>({ kind: 'idle' })
-  const [output, setOutput] = useState<ElevationRaster | null>(null)
-  const busy = state.kind === 'loading' || state.kind === 'running'
+  const busy = state.kind === 'running' || state.kind === 'cancelling'
+  const supportedSpan = input.spanKm >= minTerrainSpanKm && input.spanKm <= maxTerrainSpanKm
+  const configured = modelUrl && modelHash && /^[a-f0-9]{64}$/.test(modelHash) && loadRefinement
   useEffect(() => () => {
     controller.current?.abort()
     controller.current = null
   }, [])
 
   const run = async () => {
-    if (gpu?.kind !== 'hardware' || !exampleUrl || !loadCoarse || controller.current) return
+    if (gpu?.kind !== 'hardware' || !configured || !modelUrl || !modelHash || !loadRefinement || !input.raster ||
+      !supportedSpan || controller.current) return
     const task = new AbortController()
     controller.current = task
-    setState({ kind: 'loading' })
+    const startedAt = performance.now()
+    let phaseStartedAt = startedAt
+    let cacheUnavailable = false
+    let latest: TerrainProgress = { phase: 'prepare' }
+    setState({ kind: 'running', progress: latest, startedAt, phaseStartedAt, cacheUnavailable })
     try {
-      const base = new URL(`${exampleUrl.replace(/\/$/, '')}/`, new URL(import.meta.env.BASE_URL, window.location.href))
+      const base = new URL(`${modelUrl.replace(/\/$/, '')}/`, new URL(import.meta.env.BASE_URL, window.location.href))
       if (base.protocol !== 'https:' && !(base.protocol === 'http:' && base.origin === window.location.origin)) {
         throw new Error('Invalid TD asset origin')
       }
-      const { runCoarseTerrain } = await loadCoarse()
+      const { runTerrainRefinement } = await loadRefinement()
       task.signal.throwIfAborted()
-      const result = await runCoarseTerrain(base, gpu, task.signal, (done, total) => setState({ kind: 'running', done, total }))
+      const job = { base: base.href, hash: modelHash, raster: input.raster, spanKm: input.spanKm, sea: input.seaLevel }
+      const result = await runTerrainRefinement(job, gpu, task.signal, (progress) => {
+        if (controller.current !== task || task.signal.aborted) return
+        if (progress.phase !== latest.phase || progress.stage !== latest.stage) phaseStartedAt = performance.now()
+        if (progress.phase === 'initialize' && !progress.reusable) cacheUnavailable = true
+        latest = progress
+        setState({ kind: 'running', progress, startedAt, phaseStartedAt, cacheUnavailable })
+      })
       if (controller.current === task && !task.signal.aborted) {
-        setOutput(result)
-        setState({ kind: 'idle' })
+        input.onResult({ raster: result, manifestSha256: modelHash })
+        setState({ kind: 'completed', elapsed: performance.now() - startedAt, cacheUnavailable })
       }
-    } catch {
+    } catch (error) {
       if (controller.current === task) {
-        setState({ kind: task.signal.aborted ? 'cancelled' : 'error' })
+        if (!task.signal.aborted) console.error('Browser terrain refinement failed', error)
+        setState(task.signal.aborted ? { kind: 'cancelled' } : { kind: 'error', progress: latest })
       }
     } finally {
       if (controller.current === task) {
@@ -84,50 +156,29 @@ function CoarseExample({ gpu }: { gpu: WebGpuDevice | null | undefined }) {
     }
   }
 
+  const cancel = () => {
+    controller.current?.abort()
+    setState((current) => current.kind === 'running' ? { ...current, kind: 'cancelling' } : current)
+  }
+
   return <details className="rounded border border-space-border p-2">
-    <summary className="cursor-pointer font-medium text-neon-cyan">{t('exampleTitle')}</summary>
+    <summary className="cursor-pointer font-medium text-neon-cyan">{t('browserTitle')}</summary>
     <div className="mt-2 space-y-2">
-      <p>{t('exampleHint')}</p>
-      {!exampleUrl ? <p>{t('notPublished')}</p> : <>
+      {!configured ? <p>{t('notPublished')}</p> : <>
+        <p>{t('browserHint')}</p>
+        {!supportedSpan && <p>{t('windowLimit', { min: minTerrainSpanKm, max: maxTerrainSpanKm })}</p>}
         {gpu !== undefined && gpu?.kind !== 'hardware' && <p>{t('requiresHardware')}</p>}
         <div className="flex flex-wrap gap-2">
-          <button type="button" className={button} disabled={busy || gpu?.kind !== 'hardware'} onClick={() => void run()}>{t('run')}</button>
-          {busy && <button type="button" className={button} onClick={() => controller.current?.abort()}>{t('cancel')}</button>}
+          <button type="button" className={button} disabled={busy || !supportedSpan || !input.raster || gpu?.kind !== 'hardware'} onClick={() => void run()}>{t('run')}</button>
+          {busy && <button type="button" className={button} disabled={state.kind === 'cancelling'} onClick={cancel}>{t('cancel')}</button>}
         </div>
-        {state.kind === 'loading' && <p role="status">{t('loading')}</p>}
-        {state.kind === 'running' && <p role="status">{t('progress', state)}</p>}
+        {(busy || state.kind === 'error') && <BrowserProgress state={state} />}
+        {state.kind === 'completed' && <>
+          <p role="status">{t('completed', { run: elapsedTime(state.elapsed) })}</p>
+          {state.cacheUnavailable && <p className="text-amber-200">{t('cacheUnavailable')}</p>}
+        </>}
         {state.kind === 'cancelled' && <p role="status">{t('cancelled')}</p>}
-        {state.kind === 'error' && <p role="alert" className="text-red-300">{t('error')}</p>}
-        {output && <CoarsePreview raster={output} />}
       </>}
     </div>
   </details>
-}
-
-function CoarsePreview({ raster }: { raster: ElevationRaster }) {
-  const { t } = useTranslation('map', { keyPrefix: 'packs.compute' })
-  const canvas = useRef<HTMLCanvasElement>(null)
-  const { width, height, values } = raster
-  useEffect(() => {
-    const context = canvas.current?.getContext('2d')
-    if (!context) return
-    const image = context.createImageData(width, height)
-    const min = Math.min(...values)
-    const max = Math.max(...values)
-    const colors = generateAdaptiveTerrainScale(min, max, 0)
-    const bins = colors.length / 4 - 1
-    values.forEach((value, index) => {
-      const offset = 4 * Math.round(bins * (value - min) / (max - min || 1))
-      image.data[index * 4] = colors[offset]
-      image.data[index * 4 + 1] = colors[offset + 1]
-      image.data[index * 4 + 2] = colors[offset + 2]
-      image.data[index * 4 + 3] = 255
-    })
-    context.putImageData(image, 0, 0)
-  }, [width, height, values])
-  return <figure className="space-y-1">
-    <canvas ref={canvas} width={width} height={height} className="h-auto w-full rounded [image-rendering:pixelated]"
-      role="img" aria-label={t('previewLabel')} />
-    <figcaption>{t('previewSize', { width, height })}</figcaption>
-  </figure>
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ElevationWorkerRequest, ElevationWorkerResult } from '../../workers/regionElevation.worker'
-import type { ElevationFormat } from './elevationRaster'
+import type { ElevationFormat, ElevationRaster } from './elevationRaster'
 
 export type ElevationInput = Exclude<ElevationWorkerRequest, { kind: 'export' }>
 type Ready = Extract<ElevationWorkerResult, { kind: 'preview' | 'ready' }>
@@ -47,12 +47,12 @@ export function useRegionElevation(input: ElevationInput | null) {
   return {
     ready, failed, exporting,
     retry: () => setAttempt((previous) => previous + 1),
-    download: (name: string, size: number | null, format: ElevationFormat, metadata: Record<string, unknown>) => {
+    download: (name: string, size: number | null, format: ElevationFormat, metadata: Record<string, unknown>, raster?: ElevationRaster) => {
       if (!workerRef.current || !ready || exporting) return
       filename.current = `${name}.${format}`
       setFailed(false)
       setExporting(true)
-      workerRef.current.postMessage({ kind: 'export', size, format, metadata } satisfies ElevationWorkerRequest)
+      workerRef.current.postMessage({ kind: 'export', size, format, metadata, raster } satisfies ElevationWorkerRequest)
     },
   }
 }

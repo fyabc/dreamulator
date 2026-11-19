@@ -125,12 +125,13 @@ Diviner 为观测级地表温度例外），provenance 随导出文件走。原�
   （板块拓扑层在附录 A）。
 - `ocean_crust_transport.py` 提供外部历史模型示踪的搬运助手。它用已确认归属选择有效板块或变形网络，再调用 pyGPlates 的原生点搬运接口；未知重叠保留未确认状态，数值移除与俯冲消费另行核查。
 
-## release/ — 发布与静态导出（2 个）
+## release/ — 发布与静态导出（3 个）
 
 - `publish_world_data.py` — 发版一条命令：构建全部世界（earth 走 importer）+ 打包 +
   上传 GitHub Release（固定 tag `worlds-data`）；`deploy-pages.yml` 消费该产物。
 - `export_static.py` — 静态站数据导出（`frontend` 的 `npm run export` / `build:static` 调它；
   `deploy-pages.yml` 直接运行）。**移动此文件须同步 CI 的 path trigger 与 package.json。**
+- `export_td_web_models.py` 使用 Terrain Diffusion 的 Python 环境导出浏览器细化模型及校验清单。
 
 ## media/ — 视频素材与外部渲染链
 

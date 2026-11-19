@@ -5,7 +5,7 @@ import type { PackWindow } from '../viewers/packs/packCoords'
 export type ElevationWorkerRequest =
   | { kind: 'global'; blob: Blob; min: number; max: number; window: PackWindow }
   | { kind: 'pack'; blob: Blob }
-  | { kind: 'export'; size: number | null; format: ElevationFormat; metadata: Record<string, unknown> }
+  | { kind: 'export'; size: number | null; format: ElevationFormat; metadata: Record<string, unknown>; raster?: ElevationRaster }
 
 export type ElevationWorkerResult =
   | { kind: 'preview'; raster: ElevationRaster; sourceWidth: number; sourceHeight: number }
@@ -28,12 +28,14 @@ self.onmessage = async ({ data }: MessageEvent<ElevationWorkerRequest>) => {
       source = readElevationNpy(await data.blob.arrayBuffer())
       window = undefined
       self.postMessage({ kind: 'ready', width: source.width, height: source.height } satisfies ElevationWorkerResult)
-    } else if (source) {
+    } else {
       const { size } = data
-      const longest = Math.max(source.width, source.height)
-      const raster = size === null ? source : window ? sampleGlobalElevation(source, window, size)
-        : resizeElevation(source, Math.max(1, Math.round(size * source.width / longest)),
-          Math.max(1, Math.round(size * source.height / longest)))
+      const input = data.raster ?? source
+      if (!input) throw new Error('Missing elevation export source')
+      const longest = Math.max(input.width, input.height)
+      const raster = data.raster ?? (size === null ? input : window ? sampleGlobalElevation(input, window, size)
+        : resizeElevation(input, Math.max(1, Math.round(size * input.width / longest)),
+          Math.max(1, Math.round(size * input.height / longest))))
       const blob = data.format === 'png' ? await elevationPng(raster, data.metadata) : elevationTiff(raster, data.metadata)
       self.postMessage({ kind: 'file', blob } satisfies ElevationWorkerResult)
     }
