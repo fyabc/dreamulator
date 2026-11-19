@@ -5,7 +5,7 @@
  * Only supports read operations; write operations throw.
  */
 
-import type { BuildJob } from './buildJobs'
+import type { BuildGrid, BuildJob } from './buildJobs'
 import type { MapResultMetadata } from './resultContract'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
@@ -178,6 +178,7 @@ export const staticApi = {
 
   // Build and simulation — not available in static mode
   buildWorld: () => notAvailable('buildWorld'),
+  getBuildGrid: async (): Promise<BuildGrid> => notAvailable('getBuildGrid'),
   startBuildJob: async (): Promise<BuildJob> => notAvailable('startBuildJob'),
   getBuildJob: async (): Promise<BuildJob> => notAvailable('getBuildJob'),
 

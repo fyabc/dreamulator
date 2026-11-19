@@ -21,6 +21,9 @@ if TYPE_CHECKING:
 
     from dreamulator.engine.base import BaseEngine
     from dreamulator.engine.progress import PipelineEvent
+    from dreamulator.models.layers import Layer
+    from dreamulator.models.world import WorldConfig
+    from dreamulator.resolver import LayerResolver
 
 router = APIRouter(prefix="/api/worlds", tags=["worlds"])
 
@@ -728,6 +731,63 @@ class BuildRequest(BaseModel):
     force: bool = Field(default=False, description="Re-run even if outputs exist")
 
 
+def _resolve_build_target(
+    world_name: str, branch: str | None
+) -> tuple[WorldConfig, LayerResolver, Layer | None]:
+    from dreamulator.resolver import LayerResolver
+
+    try:
+        world_dir = _manager.world_dir(world_name)
+        config = _manager.load_world(world_name)
+        if branch and (branch in {".", ".."} or "/" in branch or "\\" in branch):
+            raise HTTPException(status_code=422, detail="Invalid branch name")
+        resolver = LayerResolver(world_dir, branch)
+        return config, resolver, resolver.get_fork_layer()
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+class BuildGrid(BaseModel):
+    num_cells: int | None = Field(default=None, gt=0, strict=True)
+    reuses_mesh: bool
+
+
+@router.get("/{world_name}/build-grid", response_model=BuildGrid)
+def get_build_grid(world_name: str, branch: str | None = None) -> BuildGrid:
+    """Describe a full build's grid without constructing or reading the mesh."""
+    from dreamulator.engine.geological import GeologicalEngine
+    from dreamulator.models.layers import Layer, get_layer_index
+
+    config, resolver, fork = _resolve_build_target(world_name, branch)
+    world_dir = resolver.world_dir
+    layers = resolver.resolve_all_layers()
+    target = world_dir / "branches" / branch if branch else world_dir
+    try:
+        engine = GeologicalEngine(
+            world_dir,
+            config.seed.seed,
+            layer_input_dirs={
+                key.value: layer.input_dir
+                for key, layer in layers.items()
+                if layer.input_dir is not None
+            },
+            layer_derived_dirs={
+                key.value: layer.derived_dir
+                for key, layer in layers.items()
+                if layer.derived_dir is not None
+            },
+            maps_output_dir=target / "maps",
+        )
+        num_cells, reuses_mesh = engine.preview_mesh_cells(
+            inherited=fork is not None and get_layer_index(fork) > get_layer_index(Layer.GEOLOGICAL)
+        )
+        return BuildGrid(num_cells=num_cells, reuses_mesh=reuses_mesh)
+    except (ValueError, yaml.YAMLError) as error:
+        raise HTTPException(
+            status_code=422, detail="Cannot determine the build grid size"
+        ) from error
+
+
 def _prepare_build(
     world_name: str, req: BuildRequest
 ) -> tuple[Path, Callable[[Callable[[PipelineEvent], None]], BuildSummary]]:
@@ -735,17 +795,9 @@ def _prepare_build(
     from dreamulator.engine import get_all_engines
     from dreamulator.engine.pipeline import run_pipeline
     from dreamulator.models.layers import get_layer_index
-    from dreamulator.resolver import LayerResolver
 
-    try:
-        world_dir = _manager.world_dir(world_name)
-        config = _manager.load_world(world_name)
-        if req.branch and (req.branch in {".", ".."} or "/" in req.branch or "\\" in req.branch):
-            raise HTTPException(status_code=422, detail="Invalid branch name")
-        resolver = LayerResolver(world_dir, req.branch)
-        fork = resolver.get_fork_layer()
-    except FileNotFoundError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+    config, resolver, fork = _resolve_build_target(world_name, req.branch)
+    world_dir = resolver.world_dir
     if req.branch is None and (config.reference_anchor or world_name == "earth"):
         raise HTTPException(
             status_code=409, detail="Reference world roots are read-only; build a branch"

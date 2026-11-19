@@ -588,7 +588,8 @@ def main() -> None:
             with out_file.open("w", encoding="utf-8") as f:
                 json.dump(value, f, ensure_ascii=False, separators=(",", ":"), default=str)
 
-        # Export root map data (elevation PNG + metadata)
+        # Publish actual grid sizes in map metadata. The live build-grid preview
+        # is not exported because a static site cannot start a build.
         maps_out_dir = world_out_dir / "maps"
         map_planets = _export_map_data(world_dir, maps_out_dir, branch=None)
 

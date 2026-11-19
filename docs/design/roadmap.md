@@ -8,6 +8,7 @@
 > 区域包查看页 `/packs`、2D 地图收敛为等距圆柱单投影、nacrea 轨道集合收尾与两档正典、
 > earth 板块运动 PB2002 欧拉极修正。详情见 CHANGELOG）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
+> 地形和前端可参考 [Heightcraft](competitor-analysis.md#424-heightcraft-的高程图超分辨率)与 [web-exoplasim-qol](web-gcm-and-frontend.md#6-web-exoplasim-qol-的增强与边界)的调研，不改变现有优先级；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
 > 生态层设计见 [ecology-layer.md](proposals/ecology-layer.md)；洋流系统见 [ocean_currents.md](../knowledge/climatology/ocean_currents.md)（物理）与 [climate-pipeline.md §6](pipelines/climate-pipeline.md)（实现）；
 > 文明种子见 `data/worlds/nacrea/layers/civilization/input/civilizations.yaml`。
@@ -138,7 +139,7 @@
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
 | P3 | **UCC 天体区分度配套**（① 学界天体气候划分文献调研——部分已由 worldbuildingpasta 调研覆盖；② 前端天体 profile 声明显示） | 调研 1–2 天 | ★★ |
 | P3 | **nullschool 式粒子流可视化** ✅ 2026-10-23：风/洋流粒子平流拖尾并入 2D/3D 查看器；技术参考见 `pipelines/map-system.md` | — | ★★ |
-| P1 | **前端入口与用户旅程**：补齐已有地图作者的导入、计算、看结果、选窗口与导出旅程；用户分层、竞品借鉴与验收见[统一提案](proposals/frontend-entry.md)。 | 按验收阶段拆分。 | ★★★★ |
+| P1 | **前端入口与用户旅程**：补齐已有地图作者的导入、计算、查看与导出流程，见[统一提案](proposals/frontend-entry.md)。[面向普通用户的静态入口](proposals/frontend-entry.md#61-面向普通用户的静态入口)另行排期。 | 按验收阶段拆分。 | ★★★★ |
 | P3 | **完整浏览器气候计算**：温度原型已实现，后端与资源产品化见[浏览器计算提案](proposals/browser-playground.md)，入口体验见[前端旅程](proposals/frontend-entry.md)。 | 按科学与资源验证结果。 | ★★ |
 | P3 | **草案七转正 + Hycean 调研**（创作线） | ①1–2 天 ②周级 | ★★ |
 | P2 | **earth 观测锚 1km 升级**（CHELSA/WorldClim 30″ 面积加权聚合；须在 LGM 分支之前） | 1–2 天 | ★★★ |

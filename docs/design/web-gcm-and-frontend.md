@@ -312,6 +312,21 @@ koppenpasta 一律用 30 天的月。Nacrea 的年长 99.7 天，于是它的「
 - **它的重写忠实度仍在建立中**：8 个 `verify-*` 脚本说明作者在认真做这件事，但那是他们的
   验证，不是我们的。若将来要引用它的数字，必须自己复核。
 
+## 6 web-exoplasim-qol 的增强与边界
+
+本节比较 [web-exoplasim-qol 公开源码 `41ec7ab`](https://github.com/Astervolans/web-exoplasim-qol/tree/41ec7abaa44b7161e66e2b01d78d333a92e5ab78)和[原版 `170ed28`](https://github.com/ryoung48/web-exoplasim/tree/170ed28611ed56ef994626be3ada1c843ba26405)，并查看[在线界面](https://astervolans.github.io/web-exoplasim-qol/gcm/)。分支最值得借鉴的是地形对齐和参数解释。两份源码都是 GPL-2.0；这里只比较行为和方法，不复制代码。
+
+| 核对项 | 分支与原版的区别 |
+|---|---|
+| 参数面板与短周期设置。 | [分支说明](https://github.com/Astervolans/web-exoplasim-qol/blob/41ec7abaa44b7161e66e2b01d78d333a92e5ab78/README.md)列出中英切换、参数示意图和潮汐锁定提示，并将轨道周期下限从 60 地球日降到 10 地球日。启用潮汐锁定后，自转周期跟随公转周期。宜居带、平衡温度和锁定时间属于[面板估算](https://github.com/Astervolans/web-exoplasim-qol/blob/41ec7abaa44b7161e66e2b01d78d333a92e5ab78/docs/climate/planet-system-estimates.md)，不能和模拟结果混读。可填入 10 地球日也不表示该配置通过了科学验证。 |
+| 地图导入与方向确认。 | 16 位灰度 PNG 和独立陆地掩膜已在[原版](https://github.com/ryoung48/web-exoplasim/blob/170ed28611ed56ef994626be3ada1c843ba26405/docs/climate/custom-terrain.md)支持。[分支](https://github.com/Astervolans/web-exoplasim-qol/blob/41ec7abaa44b7161e66e2b01d78d333a92e5ab78/docs/climate/custom-terrain.md)增加球面旋转，不改写原图，就能在预览中同时看到原图与模型的经纬线、极点和适用的恒星直射点或气候带辅助线。模型按新方向取样，结果再映回原图坐标。 |
+| 求解器和目标温度。 | WebGPU 单精度和 WebAssembly 双精度是原版已有的两条路径。WebGPU 的 T63 网格为 192 × 96，选择 T63 时自动把过大的步长限到 20 分钟，也是[原版行为](https://github.com/ryoung48/web-exoplasim/blob/170ed28611ed56ef994626be3ada1c843ba26405/docs/climate/exoplasim-webgpu-t63.md)。CPU 仍只提供 T21 和 T42。按目标全球平均地表温度分轮调整 CO₂ 也是[原版功能](https://github.com/ryoung48/web-exoplasim/blob/170ed28611ed56ef994626be3ada1c843ba26405/docs/climate/exoplasim-targeting.md)，并非分支新增，也不保证一定找到平衡态。 |
+| 数值稳定性与短年分类。 | 分支为低温恒星光谱及低太阳高度场景下的 WebGPU 短波计算[加入数值保护](https://github.com/Astervolans/web-exoplasim-qol/blob/41ec7abaa44b7161e66e2b01d78d333a92e5ab78/docs/climate/webgpu-shortwave-ozone-guard.md)，避免因除零或溢出出现非数值结果。维护者报告故障样例可以继续积分，这不等于辐射通量已经校准。其[柯本分类](https://github.com/Astervolans/web-exoplasim-qol/blob/41ec7abaa44b7161e66e2b01d78d333a92e5ab78/src/model/climate/gcm/classification/index.ts#L30-L86)仍按当地年的十二等分累计降水，§4.3 的短年分类限制仍然适用。 |
+
+对 Dreamulator，后续入口设计可以借鉴提交前预览海陆与坐标方向，以及把用户输入、界面估算和模型结果明确区分。气候计算继续使用现有参照臂。本次只查看公开页面并核对源码，没有重跑气候积分或验证两个求解器的等价性，也不调整当前前端验收范围。
+
+原版与分支都由浏览器读取用户选择的地形文件，不把它上传到 GitHub Pages。当前地形保存在浏览器页面的内存中，刷新后不会自动恢复。要跨会话继续，用户可下载 `.ckpt` 检查点；文件包含地形、运行配置、续算状态与气候统计，分支还保存地图朝向。重新选择该文件即可恢复，不需要再选择原图。可对照[浏览器读图](https://github.com/Astervolans/web-exoplasim-qol/blob/41ec7abaa44b7161e66e2b01d78d333a92e5ab78/src/ui/gcm/terrain/useTerrainImport.ts)与[保存和加载流程](https://github.com/Astervolans/web-exoplasim-qol/blob/41ec7abaa44b7161e66e2b01d78d333a92e5ab78/src/ui/gcm/useGcmRun.ts)。这与 Dreamulator 的服务端工作区不同，后者由后端保存输入并执行完整构建。
+
 ## 参考资料
 
 - 仓库与许可：`github.com/ryoung48/web-exoplasim`（GPL-2.0）

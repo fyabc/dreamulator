@@ -32,8 +32,11 @@ export interface YearlyClimateData {
   tBelowFrac: Float32Array
   /** Mean precipitation rate, mm per reference month. */
   pMeanMmPerMonth: Float32Array
-  /** Total precipitation, mm per reference year. */
+  /** Total precipitation in mm over the declared basis. */
   pTotalMm: Float32Array
+  pTotalBasis?: 'reference_year' | 'local_window'
+  /** Total scaled to a 365.25-day reference year, when exported separately. */
+  pTotalRef365Mm?: Float32Array
   /** Aridity index P/Eref over the window; NaN unless status is 'valid'. */
   ai: Float32Array
   aiStatus: Uint8Array
@@ -211,6 +214,10 @@ export function decodeYearlyClimate(raw: ArrayBuffer): YearlyClimateData {
     tBelowFrac: toFloat32(obj.t_below_frac as Uint8Array),
     pMeanMmPerMonth: toFloat32(obj.p_mean_mm_per_month as Uint8Array),
     pTotalMm: toFloat32(obj.p_total_mm as Uint8Array),
+    pTotalBasis: obj.p_total_basis === 'reference_year' || obj.p_total_basis === 'local_window'
+      ? obj.p_total_basis : undefined,
+    pTotalRef365Mm: obj.p_total_ref365_mm instanceof Uint8Array
+      ? toFloat32(obj.p_total_ref365_mm) : undefined,
     pHarmonic1: obj.p_harmonic1 ? toFloat32(obj.p_harmonic1 as Uint8Array) : undefined,
     pHarmonic2: obj.p_harmonic2 ? toFloat32(obj.p_harmonic2 as Uint8Array) : undefined,
     pPhase: obj.p_phase ? toFloat32(obj.p_phase as Uint8Array) : undefined,
@@ -250,4 +257,12 @@ export function decodeYearlyClimate(raw: ArrayBuffer): YearlyClimateData {
     out.uccPhase = obj.ucc_phase ? toUint8(obj.ucc_phase as Uint8Array) : undefined
   }
   return out
+}
+
+export function precipitationBasisKey(data: YearlyClimateData | null) {
+  if (data?.pTotalBasis === 'reference_year') return 'precipWindow.referenceYear'
+  if (data?.pTotalBasis === 'local_window') {
+    return data.windowDays != null ? 'precipWindow.localDays' : 'precipWindow.localWindow'
+  }
+  return 'precipWindow.undeclared'
 }

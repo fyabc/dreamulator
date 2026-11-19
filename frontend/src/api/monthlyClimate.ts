@@ -13,6 +13,9 @@ import { decode } from '@msgpack/msgpack'
 export interface MonthlyClimateData {
   numCells: number
   months: number
+  month0?: string
+  binDays?: number
+  windowDays?: number
   /** numCells × months, row-major (cell i, month m → index i * months + m). */
   tMonthly: Float32Array
   pMonthly: Float32Array
@@ -63,6 +66,9 @@ export function decodeMonthlyClimate(raw: ArrayBuffer): MonthlyClimateData {
   const out: MonthlyClimateData = {
     numCells,
     months,
+    month0: typeof obj.month_0 === 'string' ? obj.month_0 : undefined,
+    binDays: typeof obj.bin_days === 'number' ? obj.bin_days : undefined,
+    windowDays: typeof obj.window_days === 'number' ? obj.window_days : undefined,
     tMonthly: toF32(obj.t_monthly as Uint8Array, obj.t_scale, obj.t_offset),
     pMonthly: toF32(obj.p_monthly as Uint8Array, obj.p_scale, obj.p_offset),
     temperatureRangeC: obj.temperature_range_c as [number, number],

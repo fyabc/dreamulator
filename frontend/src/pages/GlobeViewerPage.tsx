@@ -21,6 +21,8 @@ import MapLayerPanel from '../components/map/MapLayerPanel'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
 import SunControl from '../components/map/SunControl'
 import TimeControl from '../components/map/TimeControl'
+import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
+import ClimateLegend from '../components/map/ClimateLegend'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import useRafCoalesced from '../viewers/map/useRafCoalesced'
 import { buildCellKDTree, type KDTree3D } from '../components/map/utils/kdtree'
@@ -52,7 +54,7 @@ export default function GlobeViewerPage() {
     cleanMode, setCleanMode,
     timelapsePlaying, setTimelapsePlaying, monthMs, setMonthMs,
     sunSweep, setSunSweep,
-    layerState, setLayerState,
+    layerState, setLayerState, activeMainLayer,
     monthlyMode, handleMonthlyModeChange, monthlyField,
     particleMode, setParticleMode,
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
@@ -60,7 +62,7 @@ export default function GlobeViewerPage() {
     selectedPlanet, mapPlanets, meta, metaError, elevError, cvtMeshError, awaitingBuild,
     bodyByName, planetRadiusM,
     elevation, elevationDims, cvtMesh, voronoiCells, cellIdMap,
-    monthlyThematic, monthlyData, monthlyMonth, yearlyData, uccTexture,
+    monthlyThematic, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, handleCellHover, selectedCells,
     selectCell, clearSelection,
     hoveredCell, hoveredCellData, inspectorCell, selectedCellData, selectedCellObjects,
@@ -301,9 +303,12 @@ export default function GlobeViewerPage() {
         </div>
       )}
       {awaitingBuild && !cleanMode && (
-        <div className="bg-sky-900/20 border-b border-sky-700/30 px-4 py-2 text-sm text-sky-200 text-center" data-testid="awaiting-build">
-          {t('label.awaitingBuild')}
-        </div>
+        <AwaitingBuildBanner world={worldName} branch={selectedBranch} />
+      )}
+      {!cleanMode && cvtMesh && (
+        <ClimateLegend layer={activeMainLayer} mesh={cvtMesh} monthlyMode={monthlyMode}
+          monthlyData={monthlyThematic ? monthlyData : null} monthlyLoading={monthlyLoading}
+          monthIndex={monthlyMonth} yearlyData={yearlyData} />
       )}
       {(metaError || elevError || (cvtMeshError && !awaitingBuild)) && (
         <div className="bg-red-900/20 border-b border-red-700/30 px-4 py-2 text-sm text-red-300 text-center">
@@ -447,6 +452,7 @@ export default function GlobeViewerPage() {
               </div>
               <TimeControl
                 monthlyMode={monthlyMode}
+                monthlyData={monthlyData}
                 onMonthlyModeChange={handleMonthlyModeChange}
                 seasonDeg={seasonDeg}
                 onSeasonChange={setSeasonDeg}
@@ -463,6 +469,7 @@ export default function GlobeViewerPage() {
                 onChange={setLayerState}
                 isEarth={worldName === 'earth'}
                 monthlyMode={monthlyMode}
+                monthlyData={monthlyData}
                 monthIndex={monthlyMonth}
                 onMonthlyModeChange={handleMonthlyModeChange}
                 particleMode={particleMode}
@@ -488,6 +495,7 @@ export default function GlobeViewerPage() {
           <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3 space-y-4">
             <TimeControl
               monthlyMode={monthlyMode}
+              monthlyData={monthlyData}
               onMonthlyModeChange={handleMonthlyModeChange}
               seasonDeg={seasonDeg}
               onSeasonChange={setSeasonDeg}
@@ -504,6 +512,7 @@ export default function GlobeViewerPage() {
               onChange={setLayerState}
               isEarth={worldName === 'earth'}
               monthlyMode={monthlyMode}
+              monthlyData={monthlyData}
               monthIndex={monthlyMonth}
               onMonthlyModeChange={handleMonthlyModeChange}
               particleMode={particleMode}

@@ -17,9 +17,12 @@ import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { solarDeclinationDeg } from '../../viewers/utils/solar'
+import type { MonthlyClimateData } from '../../api/monthlyClimate'
+import { climateWindowLabel } from './climateTime'
 
 interface TimeControlProps {
   monthlyMode: boolean
+  monthlyData: MonthlyClimateData | null
   onMonthlyModeChange: (mode: boolean) => void
   seasonDeg: number
   onSeasonChange: (deg: number) => void
@@ -55,6 +58,7 @@ function HelpIcon() {
 
 export default function TimeControl({
   monthlyMode,
+  monthlyData,
   onMonthlyModeChange,
   seasonDeg,
   onSeasonChange,
@@ -70,7 +74,9 @@ export default function TimeControl({
 
   // Month names in natural order, indexed by season-month (0 = March).
   const months = t('months', { returnObjects: true }) as unknown as string[]
-  const monthName = months[seasonMonthIndex(seasonDeg)] ?? String(seasonMonthIndex(seasonDeg) + 1)
+  const namedMonths = monthlyData?.month0 === 'vernal_equinox'
+  const monthIndex = seasonMonthIndex(seasonDeg)
+  const monthName = climateWindowLabel(t, monthlyData, monthIndex)
 
   const declination = solarDeclinationDeg(seasonDeg, axialTiltDeg)
   const formatDeclination = (dec: number): string => {
@@ -93,7 +99,7 @@ export default function TimeControl({
   // Tick labels: month names (Mar/Jun/Sep/Dec, wrapped) in monthly mode,
   // the four seasonal markers in annual mode.
   const tickLabels = monthlyMode
-    ? [months[0], months[3], months[6], months[9], months[0]]
+    ? namedMonths ? [months[0], months[3], months[6], months[9], months[0]] : [1, 4, 7, 10, 1]
     : [t('sun.springEquinox'), t('sun.summerSolstice'), t('sun.autumnEquinox'), t('sun.winterSolstice'), t('sun.springEquinox')]
 
   return (
@@ -185,7 +191,7 @@ export default function TimeControl({
       <div className="space-y-1">
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-gray-500">
-            {monthlyMode ? t('time.monthLabel') : t('time.seasonLabel')}
+            {monthlyMode ? t(namedMonths ? 'time.monthLabel' : 'time.windowLabel') : t('time.seasonLabel')}
           </span>
           <span className="text-[10px] font-mono tabular-nums text-amber-300/80">
             {monthlyMode

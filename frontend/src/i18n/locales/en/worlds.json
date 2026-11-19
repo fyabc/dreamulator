@@ -55,6 +55,45 @@
     "creating": "Creating...",
     "createFirstWorld": "Create your first world"
   },
+  "build": {
+    "title": "World build",
+    "target": "Build target: {{branch}}",
+    "referenceRoot": "This reference world is read-only. Select a branch to build.",
+    "gridLoading": "Reading the build grid…",
+    "gridConfigured": "Configured terrain grid: {{cells}} cells. Finer grids take more time and memory.",
+    "gridReused": "Reuses an existing terrain grid: {{cells}} cells.",
+    "gridReusedUnknown": "This build requires an existing terrain grid, but its cell count is unavailable.",
+    "gridUnknown": "Could not read the configured terrain grid size.",
+    "starting": "Submitting…",
+    "checking": "Checking the last build…",
+    "retry": "Retry build",
+    "startNew": "Start a new build",
+    "elapsed": "Elapsed: {{seconds}} s",
+    "stageChanged": "Last stage change:",
+    "bootstrap": "Prepare inherited data",
+    "busy": "The server is already running a build. Wait for it to finish, then retry.",
+    "startError": "Could not start the build: {{error}}",
+    "statusError": "Could not read build status. Retrying the status check: {{error}}",
+    "statusLost": "This build's status is no longer available. Check the saved results before starting a new build.",
+    "failedHint": "Inputs and saved results are still available. Fix the reported issue and retry; the server can reuse valid results.",
+    "openMap": "Open terrain map",
+    "openTemperature": "Open temperature layer",
+    "job": {
+      "queued": "Accepted; waiting to start",
+      "running": "Build in progress",
+      "succeeded": "Build completed",
+      "failed": "Build failed"
+    },
+    "stage": {
+      "pending": "Waiting",
+      "validating": "Checking inputs and cache",
+      "running": "Running",
+      "succeeded": "Completed",
+      "skipped": "Reused cached results",
+      "failed": "Failed",
+      "not_run": "Not run"
+    }
+  },
   "status": {
     "noWorlds": "No worlds",
     "noWorldsStatic": "No exported world data",

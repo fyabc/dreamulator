@@ -17,10 +17,11 @@ import type { VoronoiCell, CVTMesh } from '../../viewers/map/types'
 import type { ColorMode } from '../../viewers/map/types'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import type { YearlyClimateData } from '../../api/yearlyClimate'
-import { uccCode } from '../../api/yearlyClimate'
+import { precipitationBasisKey, uccCode } from '../../api/yearlyClimate'
 import { observedTempAt, observedPrecipAt, observedWindAt, observedCurrentAt, observedSlpAnomAt } from '../../viewers/map/spatialReference'
 import { useDevModeStore } from '../../stores/devModeStore'
 import { useExperimentalStore } from '../../stores/experimentalStore'
+import { climateWindowLabel } from './climateTime'
 
 interface MapCellInspectorProps {
   cell: VoronoiCell | null
@@ -426,11 +427,11 @@ function CellDetails({
 
   // Monthly lookup (Phase 4): the arrays are numCells×months, row i = mesh-cell
   // index — so resolve the cell's row via cellIndexById, then pick the month.
-  const monthNames = t('months', { returnObjects: true }) as unknown as string[]
-  const monthName = monthNames[monthIndex] ?? ''
+  const monthName = climateWindowLabel(t, monthlyData, monthIndex)
   const idx = cellIndexById.get(cell.id)
   const nMonths = monthlyData?.months ?? 12
-  const hasMonthly = monthlyMode && monthlyData != null && idx !== undefined
+  const hasMonthly = monthlyMode && monthlyData != null && idx !== undefined &&
+    idx < monthlyData.numCells && monthIndex >= 0 && monthIndex < nMonths
   const mTemp = hasMonthly ? monthlyData!.tMonthly[idx! * nMonths + monthIndex] : undefined
   const mPrecip = hasMonthly ? monthlyData!.pMonthly[idx! * nMonths + monthIndex] : undefined
   const mPressure = hasMonthly && monthlyData!.pressureMonthly
@@ -449,6 +450,10 @@ function CellDetails({
   // UCC yearly descriptors (UCC-01): same row order as the monthly arrays.
   const hasYearly = yearlyData != null && idx !== undefined
   const yi = hasYearly ? idx! : -1
+  const precipBasis = t(precipitationBasisKey(yearlyData), { days: yearlyData?.windowDays })
+  const normalizedPrecip = yearlyData?.pTotalBasis === 'local_window' ? yearlyData.pTotalRef365Mm?.[yi] : undefined
+  const climateSource = yearlyData?.provenance?.climate_source === 'gcm'
+    ? 'gcm-climatology' : yearlyData?.dataSource
   const descStatusName = (code: number): string =>
     yearlyData?.statusCodes[code] ?? 'not_applicable'
   const aiStatus = hasYearly ? descStatusName(yearlyData!.aiStatus[yi]) : null
@@ -509,8 +514,9 @@ function CellDetails({
   // Declaration block (click-to-show): the time basis falls back to the
   // result contract's reference month/year on engine exports that predate
   // the bin_days/window_days fields.
-  const declBinDays = yearlyData?.binDays ?? yearlyData?.referenceMonthDays
-  const declWindowDays = yearlyData?.windowDays ?? yearlyData?.referenceYearDays
+  const referenceBasis = yearlyData?.pTotalBasis === 'reference_year'
+  const declBinDays = yearlyData?.binDays ?? (referenceBasis ? yearlyData.referenceMonthDays : undefined)
+  const declWindowDays = yearlyData?.windowDays ?? (referenceBasis ? yearlyData.referenceYearDays : undefined)
   const declProvenanceEntries = yearlyData?.provenance ? Object.entries(yearlyData.provenance) : []
 
   const hasGeology = Boolean(
@@ -735,16 +741,16 @@ function CellDetails({
                 </dd>
               </div>
             )}
-            {hasMonthly && mTemp !== undefined ? (
+            {hasMonthly ? (
               <div className="flex justify-between">
-                <dt className="text-gray-500">{t('inspector.monthlyTemp')}</dt>
-                <dd className="font-mono">{mTemp.toFixed(1)} °C</dd>
+                <dt className="text-gray-500">{t('inspector.windowTemp')}</dt>
+                <dd className="font-mono">{mTemp != null && Number.isFinite(mTemp) ? `${mTemp.toFixed(1)} °C` : '—'}</dd>
               </div>
             ) : (
               <>
-                {cell.temperature_C != null && (
+                {cell.temperature_C != null && Number.isFinite(cell.temperature_C) && (
                   <div className="flex justify-between">
-                    <dt className="text-gray-500">{t('inspector.annualTemp')}</dt>
+                    <dt className="text-gray-500">{t('inspector.periodTemp')}</dt>
                     <dd className="font-mono">{cell.temperature_C.toFixed(1)} °C</dd>
                   </div>
                 )}
@@ -758,18 +764,32 @@ function CellDetails({
                 )}
               </>
             )}
-            {hasMonthly && mPrecip !== undefined ? (
-              <div className="flex justify-between">
-                <dt className="text-gray-500">{t('inspector.monthlyPrecip')}</dt>
-                <dd className="font-mono">{Math.round(mPrecip)} mm</dd>
+            {hasMonthly ? (
+              <div className="flex justify-between gap-2">
+                <dt className="text-gray-500">{monthlyData?.binDays != null
+                  ? t('inspector.windowPrecipDuration', { duration: formatDurationDays(monthlyData.binDays) })
+                  : t('inspector.windowPrecip')}</dt>
+                <dd className="font-mono shrink-0">{mPrecip != null && Number.isFinite(mPrecip) ? `${Math.round(mPrecip)} mm` : '—'}</dd>
               </div>
             ) : (
-              cell.precipitation_mm != null && (
+              cell.precipitation_mm != null && Number.isFinite(cell.precipitation_mm) && (
                 <div className="flex justify-between">
-                  <dt className="text-gray-500">{t('inspector.annualPrecip')}</dt>
+                  <dt className="text-gray-500">{t('precipWindow.total', { basis: precipBasis })}</dt>
                   <dd className="font-mono">{Math.round(cell.precipitation_mm)} mm</dd>
                 </div>
               )
+            )}
+            {!hasMonthly && normalizedPrecip != null && Number.isFinite(normalizedPrecip) && (
+              <div className="flex justify-between gap-2">
+                <dt className="text-gray-500">{t('inspector.normalizedPrecip')}</dt>
+                <dd className="font-mono shrink-0">{Math.round(normalizedPrecip)} mm</dd>
+              </div>
+            )}
+            {!hasMonthly && climateSource && (
+              <div className="flex justify-between gap-2">
+                <dt className="text-gray-500">{t('inspector.climateSource')}</dt>
+                <dd>{t(`uccSource.${climateSource}`, { defaultValue: climateSource })}</dd>
+              </div>
             )}
             {hasMonthly && mPressure !== undefined && (
               <div className="flex justify-between">
@@ -843,8 +863,8 @@ function CellDetails({
               <dd className="font-mono">{(yearlyData!.tBelowFrac[yi] * 100).toFixed(0)}%</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-gray-500" title={t('tooltip.descPrecipTotal')}>{t('inspector.descPrecipTotal')}</dt>
-              <dd className="font-mono">{Math.round(yearlyData!.pTotalMm[yi])} mm</dd>
+              <dt className="text-gray-500">{t('precipWindow.total', { basis: precipBasis })}</dt>
+              <dd className="font-mono">{Number.isFinite(yearlyData!.pTotalMm[yi]) ? `${Math.round(yearlyData!.pTotalMm[yi])} mm` : '—'}</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-gray-500" title={t('tooltip.descAridity')}>{t('inspector.descAridity')}</dt>
@@ -1255,10 +1275,10 @@ function topN<K>(map: Map<K, number>, n: number): [K, number][] {
 }
 
 interface WorldStatsData {
-  tempMean: number
+  tempMean: number | null
   tempMin: number
   tempMax: number
-  precipMean: number
+  precipMean: number | null
   nppMean: number
   koppen: Map<string, number>
   biome: Map<string, number>
@@ -1278,12 +1298,12 @@ function computeWorldStats(cvtMesh: CVTMesh): WorldStatsData {
   const provinces = new Set<string>()
 
   for (const c of cells) {
-    if (c.temperature_C != null) {
+    if (c.temperature_C != null && Number.isFinite(c.temperature_C)) {
       tSum += c.temperature_C; tCount++
       if (c.temperature_C < tMin) tMin = c.temperature_C
       if (c.temperature_C > tMax) tMax = c.temperature_C
     }
-    if (c.precipitation_mm != null) { pSum += c.precipitation_mm; pCount++ }
+    if (c.precipitation_mm != null && Number.isFinite(c.precipitation_mm)) { pSum += c.precipitation_mm; pCount++ }
     if (c.npp_gc_m2_yr != null) { nSum += c.npp_gc_m2_yr; nCount++ }
     if (c.koppen_class && c.koppen_class !== 'Ocean') koppen.set(c.koppen_class, (koppen.get(c.koppen_class) ?? 0) + 1)
     if (c.biome && c.biome !== 'ocean') biome.set(c.biome, (biome.get(c.biome) ?? 0) + 1)
@@ -1292,16 +1312,18 @@ function computeWorldStats(cvtMesh: CVTMesh): WorldStatsData {
   }
 
   return {
-    tempMean: tCount ? tSum / tCount : 0,
+    tempMean: tCount ? tSum / tCount : null,
     tempMin: isFinite(tMin) ? tMin : 0,
     tempMax: isFinite(tMax) ? tMax : 0,
-    precipMean: pCount ? pSum / pCount : 0,
+    precipMean: pCount ? pSum / pCount : null,
     nppMean: nCount ? nSum / nCount : 0,
     koppen, biome, soil, provinceCount: provinces.size,
   }
 }
 
-function WorldStats({ cvtMesh, planetName }: { cvtMesh: CVTMesh | null; planetName: string | null }) {
+function WorldStats({ cvtMesh, planetName, yearlyData }: {
+  cvtMesh: CVTMesh | null; planetName: string | null; yearlyData: YearlyClimateData | null
+}) {
   const { t } = useTranslation('map')
   const stats = useMemo(() => (cvtMesh ? computeWorldStats(cvtMesh) : null), [cvtMesh])
   if (!cvtMesh || !stats) {
@@ -1321,15 +1343,15 @@ function WorldStats({ cvtMesh, planetName }: { cvtMesh: CVTMesh | null; planetNa
         <dl className="space-y-1 text-xs">
           <div className="flex justify-between">
             <dt className="text-gray-500">{t('inspector.globalTemp')}</dt>
-            <dd className="font-mono">{stats.tempMean.toFixed(1)} °C</dd>
+            <dd className="font-mono">{stats.tempMean == null ? '—' : `${stats.tempMean.toFixed(1)} °C`}</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-gray-500">{t('inspector.tempRange')}</dt>
-            <dd className="font-mono">{stats.tempMin.toFixed(0)} ~ {stats.tempMax.toFixed(0)} °C</dd>
+            <dd className="font-mono">{stats.tempMean == null ? '—' : `${stats.tempMin.toFixed(0)} ~ ${stats.tempMax.toFixed(0)} °C`}</dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-gray-500">{t('inspector.globalPrecip')}</dt>
-            <dd className="font-mono">{Math.round(stats.precipMean)} mm/yr</dd>
+            <dt className="text-gray-500">{t('inspector.globalPrecip')} · {t(precipitationBasisKey(yearlyData), { days: yearlyData?.windowDays })}</dt>
+            <dd className="font-mono shrink-0">{stats.precipMean == null ? '—' : `${Math.round(stats.precipMean)} mm`}</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-gray-500">{t('inspector.koppenCount')}</dt>
@@ -1431,7 +1453,7 @@ export default function MapCellInspector({
       </div>
 
       {view === 'stats' ? (
-        <WorldStats cvtMesh={cvtMesh} planetName={planetName} />
+        <WorldStats cvtMesh={cvtMesh} planetName={planetName} yearlyData={yearlyData} />
       ) : !cell && selectedCells && selectedCells.length > 1 ? (
         <MultiCellStats cells={selectedCells} />
       ) : cell ? (

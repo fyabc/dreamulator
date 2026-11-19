@@ -28,7 +28,8 @@
     "uploadRaster": "⬆ 锚定灰度图",
     "uploading": "上传中…",
     "importHeightmap": "⬆ 导入高度图",
-    "importing": "导入中…"
+    "importing": "导入中…",
+    "openBuild": "前往构建世界"
   },
   "status": {
     "loading": "加载中...",
@@ -180,16 +181,17 @@
     "basin": "断陷盆地",
     "climate": "气候",
     "koppenClimate": "Köppen 气候",
-    "annualTemp": "年均温",
+    "periodTemp": "完整时段平均温度",
+    "climateSource": "气候数据来源",
     "hottestColdest": "最热月 / 最冷月",
-    "annualPrecip": "年降水",
     "tempDeviation": "温度偏差 ΔT",
     "precipDeviation": "降水偏差 ΔP",
     "pressureDeviation": "ΔSLP 偏差",
     "windDeviation": "风速偏差",
     "currentDeviation": "洋流偏差",
-    "monthlyTemp": "月度温度",
-    "monthlyPrecip": "月度降水",
+    "windowTemp": "本时段温度",
+    "windowPrecip": "本时段累计降水",
+    "windowPrecipDuration": "本时段累计降水（{{duration}}）",
     "pressureAnomaly": "气压异常",
     "slpAbsolute": "海平面气压",
     "distanceToCoast": "距岸距离",
@@ -241,7 +243,7 @@
     "descMinMaxTemp": "最冷月 / 最热月",
     "descTempRange": "温度季节范围",
     "descBelowFreeze": "低于 {{threshold}}°C 时间份额",
-    "descPrecipTotal": "年降水（参考年）",
+    "normalizedPrecip": "折算到 365.25 天",
     "descAridity": "干燥度指数 AI",
     "descDeficit": "同期供需亏缺",
     "descConcentration": "降水集中度",
@@ -286,7 +288,6 @@
     "descMeanTemp": "时长加权平均温度（分箱均值按时长加权）",
     "descTempRange": "最热月与最冷月均值之差（全范围，非半振幅；非天气瞬时极值）",
     "descBelowFreeze": "分箱月均温低于阈值的时长份额，不是实际霜冻天数",
-    "descPrecipTotal": "每 365.25 天参考年的总降水",
     "descAridity": "AI = 总降水 / 参考蒸散（Hamon 1961，固定 12h 日长）——参考气候供需比，不是土壤湿度",
     "descDeficit": "Σ max(Eref−P, 0) / Σ Eref——同期亏缺份额，忽略储水与横向输水",
     "descConcentration": "C_TV = 0.5 Σ |q_i − w_i|——降水时间分布相对均匀率的偏离，无降水时无定义",
@@ -307,6 +308,13 @@
     "autumnEquinox": "秋分",
     "winterSolstice": "冬至"
   },
+  "precipWindow": {
+    "total": "累计降水（{{basis}}）",
+    "referenceYear": "365.25 天参考年",
+    "localDays": "当地 {{days, number(maximumFractionDigits: 2)}} 天窗口",
+    "localWindow": "当地时间窗口",
+    "undeclared": "文件未声明时段"
+  },
   "time": {
     "title": "时间",
     "titleHint": "时间维度：年均 / 月度模式 + 季节/月份滑块",
@@ -314,6 +322,9 @@
     "monthly": "月度",
     "seasonLabel": "季节（仅光照）",
     "monthLabel": "月份",
+    "windowLabel": "数据时段",
+    "windowNumber": "第 {{number}} 个时段",
+    "windowWithDuration": "{{window}}，{{days, number(maximumFractionDigits: 2)}} 天",
     "annualHint": "年均模式：图层显示年度平均，季节滑条仅影响光照",
     "monthlyHint": "月度模式：拖动选择月份，温度/降水/气压/风场随之变化",
     "playHint": "季节循环播放：月份逐月推进、循环回绕（视频录制用）",
@@ -427,7 +438,11 @@
     "ocean": "海洋",
     "land": "陆地",
     "lake": "湖泊",
-    "frozenLake": "冰湖"
+    "frozenLake": "冰湖",
+    "logScale": "对数色标",
+    "climateMissing": "这个气候图层没有陆地数据。",
+    "monthlyLoading": "正在读取月度数据…",
+    "monthlyMissing": "没有可用的月度数据，图层颜色仍按完整时段的结果显示。"
   },
   "panel": {
     "none": "无",

@@ -5,6 +5,11 @@ export interface BuildOptions {
   force?: boolean
 }
 
+export interface BuildGrid {
+  num_cells: number | null
+  reuses_mesh: boolean
+}
+
 export interface BuildSummary {
   status: string
   engines_run: number

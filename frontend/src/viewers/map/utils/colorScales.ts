@@ -63,6 +63,9 @@ export const TEMPERATURE_SCALE: ColorStop[] = palettesJson.continuous.temperatur
 
 /** Annual precipitation sequential scale (ColorBrewer YlGnBu, log-normalised). */
 export const PRECIP_SCALE: ColorStop[] = palettesJson.continuous.precip as ColorStop[]
+export const TEMPERATURE_LIMIT_C = 40
+export const PRECIP_TOTAL_LIMIT_MM = 30_000
+export const PRECIP_WINDOW_LIMIT_MM = 2_500
 
 /** Habitability grade (宜居等级): dark slate → amber → green → teal. */
 export const HABITABILITY_SCALE: ColorStop[] = palettesJson.continuous.habitability as ColorStop[]

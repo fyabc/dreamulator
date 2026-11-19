@@ -28,7 +28,8 @@
     "uploadRaster": "⬆ Geography Raster",
     "uploading": "Uploading…",
     "importHeightmap": "⬆ Import Heightmap",
-    "importing": "Importing…"
+    "importing": "Importing…",
+    "openBuild": "Open world build"
   },
   "status": {
     "loading": "Loading...",
@@ -180,16 +181,17 @@
     "basin": "Intermontane basin",
     "climate": "Climate",
     "koppenClimate": "Köppen climate",
-    "annualTemp": "Annual temp.",
+    "periodTemp": "Mean temperature (full period)",
+    "climateSource": "Climate data source",
     "hottestColdest": "Hottest / coldest",
-    "annualPrecip": "Annual precip.",
     "tempDeviation": "Temp. deviation ΔT",
     "precipDeviation": "Precip. deviation ΔP",
     "pressureDeviation": "ΔSLP deviation",
     "windDeviation": "Wind deviation",
     "currentDeviation": "Current deviation",
-    "monthlyTemp": "Monthly temp.",
-    "monthlyPrecip": "Monthly precip.",
+    "windowTemp": "Temperature in this window",
+    "windowPrecip": "Precipitation in this window",
+    "windowPrecipDuration": "Precipitation in this {{duration}} window",
     "pressureAnomaly": "Pressure anomaly",
     "slpAbsolute": "Sea-level pressure",
     "distanceToCoast": "Distance to coast",
@@ -241,7 +243,7 @@
     "descMinMaxTemp": "Coldest / hottest month",
     "descTempRange": "Seasonal temp range",
     "descBelowFreeze": "Time below {{threshold}}°C",
-    "descPrecipTotal": "Annual precip (ref. year)",
+    "normalizedPrecip": "Scaled to 365.25 days",
     "descAridity": "Aridity index AI",
     "descDeficit": "Same-period deficit",
     "descConcentration": "Precip concentration",
@@ -286,7 +288,6 @@
     "descMeanTemp": "Duration-weighted mean of bin-mean temperatures",
     "descTempRange": "Hottest minus coldest bin mean (full range, not half-amplitude; not a weather extreme)",
     "descBelowFreeze": "Fraction of time with bin-mean temperature below the threshold — not actual frost days",
-    "descPrecipTotal": "Total precipitation per 365.25-day reference year",
     "descAridity": "AI = total precipitation / reference evapotranspiration (Hamon 1961, fixed 12 h daylength) — a reference supply–demand ratio, not soil moisture",
     "descDeficit": "Σ max(Eref−P, 0) / Σ Eref — same-period shortfall fraction; ignores storage and lateral water transport",
     "descConcentration": "C_TV = 0.5 Σ |q_i − w_i| — deviation of the precipitation time distribution from a uniform rate; undefined without precipitation",
@@ -307,6 +308,13 @@
     "autumnEquinox": "Equinox",
     "winterSolstice": "Solstice"
   },
+  "precipWindow": {
+    "total": "Precipitation total ({{basis}})",
+    "referenceYear": "365.25-day reference year",
+    "localDays": "{{days, number(maximumFractionDigits: 2)}}-day local window",
+    "localWindow": "local window",
+    "undeclared": "time window not declared"
+  },
   "time": {
     "title": "Time",
     "titleHint": "Time dimension: annual/monthly mode + season/month slider",
@@ -314,6 +322,9 @@
     "monthly": "Monthly",
     "seasonLabel": "Season (lighting only)",
     "monthLabel": "Month",
+    "windowLabel": "Data window",
+    "windowNumber": "Window {{number}}",
+    "windowWithDuration": "{{window}}, {{days, number(maximumFractionDigits: 2)}} d",
     "annualHint": "Annual mode: layers show annual averages; the season slider affects lighting only.",
     "monthlyHint": "Monthly mode: drag to pick a month — temperature / precipitation / pressure / wind follow it.",
     "playHint": "Seasonal cycle playback: months advance step by step and wrap around (for video recording)",
@@ -427,7 +438,11 @@
     "ocean": "Ocean",
     "land": "Land",
     "lake": "Lake",
-    "frozenLake": "Frozen lake"
+    "frozenLake": "Frozen lake",
+    "logScale": "Logarithmic scale",
+    "climateMissing": "No land data for this climate layer.",
+    "monthlyLoading": "Loading monthly data…",
+    "monthlyMissing": "No monthly data available. Any colors shown use the full-period result."
   },
   "panel": {
     "none": "None",

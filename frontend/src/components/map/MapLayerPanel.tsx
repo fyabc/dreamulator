@@ -18,10 +18,12 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import type { ColorMode } from '../../viewers/map/types'
 import { LAYER_HELP, LAYER_GROUPS, type LayerHelpEntry } from './helpContent'
 import { useDevModeStore } from '../../stores/devModeStore'
 import { useExperimentalStore } from '../../stores/experimentalStore'
+import { climateWindowLabel } from './climateTime'
 
 type LayerOpacities = Record<ColorMode, number>
 
@@ -35,7 +37,7 @@ interface MapLayerPanelProps {
   /** Monthly-climate mode (driven by TimeControl). When on, monthly-capable
    *  layers show a month badge, and monthly-only layers (pressure) are live. */
   monthlyMode?: boolean
-  /** Current season-month index (0 = March) for the monthly badge label. */
+  monthlyData?: MonthlyClimateData | null
   monthIndex?: number | null
   /** Called when a monthly-only layer is selected in annual mode, to
    *  auto-enable monthly mode. */
@@ -129,21 +131,25 @@ function HelpIcon() {
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-export default function MapLayerPanel({ state, onChange, monthlyMode = false, monthIndex = null, onMonthlyModeChange, isEarth, particleMode = false, onParticleModeChange }: MapLayerPanelProps) {
+export default function MapLayerPanel({ state, onChange, monthlyMode = false, monthlyData = null, monthIndex = null, onMonthlyModeChange, isEarth, particleMode = false, onParticleModeChange }: MapLayerPanelProps) {
   const { t } = useTranslation('map')
   /** Remember the last explicit non-zero opacity so toggles can restore it. */
   const lastNonZero = useRef<Record<string, number>>({})
 
-  /** Natural-language month name for the badge (empty in annual mode). */
-  const monthName = useMemo(() => {
-    if (monthIndex == null) return ''
-    const months = t('months', { returnObjects: true }) as unknown as string[]
-    return months[monthIndex] ?? String(monthIndex + 1)
-  }, [monthIndex, t])
+  const monthName = monthlyMode && monthlyData && monthIndex != null
+    ? climateWindowLabel(t, monthlyData, monthIndex) : null
+  const monthlyValues: Partial<Record<ColorMode, Float32Array>> = {
+    temperature: monthlyData?.tMonthly,
+    precipitation: monthlyData?.pMonthly,
+    pressure: monthlyData?.pressureMonthly,
+    pressureError: monthlyData?.pressureMonthly,
+    slp: monthlyData?.slpMonthly,
+    winds: monthlyData?.windEastMonthly,
+  }
 
   /** Small month badge for monthly-capable layers (dimmed with the row). */
   const monthBadge = (l: LayerHelpEntry, dimmed: boolean) => {
-    if (!monthlyMode || !l.monthlyCapable || !monthName) return null
+    if (!l.monthlyCapable || !monthName || !monthlyValues[l.id]?.length) return null
     return <span className={`shrink-0 text-[9px] ${dimmed ? 'text-amber-300/40' : 'text-amber-300/70'}`}>·{monthName}</span>
   }
 

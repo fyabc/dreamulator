@@ -18,10 +18,12 @@ import MapViewer from '../components/map/MapViewer'
 import MapLayerPanel from '../components/map/MapLayerPanel'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
 import MapLegend from '../components/map/MapLegend'
+import ClimateLegend from '../components/map/ClimateLegend'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapMinimap from '../components/map/MapMinimap'
 import SunControl from '../components/map/SunControl'
 import TimeControl from '../components/map/TimeControl'
+import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
 
 export default function MapViewerPage() {
@@ -47,7 +49,7 @@ export default function MapViewerPage() {
     selectedPlanet, mapPlanets, meta, bodyByName, currentPlanetName, planetRadiusM,
     worldPlanetsError, platesError,
     elevation, cvtMesh, voronoiCells, awaitingBuild,
-    monthlyThematic, monthlyData, monthlyMonth, yearlyData, uccTexture,
+    monthlyThematic, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, hoveredCell, handleCellHover, selectedCells,
     selectCell, clearSelection,
     hoveredCellData, inspectorCell, selectedCellData, selectedCellObjects,
@@ -180,9 +182,12 @@ export default function MapViewerPage() {
       )}
 
       {awaitingBuild && !cleanMode && (
-        <div className="bg-sky-900/20 border-b border-sky-700/30 px-4 py-2 text-sm text-sky-200 text-center" data-testid="awaiting-build">
-          {t('label.awaitingBuild')}
-        </div>
+        <AwaitingBuildBanner world={worldName} branch={selectedBranch} />
+      )}
+      {!cleanMode && cvtMesh && (
+        <ClimateLegend layer={activeMainLayer} mesh={cvtMesh} monthlyMode={monthlyMode}
+          monthlyData={monthlyThematic ? monthlyData : null} monthlyLoading={monthlyLoading}
+          monthIndex={monthlyMonth} yearlyData={yearlyData} />
       )}
       {/* Error banner */}
       {worldPlanetsError && (
@@ -300,6 +305,7 @@ export default function MapViewerPage() {
                 </div>
                 <TimeControl
                   monthlyMode={monthlyMode}
+                  monthlyData={monthlyData}
                   onMonthlyModeChange={handleMonthlyModeChange}
                   seasonDeg={seasonDeg}
                   onSeasonChange={setSeasonDeg}
@@ -316,6 +322,7 @@ export default function MapViewerPage() {
                   onChange={setLayerState}
                   isEarth={worldName === 'earth'}
                   monthlyMode={monthlyMode}
+                  monthlyData={monthlyData}
                   monthIndex={monthlyMonth}
                   onMonthlyModeChange={handleMonthlyModeChange}
                   particleMode={particleMode}
@@ -346,6 +353,7 @@ export default function MapViewerPage() {
           <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3 space-y-4">
             <TimeControl
               monthlyMode={monthlyMode}
+              monthlyData={monthlyData}
               onMonthlyModeChange={handleMonthlyModeChange}
               seasonDeg={seasonDeg}
               onSeasonChange={setSeasonDeg}
@@ -362,6 +370,7 @@ export default function MapViewerPage() {
               onChange={setLayerState}
               isEarth={worldName === 'earth'}
               monthlyMode={monthlyMode}
+              monthlyData={monthlyData}
               monthIndex={monthlyMonth}
               onMonthlyModeChange={handleMonthlyModeChange}
               particleMode={particleMode}

@@ -43,6 +43,7 @@ export interface MonthlyClimateResult {
   texture: import('three').DataTexture | null
   /** Raw decoded monthly arrays (for wind arrows etc.), or null. */
   data: MonthlyClimateData | null
+  loading: boolean
   /** Current month index 0–11 (0 = March / vernal equinox). */
   month: number
 }
@@ -61,17 +62,20 @@ export function useMonthlyClimate({
   height,
   flipHorizontal,
 }: UseMonthlyClimateArgs): MonthlyClimateResult {
-  const { data: monthly } = useQuery({
+  const { data, isFetching } = useQuery({
     queryKey: ['monthlyClimate', worldName, planetId, branch],
     queryFn: () => api.getMonthlyClimate(worldName!, planetId!, branch),
     enabled: !!worldName && !!planetId && active,
     retry: false,
   })
 
-  const month = Math.round(seasonDeg / 30) % 12
+  const monthly = active && data && (!cvtMesh || data.numCells === cvtMesh.cells.length) ? data : null
+  const month = ((Math.round(seasonDeg / 30) % 12) + 12) % 12
 
   const texture = useMemo(() => {
     if (!monthly || !cvtMesh || !cellIdMap || field === null) return null
+    if ((field === 'pressure' || field === 'pressureError') && !monthly.pressureMonthly) return null
+    if (field === 'slp' && !monthly.slpMonthly) return null
     if (playing) {
       // Strip path: current month synchronously (first-ever month ~25 ms),
       // remaining months trickle in via requestIdleCallback.  Null-safety
@@ -84,5 +88,5 @@ export function useMonthlyClimate({
     return bakeMonthlyLayer(monthly, month, field, cvtMesh, cellIdMap, width, height, flipHorizontal)
   }, [monthly, month, field, cvtMesh, cellIdMap, width, height, flipHorizontal, playing, worldName, planetId, branch])
 
-  return { texture, data: monthly ?? null, month }
+  return { texture, data: monthly, loading: isFetching, month }
 }

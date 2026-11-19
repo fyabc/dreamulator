@@ -60,6 +60,56 @@ def setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         yield client, manager, jobs
 
 
+def test_build_grid_uses_config_before_build_and_inherits_actual_mesh_after_geology(setup):
+    from dreamulator.map.export import MESH_FILENAME, save_cvt_mesh
+
+    client, manager, _ = setup
+    world = manager.world_dir("sample")
+    endpoint = "/api/worlds/sample/build-grid"
+    assert client.get(endpoint).json() == {"num_cells": 100_000, "reuses_mesh": False}
+    inputs = world / "layers/geological/input"
+    inputs.mkdir(parents=True, exist_ok=True)
+    (inputs / "planets.yaml").write_text(
+        "planets:\n  - id: planet_test\n    terrain:\n      num_nodes: 3072\n",
+        encoding="utf-8",
+    )
+    assert client.get(endpoint).json() == {"num_cells": 3072, "reuses_mesh": False}
+    for branch_name, layer in (("terrain", "geological"), ("climate", "climate")):
+        branch = world / "branches" / branch_name
+        branch.mkdir(parents=True)
+        (branch / "branch.yaml").write_text(
+            yaml.safe_dump({"name": branch_name, "fork_layer": layer}), encoding="utf-8"
+        )
+    inputs = world / "branches/terrain/layers/geological/input"
+    inputs.mkdir(parents=True)
+    (inputs / "terrain_config.yaml").write_text("terrain:\n  num_cells: 8192\n", encoding="utf-8")
+    assert client.get(endpoint, params={"branch": "terrain"}).json() == {
+        "num_cells": 8192,
+        "reuses_mesh": False,
+    }
+    assert client.get(endpoint, params={"branch": "climate"}).json() == {
+        "num_cells": None,
+        "reuses_mesh": True,
+    }
+    map_dir = world / "maps/planet_test"
+    map_dir.mkdir(parents=True)
+    save_cvt_mesh(map_dir / MESH_FILENAME, {"num_cells": 2048})
+    (map_dir / "map.yaml").write_text("voronoi_num_cells: 2048\n", encoding="utf-8")
+    assert client.get(endpoint, params={"branch": "climate"}).json() == {
+        "num_cells": 2048,
+        "reuses_mesh": True,
+    }
+    branch_mesh = world / "branches/climate/maps/planet_test" / MESH_FILENAME
+    save_cvt_mesh(branch_mesh, {"num_cells": 2048})
+    assert client.get(endpoint, params={"branch": "climate"}).json() == {
+        "num_cells": 2048,
+        "reuses_mesh": True,
+    }
+    assert client.get(endpoint).json() == {"num_cells": 3072, "reuses_mesh": False}
+    assert client.get(endpoint, params={"branch": "missing"}).status_code == 404
+    assert client.get(endpoint, params={"branch": ".."}).status_code == 422
+
+
 def test_results_cache_and_forced_target(setup):
     client, manager, _ = setup
     world = manager.world_dir("sample")

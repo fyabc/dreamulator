@@ -349,31 +349,49 @@ class GeologicalEngine(BaseEngine):
 
         return iter_mesh_files(self.maps_output_dir)
 
-    def _load_config(
-        self, pars: dict[str, object]
-    ) -> tuple[TerrainPipelineConfig | None, list[str]]:
-        """Load TerrainPipelineConfig and canonical physical parameters.
+    def preview_mesh_cells(self, *, inherited: bool = False) -> tuple[int | None, bool]:
+        """Return the mesh size and whether the build reuses an existing mesh."""
+        import yaml
 
-        Terrain-generation knobs come from ``terrain_config.yaml`` (or planet
-        defaults); physical forcing parameters (stellar luminosity, orbital
-        distance, tilt, rotation, radius, greenhouse) are resolved exactly as
-        the climate engine does (shared ``physical_inputs`` module), so the
-        in-pipeline climate pass and the climate engine can never diverge.
+        planet_id = self._detect_planet_id()
+        if inherited:
+            from dreamulator.engine.climate import geological_mesh_candidates
 
-        Args:
-            pars: Optional parameter overrides.
+            candidates, _ = geological_mesh_candidates(
+                self.layer_derived_dirs,
+                self.layer_input_dirs,
+                self.maps_output_dir,
+                planet_id=planet_id,
+                world_dir=self.world_dir,
+            )
+            mesh_path = next(iter(candidates), None)
+        else:
+            from dreamulator.map.elevation_input import SOURCE_MANIFEST, load_elevation_sources
 
-        Returns:
-            (config, warnings).
-        """
-        from dreamulator.engine.physical_inputs import (
-            PHYSICAL_CONFIG_FIELDS,
-            resolve_and_apply_physical_parameters,
-            resolve_tidal_lock,
-        )
+            cfg, _ = self._load_terrain_config()
+            sources = load_elevation_sources(self.find_input(SOURCE_MANIFEST))
+            if cfg.elevation_source != "imported" or planet_id in sources:
+                return cfg.num_nodes, False
+            mesh_path = self._find_imported_mesh(planet_id)
+
+        if mesh_path is None:
+            return None, True
+        metadata_paths = [mesh_path.with_name("map.yaml")]
+        if inherited and self._branch_name() and mesh_path.is_relative_to(self.maps_output_dir):
+            root_mesh = self.world_dir / "maps" / mesh_path.parent.name / mesh_path.name
+            if root_mesh.is_file():
+                metadata_paths.append(root_mesh.with_name("map.yaml"))
+        for metadata_path in metadata_paths:
+            if metadata_path.is_file():
+                with metadata_path.open(encoding="utf-8") as stream:
+                    metadata = yaml.safe_load(stream)
+                if isinstance(metadata, dict) and "voronoi_num_cells" in metadata:
+                    return metadata["voronoi_num_cells"], True
+        return None, True
+
+    def _load_terrain_config(self) -> tuple[TerrainPipelineConfig, bool]:
+        """Read terrain knobs and whether the land fraction is authored."""
         from dreamulator.map.pipeline_types import TerrainPipelineConfig
-
-        warnings: list[str] = []
 
         # Try to find terrain_config.yaml
         config_path = self.find_input("terrain_config.yaml")
@@ -405,6 +423,21 @@ class GeologicalEngine(BaseEngine):
                     cfg = TerrainPipelineConfig()
             else:
                 cfg = TerrainPipelineConfig()
+        return cfg, land_fraction_authored
+
+    def _load_config(
+        self, pars: dict[str, object]
+    ) -> tuple[TerrainPipelineConfig | None, list[str]]:
+        """Resolve terrain knobs and the canonical physical forcing shared with climate."""
+        from dreamulator.engine.physical_inputs import (
+            PHYSICAL_CONFIG_FIELDS,
+            resolve_and_apply_physical_parameters,
+            resolve_tidal_lock,
+        )
+        from dreamulator.map.pipeline_types import TerrainPipelineConfig
+
+        warnings: list[str] = []
+        cfg, land_fraction_authored = self._load_terrain_config()
 
         # Apply parameter overrides (terrain knobs from CLI/API)
         for key in ("num_nodes", "num_plates", "seed", "tectonic_steps"):

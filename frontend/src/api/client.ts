@@ -1,7 +1,7 @@
 import { isStaticMode } from './mode'
 import type { MapResultMetadata } from './resultContract'
 import { staticApi } from './staticClient'
-import type { BuildJob, BuildOptions, BuildSummary } from './buildJobs'
+import type { BuildGrid, BuildJob, BuildOptions, BuildSummary } from './buildJobs'
 import { mappingFormFields } from './elevationImport'
 import type {
   ElevationImportResponse,
@@ -176,6 +176,12 @@ interface ApiResponse<T> {
   data: T
 }
 
+export class ApiError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message)
+  }
+}
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${url}`, {
     headers: {
@@ -187,7 +193,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
-    throw new Error(error.detail || error.error || `HTTP ${response.status}`)
+    throw new ApiError(response.status, error.detail || error.error || `HTTP ${response.status}`)
   }
 
   // Handle 204 No Content
@@ -355,6 +361,13 @@ const liveOnlyApi = {
       body: JSON.stringify({ ...options, engine }),
     }),
 
+  getBuildGrid: (name: string, branch?: string | null) => {
+    const query = branch ? `?branch=${encodeURIComponent(branch)}` : ''
+    return fetchJson<BuildGrid>(`/worlds/${encodeURIComponent(name)}/build-grid${query}`, {
+      cache: 'no-store',
+    })
+  },
+
   startBuildJob: (name: string, options: BuildOptions = {}) =>
     fetchJson<BuildJob>(`/worlds/${encodeURIComponent(name)}/build-jobs`, {
       method: 'POST',
@@ -362,7 +375,9 @@ const liveOnlyApi = {
     }),
 
   getBuildJob: (name: string, jobId: string) =>
-    fetchJson<BuildJob>(`/worlds/${encodeURIComponent(name)}/build-jobs/${encodeURIComponent(jobId)}`),
+    fetchJson<BuildJob>(`/worlds/${encodeURIComponent(name)}/build-jobs/${encodeURIComponent(jobId)}`, {
+      cache: 'no-store',
+    }),
 
   // ---- Map write operations ----
 
@@ -816,6 +831,9 @@ export const api = {
     isStaticMode()
       ? Promise.reject(new Error('Not available in static mode'))
       : liveOnlyApi.buildWorld(...args),
+
+  getBuildGrid: (...args: Parameters<typeof liveOnlyApi.getBuildGrid>) =>
+    isStaticMode() ? staticApi.getBuildGrid() : liveOnlyApi.getBuildGrid(...args),
 
   startBuildJob: (...args: Parameters<typeof liveOnlyApi.startBuildJob>) =>
     isStaticMode() ? staticApi.startBuildJob() : liveOnlyApi.startBuildJob(...args),

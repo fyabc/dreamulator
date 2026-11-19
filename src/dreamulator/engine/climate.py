@@ -520,36 +520,16 @@ def _parent_mesh_is_newer(maps_dir: Path, parent: list[Path], planet_id: str | N
     return parent[0].stat().st_mtime > local[0].stat().st_mtime
 
 
-def _load_cvt_mesh_from_geological(
+def geological_mesh_candidates(
     layer_derived_dirs: dict[str, Path],
     layer_input_dirs: dict[str, Path] | None = None,
     maps_dir: Path | None = None,
     *,
     planet_id: str | None = None,
     world_dir: Path | None = None,
-) -> tuple[CVTMesh | None, Path | None, list[str]]:
-    """Load the CVT mesh, planet-scoped, with parent-world inheritance.
-
-    Candidate locations, most specific first:
-
-    1. this build's unified ``maps/`` — exact ``maps/{planet_id}/`` match
-       before any non-scratch planet directory
-    2. the root world's ``maps/`` (same rule) — branch builds inherit the
-       parent's mesh when the branch has none of its own
-    3. legacy layer-based ``maps/`` locations under the geological layer
-
-    Args:
-        layer_derived_dirs: Map of layer name → derived directory.
-        layer_input_dirs: Map of layer name → input directory.
-        maps_dir: Unified maps output directory for this build (branch or root).
-        planet_id: Target planet — selects the exact mesh instead of the
-            first glob hit.
-        world_dir: Root world directory, enabling parent-map inheritance.
-
-    Returns:
-        (mesh, source path, warnings).  Source path is None iff mesh is None.
-    """
-    from ..map.export import iter_mesh_files, load_cvt_mesh_model
+) -> tuple[list[Path], list[Path]]:
+    """Return the ordered mesh candidates and legacy directories searched."""
+    from ..map.export import iter_mesh_files
 
     candidates: list[Path] = []
     if maps_dir is not None:
@@ -578,6 +558,23 @@ def _load_cvt_mesh_from_geological(
         for p in iter_mesh_files(d / "maps"):
             if p not in candidates:
                 candidates.append(p)
+    return candidates, legacy_dirs
+
+
+def _load_cvt_mesh_from_geological(
+    layer_derived_dirs: dict[str, Path],
+    layer_input_dirs: dict[str, Path] | None = None,
+    maps_dir: Path | None = None,
+    *,
+    planet_id: str | None = None,
+    world_dir: Path | None = None,
+) -> tuple[CVTMesh | None, Path | None, list[str]]:
+    """Load the CVT mesh, planet-scoped, with parent-world inheritance."""
+    from ..map.export import load_cvt_mesh_model
+
+    candidates, legacy_dirs = geological_mesh_candidates(
+        layer_derived_dirs, layer_input_dirs, maps_dir, planet_id=planet_id, world_dir=world_dir
+    )
 
     if not candidates:
         searched = [

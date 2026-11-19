@@ -11,6 +11,7 @@ import LayerDocuments from '../components/LayerDocuments'
 import CivMapPreview from '../components/civmap/CivMapPreview'
 import LayerDag from '../components/LayerDag'
 import LayerTabSection from '../components/world/LayerTabSection'
+import WorldBuildPanel from '../components/world/WorldBuildPanel'
 import StarfieldBackground from '../components/StarfieldBackground'
 
 /** Pick a Unicode glyph + color class based on body type and mass. */
@@ -180,10 +181,6 @@ export default function WorldDetail() {
     retry: false,
   })
 
-  const buildMutation = useMutation({
-    mutationFn: () => api.buildWorld(worldName!),
-  })
-
   const validateMutation = useMutation({
     mutationFn: () => api.validateWorld(worldName!),
   })
@@ -245,6 +242,15 @@ export default function WorldDetail() {
               />
             </div>
 
+            {!staticMode && world && (
+              <WorldBuildPanel
+                key={JSON.stringify([worldName, selectedBranch])}
+                world={worldName}
+                branch={selectedBranch}
+                readOnly={!selectedBranch && (worldName === 'earth' || world.reference_anchor === true)}
+              />
+            )}
+
             {/* Build/Validate buttons — only in API mode */}
             {!staticMode && (
               <div className="flex gap-3 mb-6">
@@ -254,13 +260,6 @@ export default function WorldDetail() {
                   className="px-4 py-2 rounded-lg font-medium transition-all bg-space-surface text-gray-300 border border-space-border hover:border-neon-cyan/30 disabled:opacity-50"
                 >
                   {validateMutation.isPending ? t('status.validating') : t('action.validateWorld')}
-                </button>
-                <button
-                  onClick={() => buildMutation.mutate()}
-                  disabled={buildMutation.isPending}
-                  className="px-4 py-2 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
-                >
-                  {buildMutation.isPending ? t('status.building') : t('action.buildWorld')}
                 </button>
               </div>
             )}

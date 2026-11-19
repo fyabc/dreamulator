@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { encode } from '@msgpack/msgpack'
-import { decodeYearlyClimate, uccCode } from './yearlyClimate'
+import { decodeYearlyClimate, precipitationBasisKey, uccCode } from './yearlyClimate'
 
 /** encode() views a pooled 2048-byte buffer — slice to the exact bytes. */
 function toBuffer(payload: Record<string, unknown>): ArrayBuffer {
@@ -40,6 +40,28 @@ function basePayload(): Record<string, unknown> {
 }
 
 describe('decodeYearlyClimate', () => {
+  it('keeps the local-window total separate from the normalized reference-year total', () => {
+    const decoded = decodeYearlyClimate(toBuffer({
+      ...basePayload(),
+      p_total_basis: 'local_window',
+      window_days: 686.98,
+      p_total_ref365_mm: new Uint8Array(new Float32Array([319, 383]).buffer),
+    }))
+    expect(precipitationBasisKey(decoded)).toBe('precipWindow.localDays')
+    expect(decoded.windowDays).toBe(686.98)
+    expect([...decoded.pTotalMm]).toEqual([600, 720])
+    expect([...decoded.pTotalRef365Mm!]).toEqual([319, 383])
+  })
+
+  it('does not infer a reference year from generic time metadata', () => {
+    const payload = { ...basePayload(), time: { reference_year_days: 365.25 } }
+    const legacy = decodeYearlyClimate(toBuffer(payload))
+    expect(precipitationBasisKey(legacy)).toBe('precipWindow.undeclared')
+    expect(legacy.pTotalRef365Mm).toBeUndefined()
+    const declared = decodeYearlyClimate(toBuffer({ ...payload, p_total_basis: 'reference_year' }))
+    expect(precipitationBasisKey(declared)).toBe('precipWindow.referenceYear')
+  })
+
   it('decodes classification fields when present', () => {
     const payload = {
       ...basePayload(),

@@ -84,6 +84,7 @@
 | [**Gleba**](https://calandiel.itch.io/gleba) | 闭源（itch.io 免费） | 科学模拟：板块构造（沿笔触布置小板块 → 真实造山带/海洋特征）+ 地表水运动/土壤搬运/侵蚀 + 全球气候（降雨+温度，随地形调整）+ 植物群系；显式特性含**湖泊与内流海、冰川/峡湾/末次冰盛期遗迹**；Rust 核心，真实尺度行星 3D 可视化（卫星视图/真彩色） | 同赛道，但无分支系统 / 无 AI 叙事；Gleba 本体闭源，但同作者的 SotE FOSS 版 [SongsOfGPL](https://github.com/Calandiel/SongsOfGPL)（Lua）**含完整气候代码**（`sote/game/climate/`，诊断式 2 月模型），算法详见 §4.3；侵蚀公开信息见 §4.2.1 |
 | [**World Creator**](https://www.world-creator.com/) | 商用 | 2025.1：多层 Biome 系统 + 实时侵蚀/沉积/水/熔岩模拟 + Blender Bridge + 百万级 3D 模型散布 | 纯地形雕刻/渲染，非科学模拟；不生成气候或文明 |
 | [**Gaea**](https://quadspinner.com/) | 商用 | 节点图程序化地形：分形噪声 + 水力/热力侵蚀 + 沉积。2025 支持 tile-aware 导出 | 局部地形（~几 km²），非全球尺度；针对游戏/影视资产 |
+| [**Heightcraft**](https://andre-silva-14.github.io/heightcraft/) | Python 命令行工具，采用 MIT 许可证。 | 它能放大高程图，也能从网格和激光雷达点云生成高程图。 | 可把它的插值作为地形细化的低成本对照。它不求解侵蚀或河网，详见 [§4.2.4](#424-heightcraft-的高程图超分辨率)。 |
 | [**World Machine**](https://www.world-machine.com/) | 商用 | 节点图地形：确定性侵蚀设备、多掩码导出。地质时间线模拟（GeoGlyph 附加） | 同上；适合可复现的资产管线，无气候/生态/文明 |
 | [**Gaia Pro**](https://www.procedural-worlds.com/products/professional/gaia-pro/) (Unity) | 商用 | Unity 地形 + 植被/水体一键生成；2024 最佳开发工具奖 | 游戏引擎资产生成器，非科学模拟 |
 | [**TerreSculptor**](https://www.demenzunmedia.com/terresculptor/) | 商用 | 高度图雕刻 + 侵蚀滤镜 | 同 Gaea/World Machine |
@@ -236,12 +237,19 @@ K₀ 下 nacrea 100 Myr 起伏度 1365→37 m）。各引擎如何处理构造�
    削到 ≤3 m（准平原化对 K₀ 不敏感）；**K₀=2** 保 p95 ≈ 1 km、max 7.5 km
    （山系残留 + 低地准平原——造山后世界的物理正确形态）。
 
+### 4.2.4 Heightcraft 的高程图超分辨率
+
+[官方指南](https://andre-silva-14.github.io/heightcraft/docs/guides/ai-upscaling/)列出 2、3、4 倍放大和更高位深输出。核对 `9f7227d` 的[放大服务](https://github.com/andre-silva-14/heightcraft/blob/9f7227d0a005ecd3e27b4a4db38a2cb2465db143/heightcraft/services/upscaling_service.py)后可以区分两条路径：不指定权重时执行双三次插值；指定权重时加载 PyTorch 卷积网络，但当前实现固定为 2 倍。训练把高程图转成 8 位灰度，用双三次降采样构造低分辨率输入，再用均方误差拟合高分辨率目标。[训练代码](https://github.com/andre-silva-14/heightcraft/blob/9f7227d0a005ecd3e27b4a4db38a2cb2465db143/heightcraft/services/training_service.py)保存的是 PyTorch 权重，即使默认文件名以 `.h5` 结尾。核对的[公开发布](https://github.com/andre-silva-14/heightcraft/releases)未附可确认来源的通用地形权重，本次也未运行神经推理或测量质量。
+
+对于 Dreamulator，值得借鉴的是把双三次插值设为不训练模型的对照，而不是直接引入 Heightcraft 作为细化后端。[高程图读写](https://github.com/andre-silva-14/heightcraft/blob/9f7227d0a005ecd3e27b4a4db38a2cb2465db143/heightcraft/domain/height_map.py)会按像素值范围归一化，不能据此认定以米表示的高程、海平面、投影或无数据掩膜得到保留。提高位深可以更细地存储插值结果，却不能找回原图未记录的真实地貌。后续若比较原图驱动的 Terrain Diffusion，应使用同一批降采样地形，把原高分辨率地形留作参照，分别检查细化图降回原分辨率后的高程误差、海岸与河网是否保持，以及坡度和山谷形态是否更接近参照。放大倍数本身不是验收指标。
+
 ### 4.3 气候层
 
 | 工具 | 用途 | 与 Dreamulator 的关系 |
 |------|------|---------------------|
 | [**PlaSim**](https://www.mi.uni-hamburg.de/en/arbeitsgruppen/theoretische-meteorologie/modelle/plasim.html) | 中等复杂度 3D GCM。灵活、快速、支持任意轨道/物理参数 | Dreamulator 目前的 EBM + BFS 水汽比 PlaSim 简单 2–3 个数量级；长期"简化 GCM"方向可对标 PlaSim |
 | [**ExoPlaSim**](https://github.com/alphaparrot/ExoPlaSim) | PlaSim 扩展：潮汐锁定行星、非太阳光谱、超地球。pip 安装 + Python API。MNRAS (2022) 发表。**2026-08 已启动 PoC**——用 nacrea 参数配置 ExoPlaSim（T21/T42），对比 dreamulator 当前启发式气候输出，评估替代 `climate_simulator.py` 的可行性 | Dreamulator 的"简化 GCM"方向直接对标。ExoPlaSim 已解决：潮汐锁定、冰川模块、碳-硅酸盐风化。主要风险：Fortran 编译依赖（Windows 兼容性）、T21 分辨率 vs CVT 100K 网格的地形细节损失 |
+| [**web-exoplasim-qol**](https://astervolans.github.io/web-exoplasim-qol/gcm/) | 这是 web-exoplasim 的浏览器分支，重点是参数解释和地图导入交互。 | 可参照它如何预览地图方向并区分估算与计算结果，不用它替换气候参照臂。和原版的差异见[专题调研](web-gcm-and-frontend.md#6-web-exoplasim-qol-的增强与边界)。 |
 | [**CESM / ROCKE-3D**](https://www.cesm.ucar.edu/) | 全复杂度地球系统模型（大气/海洋/陆地/海冰/碳循环耦合） | 精度标杆——Dreamulator 气候验证的参照系 |
 | **程序化云生成工业实现**（Guerrilla Decima HZD / Frostbite / SatelliteCloudGenerator / Gaia Sky / CloudNoiseGen） | weather map 三通道契约、形状/侵蚀噪声分离、locality 尺度多变、球面 3D 采样无缝、Perlin-Worley 平铺体积噪声 | L2 云纹理与 L1 图层包契约的对照系；取舍明细见 [knowledge/climatology/cloud_generation_competitors.md](../knowledge/climatology/cloud_generation_competitors.md) |
 | [**climlab**](https://climlab.readthedocs.io/) | Python 气候建模工具箱：EBM/RCE/辐射对流。Brian Rose (SUNY Albany) | Dreamulator 同架构（Python 纯函数模块）；其 `climlab.EBM` 类（1D 纬度能量平衡模型，解 `0 = D∇²T + Q(φ)(1−α) − (A+BT)`）是温度模型「sin² → 正式 EBM 求解」的直接对标 |

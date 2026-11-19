@@ -106,6 +106,7 @@ export interface PlanetViewState {
   // --- Monthly/UCC climate products ---
   monthlyThematic: ReturnType<typeof useMonthlyClimate>['texture']
   monthlyData: ReturnType<typeof useMonthlyClimate>['data']
+  monthlyLoading: boolean
   monthlyMonth: number
   yearlyData: ReturnType<typeof useYearlyClimate>
   uccTexture: ReturnType<typeof useUccLayer>
@@ -436,13 +437,14 @@ export function usePlanetViewState(
   const [dayNightEnabled, setDayNightEnabled] = useState(() => searchParams.get('night') === '1')
 
   // --- Monthly/UCC climate products ---
-  const { texture: monthlyThematic, data: monthlyData, month: monthlyMonth } = useMonthlyClimate({
+  const { texture: monthlyThematic, data: monthlyData, loading: monthlyLoading, month: monthlyMonth } = useMonthlyClimate({
     worldName, planetId: selectedPlanet, branch: selectedBranch, seasonDeg,
     field: monthlyField, active: monthlyActive, playing: timelapsePlaying,
     cvtMesh: cvtMesh ?? null, cellIdMap,
     width: meta?.width ?? 2048, height: meta?.height ?? 1024, flipHorizontal: false,
   })
-  const yearlyData = useYearlyClimate(worldName, selectedPlanet, selectedBranch)
+  const yearlyProduct = useYearlyClimate(worldName, selectedPlanet, selectedBranch)
+  const yearlyData = yearlyProduct && cvtMesh && yearlyProduct.numCells === cvtMesh.cells.length ? yearlyProduct : null
   const uccTexture = useUccLayer(
     yearlyData, cvtMesh ?? null, cellIdMap,
     meta?.width ?? 2048, meta?.height ?? 1024, false,
@@ -647,7 +649,7 @@ export function usePlanetViewState(
     bodyByName, currentPlanetName, planetRadiusM, axialTiltDeg,
     worldPlanetsError, platesError,
     elevation, elevationDims, cvtMesh: cvtMesh ?? null, voronoiCells, cellIdMap,
-    monthlyThematic, monthlyData, monthlyMonth, yearlyData, uccTexture,
+    monthlyThematic, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, hoveredCell, handleCellHover, lastCell, selectedCells,
     selectCell, clearSelection,
     selectedCellData, hoveredCellData, inspectorCell, selectedCellObjects,

@@ -36,7 +36,10 @@ import {
   SOIL_COLORS,
   NPP_SCALE,
   TEMPERATURE_SCALE,
+  TEMPERATURE_LIMIT_C,
   PRECIP_SCALE,
+  PRECIP_TOTAL_LIMIT_MM,
+  PRECIP_WINDOW_LIMIT_MM,
   HABITABILITY_SCALE,
   AGRICULTURE_SCALE,
   generateAdaptiveTerrainScale,
@@ -484,19 +487,19 @@ function buildCellPalettes(
     // Annual mean temperature — continuous diverging, land only (ocean stays
     // transparent so the base terrain shows through, matching npp/biomes).
     const tC: number | null | undefined = cell.temperature_C
-    if (tC != null && !isOcean) {
+    if (tC != null && Number.isFinite(tC) && !isOcean) {
       // Fixed −40…+40 °C physical range → 0 °C (freezing) at the centre stop.
-      temperature.set(cell.id, sequentialColor((tC + 40) / 80, TEMPERATURE_SCALE))
+      temperature.set(cell.id, sequentialColor((tC / TEMPERATURE_LIMIT_C + 1) / 2, TEMPERATURE_SCALE))
     }
 
     // Annual precipitation — continuous, log-normalised (0…30000 mm), land only.
     // Log scale because precipitation spans five orders of magnitude; a linear
     // ramp would collapse ~95% of cells into the low end.
     const pMm: number | null | undefined = cell.precipitation_mm
-    if (pMm != null && !isOcean) {
+    if (pMm != null && Number.isFinite(pMm) && !isOcean) {
       precipitation.set(
         cell.id,
-        sequentialColor(Math.log10(pMm + 1) / Math.log10(30001), PRECIP_SCALE),
+        sequentialColor(Math.log10(pMm + 1) / Math.log10(PRECIP_TOTAL_LIMIT_MM + 1), PRECIP_SCALE),
       )
     }
 
@@ -735,13 +738,14 @@ function buildMonthlyColors(
     // pressure-family layer greys them out.
     if (isPressureFamily && cell.slp_reduction_unreliable === true) continue
     const v = arr[i * months + month]
+    if (!Number.isFinite(v)) continue
     let color: [number, number, number] | null
     if (field === 'temperature') {
-      color = sequentialColor((v + 40) / 80, TEMPERATURE_SCALE)
+      color = sequentialColor((v / TEMPERATURE_LIMIT_C + 1) / 2, TEMPERATURE_SCALE)
     } else if (field === 'precipitation') {
       // Monthly precipitation is a per-month flux (mm/month ≈ annual/12), so
       // it uses its OWN log range (0–2500 mm/month) — not the annual 0–30000.
-      color = sequentialColor(Math.log10(Math.max(v, 0) + 1) / Math.log10(2501), PRECIP_SCALE)
+      color = sequentialColor(Math.log10(Math.max(v, 0) + 1) / Math.log10(PRECIP_WINDOW_LIMIT_MM + 1), PRECIP_SCALE)
     } else if (field === 'slp') {
       // Absolute SLP: diverging ±40 hPa around 1013.25 (raw NCEP field, no
       // band reference — the artefact-free baseline display).
