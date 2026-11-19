@@ -1,5 +1,6 @@
 import type { PackSummary } from '../packs/types'
 import type { LonLat } from './utils/mapCoords'
+import { kmToLonLat, type PackWindow } from '../packs/packCoords'
 
 export const REGION_WINDOW_PARAM = 'window'
 
@@ -30,15 +31,17 @@ export function encodeRegionWindow({ lat, lon, spanKm }: RegionWindow): string {
   return `${lat},${lon},${spanKm}`
 }
 
-const DEG = Math.PI / 180
 const EDGE_STEPS = 64
+
+export function regionPackWindow(window: RegionWindow, radiusKm: number): PackWindow {
+  return { centerLat: window.lat, centerLon: window.lon, radiusKm, projection: 'azimuthal_equidistant',
+    extentKmX: window.spanKm, extentKmY: window.spanKm }
+}
 
 export function readRegionBoundary(raw: string | null, radiusKm: number): LonLat[] | null {
   const window = readRegionWindow(raw, radiusKm)
   if (!window) return null
-  const centerLat = window.lat * DEG
-  const sinCenter = Math.sin(centerLat)
-  const cosCenter = Math.cos(centerLat)
+  const projection = regionPackWindow(window, radiusKm)
   const half = window.spanKm / 2
   const corners = [[-half, half], [half, half], [half, -half], [-half, -half], [-half, half]]
 
@@ -50,16 +53,7 @@ export function readRegionBoundary(raw: string | null, radiusKm: number): LonLat
       const fraction = step / EDGE_STEPS
       const east = startEast + (endEast - startEast) * fraction
       const north = startNorth + (endNorth - startNorth) * fraction
-      const distance = Math.hypot(east, north)
-      const angle = distance / radiusKm
-      const scale = Math.sin(angle) / (distance || 1)
-      const cosAngle = Math.cos(angle)
-      const sinLat = cosAngle * sinCenter + north * scale * cosCenter
-      const lonDelta = Math.atan2(east * scale, cosCenter * cosAngle - north * scale * sinCenter)
-      boundary.push({
-        lat: Math.asin(Math.max(-1, Math.min(1, sinLat))) / DEG,
-        lon: (window.lon + lonDelta / DEG + 540) % 360 - 180,
-      })
+      boundary.push(kmToLonLat(east, north, projection))
     }
   }
   boundary.push(boundary[0])

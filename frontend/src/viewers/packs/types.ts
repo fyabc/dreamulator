@@ -49,7 +49,10 @@ export interface PackRefinedMeta {
 export interface PackMeta {
   input: PackInputMeta
   refined: PackRefinedMeta | null
+  height_source?: PackHeightSource | null
 }
+
+export type PackHeightSource = 'input' | 'refined-out' | 'gaea-out'
 
 export interface ProbeResult {
   row: number

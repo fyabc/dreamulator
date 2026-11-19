@@ -150,7 +150,22 @@ def test_meta_returns_both_documents(client: TestClient) -> None:
     data = r.json()["data"]
     assert data["input"]["span_km"] == EXTENT
     assert data["refined"]["river_threshold"] == 1
+    assert data["height_source"] == "refined-out"
     assert client.get("/api/packs/no-such-pack/meta").status_code == 404
+
+
+def test_numeric_elevation_returns_exact_source(client: TestClient) -> None:
+    url = f"/api/packs/{PACK}/elevation.npy"
+    refined = client.get(url, params={"source": "refined-out"})
+    assert refined.status_code == 200
+    assert refined.headers["content-type"] == "application/octet-stream"
+    result = np.load(io.BytesIO(refined.content), allow_pickle=False)
+    assert result.shape == (GRID * 2, GRID * 2)
+    assert result[4, 4] == 68
+    original = client.get(url, params={"source": "input"})
+    assert np.load(io.BytesIO(original.content), allow_pickle=False).shape == (GRID, GRID)
+    assert client.get(url, params={"source": "gaea-out"}).status_code == 404
+    assert client.get(url, params={"source": "../input"}).status_code == 422
 
 
 def test_image_serves_with_etag_and_304(client: TestClient) -> None:

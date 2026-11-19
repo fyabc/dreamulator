@@ -478,7 +478,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: 'packs',
     title: 'help:section.packs.title',
     icon: '🧭',
-    render: (t) => entryKeys('packs', 3).map(({ title, content }) => ({ title: t(title), content: t(content) })),
+    render: (t) => entryKeys('packs', 4).map(({ title, content }) => ({ title: t(title), content: t(content) })),
   },
   {
     id: 'concepts',

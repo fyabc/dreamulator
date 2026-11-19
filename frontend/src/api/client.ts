@@ -13,7 +13,7 @@ import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 import i18n from '../i18n'
 import type { CVTMesh, CVTVertex, CVTRegion, VoronoiCell } from '../viewers/map/types'
-import type { PackMeta, PackSummary, ProbeResult, RiverData } from '../viewers/packs/types'
+import type { PackHeightSource, PackMeta, PackSummary, ProbeResult, RiverData } from '../viewers/packs/types'
 import type { SkyBackground, SkyCulture, SkyEphemerisResult } from '../viewers/sky/types'
 
 const API_BASE = '/api'
@@ -712,6 +712,10 @@ const readApi = {
 
   getPackMeta: (pack: string) =>
     fetchJson<PackMeta>(`/packs/${encodeURIComponent(pack)}/meta`),
+
+  getPackElevation: (pack: string, source: PackHeightSource) => isStaticMode()
+    ? staticApi.getPackElevation()
+    : fetchBlob(`/packs/${encodeURIComponent(pack)}/elevation.npy?source=${encodeURIComponent(source)}`),
 
   getPackRivers: (pack: string) =>
     fetchJson<RiverData>(`/packs/${encodeURIComponent(pack)}/rivers.json`),

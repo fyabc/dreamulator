@@ -359,8 +359,8 @@
           "content": "**Save selection** stores the centre and side length in the URL. Both the global map and globe mark the area with a white dashed outline with a dark border, separate from cell highlights. Reopening the URL or switching views keeps the selection. **Clear selection** removes the outline and the saved selection without deleting any maps. Saving does not build, refine or export a map."
         },
         {
-          "title": "Open an existing regional map",
-          "content": "In local server mode, **Existing regional maps** lists maps for the current world, body and branch. Picking one fills in its exact centre and side length. You can then open the map and use **Back to the global selection** to return. If no existing map matches the centre and side length, the selection is still saved. The static site can save and restore selections, but it cannot open local regional maps."
+          "title": "View the selected region",
+          "content": "Choose **View region** after saving. Both the local and static sites open a preview from the global heightmap, even without an existing regional map. Use **Back to the global selection** to return. Output size and downloads are on the regional map page."
         }
       ]
     },
@@ -369,7 +369,7 @@
       "entries": [
         {
           "title": "Open a regional map",
-          "content": "Open **Regional maps** from the sidebar or from an existing region on the global map. The map selector lists the source world, centre coordinates and side length. Regional maps are generated data stored locally and are not published with the static site. If none exist, use `dreamulator region pack` to prepare one and `dreamulator serve` to view it."
+          "content": "Open **View region** from a saved global selection to see an extract of the global heightmap. On the local site, matching existing regional maps appear as separate links. You can also browse all local regional maps from the sidebar. Those local files are not published to the static site."
         },
         {
           "title": "Browse and change the display",
@@ -377,7 +377,11 @@
         },
         {
           "title": "Inspect a location",
-          "content": "Hover over the map to see coordinates. Click a location to check its elevation and any available climate, biome or water data. Elevation is reported in metres. River accumulation is a relative measure of the upstream cells, not a discharge in cubic metres per second. When river data are present, dashed river lines indicate channels that do not flow year-round. You can copy the inspected coordinates from the panel."
+          "content": "Hover over the map to see coordinates. Click a location to check its elevation in metres. Existing regional maps can also show available climate, biome or water data. River accumulation is a relative measure of the upstream cells, not a discharge in cubic metres per second. When river data are present, dashed lines indicate channels that do not flow year-round."
+        },
+        {
+          "title": "Download elevation",
+          "content": "Open **Export elevation**, check the source and choose the size and format. The default 16-bit grayscale PNG maps the region’s elevation range from black to white. Choose 32-bit floating-point TIFF if you need pixel values in metres. Both formats record the source and bounds in their image description. Output size changes only the downloaded raster: denser output is interpolation, not refinement. The global extract can be downloaded entirely in the browser on either site. Downloads from existing regional maps use the local site and default to their native size."
         }
       ]
     },

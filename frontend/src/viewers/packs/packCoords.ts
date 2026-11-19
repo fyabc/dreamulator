@@ -26,6 +26,7 @@ export interface PackWindow {
   radiusKm: number
   extentKmX: number
   extentKmY: number
+  projection?: 'azimuthal_equidistant'
 }
 
 /** Graticule step candidates in degrees — same ladder as the carto sheets. */
@@ -42,6 +43,17 @@ export function wrapLon(lon: number): number {
 
 /** Centre-origin km offsets → geographic degrees. */
 export function kmToLonLat(x: number, y: number, w: PackWindow): LonLat {
+  if (w.projection) {
+    const radians = Math.PI / 180
+    const lat = w.centerLat * radians
+    const distance = Math.hypot(x, y)
+    if (distance === 0) return { lon: w.centerLon, lat: w.centerLat }
+    const angle = distance / w.radiusKm
+    const scale = Math.sin(angle) / distance
+    const sinLat = Math.cos(angle) * Math.sin(lat) + y * scale * Math.cos(lat)
+    const lonDelta = Math.atan2(x * scale, Math.cos(lat) * Math.cos(angle) - y * scale * Math.sin(lat))
+    return { lon: wrapLon(w.centerLon + lonDelta / radians), lat: Math.asin(Math.max(-1, Math.min(1, sinLat))) / radians }
+  }
   const cosLat = Math.cos((w.centerLat * Math.PI) / 180)
   const lon = w.centerLon + (x * degPerKm(w)) / cosLat
   const lat = w.centerLat + y * degPerKm(w)
@@ -50,6 +62,18 @@ export function kmToLonLat(x: number, y: number, w: PackWindow): LonLat {
 
 /** Geographic degrees → centre-origin km offsets (x east, y north). */
 export function lonLatToKm(ll: LonLat, w: PackWindow): { x: number; y: number } {
+  if (w.projection) {
+    const radians = Math.PI / 180
+    const lat = ll.lat * radians
+    const center = w.centerLat * radians
+    const delta = wrapLon(ll.lon - w.centerLon) * radians
+    const east = Math.cos(lat) * Math.sin(delta)
+    const north = Math.cos(center) * Math.sin(lat) - Math.sin(center) * Math.cos(lat) * Math.cos(delta)
+    const dot = Math.sin(center) * Math.sin(lat) + Math.cos(center) * Math.cos(lat) * Math.cos(delta)
+    const sinAngle = Math.hypot(east, north)
+    const scale = w.radiusKm * Math.atan2(sinAngle, dot) / (sinAngle || 1)
+    return { x: east * scale, y: north * scale }
+  }
   const cosLat = Math.cos((w.centerLat * Math.PI) / 180)
   const dx = (((ll.lon - w.centerLon) % 360) + 540) % 360 - 180
   return {

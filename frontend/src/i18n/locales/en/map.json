@@ -509,13 +509,9 @@
     "clear": "Clear selection",
     "summary": "Selected region: {{lat}}°, {{lon}}° · {{spanKm}} × {{spanKm}} km",
     "invalid": "Enter latitude from −90° to 90°, longitude from −180° to 180°, and a positive side length below {{limit}} km.",
-    "existing": "Existing regional maps",
-    "chooseExisting": "Choose a regional map",
-    "packListFailed": "Could not load the local regional maps. Your selection is still saved in the URL.",
-    "noExactPack": "No existing regional map matches this centre and side length. Nothing has been generated.",
-    "openPack": "Open regional map: {{name}}",
+    "open": "View region",
+    "openPack": "Open existing regional map: {{name}}",
     "back": "← Back to the global selection",
-    "staticHint": "Selection is saved in the URL. Local regional maps cannot be opened from the static site.",
     "help": "Region selection help (opens in a new tab)",
     "hint": {
       "toggle": "Show or hide the region selection controls.",
@@ -526,12 +522,11 @@
       "usePoint": "Fill in the coordinates of the selected cell centre, keeping the current side length.",
       "save": "Save the centre and side length in the URL without generating a map.",
       "clear": "Remove the selection from the URL without deleting any maps.",
-      "existing": "Choose a map from this world, body and branch to fill in its centre and side length.",
-      "open": "View the existing map that matches the saved selection."
+      "open": "Open the saved selection on the regional map, even if it has not been refined."
     }
   },
   "packs": {
-    "staticModeHint": "Regional maps are stored locally and are not published with the static site. To view them, open the site served by dreamulator serve.",
+    "staticModeHint": "To view a region, open a published global map, save a selection, then choose View region. Existing local regional maps are not published here.",
     "hoverPrompt": "Move the cursor for lon/lat",
     "loadingBase": "Loading base map…",
     "clickToProbe": "Click to probe cell values",
@@ -540,6 +535,36 @@
     "noMeta": "This regional map could not be loaded. Choose another map, or see the help for how to prepare one.",
     "base": "Base",
     "help": "Regional map help (opens in a new tab)",
+    "export": {
+      "title": "Export elevation",
+      "global": "Global elevation extract",
+      "globalHint": "This preview uses the global heightmap. It does not refine the terrain.",
+      "source": {
+        "input": "Source: the regional map’s input elevation.",
+        "refined-out": "Source: the existing refined elevation.",
+        "gaea-out": "Source: the existing external terrain result."
+      },
+      "size": "Output size (pixels)",
+      "sizeHint": "Changes the downloaded file, not the map zoom or the terrain detail.",
+      "native": "Native: {{width}} × {{height}}",
+      "interpolated": "A denser output adds samples, not terrain detail.",
+      "format": {
+        "label": "File format",
+        "png": "Grayscale PNG (16-bit)",
+        "tiff": "Elevation TIFF (32-bit float)",
+        "pngHint": "The lowest elevation is black and the highest is white. The file records the elevation range so you can convert the grayscale values back to metres.",
+        "tiffHint": "Pixels store elevation in metres directly. General-purpose image viewers may not display the full range of tones."
+      },
+      "download": "Download elevation map",
+      "exporting": "Preparing download…",
+      "failed": "The elevation file could not be prepared.",
+      "previewFailed": "The browser could not read the global heightmap.",
+      "retry": "Try again",
+      "noNumeric": "This regional map has no downloadable numeric elevation.",
+      "missing": "The global heightmap for this selection is unavailable.",
+      "invalidSelection": "This region link is incomplete. Open the global map and save a new selection.",
+      "probe": "Elevation at the selected point: about {{value}} m"
+    },
     "hint": {
       "pick": "Choose a local regional map by world, centre coordinates and side length.",
       "base": "Choose how to colour the map. Switching the base does not change the data.",

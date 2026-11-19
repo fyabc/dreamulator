@@ -32,7 +32,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
@@ -277,7 +277,32 @@ def pack_meta(pack: str) -> dict[str, Any]:
     refined = (
         json.loads(refined_file.read_text(encoding="utf-8")) if refined_file.is_file() else None
     )
-    return {"ok": True, "data": {"input": _input_meta(pack_dir), "refined": refined}}
+    terrain_dir = _best_gaea_dir(pack_dir)
+    height_source = (
+        terrain_dir.name
+        if terrain_dir is not None and (terrain_dir / "height.meters.npy").is_file()
+        else None
+    )
+    return {
+        "ok": True,
+        "data": {
+            "input": _input_meta(pack_dir),
+            "refined": refined,
+            "height_source": height_source,
+        },
+    }
+
+
+@router.get("/{pack}/elevation.npy")
+def pack_elevation(
+    pack: str, source: Literal["input", "refined-out", "gaea-out"], request: Request
+) -> Response:
+    """Serve only the selected pack's numeric elevation field."""
+    pack_dir = _pack_dir(pack)
+    path = (pack_dir / source / "height.meters.npy").resolve()
+    if not path.is_relative_to(pack_dir) or not path.is_file():
+        raise HTTPException(status_code=404, detail="No numeric elevation for this source")
+    return _file_response(request, path, "application/octet-stream")
 
 
 @router.get("/{pack}/image/{path:path}")

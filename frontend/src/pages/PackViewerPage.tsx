@@ -3,10 +3,8 @@
  * worldbuilding QA loop: browse terrain video-chain packs, hover for exact
  * lon/lat, click to probe cell values (height/biome/köppen/water/river).
  *
- * API-mode only by design: packs are gitignored local artifacts and never
- * reach the static export, so this page deliberately skips the staticClient
- * mirror — the static guard below is the intended degradation (same pattern
- * as the narrate SSE endpoints).
+ * A URL with a global selection opens the browser's regional extract view.
+ * Existing regional packs remain available through the local API.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -15,10 +13,13 @@ import { useTranslation } from 'react-i18next'
 import { api, packImageUrl, packTopoUrl } from '../api/client'
 import { isStaticMode } from '../api/mode'
 import MapHelpLink from '../components/map/MapHelpLink'
+import { REGION_WINDOW_PARAM, readRegionWindow } from '../viewers/map/regionWindow'
 import type { LonLat } from '../viewers/map/utils/mapCoords'
 import PackMap from '../viewers/packs/PackMap'
 import PackStatusBar from '../viewers/packs/PackStatusBar'
 import ProbePanel from '../viewers/packs/ProbePanel'
+import RegionalExtractView from '../viewers/packs/RegionalExtractView'
+import PackElevationDownload from '../viewers/packs/PackElevationDownload'
 import type { PackMeta, PackSummary, ProbeResult, RiverData } from '../viewers/packs/types'
 import type { PackWindow } from '../viewers/packs/packCoords'
 
@@ -53,9 +54,39 @@ function windowOf(meta: PackMeta): PackWindow {
 
 export default function PackViewerPage() {
   const { t } = useTranslation('map')
+  const [search] = useSearchParams()
+  const { state } = useLocation()
+  const world = search.get('world')
+  const planet = search.get('planet')
+  const branch = search.get('branch') || null
+  const radiusKm = Number(search.get('radius'))
+  const rawWindow = search.get(REGION_WINDOW_PARAM)
+  const selection = readRegionWindow(rawWindow, radiusKm)
+  if (world && planet && selection) {
+    const globalParams = new URLSearchParams({ [REGION_WINDOW_PARAM]: rawWindow! })
+    if (branch) globalParams.set('branch', branch)
+    const view = search.get('view') === 'globe' ? 'globe' : 'map'
+    const globalReturn = typeof state?.regionReturn === 'string' ? state.regionReturn
+      : `/worlds/${encodeURIComponent(world)}/${view}/${encodeURIComponent(planet)}?${globalParams}`
+    if (!search.has('pack') || isStaticMode()) {
+      return <RegionalExtractView key={search.toString()} world={world} planet={planet} branch={branch}
+        radiusKm={radiusKm} selection={selection} globalReturn={globalReturn} regionParams={search} />
+    }
+    const params = new URLSearchParams(search)
+    params.delete('pack')
+    return <ExistingPackViewer globalReturn={globalReturn} extractUrl={`/packs?${params}`} />
+  }
+  if (rawWindow !== null) {
+    return <p role="alert" className="p-4 text-sm text-gray-400">{t('packs.export.invalidSelection')}</p>
+  }
+  return <ExistingPackViewer />
+}
+
+function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: string; extractUrl?: string }) {
+  const { t } = useTranslation('map')
   const staticMode = isStaticMode()
   const { state } = useLocation()
-  const regionReturn = typeof state?.regionReturn === 'string' ? state.regionReturn : null
+  const regionReturn = globalReturn ?? (typeof state?.regionReturn === 'string' ? state.regionReturn : null)
 
   const [searchParams, setSearchParams] = useSearchParams()
   const [packs, setPacks] = useState<PackSummary[] | null>(null)
@@ -82,10 +113,14 @@ export default function PackViewerPage() {
     setPack(name)
     setMeta(null)
     setSummary(null)
+    setRivers(null)
     setPin(null)
     setProbe(null)
     setProbeError(null)
-    setSearchParams(name ? { pack: name } : {}, { replace: true, state })
+    const next = new URLSearchParams(searchParams)
+    if (name) next.set('pack', name)
+    else next.delete('pack')
+    setSearchParams(next, { replace: true, state })
   }
 
   useEffect(() => {
@@ -97,14 +132,16 @@ export default function PackViewerPage() {
 
   useEffect(() => {
     if (!pack) return
+    let current = true
     api
       .getPackMeta(pack)
-      .then(setMeta)
-      .catch(() => setMeta(null))
+      .then((next) => { if (current) setMeta(next) })
+      .catch(() => { if (current) setMeta(null) })
     api
       .getPackRivers(pack)
-      .then(setRivers)
-      .catch(() => setRivers(null))
+      .then((next) => { if (current) setRivers(next) })
+      .catch(() => { if (current) setRivers(null) })
+    return () => { current = false }
   }, [pack])
 
   useEffect(() => {
@@ -180,6 +217,9 @@ export default function PackViewerPage() {
             {t('regionWindow.back')}
           </Link>
         )}
+        {extractUrl && <Link to={extractUrl} state={{ regionReturn }} className="text-xs text-neon-cyan hover:underline">
+          {t('packs.export.global')}
+        </Link>}
         <label className="flex items-center gap-2">
           <span className="text-xs text-gray-500">{t('packs.pickPrompt')}</span>
           <select
@@ -212,7 +252,7 @@ export default function PackViewerPage() {
       <div className="flex min-h-0 flex-1 flex-col bg-space-bg md:flex-row">
         {win && (
           <aside aria-label={t('label.layerSettings')}
-            className="flex shrink-0 flex-wrap items-center gap-3 border-b border-space-border bg-space-panel p-3 md:block md:w-48 md:space-y-3 md:border-b-0 md:border-r">
+            className="max-h-[38dvh] shrink-0 space-y-3 overflow-auto border-b border-space-border bg-space-panel p-3 md:max-h-none md:w-56 md:border-b-0 md:border-r">
             <h2 className="hidden text-xs font-semibold uppercase tracking-wide text-gray-500 md:block">
               {t('label.layerSettings')}
             </h2>
@@ -235,6 +275,9 @@ export default function PackViewerPage() {
               <input type="checkbox" checked={graticuleOn} onChange={(e) => setGraticuleOn(e.target.checked)} />
               {t('packs.graticule')}
             </label>
+            {pack && meta?.height_source && <PackElevationDownload key={`${pack}:${meta.height_source}`} pack={pack}
+              source={meta.height_source} input={meta.input} summary={summary} />}
+            {meta?.height_source === null && <p className="text-xs text-gray-400">{t('packs.export.noNumeric')}</p>}
           </aside>
         )}
         <div className="relative isolate min-h-0 min-w-0 flex-1">

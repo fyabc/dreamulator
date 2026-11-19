@@ -1,11 +1,8 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { api } from '../../api/client'
-import { isStaticMode } from '../../api/mode'
 import {
-  availableRegionPacks, encodeRegionWindow, matchingRegionPacks, packRegionWindow,
+  encodeRegionWindow,
   readRegionWindow, REGION_WINDOW_PARAM, type RegionWindow,
 } from '../../viewers/map/regionWindow'
 import type { LonLat } from '../../viewers/map/utils/mapCoords'
@@ -29,10 +26,10 @@ export default function RegionWindowPanel({ world, planet, branch, radiusKm, sel
   const rawWindow = search.get(REGION_WINDOW_PARAM)
   const window = readRegionWindow(rawWindow, radiusKm)
   const [expanded, setExpanded] = useState(window !== null)
-  const staticMode = isStaticMode()
-  const packs = useQuery({ queryKey: ['packs'], queryFn: api.listPacks, enabled: expanded && !staticMode, retry: false })
-  const available = availableRegionPacks(packs.data ?? [], { world, planet, branch }, radiusKm)
-  const matching = window ? matchingRegionPacks(available, window, radiusKm) : []
+  const regionParams = new URLSearchParams({ world, planet, radius: String(radiusKm),
+    view: location.pathname.split('/')[3] === 'globe' ? 'globe' : 'map' })
+  if (branch) regionParams.set('branch', branch)
+  if (window) regionParams.set(REGION_WINDOW_PARAM, encodeRegionWindow(window))
 
   const save = (nextWindow: RegionWindow | null) => setSearch((previous) => {
     const next = new URLSearchParams(previous)
@@ -48,44 +45,20 @@ export default function RegionWindowPanel({ world, planet, branch, radiusKm, sel
           title={t('regionWindow.hint.toggle')}
           onClick={() => setExpanded((open) => !open)}>{t('regionWindow.title')}</button>
         {window && <span className="text-neon-cyan">{t('regionWindow.summary', { ...window })}</span>}
+        {window && <Link className={buttonClass} to={`/packs?${regionParams}`} title={t('regionWindow.hint.open')}
+          state={{ regionReturn: `${location.pathname}${location.search}` }}>{t('regionWindow.open')}</Link>}
         <div className="ml-auto">
           <MapHelpLink section="region-selection" label={t('regionWindow.help')} />
         </div>
       </div>
       {expanded && (
-        <div className="mt-2 space-y-2">
+        <div className="mt-2 max-h-[40dvh] space-y-2 overflow-y-auto pr-1">
           <RegionWindowForm key={rawWindow ?? ''} initial={window} radiusKm={radiusKm}
             selectedPoint={selectedPoint} onSave={save} />
           {rawWindow && <button type="button" className={buttonClass} title={t('regionWindow.hint.clear')}
             onClick={() => save(null)}>
             {t('regionWindow.clear')}
           </button>}
-          {staticMode ? <p className="text-gray-400">{t('regionWindow.staticHint')}</p> : (
-            <div className="flex flex-wrap items-center gap-2 text-gray-400">
-              {packs.isPending && <p role="status">{t('status.loading')}</p>}
-              {packs.isError && <p role="status">{t('regionWindow.packListFailed')}</p>}
-              {available.length > 0 && (
-                <label className="flex flex-wrap items-center gap-2">
-                  {t('regionWindow.existing')}
-                  <select className={buttonClass} value="" title={t('regionWindow.hint.existing')} onChange={(event) => {
-                    const pack = available.find(({ name }) => name === event.target.value)
-                    if (pack) save(packRegionWindow(pack, radiusKm))
-                  }}>
-                    <option value="">{t('regionWindow.chooseExisting')}</option>
-                    {available.map((pack) => <option key={pack.name} value={pack.name}>{pack.name}</option>)}
-                  </select>
-                </label>
-              )}
-              {packs.isSuccess && window && matching.length === 0 && <p>{t('regionWindow.noExactPack')}</p>}
-              {matching.map(({ name }) => (
-                <Link key={name} className={buttonClass} to={`/packs?${new URLSearchParams({ pack: name })}`}
-                  title={t('regionWindow.hint.open')}
-                  state={{ regionReturn: `${location.pathname}${location.search}` }}>
-                  {t('regionWindow.openPack', { name })}
-                </Link>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </section>

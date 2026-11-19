@@ -5,6 +5,8 @@ to frontend/public/data/ for static site hosting.
 
 Build jobs are process-local execution state and are not exported. The static
 client rejects startBuildJob and getBuildJob instead of requesting stale job files.
+Local region packs and their numeric elevation endpoint are not exported. The
+browser extracts static regional heightmaps from the published global PNGs.
 
 Usage:
     python scripts/release/export_static.py

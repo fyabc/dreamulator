@@ -181,6 +181,7 @@ export const staticApi = {
   getBuildGrid: async (): Promise<BuildGrid> => notAvailable('getBuildGrid'),
   startBuildJob: async (): Promise<BuildJob> => notAvailable('startBuildJob'),
   getBuildJob: async (): Promise<BuildJob> => notAvailable('getBuildJob'),
+  getPackElevation: async (): Promise<Blob> => notAvailable('getPackElevation'),
 
   // Data access (branch-aware: fetches from branches/{branch}/ when branch is set)
   getStellarSystem: (name: string, branch?: string | null) =>
