@@ -6,6 +6,7 @@ import { api } from '../../api/client'
 import { isStaticMode } from '../../api/mode'
 import MapHelpLink from '../../components/map/MapHelpLink'
 import RegionElevationDownload from '../../components/map/RegionElevationDownload'
+import RegionRefinementPanel from './RegionRefinementPanel'
 import { availableRegionPacks, matchingRegionPacks, regionPackWindow, type RegionWindow } from '../map/regionWindow'
 import { generateAdaptiveTerrainScale } from '../map/utils/colorScales'
 import type { LonLat } from '../map/utils/mapCoords'
@@ -101,6 +102,12 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
             return <Link key={name} className="block break-all text-neon-cyan hover:underline" to={`/packs?${params}`}
               state={{ regionReturn: globalReturn }}>{t('regionWindow.openPack', { name })}</Link>
           })}
+          {!isStaticMode() && <RegionRefinementPanel source={{ kind: 'world', world, planet, branch, lat, lon, span_km: spanKm }}
+            globalReturn={globalReturn} resultUrl={(pack) => {
+              const params = new URLSearchParams(regionParams)
+              params.set('pack', pack)
+              return `/packs?${params}`
+            }} />}
           {preview && <details className="rounded border border-space-border p-2">
             <summary className="cursor-pointer font-medium text-neon-cyan">{t('packs.export.title')}</summary>
             <div className="mt-2">

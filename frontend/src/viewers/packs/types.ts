@@ -60,6 +60,7 @@ export interface ProbeResult {
   res: { w: number; h: number }
   height_source: 'refined' | 'input' | null
   height_m: number | null
+  input_height_m?: number
   biome_code: number | null
   koppen_code: number | null
   river: boolean | null
@@ -68,6 +69,28 @@ export interface ProbeResult {
   river_flow_accum: number | null
   river_regime: number | null
   offset_km: { x: number; y: number }
+}
+
+export type RegionRefinementSource = { kind: 'pack'; pack: string } | {
+  kind: 'world'; world: string; planet: string; branch: string | null; lat: number; lon: number; span_km: number
+  input_px?: number
+}
+
+export interface RegionRefinementPlan {
+  span_km: number
+  input_px: number
+  output_px: number
+  native_scale_km: number | null
+}
+
+export interface RegionRefinementJob {
+  id: string
+  plan: RegionRefinementPlan
+  state: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  stage: 'preparing' | 'terrain' | 'hydrology' | 'publishing'
+  elapsed_seconds: number
+  result_pack: string | null
+  error: string | null
 }
 
 /** A displayable raster layer over the pack window. */

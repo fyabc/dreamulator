@@ -13,7 +13,8 @@ import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 import i18n from '../i18n'
 import type { CVTMesh, CVTVertex, CVTRegion, VoronoiCell } from '../viewers/map/types'
-import type { PackHeightSource, PackMeta, PackSummary, ProbeResult, RiverData } from '../viewers/packs/types'
+import type { PackHeightSource, PackMeta, PackSummary, ProbeResult, RegionRefinementJob,
+  RegionRefinementPlan, RegionRefinementSource, RiverData } from '../viewers/packs/types'
 import type { SkyBackground, SkyCulture, SkyEphemerisResult } from '../viewers/sky/types'
 
 const API_BASE = '/api'
@@ -27,8 +28,8 @@ export function packImageUrl(pack: string, path: string): string {
 }
 
 /** URL of the server-rendered topo composite (compose_rgb, no furniture). */
-export function packTopoUrl(pack: string): string {
-  return `${API_BASE}/packs/${encodeURIComponent(pack)}/topo.png`
+export function packTopoUrl(pack: string, original = false): string {
+  return `${API_BASE}/packs/${encodeURIComponent(pack)}/topo.png${original ? '?source=input' : ''}`
 }
 
 // ---------------------------------------------------------------------------
@@ -724,6 +725,15 @@ const readApi = {
     fetchJson<ProbeResult>(
       `/packs/${encodeURIComponent(pack)}/probe?lat=${lat}&lon=${lon}`,
     ),
+
+  planRegionRefinement: (source: RegionRefinementSource) => isStaticMode() ? staticApi.planRegionRefinement()
+    : fetchJson<RegionRefinementPlan>('/region-refinement/plan', { method: 'POST', body: JSON.stringify(source) }),
+  startRegionRefinement: (source: RegionRefinementSource) => isStaticMode() ? staticApi.startRegionRefinement()
+    : fetchJson<RegionRefinementJob>('/region-refinement/jobs', { method: 'POST', body: JSON.stringify(source) }),
+  getRegionRefinement: (id: string) => isStaticMode() ? staticApi.getRegionRefinement()
+    : fetchJson<RegionRefinementJob>(`/region-refinement/jobs/${encodeURIComponent(id)}`),
+  cancelRegionRefinement: (id: string) => isStaticMode() ? staticApi.cancelRegionRefinement()
+    : fetchJson<RegionRefinementJob>(`/region-refinement/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
 
   // ---- Sky ephemeris (observer's sky) — API-only: the output is
   // parameterized (observer × lat × lon × time), so it has no static mirror

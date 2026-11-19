@@ -182,6 +182,10 @@ export const staticApi = {
   startBuildJob: async (): Promise<BuildJob> => notAvailable('startBuildJob'),
   getBuildJob: async (): Promise<BuildJob> => notAvailable('getBuildJob'),
   getPackElevation: async (): Promise<Blob> => notAvailable('getPackElevation'),
+  planRegionRefinement: async () => notAvailable('planRegionRefinement'),
+  startRegionRefinement: async () => notAvailable('startRegionRefinement'),
+  getRegionRefinement: async () => notAvailable('getRegionRefinement'),
+  cancelRegionRefinement: async () => notAvailable('cancelRegionRefinement'),
 
   // Data access (branch-aware: fetches from branches/{branch}/ when branch is set)
   getStellarSystem: (name: string, branch?: string | null) =>

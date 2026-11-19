@@ -286,6 +286,13 @@ def test_topo_png_renders_composite_with_water_ink(client: TestClient) -> None:
     r2 = client.get(f"/api/packs/{PACK}/topo.png", headers={"If-None-Match": r1.headers["ETag"]})
     assert r2.status_code == 304
 
+    original = client.get(
+        f"/api/packs/{PACK}/topo.png?source=input", headers={"If-None-Match": r1.headers["ETag"]}
+    )
+    assert original.status_code == 200
+    assert Image.open(io.BytesIO(original.content)).size == (GRID, GRID)
+    assert original.headers["ETag"] != r1.headers["ETag"]
+
 
 @pytest.mark.parametrize("sea_level_m", [0.0, 150.0])
 def test_topo_png_derives_blue_ocean_from_input_elevation(

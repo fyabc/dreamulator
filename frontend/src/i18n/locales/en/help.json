@@ -382,6 +382,10 @@
         {
           "title": "Download elevation",
           "content": "Open **Export elevation**, check the source and choose the size and format. The default 16-bit grayscale PNG maps the region’s elevation range from black to white. Choose 32-bit floating-point TIFF if you need pixel values in metres. Both formats record the source and bounds in their image description. Output size changes only the downloaded raster: denser output is interpolation, not refinement. The global extract can be downloaded entirely in the browser on either site. Downloads from existing regional maps use the local site and default to their native size."
+        },
+        {
+          "title": "Generate and compare terrain locally",
+          "content": "On a local site configured with Terrain Diffusion, open a selection with monthly climate or a square regional map with refinement inputs. Open **Generate refined terrain**, then confirm the window and grid size. You can cancel before saving, and refreshing does not restart the job. Refinement redraws valleys and coastlines, but saves the result separately. Open **Compare and download result** to switch between original and generated elevation without moving the map. Downloads follow the displayed terrain source. The static site does not run refinement."
         }
       ]
     },

@@ -75,6 +75,9 @@ class BuildBusyError(RuntimeError):
     """A second API build would overlap the active writer."""
 
 
+local_compute_slot = Lock()
+
+
 class BuildJobs:
     """Retain recent snapshots; FastAPI owns execution and graceful shutdown.
 
@@ -96,9 +99,12 @@ class BuildJobs:
         self, world_dir: Path, *, branch: str | None, engine: str | None, force: bool
     ) -> BuildJob:
         """Reserve the writer before the response, rejecting duplicate clicks."""
+        world_dir = world_dir.resolve()
         with self._lock:
             if self._active is not None:
                 raise BuildBusyError(f"Build '{self._active}' is already active")
+            if not local_compute_slot.acquire(blocking=False):
+                raise BuildBusyError("Another local compute job is already active")
             while len(self._jobs) >= self._limit:
                 old_id, _ = self._jobs.popitem(last=False)
                 self._worlds.pop(old_id)
@@ -107,7 +113,7 @@ class BuildJobs:
                 id=str(uuid4()), world=world_dir.name, branch=branch, engine=engine, force=force
             )
             self._jobs[job.id] = job
-            self._worlds[job.id] = world_dir.resolve()
+            self._worlds[job.id] = world_dir
             self._active = job.id
             return job.model_copy(deep=True)
 
@@ -198,6 +204,7 @@ class BuildJobs:
                 job.elapsed_seconds = round(monotonic() - self._started[job_id], 3)
                 job.current_engine = None
                 self._active = None
+                local_compute_slot.release()
                 # Finalization also runs if the hosting process is shutting down.
                 job.result = result
                 job.state = JobState.SUCCEEDED if result.status == "success" else JobState.FAILED

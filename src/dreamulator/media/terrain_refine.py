@@ -26,6 +26,7 @@ from dreamulator.media.terrain_blend import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from dreamulator.map.models import CVTMesh
@@ -368,6 +369,7 @@ def refine_region_pack(
     native_resolution_km: float | None = None,
     preserve_wavelength_km: float | None = None,
     depth_cap: bool = False,
+    on_stage: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     """CLI entry: refine a region pack's terrain, write ``refined-out/``.
 
@@ -479,6 +481,8 @@ def refine_region_pack(
             n = _export_conditioning(pack_dir, tmp / "fields", coast_warp=coast_warp)
             py = _td_python(td_repo)
             raw_tif = tmp / "refined.tif"
+            if on_stage is not None:
+                on_stage("terrain")
             _run_td(py, td_repo, tmp, float(meta["extent_km"]["x"]), n, raw_tif)
             subprocess.run(
                 [
@@ -494,6 +498,8 @@ def refine_region_pack(
             donor = np.load(tmp / "refined.npy").astype(np.float32)
         if donor.shape != (res, res) or not np.isfinite(donor).all():
             raise ValueError("donor height must be finite and match the refined grid")
+    if on_stage is not None:
+        on_stage("hydrology")
     # Assemble a complete product separately; a rejected build leaves the
     # previous adopted height and cache intact.
     out = tmp / "product"

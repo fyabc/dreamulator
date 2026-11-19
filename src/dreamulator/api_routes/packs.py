@@ -362,6 +362,11 @@ def probe(pack: str, lat: float, lon: float) -> dict[str, Any]:
             "y": round((0.5 - v) * win.ext_y, 3),
         },
     }
+    if height_source == "refined":
+        original = _npy(pack_dir, "input/height.meters.npy")
+        if original is not None:
+            input_row, input_col = _cell(u, v, original.shape)
+            result["input_height_m"] = float(original[input_row, input_col])
 
     for key, rel in (
         ("biome_code", "input/biome.codes.npy"),
@@ -451,7 +456,9 @@ def _topo_etag(paths: list[Path]) -> str:
 
 
 @router.get("/{pack}/topo.png")
-def pack_topo(pack: str, request: Request) -> Response:
+def pack_topo(
+    pack: str, request: Request, source: Literal["input", "adopted"] = "adopted"
+) -> Response:
     """Full-resolution topo body (terrain LUT + hillshade + lake/sea fills).
 
     The same :func:`carto_render.compose_rgb` raster that underlies the
@@ -462,7 +469,9 @@ def pack_topo(pack: str, request: Request) -> Response:
     re-renders.
     """
     pack_dir = _pack_dir(pack)
-    gaea = _best_gaea_dir(pack_dir)
+    gaea = pack_dir / "input" if source == "input" else _best_gaea_dir(pack_dir)
+    if source == "input" and not (pack_dir / "input" / "height.meters.npy").is_file():
+        raise HTTPException(status_code=404, detail="No numeric input elevation in this pack")
     if gaea is None:
         raise HTTPException(status_code=404, detail=f"No heightfield in pack '{pack}'")
     source_files = [

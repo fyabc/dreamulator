@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+import json
+from types import SimpleNamespace
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from dreamulator.api_routes import region_refinement as routes
+from dreamulator.build_jobs import BuildBusyError, BuildJobs, BuildSummary
+from dreamulator.region_jobs import RSS_LIMIT, RegionJobs, RegionPlan, RegionWork
+
+PREFIX = "/api/region-refinement"
+PACK_SOURCE = {"kind": "pack", "pack": "test-coast"}
+
+
+@pytest.fixture
+def setup(tmp_path, monkeypatch):
+    root = tmp_path / "packs"
+    td_repo = tmp_path / "td"
+    python = td_repo / ".venv/bin/python"
+    python.parent.mkdir(parents=True)
+    python.touch()
+    monkeypatch.setenv("DREAMULATOR_TD_DIR", str(td_repo))
+    monkeypatch.setenv("DREAMULATOR_PACKS_DIR", str(root))
+    monkeypatch.setattr(routes, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setattr(routes, "available_memory_bytes", lambda: 2 * RSS_LIMIT)
+    monkeypatch.setattr("dreamulator.region_jobs.available_memory_bytes", lambda: 2 * RSS_LIMIT)
+    monkeypatch.setattr(routes, "region_jobs", RegionJobs())
+    pack = root / PACK_SOURCE["pack"]
+    source = pack / "input"
+    source.mkdir(parents=True)
+    (source / "meta.json").write_text(
+        json.dumps(
+            {
+                "span_km": 100,
+                "grid": {"w": 256, "h": 256},
+                "projection": "azimuthal_equidistant",
+                "extent_km": {"x": 100, "y": 100},
+                "refinement_inputs": {"temperature_basis": "surface"},
+                "cell_pitch_km": 0.5,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (source / "height.meters.npy").write_bytes(b"input")
+    app = FastAPI()
+    app.include_router(routes.router)
+    return TestClient(app), root, pack, td_repo
+
+
+def test_pack_preflight(setup, monkeypatch):
+    client, _, pack, _ = setup
+    response = client.post(f"{PREFIX}/plan", json=PACK_SOURCE)
+    assert response.json() == {
+        "span_km": 100,
+        "input_px": 256,
+        "output_px": 512,
+        "native_scale_km": 0.5,
+    }
+    meta_file = pack / "input/meta.json"
+    meta = json.loads(meta_file.read_text(encoding="utf-8"))
+    meta.update(span_km=551, extent_km={"x": 551, "y": 551})
+    meta_file.write_text(json.dumps(meta), encoding="utf-8")
+    assert client.post(f"{PREFIX}/jobs", json=PACK_SOURCE).status_code == 422
+    meta.update(span_km=100, extent_km={"x": 100, "y": 100}, grid={"w": 2048, "h": 2048})
+    meta_file.write_text(json.dumps(meta), encoding="utf-8")
+    assert client.post(f"{PREFIX}/jobs", json=PACK_SOURCE).status_code == 422
+    monkeypatch.setattr(routes, "available_memory_bytes", lambda: 2 * RSS_LIMIT - 1)
+    assert client.post(f"{PREFIX}/plan", json=PACK_SOURCE).status_code == 503
+    monkeypatch.delenv("DREAMULATOR_TD_DIR")
+    assert "DREAMULATOR_TD_DIR" in client.post(f"{PREFIX}/plan", json=PACK_SOURCE).json()["detail"]
+
+
+def test_world_requires_monthly_climate(setup, tmp_path, monkeypatch):
+    client, _, _, _ = setup
+    monkeypatch.setenv("DREAMULATOR_DATA_DIR", str(tmp_path))
+    world = tmp_path / "test-world"
+    world.mkdir()
+    (world / "world.yaml").write_text("name: test-world\n", encoding="utf-8")
+    maps = world / "maps" / "planet_gaia"
+    maps.mkdir(parents=True)
+    (maps / "cvt_mesh.json").touch()
+    monkeypatch.setattr(routes.MapManager, "get_map_metadata", lambda *_: SimpleNamespace())
+    response = client.post(
+        f"{PREFIX}/plan",
+        json={
+            "kind": "world",
+            "world": "test-world",
+            "planet": "planet_gaia",
+            "lat": 45,
+            "lon": -123,
+            "span_km": 550,
+        },
+    )
+    assert response.status_code == 422
+    assert "monthly climate" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("state", ["succeeded", "cancelled", "failed"])
+def test_job_publication_is_atomic(setup, monkeypatch, state):
+    client, root, pack, _ = setup
+
+    def run_worker(self, job, work, staging, cancelled):
+        assert work.pack == pack
+        output = staging / "pack/refined-out"
+        output.mkdir(parents=True)
+        (output / "height.meters.npy").write_bytes(b"result")
+        if state == "cancelled":
+            self.get(job.id, cancel=True)
+            assert cancelled.is_set()
+        if state == "failed":
+            raise RuntimeError("Test worker failed")
+
+    monkeypatch.setattr(RegionJobs, "_run_worker", run_worker)
+    response = client.post(f"{PREFIX}/jobs", json=PACK_SOURCE)
+    assert response.status_code == 202
+    key = response.json()["id"]
+    job = client.get(f"{PREFIX}/jobs/{key}").json()
+    assert job["state"] == state
+    assert list(root.glob(".refinement-*")) == []
+    assert (pack / "input/height.meters.npy").read_bytes() == b"input"
+    results = list(root.glob("web-region-*"))
+    if state == "succeeded":
+        assert results == [root / job["result_pack"]]
+        assert (results[0] / "refined-out/height.meters.npy").read_bytes() == b"result"
+    else:
+        assert results == []
+        assert job["result_pack"] is None
+        assert job["error"] == ("Test worker failed" if state == "failed" else None)
+
+
+def test_region_and_world_build_share_compute_slot(setup):
+    client, root, _, td_repo = setup
+    builds = BuildJobs()
+    build = builds.reserve(root, branch=None, engine=None, force=False)
+    try:
+        assert client.post(f"{PREFIX}/jobs", json=PACK_SOURCE).status_code == 409
+    finally:
+        builds.execute(build.id, lambda _: BuildSummary(status="success"))
+
+    plan = RegionPlan(span_km=100, input_px=256, output_px=512, native_scale_km=None)
+    job = routes.region_jobs.reserve(plan)
+    try:
+        with pytest.raises(BuildBusyError):
+            builds.reserve(root, branch=None, engine=None, force=False)
+        assert client.post(f"{PREFIX}/jobs/{job.id}/cancel").status_code == 200
+    finally:
+        routes.region_jobs.get(job.id, cancel=True)
+        routes.region_jobs.execute(job.id, RegionWork(root, td_repo))
+    assert client.get(f"{PREFIX}/jobs/{job.id}").json()["state"] == "cancelled"

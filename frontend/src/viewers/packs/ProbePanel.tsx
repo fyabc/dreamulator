@@ -110,10 +110,13 @@ export default function ProbePanel({ point, probe, loading, error, meta, spanKm 
 
       {probe && !loading && (
         <>
-          <Row label={t('packs.field.height')}>
+          {probe.input_height_m !== undefined && <Row label={t('packs.refinement.original')}>
+            {probe.input_height_m.toFixed(1)} m
+          </Row>}
+          <Row label={t(probe.input_height_m === undefined ? 'packs.field.height' : 'packs.refinement.adopted')}>
             <span className={probe.height_m !== null && probe.height_m >= 0 ? 'text-green-400' : 'text-blue-400'}>
               {probe.height_m === null ? '—' : `${probe.height_m >= 0 ? '+' : ''}${probe.height_m.toFixed(1)} m`}
-              {probe.height_source ? ` (${probe.height_source})` : ''}
+              {probe.height_source && probe.input_height_m === undefined ? ` (${probe.height_source})` : ''}
             </span>
           </Row>
           <Row label={t('packs.field.biome')}>{biomeName(probe.biome_code)}</Row>

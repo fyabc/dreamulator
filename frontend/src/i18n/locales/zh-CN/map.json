@@ -535,6 +535,31 @@
     "noMeta": "无法载入这张区域地图。请选择其他地图，或参阅帮助了解如何准备地图。",
     "base": "底图",
     "help": "区域地图帮助（在新标签页打开）",
+    "refinement": {
+      "title": "生成细化地形",
+      "redraw": "Terrain Diffusion 会按输入场重绘这个区域。山脊、谷地和局部海岸可能改变；原始地图不会被修改。",
+      "grid": "结果网格",
+      "plan": "窗口边长 {{span}} km，输入网格 {{input}} × {{input}}，输出 {{output}} × {{output}} 像素，每像素 {{step}} km。",
+      "nativeScale": "来源的代表性尺度约为 {{scale}} km。新增的细节是生成的，不是实测地形。",
+      "seconds_other": "已用 {{count}} 秒",
+      "stage": {
+        "preparing": "正在准备输入",
+        "terrain": "正在生成地形",
+        "hydrology": "正在提取水文",
+        "publishing": "正在保存结果"
+      },
+      "start": "开始细化",
+      "cancel": "取消细化",
+      "cancelling": "正在取消…",
+      "cancelled": "细化已取消，已有结果保持不变。",
+      "failed": "细化失败：",
+      "missing": "本机任务记录已不可用，请先检查已保存的区域地图，再决定是否重试。",
+      "reconnect": "刷新任务状态",
+      "result": "对照并下载结果",
+      "compare": "对照地形",
+      "original": "原始高程",
+      "adopted": "细化高程"
+    },
     "export": {
       "title": "导出高程图",
       "global": "全球高程截取",

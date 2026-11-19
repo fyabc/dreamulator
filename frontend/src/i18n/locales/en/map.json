@@ -535,6 +535,32 @@
     "noMeta": "This regional map could not be loaded. Choose another map, or see the help for how to prepare one.",
     "base": "Base",
     "help": "Regional map help (opens in a new tab)",
+    "refinement": {
+      "title": "Generate refined terrain",
+      "redraw": "Terrain Diffusion redraws this region. Ridges, valleys and parts of the coastline may change. The source map is kept intact.",
+      "grid": "Result grid",
+      "plan": "{{span}} km window. The {{input}} × {{input}} input grid produces {{output}} × {{output}} pixels ({{step}} km per output pixel).",
+      "nativeScale": "Source scale ≈ {{scale}} km. Generated detail is not measured terrain.",
+      "seconds_one": "{{count}} second elapsed",
+      "seconds_other": "{{count}} seconds elapsed",
+      "stage": {
+        "preparing": "Preparing inputs",
+        "terrain": "Generating terrain",
+        "hydrology": "Extracting drainage",
+        "publishing": "Saving result"
+      },
+      "start": "Start refinement",
+      "cancel": "Cancel refinement",
+      "cancelling": "Cancelling…",
+      "cancelled": "Refinement cancelled. Previous results are unchanged.",
+      "failed": "Refinement failed:",
+      "missing": "The local job is no longer available. Check saved regional maps before starting again.",
+      "reconnect": "Refresh job status",
+      "result": "Compare and download result",
+      "compare": "Compare terrain",
+      "original": "Original elevation",
+      "adopted": "Refined elevation"
+    },
     "export": {
       "title": "Export elevation",
       "global": "Global elevation extract",

@@ -20,6 +20,7 @@ import PackStatusBar from '../viewers/packs/PackStatusBar'
 import ProbePanel from '../viewers/packs/ProbePanel'
 import RegionalExtractView from '../viewers/packs/RegionalExtractView'
 import PackElevationDownload from '../viewers/packs/PackElevationDownload'
+import RegionRefinementPanel from '../viewers/packs/RegionRefinementPanel'
 import type { PackMeta, PackSummary, ProbeResult, RiverData } from '../viewers/packs/types'
 import type { PackWindow } from '../viewers/packs/packCoords'
 
@@ -49,6 +50,7 @@ function windowOf(meta: PackMeta): PackWindow {
     radiusKm: i.radius_km ?? 6371,
     extentKmX: i.extent_km.x,
     extentKmY: i.extent_km.y,
+    projection: i.projection === 'azimuthal_equidistant' ? i.projection : undefined,
   }
 }
 
@@ -74,12 +76,12 @@ export default function PackViewerPage() {
     }
     const params = new URLSearchParams(search)
     params.delete('pack')
-    return <ExistingPackViewer globalReturn={globalReturn} extractUrl={`/packs?${params}`} />
+    return <ExistingPackViewer key={search.get('pack')} globalReturn={globalReturn} extractUrl={`/packs?${params}`} />
   }
   if (rawWindow !== null) {
     return <p role="alert" className="p-4 text-sm text-gray-400">{t('packs.export.invalidSelection')}</p>
   }
-  return <ExistingPackViewer />
+  return <ExistingPackViewer key={search.get('pack')} />
 }
 
 function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: string; extractUrl?: string }) {
@@ -95,6 +97,7 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
   const [summary, setSummary] = useState<PackSummary | null>(null)
   const [rivers, setRivers] = useState<RiverData | null>(null)
   const [baseId, setBaseId] = useState<string>('topo')
+  const [showOriginal, setShowOriginal] = useState(false)
   const [graticuleOn, setGraticuleOn] = useState(true)
   const [hover, setHover] = useState<LonLat | null>(null)
   const [pin, setPin] = useState<LonLat | null>(null)
@@ -150,6 +153,8 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
   }, [packs, pack])
 
   const win = useMemo(() => (meta ? windowOf(meta) : null), [meta])
+  const canCompare = meta?.height_source === 'refined-out'
+  const original = canCompare && showOriginal && baseId === 'topo'
 
   const availableBases = useMemo<BaseOption[]>(() => {
     if (!summary) return BASE_OPTIONS.filter((b) => b.needs === null)
@@ -165,8 +170,8 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
   const base = useMemo(() => {
     const opt = availableBases.find((b) => b.id === baseId)
     if (!opt || !pack) return null
-    return { url: opt.endpoint === 'topo' ? packTopoUrl(pack) : packImageUrl(pack, opt.path) }
-  }, [availableBases, baseId, pack])
+    return { url: opt.endpoint === 'topo' ? packTopoUrl(pack, original) : packImageUrl(pack, opt.path) }
+  }, [availableBases, baseId, pack, original])
 
   // Static mode: the pack root is a local-only directory — nothing to show.
   // All hooks have run by this point, so the conditional return is safe.
@@ -275,9 +280,23 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
               <input type="checkbox" checked={graticuleOn} onChange={(e) => setGraticuleOn(e.target.checked)} />
               {t('packs.graticule')}
             </label>
-            {pack && meta?.height_source && <PackElevationDownload key={`${pack}:${meta.height_source}`} pack={pack}
-              source={meta.height_source} input={meta.input} summary={summary} />}
+            {canCompare && baseId === 'topo' && <label className="block text-xs text-gray-400">
+              <span className="mr-2">{t('packs.refinement.compare')}</span>
+              <select className="rounded border border-space-border bg-space-surface p-1 text-xs text-gray-200"
+                value={showOriginal ? 'input' : 'result'} onChange={(event) => setShowOriginal(event.target.value === 'input')}>
+                <option value="input">{t('packs.refinement.original')}</option>
+                <option value="result">{t('packs.refinement.adopted')}</option>
+              </select>
+            </label>}
+            {pack && meta?.height_source && <PackElevationDownload key={`${pack}:${original ? 'input' : meta.height_source}`}
+              pack={pack} source={original ? 'input' : meta.height_source} input={meta.input} summary={summary} />}
             {meta?.height_source === null && <p className="text-xs text-gray-400">{t('packs.export.noNumeric')}</p>}
+            {pack && !pack.startsWith('web-region-') && <RegionRefinementPanel source={{ kind: 'pack', pack }} globalReturn={regionReturn}
+              resultUrl={(result) => {
+                const params = new URLSearchParams(searchParams)
+                params.set('pack', result)
+                return `/packs?${params}`
+              }} />}
           </aside>
         )}
         <div className="relative isolate min-h-0 min-w-0 flex-1">
@@ -286,7 +305,7 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
               <PackMap
                 window={win}
                 base={base}
-                rivers={rivers}
+                rivers={original ? null : rivers}
                 graticuleOn={graticuleOn}
                 pin={pin}
                 onHover={setHover}
