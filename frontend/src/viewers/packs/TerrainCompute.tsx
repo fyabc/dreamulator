@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
 import { isStaticMode } from '../../api/mode'
@@ -9,6 +9,7 @@ import type { TerrainProgress, TerrainStage } from './terrainRefinement'
 import { defaultEnhancedGain, defaultTerrainSeed, enhancedTerrainGain, maxEnhancedGain, maxTerrainSeed, minEnhancedGain,
   nativeTerrainSpacing, recommendTerrain, terrainRecipe, terrainSeed, type TerrainMethod, type TerrainRecipe } from './terrainRecommendation'
 import { TerrainParameter } from './TerrainParameter'
+import { clearTerrainModelCache, readTerrainModelCacheBytes } from './terrainModelCache'
 import { makeTerrainPlan, maxTerrainSpanKm, minTerrainSpanKm, supportsTerrainSpan } from './terrainTiles'
 
 const modelUrl = import.meta.env.VITE_TD_MODEL_URL?.trim()
@@ -16,6 +17,13 @@ const modelHash = import.meta.env.VITE_TD_MODEL_SHA256?.trim().toLowerCase()
 const loadRefinement = import.meta.env.VITE_STATIC_MODE === 'true' && import.meta.env.VITE_TD_MODEL_URL
   ? () => import('./runTerrainRefinement') : null
 const button = 'rounded border border-space-border bg-space-surface px-2 py-1 text-neon-cyan disabled:opacity-50'
+const modelCacheKey = ['terrain-model-cache'] as const
+
+function formatCacheSize(bytes: number, language: string) {
+  const [unit, divisor] = bytes >= 1e9 ? ['gigabyte', 1e9] as const : bytes >= 1e6 ? ['megabyte', 1e6] as const
+    : bytes >= 1e3 ? ['kilobyte', 1e3] as const : ['byte', 1] as const
+  return new Intl.NumberFormat(language, { style: 'unit', unit, unitDisplay: 'short', maximumFractionDigits: 2 }).format(bytes / divisor)
+}
 
 export interface BrowserTerrainResult {
   raster: ElevationRaster
@@ -168,10 +176,12 @@ function BrowserBudget({ plan, spanKm, sourceRowSpacingKm }: {
 }
 
 function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefined; input: BrowserInput }) {
-  const { t } = useTranslation('map', { keyPrefix: 'packs.compute' })
+  const { t, i18n } = useTranslation('map', { keyPrefix: 'packs.compute' })
   const helpId = useId()
   const controller = useRef<AbortController | null>(null)
+  const queryClient = useQueryClient()
   const [state, setState] = useState<RunState>({ kind: 'idle' })
+  const [modelManagerOpen, setModelManagerOpen] = useState(false)
   const [nativeInput, setNativeInput] = useState('')
   const [choice, setChoice] = useState<TerrainMethod | null>(null)
   const [seed, setSeed] = useState('')
@@ -180,6 +190,11 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
   const busy = state.kind === 'running' || state.kind === 'cancelling'
   const plan = useMemo(() => supportsTerrainSpan(input.spanKm) ? makeTerrainPlan(input.spanKm) : null, [input.spanKm])
   const configured = modelUrl && modelHash && /^[a-f0-9]{64}$/.test(modelHash) && loadRefinement
+  const cache = useQuery({ queryKey: modelCacheKey, queryFn: readTerrainModelCacheBytes,
+    enabled: modelManagerOpen && !busy, staleTime: 0, retry: false })
+  const clearCache = useMutation({ mutationFn: clearTerrainModelCache,
+    onSettled: () => queryClient.invalidateQueries({ queryKey: modelCacheKey }) })
+  const canClearCache = !busy && !clearCache.isPending && !cache.isFetching && !cache.isError && !!cache.data
   const nativeSpacingKm = nativeTerrainSpacing(nativeInput)
   const invalidSpacing = nativeInput !== '' && nativeSpacingKm === null
   const recommendation = plan ? recommendTerrain(nativeSpacingKm, input.spanKm / plan.inputSize, input.spanKm / plan.size) : null
@@ -197,7 +212,8 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
 
   const run = async () => {
     if (!canRun || !recipe || gpu?.kind !== 'hardware' || !configured || !modelUrl || !modelHash || !loadRefinement || !input.raster ||
-      controller.current) return
+      controller.current || clearCache.isPending) return
+    clearCache.reset()
     const task = new AbortController()
     controller.current = task
     const startedAt = performance.now()
@@ -248,6 +264,11 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
   const cancel = () => {
     controller.current?.abort()
     setState((current) => current.kind === 'running' ? { ...current, kind: 'cancelling' } : current)
+  }
+
+  const clearModels = () => {
+    if (!canClearCache || controller.current) return
+    if (window.confirm(t('modelCache.confirm'))) clearCache.mutate()
   }
 
   return <details className="rounded border border-space-border p-2">
@@ -304,7 +325,7 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
         {!busy && recipe && <p>{t('browserHint')}</p>}
         {!busy && recipe && gpu !== undefined && gpu?.kind !== 'hardware' && <p>{t('requiresHardware')}</p>}
         <div className="flex flex-wrap gap-2">
-          <button type="button" className={button} disabled={busy || !canRun} onClick={() => void run()}>{t('run')}</button>
+          <button type="button" className={button} disabled={busy || clearCache.isPending || !canRun} onClick={() => void run()}>{t('run')}</button>
           {busy && <button type="button" className={button} disabled={state.kind === 'cancelling'} onClick={cancel}>{t('cancel')}</button>}
         </div>
         {(busy || state.kind === 'error') && <BrowserProgress state={state} />}
@@ -315,6 +336,22 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
         </>}
         {state.kind === 'cancelled' && <p role="status">{t('cancelled')}</p>}
       </>}
+      <details className="rounded border border-space-border p-2" onToggle={(event) => setModelManagerOpen(event.currentTarget.open)}>
+        <summary className="cursor-pointer">{t('modelCache.title')}</summary>
+        <div className="mt-1 space-y-1">
+          {(cache.isError || cache.data !== undefined || !busy) && <p role="status" className="tabular-nums">
+            {cache.isError ? t('modelCache.readFailed') : cache.data !== undefined
+              ? t('modelCache.size', { size: formatCacheSize(cache.data, i18n.language) })
+              : t('modelCache.checking')}
+          </p>}
+          <p id={`${helpId}-model-cache`}>{t(busy ? 'modelCache.busy' : 'modelCache.help')}</p>
+          <button type="button" className={button} disabled={!canClearCache} aria-describedby={`${helpId}-model-cache`} onClick={clearModels}>
+            {t(clearCache.isPending ? 'modelCache.clearing' : 'modelCache.clear')}
+          </button>
+          {clearCache.isSuccess && <p role="status">{t('modelCache.cleared')}</p>}
+          {clearCache.isError && <p role="alert" className="text-red-300">{t('modelCache.clearFailed')}</p>}
+        </div>
+      </details>
     </div>
   </details>
 }
