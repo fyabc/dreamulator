@@ -35,6 +35,7 @@ from pydantic import BaseModel, Field
 
 from . import td_canvas as tc
 from .astronomy_inputs import load_astronomy as load_astronomy
+from .region_inputs import td_temperature_lapse_c_per_m
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -482,7 +483,7 @@ def write_canvas_inputs(
             monthly.std(axis=0) * 100, mean, out=np.zeros_like(mean), where=mean > 1e-9
         )
     # sea-level temperature, lapse rate from precipitation as in the region chain's refine
-    lapse = np.clip(-6.5 + 0.0015 * cond["precipitation"], -9.8, -4.0) / 1000.0
+    lapse = td_temperature_lapse_c_per_m(cond["precipitation"])
     cond["temperature"] = cond["temperature"] - lapse * np.maximum(0.0, cell_mean_height)
     structure_stats: dict[str, Any] | None = None
     if structure:
@@ -907,7 +908,7 @@ def refresh_canvas_climate(
         mean = monthly.mean(axis=0)
         annual = monthly.sum(axis=0)
         cell_height = tc.sample_mesh_field(geom, cols.elevation_m, cols.xyz)
-        lapse = np.clip(-6.5 + 0.0015 * annual, -9.8, -4.0) / 1000.0
+        lapse = td_temperature_lapse_c_per_m(annual)
         conditions = {
             "temperature": tc.sample_mesh_field(geom, cols.t_monthly_c.mean(1), cols.xyz)
             - lapse * np.maximum(0.0, cell_height),

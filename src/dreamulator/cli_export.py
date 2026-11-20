@@ -66,7 +66,7 @@ map_app = typer.Typer(
     no_args_is_help=True,
 )
 region_app = typer.Typer(
-    help="Single-region packs sampled straight from the mesh: pack, then build; "
+    help="Single-region packs from world terrain and climate: pack, then build; "
     "draw them with `dreamulator render`.",
     no_args_is_help=True,
 )
@@ -465,9 +465,7 @@ def export_region(
     out_res: int = typer.Option(
         2048,
         "--out-res",
-        help="Pack raster resolution (square N×N; scalar channels are "
-        "Delaunay-interpolated from cell centres, so N can exceed the "
-        "base-grid crop without terracing)",
+        help="Pack raster resolution (square N×N; does not change source resolution)",
     ),
     planet: str | None = typer.Option(None, "--planet", "-p", help="Planet ID"),
     branch: str | None = typer.Option(None, "--branch", "-b", help="Branch name"),
@@ -623,6 +621,38 @@ def export_region(
         f"centre ({lat:g}, {lon:g}), span {span_km:g} km → {input_dir}"
     )
     try:
+        from dreamulator.map.elevation_input import (
+            native_elevation_spacing_km,
+            read_elevation_source,
+            world_elevation_source,
+        )
+        from dreamulator.map.region_inputs import file_sha256
+
+        source: dict[str, Any] = {
+            "world": world,
+            "planet": planet_id,
+            "branch": branch,
+            **mesh_fingerprint(mesh_file),
+        }
+        retained = world_elevation_source(world_dir, branch, planet_id)
+        native_elevation = None
+        if retained is not None:
+            elevation_source, blob = retained
+            native_elevation = read_elevation_source(elevation_source, blob, native=True).metres
+            elev_min, elev_max = float(native_elevation.min()), float(native_elevation.max())
+            source["px_km"] = native_elevation_spacing_km(elevation_source, radius_km)
+            source["elevation"] = {
+                "kind": "imported_global_raster",
+                "sha256": elevation_source.sha256,
+                "resolution": list(native_elevation.shape[::-1]),
+                "sampling": "pixel_center_bilinear",
+            }
+        if climate_monthly is not None:
+            source["climate_monthly"] = {
+                "kind": "world_mesh",
+                "sha256": file_sha256(map_dir / "climate_monthly.msgpack"),
+                "td_temperature_reference": "source_surface_lapse" if retained else "mesh_surface",
+            }
         pack_meta = export_region_pack(
             mesh,
             center_lat=lat,
@@ -635,17 +665,13 @@ def export_region(
             elev_max_m=elev_max,
             sea_level_m=sea_level,
             out_dir=input_dir,
-            source={
-                "world": world,
-                "planet": planet_id,
-                "branch": branch,
-                **mesh_fingerprint(mesh_file),
-            },
+            source=source,
             include_climate=climate,
             climate_monthly=climate_monthly,
             seafloor_clamp_m=seafloor_clamp,
             out_res=out_res,
             astronomy=astronomy,
+            native_elevation_m=native_elevation,
         )
     except (RegionWindowError, ValueError) as exc:
         console.print(f"[red]Region rejected: {exc}[/red]")

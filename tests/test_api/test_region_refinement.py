@@ -105,13 +105,25 @@ def test_pack_preflight(setup, monkeypatch):
 def test_preflight_blend_requires_spacing_larger_than_output_pixel(setup):
     client, _, _, _ = setup
     source = {**PACK_SOURCE, "mode": "blend"}
-    for spacing in (None, 0, 0.19, "inf"):
+    for spacing in (0, 0.19, "inf"):
         response = client.post(f"{PREFIX}/plan", json={**source, "native_resolution_km": spacing})
         assert response.status_code == 422
     response = client.post(f"{PREFIX}/plan", json={**source, "native_resolution_km": 0.36})
     assert response.status_code == 200
     assert response.json()["mode"] == "blend"
     assert response.json()["native_resolution_km"] == 0.36
+
+
+def test_preflight_blend_defaults_to_recorded_input_spacing(setup):
+    client, _, pack, _ = setup
+    source = {**PACK_SOURCE, "mode": "blend"}
+    assert client.post(f"{PREFIX}/plan", json=source).json()["native_resolution_km"] == 0.5
+    path = pack / "input/meta.json"
+    meta = json.loads(path.read_text(encoding="utf-8"))
+    meta["source"] = {"px_km": 9.77}
+    path.write_text(json.dumps(meta), encoding="utf-8")
+    plan = client.post(f"{PREFIX}/plan", json=source).json()
+    assert plan["native_scale_km"] == plan["native_resolution_km"] == 9.77
 
 
 def test_preflight_applies_only_valid_settings(setup):

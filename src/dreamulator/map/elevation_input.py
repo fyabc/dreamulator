@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -34,6 +35,32 @@ def load_elevation_sources(path: Path | None) -> dict[str, ElevationImportSource
     except yaml.YAMLError as e:
         raise ValueError(f"invalid elevation import manifest: {path.name}") from e
     return _SOURCES.validate_python(data)
+
+
+def world_elevation_source(
+    world_dir: Path, branch: str | None, planet_id: str
+) -> tuple[ElevationImportSource, Path] | None:
+    """Resolve the retained heightmap through the same geological inputs as a build."""
+    resolver = LayerResolver(world_dir, branch)
+    manifest = resolver.find_input_file(Layer.GEOLOGICAL, SOURCE_MANIFEST)
+    source = load_elevation_sources(manifest).get(planet_id)
+    if source is None:
+        return None
+    blob = resolver.find_input_file(Layer.GEOLOGICAL, source.relative_path)
+    if blob is None:
+        raise ValueError(
+            f"retained elevation image is missing: {source.relative_path}; re-import it"
+        )
+    return source, blob
+
+
+def native_elevation_spacing_km(source: ElevationImportSource, radius_km: float) -> float:
+    """Return the nominal equatorial pitch along the coarser image axis."""
+    size = source.provenance.source_resolution
+    if len(size) != 2 or min(size) <= 0:
+        size = source.provenance.output_resolution
+    width, height = size
+    return math.pi * radius_km * max(2 / width, 1 / height)
 
 
 def validate_elevation_input_target(world_dir: Path, branch: str | None) -> None:
@@ -84,7 +111,9 @@ def save_elevation_source(
     temp.replace(manifest)
 
 
-def read_elevation_source(source: ElevationImportSource, blob: Path | None) -> MetricImport:
+def read_elevation_source(
+    source: ElevationImportSource, blob: Path | None, *, native: bool = False
+) -> MetricImport:
     """Decode the retained original, refusing missing or corrupted input even if a mesh exists."""
     from .importer import import_heightmap_metres
 
@@ -102,8 +131,8 @@ def read_elevation_source(source: ElevationImportSource, blob: Path | None) -> M
         data,
         provenance.mapping,
         filename=provenance.source_filename,
-        target_width=width,
-        target_height=height,
+        target_width=None if native else width,
+        target_height=None if native else height,
     )
 
 

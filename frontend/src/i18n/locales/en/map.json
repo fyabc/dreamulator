@@ -559,12 +559,13 @@
       "riverThresholdInvalid": "Enter a whole number from 1 to {{max, number}}, or leave it blank.",
       "methodHelp": {
         "redraw": "The model redraws terrain from broad features, then the app computes rivers and lakes.",
-        "blend": "The model adds small-scale detail to the source before rivers and lakes are computed. Enter the native spacing, such as 0.36 km.",
+        "blend": "The model adds small-scale detail to the source before rivers and lakes are computed.",
         "hydrology": "Compute rivers and lakes from the original terrain without loading the model."
       },
       "grid": "Result grid",
       "plan": "{{span}} km window. The {{input}} × {{input}} input grid produces {{output}} × {{output}} pixels ({{step}} km per output pixel).",
       "nativeScale": "Source scale ≈ {{scale}} km. Generated detail is not measured terrain.",
+      "nativeSpacingDefault": "Leave blank to use the source scale. If the input image was enlarged before import, enter its spacing before enlargement.",
       "seconds_one": "{{count}} second elapsed",
       "seconds_other": "{{count}} seconds elapsed",
       "stage": {

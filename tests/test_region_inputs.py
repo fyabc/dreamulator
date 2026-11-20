@@ -16,7 +16,7 @@ from typer.testing import CliRunner
 
 from dreamulator.cli import app
 from dreamulator.map.models import ElevationMapping
-from dreamulator.map.region_export import export_region_pack, region_window
+from dreamulator.map.region_export import export_region_pack, region_window, sample_native_elevation
 from dreamulator.map.region_import import import_region_pack, load_local_climate
 from dreamulator.map.region_inputs import (
     CONDITIONING_UNITS,
@@ -112,6 +112,43 @@ def test_world_snapshot_matches_legacy_samples(
     for name in CONDITIONING_UNITS:
         np.testing.assert_array_equal(np.load(tmp_path / "legacy" / f"{name}.npy"), snapshot[name])
     np.testing.assert_array_equal(tr._pack_monthly_runoff(pack), snapshot["runoff_monthly_mm"])
+
+
+def test_imported_elevation_and_mesh_climate_use_separate_scales(tmp_path: Path) -> None:
+    mesh = _patch_mesh()
+    temperature = np.tile(np.arange(12) + 9.0, (mesh.num_cells, 1))
+    precipitation = np.full_like(temperature, 100.0)
+    native_height = np.full((180, 360), 2234.0)
+    pack = tmp_path / "native"
+    meta = export_region_pack(
+        mesh,
+        **_clim_kwargs(),
+        out_dir=pack / "input",
+        climate_monthly=(temperature, precipitation),
+        native_elevation_m=native_height,
+    )
+    np.testing.assert_array_equal(np.load(pack / "input/height.meters.npy"), 2234.0)
+    fields = read_refinement_inputs(pack / "input", meta["refinement_inputs"])
+    np.testing.assert_array_equal(fields["elevation_m"], 2234.0)
+    np.testing.assert_array_equal(fields["precipitation_total_mm"], 1200.0)
+    lapse_c_per_m = (-6.5 + 0.0015 * 1200) / 1000
+    np.testing.assert_allclose(fields["temperature_mean_c"], 14.5 + lapse_c_per_m * 1000)
+    sea_level_temperature = fields["temperature_mean_c"] - lapse_c_per_m * fields["elevation_m"]
+    np.testing.assert_allclose(sea_level_temperature, 14.5 - lapse_c_per_m * 1234.0)
+    np.testing.assert_allclose(
+        fields["runoff_monthly_mm"].sum(axis=-1), np.load(pack / "input/runoff.mm.npy"), atol=1e-4
+    )
+
+
+def test_native_raster_wraps_at_the_antimeridian_and_extends_poles() -> None:
+    elevation = np.array([[10.0, 20.0, 30.0, 40.0], [-10.0, -20.0, -30.0, -40.0]])
+    lon = np.array([[-180.0, 180.0, -135.0, 135.0]])
+    for latitude, expected in [
+        (90.0, [25.0, 25.0, 10.0, 40.0]),
+        (-90.0, [-25.0, -25.0, -10.0, -40.0]),
+    ]:
+        result = sample_native_elevation(elevation, lon, np.full_like(lon, latitude))
+        np.testing.assert_array_equal(result[0], expected)
 
 
 @pytest.mark.parametrize(

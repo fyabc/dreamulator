@@ -42,8 +42,7 @@ export default function RegionRefinementPanel({ source, resultUrl, globalReturn 
   const threshold = Number(thresholdInput)
   const invalidWavelength = mode === 'blend' && wavelengthInput !== '' && wavelengthKm === null
   const invalidThreshold = thresholdInput !== '' && (!Number.isInteger(threshold) || threshold < 1 || threshold > maxRiverThreshold)
-  const invalidOptions = (mode === 'blend' && nativeKm === null) || invalidWavelength || invalidThreshold
-  const defaultWavelength = nativeKm === null ? null : nativeKm * 4
+  const invalidOptions = (mode === 'blend' && nativeInput !== '' && nativeKm === null) || invalidWavelength || invalidThreshold
   const options = {
     mode, native_resolution_km: mode === 'blend' ? nativeKm ?? undefined : undefined,
     preserve_wavelength_km: mode === 'blend' ? wavelengthKm ?? undefined : undefined,
@@ -61,6 +60,9 @@ export default function RegionRefinementPanel({ source, resultUrl, globalReturn 
   const active = ongoing(query.data)
   const missing = query.error instanceof ApiError && query.error.status === 404
   const display = active ? query.data?.plan : plan.data
+  const defaultNativeKm = display?.native_scale_km ?? null
+  const effectiveNativeKm = nativeKm ?? defaultNativeKm
+  const defaultWavelength = effectiveNativeKm === null ? null : effectiveNativeKm * 4
   const detail = cancel.error ?? start.error ?? plan.error
   const job = query.data
 
@@ -83,7 +85,8 @@ export default function RegionRefinementPanel({ source, resultUrl, globalReturn 
         <p id={methodHelp}>{t(`packs.refinement.methodHelp.${mode}`)}</p>
         {mode === 'blend' && <>
           <TerrainParameter label={t('packs.compute.method.nativeSpacing')} value={nativeInput} onChange={setSpacing} min={0}
-            help={t(source.kind === 'world' ? 'packs.compute.method.meshSpacingHint' : 'packs.compute.method.nativeSpacingHint')}
+            placeholder={defaultNativeKm === null ? t('packs.compute.parameters.auto') : String(+defaultNativeKm.toPrecision(5))}
+            help={t('packs.refinement.nativeSpacingDefault')}
             invalid={nativeInput !== '' && nativeKm === null} />
           <TerrainParameter label={t('packs.compute.parameters.wavelength')} value={wavelengthInput} onChange={setWavelength} min={0}
             placeholder={defaultWavelength === null || !Number.isFinite(defaultWavelength) ? t('packs.compute.parameters.auto') : String(+defaultWavelength.toPrecision(5))}

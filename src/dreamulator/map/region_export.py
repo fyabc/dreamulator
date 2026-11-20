@@ -639,6 +639,7 @@ def export_region_pack(
     seafloor_clamp_m: float = -400.0,
     out_res: int = DEFAULT_OUT_RES,
     astronomy: dict[str, Any] | None = None,
+    native_elevation_m: np.ndarray | None = None,
 ) -> dict[str, Any]:
     """Export the region data pack; returns the written ``meta`` dict.
 
@@ -649,8 +650,6 @@ def export_region_pack(
     """
     window = region_window(center_lat, center_lon, span_km, radius_km)
 
-    # The equirect index grid survives only as the alignment probe's subject;
-    # pack rasters are sampled from the mesh on the AEQ output grid.
     tree = build_export_tree(mesh)
     indices_full = export_cell_index_grid(mesh, grid_width, grid_height, tree=tree)
 
@@ -662,24 +661,21 @@ def export_region_pack(
         dtype=np.float64,
         count=mesh.num_cells,
     )
-    height = _interpolate_window(mesh, window, out_res, cell_elev, cell_elev[indices_fine])
-
     lut = build_adaptive_terrain_lut(elev_min_m, elev_max_m, sea_level_m)
-    color = render_terrain_layer(
-        mesh,
-        indices_fine,
-        lut,
-        elev_min_m,
-        elev_max_m,
-        sea_level_m,
-    )
-
-    water = np.fromiter(
-        (c.water_class for c in mesh.cells),
-        dtype="U6",
-        count=mesh.num_cells,
-    )
-    ocean_frac = float((water[indices_fine] == "ocean").mean())
+    if native_elevation_m is None:
+        height = _interpolate_window(mesh, window, out_res, cell_elev, cell_elev[indices_fine])
+        color = render_terrain_layer(mesh, indices_fine, lut, elev_min_m, elev_max_m, sea_level_m)
+        water = np.fromiter((c.water_class for c in mesh.cells), dtype="U6", count=mesh.num_cells)
+        ocean_frac = float((water[indices_fine] == "ocean").mean())
+        global_range = [float(cell_elev.min()), float(cell_elev.max())]
+    else:
+        height = sample_native_elevation(native_elevation_m, lon_grid, lat_grid)
+        fraction = (height - elev_min_m) / (elev_max_m - elev_min_m or 1.0)
+        bins = np.rint(np.clip(fraction, 0, 1) * (len(lut) - 1)).astype(np.intp)
+        color = np.full((*height.shape, 4), 255, dtype=np.uint8)
+        color[..., :3] = lut[bins]
+        ocean_frac = float((height <= sea_level_m).mean())
+        global_range = [elev_min_m, elev_max_m]
 
     h_min, h_max = float(height.min()), float(height.max())
 
@@ -726,7 +722,7 @@ def export_region_pack(
         # windows (e.g. the shared hypsometric palette — same elevation,
         # same colour on every sheet) anchor their lookup on this, not the
         # window range.
-        "elevation_m_global": [float(cell_elev.min()), float(cell_elev.max())],
+        "elevation_m_global": global_range,
         "height_png_range_m": [h_min, h_max],
         "height_gaea_png_range_m": [gaea_min, h_max],
         "seafloor_clamp_m": seafloor_clamp_m,
@@ -808,7 +804,13 @@ def export_region_pack(
         from dreamulator.map.region_inputs import write_world_refinement_inputs
 
         meta["refinement_inputs"] = write_world_refinement_inputs(
-            out_dir, mesh, window, *climate_monthly, indices_fine, provenance=source or {}
+            out_dir,
+            mesh,
+            window,
+            *climate_monthly,
+            indices_fine,
+            provenance=source or {},
+            native_elevation_m=native_elevation_m,
         )
     if "refinement_inputs" in meta:
         from dreamulator.map.region_inputs import REFINEMENT_GEOMETRY_KEYS
@@ -819,3 +821,31 @@ def export_region_pack(
         encoding="utf-8",
     )
     return meta
+
+
+def sample_native_elevation(
+    elevation_m: np.ndarray, lon_deg: np.ndarray, lat_deg: np.ndarray
+) -> np.ndarray:
+    """Match the browser's bilinear sampling of pixel-centred global imports."""
+    result = np.empty(lon_deg.shape, dtype=np.float64)
+    for start in range(0, lon_deg.shape[0], 64):
+        block = slice(start, start + 64)
+        result[block] = _sample_native_block(elevation_m, lon_deg[block], lat_deg[block])
+    return result
+
+
+def _sample_native_block(
+    elevation_m: np.ndarray, lon_deg: np.ndarray, lat_deg: np.ndarray
+) -> np.ndarray:
+    height, width = elevation_m.shape
+    cols = ((lon_deg + 180) * width / 360 - 0.5) % width
+    rows = np.clip((90 - lat_deg) * height / 180 - 0.5, 0, height - 1)
+    left = cols.astype(np.intp)
+    top = rows.astype(np.intp)
+    right = (left + 1) % width
+    bottom = np.minimum(top + 1, height - 1)
+    col_weight = cols - left
+    row_weight = rows - top
+    upper = elevation_m[top, left] * (1 - col_weight) + elevation_m[top, right] * col_weight
+    lower = elevation_m[bottom, left] * (1 - col_weight) + elevation_m[bottom, right] * col_weight
+    return np.asarray(upper * (1 - row_weight) + lower * row_weight)

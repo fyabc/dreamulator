@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from dreamulator.api_routes.packs import _input_meta, _pack_dir
 from dreamulator.branch_manager import BranchManager
 from dreamulator.build_jobs import BuildBusyError
+from dreamulator.map.elevation_input import native_elevation_spacing_km, world_elevation_source
 from dreamulator.map.export import find_mesh_file
 from dreamulator.map.manager import MapManager
 from dreamulator.map.region_export import read_radius_km, region_window
@@ -109,8 +110,6 @@ def _environment(mode: RefinementMode) -> Path | None:
 def _plan(source: RegionSelection | RegionPackSource) -> tuple[RegionPlan, RegionWork]:
     spacing = source.native_resolution_km
     wavelength = source.preserve_wavelength_km
-    if source.mode == RefinementMode.BLEND and spacing is None:
-        raise HTTPException(422, "Enter the native spacing when using the blend mode")
     if source.mode != RefinementMode.BLEND and (spacing is not None or wavelength is not None):
         raise HTTPException(422, "Native spacing and wavelength are only used by the blend mode")
     td = _environment(source.mode)
@@ -139,7 +138,7 @@ def _plan(source: RegionSelection | RegionPackSource) -> tuple[RegionPlan, Regio
         size = sum(path.stat().st_size for path in input_dir.rglob("*") if path.is_file())
         if size > 512 * 2**20:
             raise HTTPException(422, "The regional input exceeds the web refinement disk budget")
-        scale = meta.get("cell_pitch_km")
+        scale = meta.get("source", {}).get("px_km", meta.get("cell_pitch_km"))
         if isinstance(scale, (int, float)) and math.isfinite(scale) and scale > 0:
             native = float(scale)
         work = RegionWork(pack.parent, td, pack=pack)
@@ -164,10 +163,15 @@ def _plan(source: RegionSelection | RegionPackSource) -> tuple[RegionPlan, Regio
         span = source.span_km
         try:
             region_window(source.lat, source.lon, span, radius)
+            retained = world_elevation_source(world, source.branch, source.planet)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         pixels = source.input_px
-        native = radius * math.sqrt(4 * math.pi / meta_world.voronoi_num_cells)
+        native = (
+            native_elevation_spacing_km(retained[0], radius)
+            if retained is not None
+            else round(radius * math.sqrt(4 * math.pi / meta_world.voronoi_num_cells), 2)
+        )
         args = [
             source.world,
             "--planet",
@@ -198,6 +202,10 @@ def _plan(source: RegionSelection | RegionPackSource) -> tuple[RegionPlan, Regio
         )
     output_px = pixels * REFINE_FACTOR
     pixel_km = span / output_px
+    if source.mode == RefinementMode.BLEND and spacing is None:
+        if native is None:
+            raise HTTPException(422, "Enter a native elevation spacing in km for this map")
+        spacing = native
     if spacing is not None and spacing <= pixel_km:
         raise HTTPException(422, "Native spacing must be larger than the output pixel spacing")
     if wavelength is not None and wavelength < 4 * pixel_km:

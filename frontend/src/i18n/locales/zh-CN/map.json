@@ -559,12 +559,13 @@
       "riverThresholdInvalid": "请输入 1 到 {{max, number}} 之间的整数，或留空。",
       "methodHelp": {
         "redraw": "模型按大尺度地势重绘地形，再计算河流和湖泊。",
-        "blend": "模型在原图上补一些小尺度起伏，再计算河流和湖泊。请填写原生间距，例如 0.36 公里。",
+        "blend": "模型在原图上补一些小尺度起伏，再计算河流和湖泊。",
         "hydrology": "在原图上计算河流和湖泊，无需加载模型。"
       },
       "grid": "结果网格",
       "plan": "窗口边长 {{span}} km，输入网格 {{input}} × {{input}}，输出 {{output}} × {{output}} 像素，每像素 {{step}} km。",
       "nativeScale": "来源的代表性尺度约为 {{scale}} km。新增的细节是生成的，不是实测地形。",
+      "nativeSpacingDefault": "留空时使用来源的原生间距。若原图在导入前曾放大，请填写放大前的间距。",
       "seconds_other": "已用 {{count}} 秒",
       "stage": {
         "preparing": "正在准备输入",

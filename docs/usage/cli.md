@@ -322,14 +322,14 @@ dreamulator guard archive nacrea --limit 20
 |---|---|---|
 | `map layers` | 整颗星球 | 地图图层烘焙为彩色 PNG，与前端逐字节同色 |
 | `map globe` | 整颗星球 | 太空俯瞰镜头：地表与云纹理、双层云、大气和圆盘静帧 |
-| `region pack` | 单个区域 | 从网格直接取样一个方形区域数据包 |
+| `region pack` | 单个区域 | 从世界高程与气候取样一个方形区域数据包。 |
 | `region build` | 单个区域 | 数据包的高清地形：terrain-diffusion 细化加水文（SPL 程序化侵蚀已于 2026-11-08 退役） |
 | `canvas …` | 全球画布 | 整块大陆的 90 m 画布链：规划、生成、侵蚀、水文、裁窗和总览图 |
 | `render` | 数据包 | 区域包与画布裁窗通用的出图：卫星真彩或制图风格 |
 
 两条出图路线的区别：
-- **区域路线**（`region pack` → `region build` → `render`）直接从网格插值出一个窗口，不经过全球画布，
-  适合单张图和快速试验。
+- **区域路线**先用 `region pack` 准备窗口，再用 `region build` 细化并通过 `render` 出图。
+  这条路线不经过全球画布，适合单张图和快速试验。
 - **画布路线**（`canvas plan` → `canvas generate` → `canvas run` → `canvas window` → `render`）先把整块
   大陆生成为 90 m 画布并做完水文，裁出的窗口在画布之间连续，适合正式产品。
 
@@ -390,9 +390,7 @@ dreamulator region pack nacrea --seafloor-clamp -800   # height.gaea.png 的海�
 dreamulator region pack nacrea --out-res 4096   # 数据包栅格分辨率（默认 2048，正方形）
 ```
 
-数据包的栅格分辨率与引擎导出网格解耦：标量通道（高程/降水/温度/冰厚）在 cell
-中心的 Delaunay 三角网上 Clough-Tocher C1 插值（cell 中心保真，消除 Voronoi 平台与折痕），类别通道
-最近邻，所有通道共用同一正方形输出网格。
+数据包的输出分辨率与源分辨率分开设置。导入过全球高程图的世界优先从保留的原图采样，气候仍取计算网格。没有保留原图的世界从网格插值高程。连续的网格通道使用格心插值，类别通道取最近格。所有通道共用同一方形输出窗口。
 
 高度主通道是 float32 米值的 `.npy`（精确无编码损失）；配色 PNG 与前端同一调色板单源；
 `meta.json` 记录物理范围、千米/像素与源 mesh 指纹。pack v4 起区域窗口是局部方位等距

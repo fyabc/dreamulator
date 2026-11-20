@@ -107,6 +107,11 @@ def conditioning_fields(heights: np.ndarray, t: np.ndarray, p: np.ndarray) -> di
     }
 
 
+def td_temperature_lapse_c_per_m(annual_precipitation_mm: np.ndarray) -> np.ndarray:
+    """The existing precipitation-dependent terrain-conditioning convention."""
+    return np.clip(-6.5 + 0.0015 * annual_precipitation_mm, -9.8, -4.0) / 1000.0
+
+
 def write_refinement_inputs(
     input_dir: Path,
     fields: dict[str, np.ndarray],
@@ -243,17 +248,26 @@ def write_world_refinement_inputs(
     indices: np.ndarray,
     *,
     provenance: dict[str, Any],
+    native_elevation_m: np.ndarray | None = None,
 ) -> dict[str, Any]:
-    """Preserve the legacy mesh samples and runoff calculation at export."""
+    """Snapshot mesh climate and evaluate TD's temperature at the source surface."""
     import math
 
     from dreamulator.map.export import build_export_tree
-    from dreamulator.map.region_export import _nearest_indices_on_grid
+    from dreamulator.map.region_export import _nearest_indices_on_grid, sample_native_elevation
 
     n = max(2, round(window.span_km / (math.pi * window.radius_km / 2047.0)))
-    coarse_indices = _nearest_indices_on_grid(build_export_tree(mesh), *window.out_latlon(n))
+    lon, lat = window.out_latlon(n)
+    coarse_indices = _nearest_indices_on_grid(build_export_tree(mesh), lon, lat)
     height = np.fromiter((c.elevation for c in mesh.cells), dtype=np.float64, count=len(mesh.cells))
     fields = conditioning_fields(height[coarse_indices], t[coarse_indices], p[coarse_indices])
+    if native_elevation_m is not None:
+        native_height = sample_native_elevation(native_elevation_m, lon, lat)
+        height_delta = np.maximum(0, native_height) - np.maximum(0, fields["elevation_m"])
+        fields["temperature_mean_c"] += (
+            td_temperature_lapse_c_per_m(fields["precipitation_total_mm"]) * height_delta
+        )
+        fields["elevation_m"] = native_height
     annual = annual_runoff(input_dir)
     monthly = runoff_on_grid(monthly_runoff_shape(t, p), indices, annual)
     return write_refinement_inputs(input_dir, fields, monthly, provenance=provenance)
