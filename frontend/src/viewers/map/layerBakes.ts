@@ -21,6 +21,7 @@
  * full-res doubles the pixel density per cell at ~4× GPU memory / bake time.
  */
 
+import type { TerrainSource } from './elevationSource'
 import * as THREE from 'three'
 import { mark } from '../../utils/perf'
 import type { CVTMesh, BoundaryType } from './types'
@@ -144,6 +145,9 @@ export interface BakeInputs {
   width: number
   height: number
   seaLevel: number              // metres
+  terrainSource?: TerrainSource
+  meshWidth?: number
+  meshHeight?: number
   elevMinM: number
   elevMaxM: number
   waterDepthFactor: number
@@ -171,6 +175,9 @@ function sameBakeInputs(a: BakeInputs, b: BakeInputs): boolean {
     a.elevation === b.elevation &&
     a.width === b.width &&
     a.height === b.height &&
+    a.terrainSource === b.terrainSource &&
+    a.meshWidth === b.meshWidth &&
+    a.meshHeight === b.meshHeight &&
     a.seaLevel === b.seaLevel &&
     a.elevMinM === b.elevMinM &&
     a.elevMaxM === b.elevMaxM &&
@@ -630,9 +637,8 @@ function bakeCoastlineMask(
  * Samples every pixel of the full-res cell-id map.
  */
 /**
- * Terrain, land/sea and coastline layers straight from the elevation raster,
- * for maps that have no CVT mesh yet (an imported heightmap before its first
- * build).  Land is the import contract's rule: height above the sea level.
+ * Terrain, land/sea and coastline layers straight from the elevation raster.
+ * Land follows the import contract: height above the sea level.
  */
 function bakeRasterTerrain(inp: BakeInputs): { terrain: Uint8Array; landsea: Uint8Array; coast: Uint8Array } {
   const { elevation, width, height, elevMinM, elevMaxM, seaLevel, waterDepthFactor, flipHorizontal } = inp
@@ -647,12 +653,13 @@ function bakeRasterTerrain(inp: BakeInputs): { terrain: Uint8Array; landsea: Uin
     const m = elevMinM + elevation[i] * span
     const isLand = m > seaLevel
     land[i] = isLand ? 1 : 0
-    const c = color(m, !isLand)
+    const gray = Math.round(elevation[i] * 255)
+    const c = inp.terrainSource === 'gray' ? [gray, gray, gray] : color(m, !isLand)
     terrain[i * 4] = c[0]; terrain[i * 4 + 1] = c[1]; terrain[i * 4 + 2] = c[2]; terrain[i * 4 + 3] = 255
     const ls = isLand ? [76, 175, 80] : [21, 101, 192]
     landsea[i * 4] = ls[0]; landsea[i * 4 + 1] = ls[1]; landsea[i * 4 + 2] = ls[2]; landsea[i * 4 + 3] = 255
   }
-  for (let y = 0; y < height; y++) {
+  for (let y = 0; inp.terrainSource !== 'gray' && y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = y * width + x
       if (!land[i]) continue
@@ -957,7 +964,7 @@ export function bakeUccLayer(
 }
 
 function bakeAll(inp: BakeInputs): LayerTextures {
-  const { width, height, cvtMesh, cellIdMap, flipHorizontal } = inp
+  const { meshWidth: width = inp.width, meshHeight: height = inp.height, cvtMesh, cellIdMap, flipHorizontal } = inp
 
   // 1x1 transparent fallback
   const empty: Uint8Array = new Uint8Array([0, 0, 0, 0])
@@ -981,14 +988,18 @@ function bakeAll(inp: BakeInputs): LayerTextures {
   let pressureBuf: Uint8Array = empty
   let slpBuf: Uint8Array = empty
   let kw = 1, kh = 1
-  if (cvtMesh && cvtMesh.cells.length > 0 && cellIdMap) {
+  const hasMesh = cvtMesh && cvtMesh.cells.length > 0 && cellIdMap
+  const useRaster = !hasMesh || inp.terrainSource === 'raster' || inp.terrainSource === 'gray'
+  if (cvtMesh && hasMesh) {
     const palettes = buildCellPalettes(cvtMesh, inp.elevMinM, inp.elevMaxM, inp.seaLevel, inp.waterDepthFactor)
-    terrainThemBuf = bakeCellLayer(palettes.terrainThematic, width, height, cellIdMap, flipHorizontal)
-    landseaThemBuf = bakeCellLayer(palettes.landseaThematic, width, height, cellIdMap, flipHorizontal)
+    if (!useRaster) {
+      terrainThemBuf = bakeCellLayer(palettes.terrainThematic, width, height, cellIdMap, flipHorizontal)
+      landseaThemBuf = bakeCellLayer(palettes.landseaThematic, width, height, cellIdMap, flipHorizontal)
+      coastlinesBuf = bakeCoastlineMask(width, height, cvtMesh, cellIdMap, inp.seaLevel, flipHorizontal)
+    }
     koppenBuf = bakeCellLayer(palettes.koppen, width, height, cellIdMap, flipHorizontal)
     platesBuf = bakeCellLayer(palettes.plates, width, height, cellIdMap, flipHorizontal)
     boundariesBuf = bakeCellLayer(palettes.boundaries, width, height, cellIdMap, flipHorizontal)
-    coastlinesBuf = bakeCoastlineMask(width, height, cvtMesh, cellIdMap, inp.seaLevel, flipHorizontal)
     biomesBuf = bakeCellLayer(palettes.biomes, width, height, cellIdMap, flipHorizontal)
     nppBuf = bakeCellLayer(palettes.npp, width, height, cellIdMap, flipHorizontal)
     domesticableBuf = bakeCellLayer(palettes.domesticable, width, height, cellIdMap, flipHorizontal)
@@ -1003,13 +1014,14 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     pressureBuf = bakeCellLayer(palettes.pressure, width, height, cellIdMap, flipHorizontal)
     slpBuf = bakeCellLayer(palettes.slp, width, height, cellIdMap, flipHorizontal)
     kw = width; kh = height
-  } else if (inp.elevation.length === width * height && width > 0) {
-    // No mesh yet: show the stored heightmap itself; mesh-only layers stay empty.
+  }
+  let terrainWidth = kw, terrainHeight = kh
+  if (useRaster && inp.elevation.length === inp.width * inp.height && inp.width > 0) {
     const raster = bakeRasterTerrain(inp)
     terrainThemBuf = raster.terrain
     landseaThemBuf = raster.landsea
     coastlinesBuf = raster.coast
-    kw = width; kh = height
+    terrainWidth = inp.width; terrainHeight = inp.height
   }
 
   // Merge terrain + feature layers → self-contained textures for the 3D globe
@@ -1048,13 +1060,13 @@ function bakeAll(inp: BakeInputs): LayerTextures {
   //   domesticable): magFilter=NearestFilter → crisp cell edges
   // - All textures: minFilter=NearestFilter (no mipmaps needed; crisp when zoomed out)
   return {
-    terrainThematic: makeTexture(terrainThemBuf, kw, kh),
-    terrainWithCoastlines: makeTexture(terrainWithCoastBuf, kw, kh),
-    landseaThematic: makeTexture(landseaThemBuf, kw, kh, { nearestMag: true }),
+    terrainThematic: makeTexture(terrainThemBuf, terrainWidth, terrainHeight),
+    terrainWithCoastlines: makeTexture(terrainWithCoastBuf, terrainWidth, terrainHeight),
+    landseaThematic: makeTexture(landseaThemBuf, terrainWidth, terrainHeight, { nearestMag: true }),
     koppen: makeTexture(koppenBuf, kw, kh, { nearestMag: true }),
     plates: makeTexture(platesBuf, kw, kh, { nearestMag: true }),
     boundaries: makeTexture(boundariesBuf, kw, kh, { nearestMag: true }),
-    coastlines: makeTexture(coastlinesBuf, kw, kh, { nearestMag: true }),
+    coastlines: makeTexture(coastlinesBuf, terrainWidth, terrainHeight, { nearestMag: true }),
     biomes: makeTexture(biomesBuf, kw, kh, { nearestMag: true }),
     npp: makeTexture(nppBuf, kw, kh),
     domesticable: makeTexture(domesticableBuf, kw, kh, { nearestMag: true }),

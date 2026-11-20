@@ -104,6 +104,8 @@ API 后台构建与阶段查询由[构建进度接口](../../usage/build-progres
 月序与零点从数据读取，降水按文件定义的累积窗口显示。没有逐月场的变量保持原时间口径。
 瞬时天气入口仅在存在相应气象包时出现。接口与烘焙实现由[地图系统](../pipelines/map-system.md)维护。
 
+参照 [web-exoplasim 的自定义地形](https://github.com/ryoung48/web-exoplasim/blob/main/docs/climate/custom-terrain.md)与 [Pasta 气候后处理](https://github.com/ryoung48/web-exoplasim/blob/main/docs/climate/pasta.md)，界面应区分作者输入、求解网格上的结果和可选的降尺度产品。导入高程按原图尺寸显示，计算网格作为对照。以后只为有独立降尺度方法的变量提供切换，并注明使用了哪份细尺度输入和哪种方法。例如，近地面温度可按地形高度作订正；仅插值放大的气候图仍标为求解网格结果。分类图层应在已降尺度的物理量上重新计算分类。
+
 ### 4.4 选择窗口并获取高清结果
 
 作者在平面图或球面图上选区，并在区域地图页预览、选择导出分辨率和下载高程。区域地图没有可复用结果时使用全球高程预览；

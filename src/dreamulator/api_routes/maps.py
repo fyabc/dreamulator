@@ -449,7 +449,7 @@ async def import_elevation(
     ``seafloor_m`` for every sea cell) or ``metres`` (a float TIFF already in metres).  With no
     mapping fields it is ``range`` over the map's own ``elevation_min_m``/``elevation_max_m``,
     which is what the endpoint has always implied.  Land and sea are decided on the source
-    pixels and the heights resampled per class to the map's resolution.
+    pixels, and the mapped heights are kept at the source resolution.
 
     The response reports the land fraction, the height of one grey level, whether the sea floor
     is an assumption and any warnings about the image. The original image and contract are
@@ -460,14 +460,14 @@ async def import_elevation(
     from ..map.models import ElevationImportProvenance
 
     mgr = _get_map_manager(world_name, branch)
-    meta, mapping, _ = _import_target_and_mapping(
+    _, mapping, _ = _import_target_and_mapping(
         mgr, branch, planet_id, _mapping_fields(
             mode, min_m, max_m, sea_level, sea_level_m, curve, gamma, seafloor_m
         )
     )  # fmt: skip
     data = await _read_global_heightmap(file)
     filename = file.filename or ""
-    result = _run_metric_import(data, filename, mapping, meta)
+    result = _run_metric_import(data, filename, mapping)
 
     provenance = ElevationImportProvenance(
         source_format=result.source_format,
@@ -494,7 +494,6 @@ async def import_elevation(
     updated_meta.sea_level_m = 0.0 if mapping.mode == "threshold" else mapping.sea_level_m
     updated_meta.elevation_import = provenance
     mgr.save_map_metadata(planet_id, updated_meta)
-    mgr.sync_voronoi_from_elevation(planet_id)
 
     # Update layer registry and mark downstream layers as stale
     registry = mgr.update_registry_on_elevation_change(planet_id)
@@ -614,20 +613,12 @@ async def _read_global_heightmap(file: UploadFile) -> bytes:
     return data
 
 
-def _run_metric_import(
-    data: bytes, filename: str, mapping: ElevationMapping, meta: MapMetadata | None
-) -> MetricImport:
-    """Decode and map an uploaded image at the target map's resolution (400 on bad input)."""
+def _run_metric_import(data: bytes, filename: str, mapping: ElevationMapping) -> MetricImport:
+    """Decode and map an uploaded image without resampling (400 on bad input)."""
     from ..map.importer import import_heightmap_metres
 
     try:
-        return import_heightmap_metres(
-            data,
-            mapping,
-            filename=filename,
-            target_width=meta.width if meta else None,
-            target_height=meta.height if meta else None,
-        )
+        return import_heightmap_metres(data, mapping, filename=filename)
     except (OSError, ValueError, SyntaxError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -668,13 +659,13 @@ async def preview_elevation_import(
     from ..map.importer import land_area_fraction, preview_grid
 
     mgr = _get_map_manager(world, branch) if world else None
-    meta, mapping, mapping_source = _import_target_and_mapping(
+    _, mapping, mapping_source = _import_target_and_mapping(
         mgr, branch, planet_id if world else None, _mapping_fields(
             mode, min_m, max_m, sea_level, sea_level_m, curve, gamma, seafloor_m
         )
     )  # fmt: skip
     data = await _read_global_heightmap(file)
-    result = _run_metric_import(data, file.filename or "", mapping, meta)
+    result = _run_metric_import(data, file.filename or "", mapping)
     grid, grid_land = preview_grid(result.metres, result.land, PREVIEW_MAX_WIDTH)
     metres_f32 = np.ascontiguousarray(grid, "<f4").tobytes()
     land_u8 = np.ascontiguousarray(grid_land, np.uint8).tobytes()
@@ -683,7 +674,7 @@ async def preview_elevation_import(
         "source_format": result.source_format,
         "source_resolution": [result.source_width, result.source_height],
         "output_resolution": list(result.metres.shape[::-1]),
-        "resolution_from": "map" if meta is not None else "source",
+        "resolution_from": "source",
         "was_resampled": result.was_resampled,
         "mapping": mapping.model_dump(),
         "mapping_source": mapping_source,

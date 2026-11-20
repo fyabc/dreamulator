@@ -27,6 +27,8 @@ import { LAYER_HELP } from '../../components/map/helpContent'
 import { initialLayerState, activeMainLayerId } from '../../components/map/layerStateInit'
 import type { LayerState } from '../../components/map/MapLayerPanel'
 import { decodePngToFloat32 } from './utils/imageCodec'
+import { readElevationPng } from '../packs/elevationRaster'
+import { meshTextureDimensions, terrainSourceFor, type TerrainSource } from './elevationSource'
 import { solarDeclinationDeg } from '../utils/solar'
 import useCellIdMap from './useCellIdMap'
 import { useMonthlyClimate, type MonthlyField } from './useMonthlyClimate'
@@ -99,6 +101,9 @@ export interface PlanetViewState {
   // --- Raster + mesh data ---
   elevation: Float32Array | null
   elevationDims: { w: number; h: number }
+  terrainSource: TerrainSource
+  setTerrainSource: (source: TerrainSource) => void
+  meshTextureSize: { width: number; height: number }
   cvtMesh: CVTMesh | null
   voronoiCells: VoronoiCell[]
   cellIdMap: ReturnType<typeof useCellIdMap>
@@ -369,13 +374,17 @@ export function usePlanetViewState(
   // Float32Array; the 3D texture bake also needs the decoded dimensions.
   const [elevation, setElevation] = useState<Float32Array | null>(null)
   const [elevationDims, setElevationDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
+  const importedElevation = Boolean(meta?.elevation_import)
   useEffect(() => {
     if (!elevationBlob) {
       setElevation(null)
       return
     }
     let cancelled = false
-    decodePngToFloat32(elevationBlob).then(({ data, width, height }) => {
+    const decode = importedElevation
+      ? readElevationPng(elevationBlob, 0, 1).then(({ values, width, height }) => ({ data: values, width, height }))
+      : decodePngToFloat32(elevationBlob)
+    decode.then(({ data, width, height }) => {
       if (!cancelled) {
         setElevation(data)
         setElevationDims({ w: width, h: height })
@@ -385,7 +394,7 @@ export function usePlanetViewState(
       if (!cancelled) setElevation(null)
     })
     return () => { cancelled = true }
-  }, [elevationBlob])
+  }, [elevationBlob, importedElevation])
 
   const { isError: platesError } = useQuery({
     queryKey: ['plates', worldName, selectedPlanet, selectedBranch],
@@ -419,10 +428,14 @@ export function usePlanetViewState(
     [cvtMesh, voronoi],
   )
 
-  const cellIdMap = useCellIdMap({
-    cvtMesh: cvtMesh ?? null,
-    width: meta?.width ?? 2048,
-    height: meta?.height ?? 1024,
+  const meshTextureSize = meshTextureDimensions(meta)
+  const cellIdMap = useCellIdMap({ cvtMesh: cvtMesh ?? null, ...meshTextureSize })
+  const terrainSource = terrainSourceFor(meta, !!cvtMesh?.cells.length, searchParams.get('terrain'))
+  const setTerrainSource = (source: TerrainSource) => setSearchParams((prev) => {
+    const next = new URLSearchParams(prev)
+    if (source === 'raster') next.delete('terrain')
+    else next.set('terrain', source)
+    return next
   })
 
   // --- Lighting (?sun=&season=&night=) ---
@@ -441,13 +454,13 @@ export function usePlanetViewState(
     worldName, planetId: selectedPlanet, branch: selectedBranch, seasonDeg,
     field: monthlyField, active: monthlyActive, playing: timelapsePlaying,
     cvtMesh: cvtMesh ?? null, cellIdMap,
-    width: meta?.width ?? 2048, height: meta?.height ?? 1024, flipHorizontal: false,
+    ...meshTextureSize, flipHorizontal: false,
   })
   const yearlyProduct = useYearlyClimate(worldName, selectedPlanet, selectedBranch)
   const yearlyData = yearlyProduct && cvtMesh && yearlyProduct.numCells === cvtMesh.cells.length ? yearlyProduct : null
   const uccTexture = useUccLayer(
     yearlyData, cvtMesh ?? null, cellIdMap,
-    meta?.width ?? 2048, meta?.height ?? 1024, false,
+    meshTextureSize.width, meshTextureSize.height, false,
   )
 
   const sweeping = timelapsePlaying && monthlyMode && sunSweep
@@ -648,7 +661,8 @@ export function usePlanetViewState(
     awaitingBuild: !!elevation && !!meta && cvtMeshError,
     bodyByName, currentPlanetName, planetRadiusM, axialTiltDeg,
     worldPlanetsError, platesError,
-    elevation, elevationDims, cvtMesh: cvtMesh ?? null, voronoiCells, cellIdMap,
+    elevation, elevationDims, terrainSource, setTerrainSource, meshTextureSize,
+    cvtMesh: cvtMesh ?? null, voronoiCells, cellIdMap,
     monthlyThematic, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, hoveredCell, handleCellHover, lastCell, selectedCells,
     selectCell, clearSelection,

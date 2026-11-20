@@ -14,6 +14,13 @@ function chunk(kind: string, body: Uint8Array) {
 }
 
 describe('region elevation', () => {
+  it('aligns an imported global raster to pixel centres and wraps longitude', () => {
+    const source = { width: 4, height: 2, values: Float32Array.from([0, 1, 2, 3, 4, 5, 6, 7]) }
+    const atPixel = { ...window, centerLon: 45, centerLat: -45 }
+    expect(sampleGlobalElevation(source, atPixel, 1, true).values[0]).toBeCloseTo(6)
+    expect(sampleGlobalElevation(source, { ...atPixel, centerLon: -180 }, 1, true).values[0]).toBeCloseTo(5.5)
+  })
+
   it('decodes grayscale16 without losing the low byte and reverses PNG filters', async () => {
     const header = new Uint8Array([0, 0, 0, 2, 0, 0, 0, 5, 16, 0, 0, 0, 0])
     const filtered = new Uint8Array([

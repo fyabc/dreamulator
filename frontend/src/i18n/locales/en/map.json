@@ -5,6 +5,13 @@
     "stellar": "Stellar System 3D",
     "mapFallback": "Map"
   },
+  "terrainSource": {
+    "label": "Terrain source",
+    "hint": "Imported terrain and grayscale use the same heightmap. The model mesh shows the values used by the simulation. Regional maps always crop from the heightmap.",
+    "raster": "Imported terrain ({{width}} × {{height}})",
+    "gray": "Grayscale heightmap",
+    "mesh": "Model mesh ({{cells}} cells)"
+  },
   "layer": {
     "terrain": "Terrain",
     "landsea": "Land/Sea",
@@ -629,6 +636,7 @@
       "method": {
         "nativeSpacing": "Native spacing (km)",
         "nativeSpacingHelp": "Enter the ground distance in kilometres between two neighbouring cells in the original elevation data. Leave blank if unknown.",
+        "nativeSpacingEstimate": "Filled from the distance between rows of the global heightmap. If the image was enlarged before import, enter the spacing before enlargement.",
         "meshSpacingHint": "Local region builds use elevation from the model mesh. The default is estimated from the average cell area and can be edited.",
         "nativeSpacingHint": "Use the spacing before any enlargement. Enter 0.36 if the original data has an elevation every 360 metres, or 50 for one every 50 kilometres.",
         "unknown": "Unknown",

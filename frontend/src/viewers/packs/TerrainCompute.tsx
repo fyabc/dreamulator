@@ -37,6 +37,7 @@ interface BrowserInput {
   raster: ElevationRaster | null
   spanKm: number
   sourceRowSpacingKm: number | null
+  nativeEstimateKm?: number | null
   seaLevel: number
   onResult: (result: BrowserTerrainResult) => void
 }
@@ -182,7 +183,8 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
   const queryClient = useQueryClient()
   const [state, setState] = useState<RunState>({ kind: 'idle' })
   const [modelManagerOpen, setModelManagerOpen] = useState(false)
-  const [nativeInput, setNativeInput] = useState('')
+  const [nativeOverride, setNativeOverride] = useState<string | null>(null)
+  const nativeInput = nativeOverride ?? (input.nativeEstimateKm == null ? '' : String(Number(input.nativeEstimateKm.toPrecision(6))))
   const [choice, setChoice] = useState<TerrainMethod | null>(null)
   const [seed, setSeed] = useState('')
   const [gain, setGain] = useState('')
@@ -282,11 +284,11 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
             <label className="flex items-center justify-between gap-1" title={t('method.nativeSpacingHint')}>
               <span>{t('method.nativeSpacing')}</span>
               <input type="number" step="any" min="0" inputMode="decimal" value={nativeInput}
-                onChange={(event) => setNativeInput(event.currentTarget.value)} placeholder={t('method.unknown')}
+                onChange={(event) => setNativeOverride(event.currentTarget.value)} placeholder={t('method.unknown')}
                 aria-describedby={`${helpId}-native`}
                 aria-invalid={invalidSpacing} className="w-20 rounded border border-space-border bg-space-surface p-1 text-right text-gray-200" />
             </label>
-            <p id={`${helpId}-native`}>{t('method.nativeSpacingHelp')}</p>
+            <p id={`${helpId}-native`}>{t(input.nativeEstimateKm == null ? 'method.nativeSpacingHelp' : 'method.nativeSpacingEstimate')}</p>
             <p id={`${helpId}-reason`} aria-live="polite">{t(invalidSpacing ? 'method.invalidSpacing' : `method.reason.${recommendation?.reason ?? 'unknown'}`)}</p>
             <label className="flex items-center justify-between gap-1" title={t('method.methodHint')}>
               <span>{t('method.label')}</span>

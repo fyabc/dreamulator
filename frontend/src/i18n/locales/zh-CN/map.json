@@ -5,6 +5,13 @@
     "stellar": "恒星系 3D 可视化",
     "mapFallback": "地图"
   },
+  "terrainSource": {
+    "label": "地形来源",
+    "hint": "导入高程和灰度图读取同一张高程图。计算网格用于查看引擎实际使用的格点高程。区域地图始终从高程图裁切。",
+    "raster": "导入高程（{{width}} × {{height}}）",
+    "gray": "高程灰度图",
+    "mesh": "计算网格（{{cells}} 格）"
+  },
   "layer": {
     "terrain": "地形",
     "landsea": "海陆",
@@ -627,6 +634,7 @@
       "method": {
         "nativeSpacing": "原生间距（km）",
         "nativeSpacingHelp": "填写原始高程数据中相邻两格在地面上相隔多少公里。不知道就留空。",
+        "nativeSpacingEstimate": "已按全球高程图相邻两行的距离填写。如果原图此前放大过，请改成放大前的间距。",
         "meshSpacingHint": "本机区域构建使用计算网格的高程。默认值按每格平均面积估算，可手动修改。",
         "nativeSpacingHint": "用放大之前的格距。例如原数据每隔 360 米有一个高程值，就填 0.36；每隔 50 公里就填 50，即使图片后来放大过。",
         "unknown": "未知",

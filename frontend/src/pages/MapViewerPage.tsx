@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import ImportElevationButton from '../components/map/ImportElevationButton'
+import TerrainSourceSelect from '../components/map/TerrainSourceSelect'
 import GeographyRasterButton from '../components/map/GeographyRasterButton'
 import BranchSelector from '../components/BranchSelector'
 import MapViewer from '../components/map/MapViewer'
@@ -50,7 +51,7 @@ export default function MapViewerPage() {
     dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
     selectedPlanet, mapPlanets, meta, bodyByName, currentPlanetName, planetRadiusM,
     worldPlanetsError, platesError,
-    elevation, cvtMesh, voronoiCells, awaitingBuild,
+    elevation, cvtMesh, voronoiCells, awaitingBuild, terrainSource, setTerrainSource,
     monthlyThematic, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, hoveredCell, handleCellHover, selectedCells,
     selectCell, clearSelection,
@@ -110,6 +111,8 @@ export default function MapViewerPage() {
         <span className="text-xs text-gray-600">{t('title.viewer')}</span>
 
         <div className="flex-1" />
+        {meta?.elevation_import && <TerrainSourceSelect value={terrainSource} onChange={setTerrainSource}
+          width={meta.width} height={meta.height} cells={cvtMesh?.cells.length} />}
 
         {/* 3D Globe button (leftmost in the view-switch group) */}
         {selectedPlanet && (
@@ -231,6 +234,7 @@ export default function MapViewerPage() {
                   <MapViewer
                     metadata={meta ?? null}
                     elevation={elevation}
+                    terrainSource={terrainSource}
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
                     layers={layerState.layers}
@@ -411,6 +415,7 @@ export default function MapViewerPage() {
                   <MapViewer
                     metadata={meta ?? null}
                     elevation={elevation}
+                    terrainSource={terrainSource}
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
                     layers={layerState.layers}

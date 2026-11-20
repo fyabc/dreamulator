@@ -19,6 +19,11 @@ export interface MapMetadata {
   sea_level_m: number
   voronoi_seed: number | null
   voronoi_num_cells: number
+  elevation_import?: {
+    source_resolution: number[]
+    output_resolution: number[]
+    was_resampled: boolean
+  } | null
 }
 
 // ---------------------------------------------------------------------------

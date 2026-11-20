@@ -7,6 +7,7 @@ import { isStaticMode } from '../../api/mode'
 import MapHelpLink from '../../components/map/MapHelpLink'
 import RegionElevationDownload from '../../components/map/RegionElevationDownload'
 import SaveProjectResult from '../../components/projects/SaveProjectResult'
+import { importedRasterSpacingKm } from '../map/elevationSource'
 import RegionRefinementPanel from './RegionRefinementPanel'
 import TerrainCompute, { type BrowserTerrainResult } from './TerrainCompute'
 import { availableRegionPacks, matchingRegionPacks, regionPackWindow, type RegionWindow } from '../map/regionWindow'
@@ -39,8 +40,10 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
   const min = meta.data?.elevation_min_m ?? 0
   const max = meta.data?.elevation_max_m ?? 0
   const sea = meta.data?.sea_level_m ?? 0
+  const pixelCentres = Boolean(meta.data?.elevation_import)
   const decoded = useMemo<ElevationInput | null>(() => meta.data && elevation.data
-    ? { kind: 'global', blob: elevation.data, min, max, window } : null, [meta.data, elevation.data, min, max, window])
+    ? { kind: 'global', blob: elevation.data, min, max, window, pixelCentres } : null,
+    [meta.data, elevation.data, min, max, window, pixelCentres])
   const height = useRegionElevation(decoded)
   const preview = height.ready?.kind === 'preview' ? height.ready : null
   const [result, setResult] = useState<BrowserTerrainResult | null>(null)
@@ -48,7 +51,9 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
   const [showRefined, setShowRefined] = useState(false)
   const displayed = (showRefined ? refined : null) ?? preview?.raster ?? null
   const base = useElevationPreview(displayed, min, max, sea)
-  const stepKm = Math.PI * radiusKm / Math.max(1, (preview?.sourceHeight ?? 1) - 1)
+  const stepKm = Math.PI * radiusKm / Math.max(1, (preview?.sourceHeight ?? 1) - (pixelCentres ? 0 : 1))
+  const nativeEstimateKm = meta.data && preview
+    ? importedRasterSpacingKm(meta.data, preview.sourceWidth, preview.sourceHeight, radiusKm) : null
   const defaultSize = Math.max(1, Math.min(2048, Math.floor(spanKm / stepKm)))
   const [hover, setHover] = useState<LonLat | null>(null)
   const [pin, setPin] = useState<LonLat | null>(null)
@@ -95,6 +100,7 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
               state={{ regionReturn: globalReturn }}>{t('regionWindow.openPack', { name })}</Link>
           })}
           <TerrainCompute browser={{ raster: preview?.raster ?? null, spanKm, seaLevel: sea,
+            nativeEstimateKm,
             sourceRowSpacingKm: preview && preview.sourceHeight > 1 ? stepKm : null, onResult: (result) => {
             setResult(result)
             setShowRefined(true)

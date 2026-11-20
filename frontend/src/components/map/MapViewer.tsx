@@ -11,6 +11,7 @@
  * mapCenter.lon wraps modulo 360° so it never overflows.
  */
 
+import { meshTextureDimensions, type TerrainSource } from '../../viewers/map/elevationSource'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { WebGLRenderer } from 'three'
@@ -44,6 +45,7 @@ import { buildCellKDTree, type KDTree3D } from './utils/kdtree'
 interface MapViewerProps {
   metadata: MapMetadata | null
   elevation: Float32Array | null
+  terrainSource?: TerrainSource
   voronoiCells: VoronoiCell[]
   cvtMesh?: CVTMesh | null
   layers?: Record<ColorMode, number>
@@ -112,6 +114,7 @@ const BASE_VIS_H = 2 * 5 * Math.tan(THREE.MathUtils.degToRad(25))
 export default function MapViewer({
   metadata,
   elevation,
+  terrainSource = 'mesh',
   voronoiCells,
   cvtMesh,
   layers,
@@ -185,7 +188,8 @@ export default function MapViewer({
   }, [voronoiCells])
 
   // Cell-ID map
-  const cellIdMap = useCellIdMap({ cvtMesh, width: mapW, height: mapH })
+  const meshSize = meshTextureDimensions(metadata)
+  const cellIdMap = useCellIdMap({ cvtMesh, ...meshSize })
 
   // Loading indicator (useEffect avoids rAF in render body, enables cleanup)
   const [isRendering, setIsRendering] = useState(false)
@@ -235,6 +239,7 @@ export default function MapViewer({
 
   const { material: gpuMaterial, renderComposite: gpuRenderComposite } = useGPUTerrain({
     elevation, width: mapW, height: mapH, seaLevel,
+    terrainSource, meshWidth: meshSize.width, meshHeight: meshSize.height,
     elevMinM: elevMin, elevMaxM: elevMax,
     layers: renderLayers, cvtMesh, cellIdMap,
     monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError,
@@ -478,16 +483,8 @@ export default function MapViewer({
         const ep = lonLatToArrayPixel(ll, mapW, mapH)
         const elev = ep ? (elevation[ep.py * mapW + ep.px] ?? 0) : 0
 
-        onCursorMove?.({
-          lon: Math.round(ll.lon * 100) / 100,
-          lat: Math.round(ll.lat * 100) / 100,
-          elevation: elev,
-          elevationM: normalisedToMeters(elev, elevMin, elevMax),
-          pixelX: ep?.px ?? 0,
-          pixelY: ep?.py ?? 0,
-        })
-
         // KD-tree cell lookup
+        let cellId = -1
         if (kdTree) {
           const lonRad = (ll.lon * Math.PI) / 180
           const latRad = (ll.lat * Math.PI) / 180
@@ -495,13 +492,22 @@ export default function MapViewer({
           const qx = cosLat * Math.cos(lonRad)
           const qy = Math.sin(latRad)
           const qz = cosLat * Math.sin(lonRad)
-          const cellId = kdTree.nearest(qx, qy, qz)
+          cellId = kdTree.nearest(qx, qy, qz)
           onCellHover?.(cellId >= 0 ? cellId : null)
         }
+        const meshElev = terrainSource === 'mesh' && cellId >= 0 ? voronoiCells[cellId]?.elevation : undefined
+        onCursorMove?.({
+          lon: Math.round(ll.lon * 100) / 100,
+          lat: Math.round(ll.lat * 100) / 100,
+          elevation: meshElev == null ? elev : (meshElev - elevMin) / (elevMax - elevMin || 1),
+          elevationM: meshElev ?? normalisedToMeters(elev, elevMin, elevMax),
+          pixelX: ep?.px ?? 0,
+          pixelY: ep?.py ?? 0,
+        })
       })
     },
     [elevation, isDragging, zoom, mapCenter, vp, mapW, mapH, elevMin, elevMax,
-     onCursorMove, onCellHover, kdTree],
+     onCursorMove, onCellHover, kdTree, terrainSource, voronoiCells],
   )
 
   // --- Zoom ---
@@ -540,18 +546,19 @@ export default function MapViewer({
         // A tap fires no mousemove, so update cursor/hover explicitly.
         const ep = lonLatToArrayPixel(ll, mapW, mapH)
         const elev = ep && elevation ? (elevation[ep.py * mapW + ep.px] ?? 0) : 0
+        const meshElev = terrainSource === 'mesh' ? voronoiCells[cellId]?.elevation : undefined
         onCursorMove?.({
           lon: Math.round(ll.lon * 100) / 100,
           lat: Math.round(ll.lat * 100) / 100,
-          elevation: elev,
-          elevationM: normalisedToMeters(elev, elevMin, elevMax),
+          elevation: meshElev == null ? elev : (meshElev - elevMin) / (elevMax - elevMin || 1),
+          elevationM: meshElev ?? normalisedToMeters(elev, elevMin, elevMax),
           pixelX: ep?.px ?? 0,
           pixelY: ep?.py ?? 0,
         })
         onCellHover?.(cellId)
       }
     },
-    [kdTree, unproject, onCellClick, elevation, elevMin, elevMax, mapW, mapH, onCursorMove, onCellHover],
+    [kdTree, unproject, onCellClick, elevation, elevMin, elevMax, mapW, mapH, onCursorMove, onCellHover, terrainSource, voronoiCells],
   )
 
   const handleDoubleClick = useCallback(
@@ -620,8 +627,8 @@ export default function MapViewer({
             opacity={layers?.currents ?? 0}
             planetRadiusM={planetRadiusM}
             cellIdMap={cellIdMap}
-            meshWidth={mapW}
-            meshHeight={mapH}
+            meshWidth={meshSize.width}
+            meshHeight={meshSize.height}
             positioning="absolute"
           />
           <FlowParticles

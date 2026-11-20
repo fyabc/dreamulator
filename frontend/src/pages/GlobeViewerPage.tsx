@@ -33,6 +33,7 @@ import GlobeCurrentArrows from '../components/map/GlobeCurrentArrows'
 import GlobeWindArrows from '../components/map/GlobeWindArrows'
 import FlowParticles from '../components/map/FlowParticles'
 import ImportElevationButton from '../components/map/ImportElevationButton'
+import TerrainSourceSelect from '../components/map/TerrainSourceSelect'
 import GeographyRasterButton from '../components/map/GeographyRasterButton'
 import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
 import { readRegionBoundary, REGION_WINDOW_PARAM } from '../viewers/map/regionWindow'
@@ -63,7 +64,7 @@ export default function GlobeViewerPage() {
     dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
     selectedPlanet, mapPlanets, meta, metaError, elevError, cvtMeshError, awaitingBuild,
     bodyByName, planetRadiusM,
-    elevation, elevationDims, cvtMesh, voronoiCells, cellIdMap,
+    elevation, elevationDims, cvtMesh, voronoiCells, cellIdMap, terrainSource, setTerrainSource, meshTextureSize,
     monthlyThematic, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, handleCellHover, selectedCells,
     selectCell, clearSelection,
@@ -105,6 +106,7 @@ export default function GlobeViewerPage() {
   const { texture: terrainTexture, renderComposite } = useGPUTerrain({
     elevation,
     width: elevationDims.w, height: elevationDims.h,
+    terrainSource, meshWidth: meshTextureSize.width, meshHeight: meshTextureSize.height,
     seaLevel, elevMinM: elevMin, elevMaxM: elevMax,
     layers: renderLayers,
     cvtMesh,
@@ -147,10 +149,10 @@ export default function GlobeViewerPage() {
   // --- Handlers ---
 
   const handleCellHoverLonLat = useCallback((lon: number, lat: number) => {
-    const mapW = meta?.width ?? 2048
-    const mapH = meta?.height ?? 1024
-    const px = Math.round(((lon + 180) / 360) * (mapW - 1))
-    const py = Math.round(((90 - lat) / 180) * (mapH - 1))
+    const mapW = elevationDims.w
+    const mapH = elevationDims.h
+    const px = Math.floor((((lon + 180) % 360 + 360) % 360) / 360 * mapW)
+    const py = Math.min(mapH - 1, Math.floor(((90 - lat) / 180) * mapH))
     const elev = elevation
       ? (elevation?.[Math.max(0, Math.min(mapH - 1, py)) * mapW + Math.max(0, Math.min(mapW - 1, px))] ?? 0)
       : 0
@@ -165,12 +167,11 @@ export default function GlobeViewerPage() {
       )
       handleCellHover(cellId >= 0 ? cellId : null)
 
-      // Use CVT mesh elevation directly — same source as the right panel
-      const meshElev = cellId >= 0 ? voronoiCells[cellId]?.elevation : undefined
+      const meshElev = terrainSource === 'mesh' && cellId >= 0 ? voronoiCells[cellId]?.elevation : undefined
       setCursor({
         lon: Math.round(lon * 100) / 100,
         lat: Math.round(lat * 100) / 100,
-        elevation: meshElev ?? elev,
+        elevation: meshElev == null ? elev : (meshElev - elevMin) / (elevMax - elevMin || 1),
         elevationM: meshElev != null ? Math.round(meshElev) : Math.round(normalisedToMeters(elev, elevMin, elevMax)),
         pixelX: px,
         pixelY: py,
@@ -186,7 +187,7 @@ export default function GlobeViewerPage() {
         pixelY: py,
       })
     }
-  }, [elevation, meta, elevMin, elevMax, kdTree, voronoiCells, handleCellHover, setCursor])
+  }, [elevation, elevationDims, elevMin, elevMax, kdTree, voronoiCells, terrainSource, handleCellHover, setCursor])
 
   const handleCellClickLonLat = useCallback((lon: number, lat: number, ctrlKey: boolean) => {
     if (!kdTree) return
@@ -243,6 +244,8 @@ export default function GlobeViewerPage() {
           🔭 {t('label.stellarShort')}
         </Link>
 
+        {meta?.elevation_import && <TerrainSourceSelect value={terrainSource} onChange={setTerrainSource}
+          width={meta.width} height={meta.height} cells={cvtMesh?.cells.length} />}
         {/* Import elevation (same position as 2D toolbar) */}
         {selectedPlanet && (
           <ImportElevationButton
@@ -390,8 +393,8 @@ export default function GlobeViewerPage() {
                   opacity={layerState.layers.currents ?? 0}
                   planetRadiusM={planetRadiusM}
                   cellIdMap={cellIdMap}
-                  meshWidth={meta?.width ?? 2048}
-                  meshHeight={meta?.height ?? 1024}
+                  meshWidth={meshTextureSize.width}
+                  meshHeight={meshTextureSize.height}
                 />
                 <FlowParticles
                   projectRef={globePointProjectRef}
@@ -601,8 +604,8 @@ export default function GlobeViewerPage() {
                 opacity={layerState.layers.currents ?? 0}
                 planetRadiusM={planetRadiusM}
                 cellIdMap={cellIdMap}
-                meshWidth={meta?.width ?? 2048}
-                meshHeight={meta?.height ?? 1024}
+                meshWidth={meshTextureSize.width}
+                meshHeight={meshTextureSize.height}
               />
               <FlowParticles
                 projectRef={globePointProjectRef}

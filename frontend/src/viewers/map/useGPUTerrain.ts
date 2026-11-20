@@ -25,6 +25,7 @@
  */
 
 import { useMemo, useEffect, useCallback } from 'react'
+import type { TerrainSource } from './elevationSource'
 import * as THREE from 'three'
 import type { ColorMode } from './types'
 import type { CVTMesh } from './types'
@@ -128,6 +129,9 @@ interface UseGPUTerrainOptions {
   elevation: Float32Array | null
   width: number
   height: number
+  terrainSource?: TerrainSource
+  meshWidth?: number
+  meshHeight?: number
   seaLevel: number
   elevMinM?: number
   elevMaxM?: number
@@ -188,6 +192,9 @@ export default function useGPUTerrain({
   elevation,
   width,
   height,
+  terrainSource,
+  meshWidth,
+  meshHeight,
   seaLevel,
   elevMinM = -11000,
   elevMaxM = 9000,
@@ -211,16 +218,17 @@ export default function useGPUTerrain({
     if (!elevation || width <= 0 || height <= 0) return null
     return getLayerTextures({
       elevation, width, height, seaLevel, elevMinM, elevMaxM,
-      waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap,
+      waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight,
     })
   }, [elevation, width, height, seaLevel, elevMinM, elevMaxM,
-      waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap])
+      waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight])
 
   // --- Composite target + materials (one per bake/size) ---
   const composite = useMemo<CompositeState | null>(() => {
     if (!baked) return null
 
-    const target = new THREE.WebGLRenderTarget(width, height, {
+    const { width: textureWidth, height: textureHeight } = baked.terrainThematic.image
+    const target = new THREE.WebGLRenderTarget(textureWidth, textureHeight, {
       depthBuffer: false,
       stencilBuffer: false,
     })
@@ -275,23 +283,9 @@ export default function useGPUTerrain({
 
     return { target, compMat, displayMat, scene, camera, quad }
     // Sun intentionally excluded from deps: updated via the effect below.
-  }, [baked, width, height])
+  }, [baked])
 
   // --- Layer-derived state (recomputed on every opacity/base change) ---
-  // overlayActive: triggers the composite pass and u_useComposite for 2D display.
-  const overlayActive =
-    (layers.koppen ?? 0) > 0 || (layers.ucc ?? 0) > 0 || (layers.landsea ?? 0) > 0 ||
-    (layers.plates ?? 0) > 0 || (layers.boundaries ?? 0) > 0 ||
-    (layers.coastlines ?? 1) > 0 ||
-    (layers.biomes ?? 0) > 0 || (layers.npp ?? 0) > 0 ||
-    (layers.domesticable ?? 0) > 0 ||
-    (layers.habitable ?? 0) > 0 || (layers.agriculture ?? 0) > 0 ||
-    (layers.soil ?? 0) > 0 || (layers.provinces ?? 0) > 0 ||
-    (layers.temperature ?? 0) > 0 || (layers.precipitation ?? 0) > 0 ||
-    (layers.temperatureError ?? 0) > 0 || (layers.precipitationError ?? 0) > 0 ||
-    (layers.pressure ?? 0) > 0 || (layers.pressureError ?? 0) > 0 ||
-    (layers.slp ?? 0) > 0
-
   // needsFboForGlobe: substantive overlays that require the FBO composite.
   // The coastline feature layer is pre-baked into a dedicated globe texture at
   // bake time, avoiding the FBO colour-space round-trip issue with
@@ -307,6 +301,9 @@ export default function useGPUTerrain({
     (layers.temperatureError ?? 0) > 0 || (layers.precipitationError ?? 0) > 0 ||
     (layers.pressure ?? 0) > 0 || (layers.pressureError ?? 0) > 0 ||
     (layers.slp ?? 0) > 0
+  const coastOpacity = terrainSource === 'gray' ? 0 : (layers.coastlines ?? 1)
+  const terrainOpacity = layers.terrain ?? 1
+  const overlayActive = needsFboForGlobe || (coastOpacity > 0 && coastOpacity < 1) || (terrainOpacity > 0 && terrainOpacity < 1)
 
   // Dispose composite resources when they are replaced / on unmount.
   useEffect(() => {
@@ -358,16 +355,17 @@ export default function useGPUTerrain({
     u.u_thematicOp.value = thematicOp
     u.u_fillOp.value = layers.plates ?? 0
     u.u_featureOp.value = layers.boundaries ?? 0
-    u.u_coastlinesOp.value = layers.coastlines ?? 1
+    u.u_coastlinesOp.value = coastOpacity
     const d = composite.displayMat.uniforms
     d.u_useComposite.value = overlayActive ? 1 : 0
+    d.u_directBase.value = coastOpacity > 0 ? baked.terrainWithCoastlines : baked.terrainThematic
     // Minification: NearestFilter when cell layers are visible (crisp cell edges
     // when zoomed out), LinearFilter for smooth terrain-only view.
     // Magnification: always LinearFilter — smooth interpolation when zoomed in,
     // eliminating the "pixel block" look at high zoom levels.
     composite.target.texture.minFilter = overlayActive ? THREE.NearestFilter : THREE.LinearFilter
     composite.target.texture.magFilter = THREE.LinearFilter
-  }, [composite, baked, layers, overlayActive, monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError, monthlySlp, uccTexture])
+  }, [composite, baked, layers, overlayActive, coastOpacity, monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError, monthlySlp, uccTexture])
 
   // --- Sun uniforms on the display material (smooth slider, no re-composite) ---
   useEffect(() => {
@@ -409,14 +407,11 @@ export default function useGPUTerrain({
    *  for the globe because its MeshStandardMaterial PBR pipeline has a known
    *  colour-space round-trip issue. */
 
-  // Feature-layer flag (binary on/off for the globe pre-bake path).
-  const coastActive = (layers.coastlines ?? 1) > 0
-
   const texture: THREE.Texture | null = !baked
     ? null
     : needsFboForGlobe
       ? (composite?.target.texture ?? null)
-      : coastActive
+      : coastOpacity > 0
         ? baked.terrainWithCoastlines
         : baked.terrainThematic
 

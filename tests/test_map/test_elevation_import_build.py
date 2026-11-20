@@ -114,6 +114,29 @@ def test_import_build_and_deleted_products_reconstruct_from_input(imported_world
     assert meta.elevation_import.source_filename == "authored.png"
 
 
+def test_large_import_keeps_pixels_independent_of_mesh_size(imported_world):
+    world, client = imported_world
+    grey = np.full((2048, 4096), 12, np.uint8)
+    grey[1024, 2048:2052] = [40, 220, 40, 220]
+    response = client.post(
+        "/api/worlds/import-test/maps/planet_gaia/import-elevation",
+        files={"file": ("fine.png", _png8(grey), "image/png")},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["output_resolution"] == [4096, 2048]
+    assert not response.json()["was_resampled"]
+    _geo_build(world)
+    mgr = MapManager(world)
+    meta = mgr.get_map_metadata("planet_gaia")
+    heightmap = mgr.get_elevation("planet_gaia")
+    assert meta is not None and meta.voronoi_num_cells == 256
+    assert heightmap is not None and heightmap.shape == grey.shape
+    metres = meta.elevation_min_m + heightmap[1024, 2048:2052] * (
+        meta.elevation_max_m - meta.elevation_min_m
+    )
+    assert metres == pytest.approx(-11000 + 20000 / 255 * grey[1024, 2048:2052], abs=0.2)
+
+
 def test_full_climate_build_reads_imported_water_mask_and_sea_datum(imported_world, monkeypatch):
     world, client = imported_world
     heights = np.full((32, 64), 1000.0)

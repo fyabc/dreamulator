@@ -3,7 +3,7 @@ import { elevationPng, elevationTiff, readElevationNpy, readElevationPng, resize
 import type { PackWindow } from '../viewers/packs/packCoords'
 
 export type ElevationWorkerRequest =
-  | { kind: 'global'; blob: Blob; min: number; max: number; window: PackWindow }
+  | { kind: 'global'; blob: Blob; min: number; max: number; window: PackWindow; pixelCentres: boolean }
   | { kind: 'project-png'; blob: Blob; min: number; max: number; maxSide: number }
   | { kind: 'project-raster'; raster: ElevationRaster }
   | { kind: 'pack'; blob: Blob }
@@ -17,13 +17,17 @@ export type ElevationWorkerResult =
 
 let source: ElevationRaster | undefined
 let window: PackWindow | undefined
+let pixelCentres = false
 
 self.onmessage = async ({ data }: MessageEvent<ElevationWorkerRequest>) => {
   try {
     if (data.kind === 'global') {
       source = await readElevationPng(data.blob, data.min, data.max)
       window = data.window
-      const raster = sampleGlobalElevation(source, window, 384)
+      pixelCentres = data.pixelCentres
+      const rowPitch = Math.PI * window.radiusKm / (pixelCentres ? source.height : Math.max(1, source.height - 1))
+      const previewSize = Math.min(1024, Math.max(384, Math.ceil(window.extentKmY / rowPitch)))
+      const raster = sampleGlobalElevation(source, window, previewSize, pixelCentres)
       const result: ElevationWorkerResult = { kind: 'preview', raster, sourceWidth: source.width, sourceHeight: source.height }
       self.postMessage(result, { transfer: [raster.values.buffer] })
     } else if (data.kind === 'project-png') {
@@ -46,7 +50,7 @@ self.onmessage = async ({ data }: MessageEvent<ElevationWorkerRequest>) => {
       const input = data.raster ?? source
       if (!input) throw new Error('Missing elevation export source')
       const longest = Math.max(input.width, input.height)
-      const raster = data.raster ?? (size === null ? input : window ? sampleGlobalElevation(input, window, size)
+      const raster = data.raster ?? (size === null ? input : window ? sampleGlobalElevation(input, window, size, pixelCentres)
         : resizeElevation(input, Math.max(1, Math.round(size * input.width / longest)),
           Math.max(1, Math.round(size * input.height / longest))))
       const blob = data.format === 'png' ? await elevationPng(raster, data.metadata) : elevationTiff(raster, data.metadata)

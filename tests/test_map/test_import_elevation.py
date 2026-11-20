@@ -268,11 +268,12 @@ def test_import_endpoint_applies_the_mapping(tmp_path: Path) -> None:
         assert meta.elevation_import.mapping.mode == "threshold"
         assert (meta.elevation_min_m, meta.elevation_max_m) == (-2500.0, 4000.0)
         stored = mgr.get_elevation("p")
-        assert stored is not None and stored.shape == (16, 32)
+        assert stored is not None and stored.shape == (32, 64)
+        assert not body["was_resampled"]
         # the stored raster reads back as the imported metres through map.yaml's scale
         back = meta.elevation_min_m + stored * (meta.elevation_max_m - meta.elevation_min_m)
-        assert back[:, :16].min() == pytest.approx(4000.0, abs=0.2)
-        assert back[:, 16:].max() == pytest.approx(-2500.0, abs=0.2)
+        assert back[:, :32].min() == pytest.approx(4000.0, abs=0.2)
+        assert back[:, 32:].max() == pytest.approx(-2500.0, abs=0.2)
         bad = client.post(
             "/api/worlds/w/maps/p/import-elevation",
             files={"file": ("map.png", _png8(grey), "image/png")},
@@ -358,12 +359,12 @@ def test_preview_matches_the_import_and_writes_nothing(tmp_path: Path) -> None:
         assert preview.status_code == 200, preview.text
         assert _tree(worlds) == before  # a preview never writes
         body = preview.json()
-        assert body["resolution_from"] == "map" and body["output_resolution"] == [32, 16]
+        assert body["resolution_from"] == "source" and body["output_resolution"] == [64, 32]
         assert body["mapping_source"] == "request"
         grid = body["preview"]
         metres = np.frombuffer(base64.b64decode(grid["metres_f32"]), "<f4")
         land = np.frombuffer(base64.b64decode(grid["land_u8"]), np.uint8)
-        assert metres.size == land.size == grid["width"] * grid["height"] == 32 * 16
+        assert metres.size == land.size == grid["width"] * grid["height"] == 64 * 32
         assert set(np.unique(metres)) == {-2500.0, 4000.0}
         assert body["land_area_fraction"] == pytest.approx(0.5)
 
