@@ -6,6 +6,7 @@ import {
   readRegionWindow, REGION_WINDOW_PARAM, type RegionWindow,
 } from '../../viewers/map/regionWindow'
 import type { LonLat } from '../../viewers/map/utils/mapCoords'
+import type { GlobeScale } from '../../viewers/map/utils/globeScale'
 import MapHelpLink from './MapHelpLink'
 
 const buttonClass = 'rounded border border-space-border bg-space-surface px-2 py-1 text-gray-200 hover:border-neon-cyan/50'
@@ -18,9 +19,13 @@ interface RegionWindowPanelProps {
   radiusKm: number
   selectedPoint?: LonLat | null
   onMoveToRegion: () => void
+  onRegionScale?: (scale: GlobeScale) => void
+  scaleAltitudeKm?: number
 }
 
-export default function RegionWindowPanel({ world, planet, branch, radiusKm, selectedPoint, onMoveToRegion }: RegionWindowPanelProps) {
+export default function RegionWindowPanel({
+  world, planet, branch, radiusKm, selectedPoint, onMoveToRegion, onRegionScale, scaleAltitudeKm,
+}: RegionWindowPanelProps) {
   const { t } = useTranslation('map')
   const [search, setSearch] = useSearchParams()
   const location = useLocation()
@@ -53,6 +58,17 @@ export default function RegionWindowPanel({ world, planet, branch, radiusKm, sel
         {window && <span className="text-neon-cyan">{t('regionWindow.summary', { ...window })}</span>}
         {window && <Link className={buttonClass} to={`/packs?${regionParams}`} title={t('regionWindow.hint.open')}
           state={{ regionReturn: `${location.pathname}${location.search}` }}>{t('regionWindow.open')}</Link>}
+        {window && onRegionScale && <>
+          <button type="button" className={buttonClass} onClick={() => onRegionScale('region')}>
+            {t('regionWindow.zoomToRegion')}
+          </button>
+          <button type="button" className={buttonClass} onClick={() => onRegionScale('globe')}>
+            {t('regionWindow.zoomToGlobe')}
+          </button>
+          {scaleAltitudeKm !== undefined && <span className="text-gray-400">
+            {t('regionWindow.scaleAltitude', { km: scaleAltitudeKm.toFixed(1) })}
+          </span>}
+        </>}
         <div className="ml-auto">
           <MapHelpLink section="region-selection" label={t('regionWindow.help')} />
         </div>

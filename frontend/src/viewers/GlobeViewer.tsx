@@ -24,8 +24,13 @@ import * as THREE from 'three'
 import { sunDirection } from './utils/solar'
 import { measureFromStart } from '../utils/perf'
 import type { PointProjector } from './map/types'
+import type { RegionWindow } from './map/regionWindow'
 import type { LonLat } from './map/utils/mapCoords'
 import { lonLatToGlobePosition } from './map/utils/globeCoords'
+import {
+  globeCameraPath, GLOBE_MAX_DISTANCE, GLOBE_OVERVIEW_DISTANCE, GLOBE_PREVIEW_MIN_DISTANCE,
+  overviewCameraDistance, regionCameraDistance, type GlobeScale,
+} from './map/utils/globeScale'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -33,7 +38,7 @@ import { lonLatToGlobePosition } from './map/utils/globeCoords'
 
 const SPHERE_RADIUS = 1
 const TRANSITION_START_DIST = 4.5
-const TRANSITION_END_DIST = 8
+const TRANSITION_END_DIST = GLOBE_MAX_DISTANCE
 const DIST_POLL_MS = 80
 const HIGHLIGHT_R = SPHERE_RADIUS * 1.003
 // OrbitControls autoRotateSpeed: 2.0 = 30s per orbit, so 0.5 ≈ 120s/orbit —
@@ -46,6 +51,7 @@ const AUTO_ROTATE_SPEED = 0.5
 
 export interface GlobeVertex { id: number; lon: number; lat: number }
 export interface GlobeRegion { id: number; vertex_ids: number[] }
+export interface GlobeRegionFlight { window: RegionWindow; radiusKm: number; scale: GlobeScale }
 
 interface GlobeViewerProps {
   texture: THREE.Texture | null
@@ -71,6 +77,8 @@ interface GlobeViewerProps {
   regionBoundary?: readonly LonLat[] | null
   regionFocus?: LonLat | null
   regionMoveRevision?: number
+  scalePreview?: boolean
+  regionFlight?: GlobeRegionFlight | null
   /** Sun longitude in degrees (0 = noon at prime meridian). */
   sunLongitudeDeg?: number
   /** Solar declination (subsolar latitude) in degrees — varies with season. */
@@ -335,6 +343,8 @@ interface GlobeSceneProps {
   regionBoundary?: readonly LonLat[] | null
   regionFocus?: LonLat | null
   regionMoveRevision?: number
+  scalePreview?: boolean
+  regionFlight?: GlobeRegionFlight | null
   sunLongitudeDeg?: number
   solarDeclinationDeg?: number
   dayNight?: boolean
@@ -349,8 +359,9 @@ interface GlobeSceneProps {
 
 // North-pole fly animation duration (ms)
 const NORTH_ANIM_DURATION = 600
+const REGION_FLIGHT_DURATION_MS = 1000
 // Default view: camera on +Z axis, north pole (+Y) = top of screen
-const NORTH_VIEW_POS = new THREE.Vector3(0, 0, 2.8)
+const NORTH_VIEW_POS = new THREE.Vector3(0, 0, GLOBE_OVERVIEW_DISTANCE)
 const NORTH_VIEW_TARGET = new THREE.Vector3(0, 0, 0)
 
 interface NorthAnimState {
@@ -362,13 +373,14 @@ interface NorthAnimState {
 function GlobeScene({
   texture, renderComposite, distanceRef, onCellHover, onCellClick, onHoverOut,
   vertices, regions, hoveredCellId, selectedCellIds, regionBoundary, regionFocus,
-  regionMoveRevision,
+  regionMoveRevision, scalePreview = false, regionFlight,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
   autoSpin = false, chrome = true, interactive = true,
   globeProjectRef, globePointProjectRef,
 }: GlobeSceneProps) {
   const controlsRef = useRef<any>(null)
   const northAnimRef = useRef<NorthAnimState | null>(null)
+  const regionFlightRef = useRef<{ startTime: number; path: ReturnType<typeof globeCameraPath> } | null>(null)
   const userDraggingRef = useRef(false)
   // First useFrame tick = first rendered frame — the interactive-ready point.
   const firstFrameRef = useRef(true)
@@ -384,6 +396,7 @@ function GlobeScene({
     const controls = controlsRef.current
     if (!regionFocus || !controls) return
     northAnimRef.current = null
+    regionFlightRef.current = null
     const radius = controls.getDistance()
     const damping = controls.enableDamping
     controls.enableDamping = false
@@ -394,11 +407,39 @@ function GlobeScene({
     controls.enableDamping = damping
   }, [regionFocus, regionMoveRevision])
 
+  useEffect(() => {
+    regionFlightRef.current = null
+    const controls = controlsRef.current
+    const camera = controls?.object as THREE.Camera | undefined
+    if (!regionFlight || !(camera instanceof THREE.PerspectiveCamera)) return
+
+    northAnimRef.current = null
+    const damping = controls.enableDamping
+    controls.enableDamping = false
+    controls.autoRotate = false
+    controls.update()
+    controls.enableDamping = damping
+    const { window: region, radiusKm, scale } = regionFlight
+    const distance = scale === 'region' ? regionCameraDistance(region.spanKm, radiusKm, camera.fov, camera.aspect)
+      : overviewCameraDistance(camera.fov, camera.aspect)
+    const end = new THREE.Vector3(...lonLatToGlobePosition(region, distance))
+    const path = globeCameraPath(camera.position, end)
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      path(camera.position, 1)
+      controls.update()
+    } else {
+      regionFlightRef.current = { startTime: performance.now(), path }
+    }
+  }, [regionFlight])
+
   // Track drag state so auto-spin yields to the user and resumes on release.
   useEffect(() => {
     const controls = controlsRef.current
     if (!controls) return
-    const onStart = () => { userDraggingRef.current = true }
+    const onStart = () => {
+      userDraggingRef.current = true
+      regionFlightRef.current = null
+    }
     const onEnd = () => { userDraggingRef.current = false }
     controls.addEventListener('start', onStart)
     controls.addEventListener('end', onEnd)
@@ -413,7 +454,7 @@ function GlobeScene({
   useFrame(() => {
     const controls = controlsRef.current
     if (controls) {
-      controls.autoRotate = !!autoSpin && !northAnimRef.current && !userDraggingRef.current
+      controls.autoRotate = !!autoSpin && !scalePreview && !northAnimRef.current && !userDraggingRef.current
     }
   })
 
@@ -427,7 +468,24 @@ function GlobeScene({
     }
   }, -1)
 
-  useFrame(({ camera }) => { distanceRef.current = camera.position.length() })
+  useFrame(({ camera }) => {
+    const flight = regionFlightRef.current
+    if (flight) {
+      const progress = Math.min(1, (performance.now() - flight.startTime) / REGION_FLIGHT_DURATION_MS)
+      flight.path(camera.position, progress)
+      controlsRef.current?.update()
+      if (progress >= 1) regionFlightRef.current = null
+    }
+    const distance = camera.position.length()
+    distanceRef.current = distance
+    if (camera instanceof THREE.PerspectiveCamera) {
+      const near = scalePreview ? Math.min(0.1, (distance - SPHERE_RADIUS) * 0.25) : 0.1
+      if (near > 0 && near !== camera.near) {
+        camera.near = near
+        camera.updateProjectionMatrix()
+      }
+    }
+  })
 
   // Scale rotation speed with zoom so the surface stays under the cursor.
   // The visible surface is at distance (d - R) from the camera, not d.
@@ -437,7 +495,8 @@ function GlobeScene({
     const controls = controlsRef.current
     if (controls) {
       const d = camera.position.length()
-      controls.rotateSpeed = Math.max(0.05, (d - SPHERE_RADIUS) / 1.8)
+      controls.rotateSpeed = Math.max(scalePreview ? 0.01 : 0.05, (d - SPHERE_RADIUS) / 1.8)
+      if (scalePreview) controls.zoomSpeed = 0.8 * Math.min(1, (d - SPHERE_RADIUS) / 0.2)
     }
   })
 
@@ -597,6 +656,10 @@ function GlobeScene({
       if (!controls) return
       const camera = controls.object as THREE.Camera
 
+      if (scalePreview) {
+        regionFlightRef.current = { startTime: performance.now(), path: globeCameraPath(camera.position, NORTH_VIEW_POS) }
+        return
+      }
       northAnimRef.current = {
         startTime: performance.now(),
         startPos: camera.position.clone(),
@@ -605,7 +668,7 @@ function GlobeScene({
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [])
+  }, [scalePreview])
 
   // Build region lookup: cellId → region
   const regionMap = useMemo(() => {
@@ -697,8 +760,8 @@ function GlobeScene({
           side={THREE.BackSide} depthWrite={false} />
       </mesh>
 
-      <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.08}
-        minDistance={SPHERE_RADIUS * 1.2} maxDistance={TRANSITION_END_DIST}
+      <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.08} enablePan={!scalePreview}
+        minDistance={scalePreview ? GLOBE_PREVIEW_MIN_DISTANCE : 1.2} maxDistance={TRANSITION_END_DIST}
         maxPolarAngle={Math.PI} target={[0, 0, 0]}
         zoomSpeed={0.8} autoRotateSpeed={AUTO_ROTATE_SPEED} />
     </>
@@ -734,22 +797,24 @@ export default function GlobeViewer({
   texture, renderComposite, onTransition, transitionLabel,
   onCellHover, onCellClick, onHoverOut, onDistanceChange,
   vertices, regions, hoveredCellId, selectedCellIds, regionBoundary, regionFocus,
-  regionMoveRevision,
+  regionMoveRevision, scalePreview = false, regionFlight,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
   autoSpin = false, chrome = true, interactive = true, frameless = false,
   globeProjectRef, globePointProjectRef,
 }: GlobeViewerProps) {
   const { t } = useTranslation('map')
   const resolvedLabel = transitionLabel ?? t('viewer.transitionToStellar')
+  const viewerRef = useRef<HTMLDivElement>(null)
   const distanceRef = useRef(TRANSITION_START_DIST - 1)
   const [progress, setProgress] = useState(0)
   const navigateRef = useRef(false)
 
   useEffect(() => {
     const interval = setInterval(() => {
+      if (scalePreview && !viewerRef.current?.clientWidth) return
       const dist = distanceRef.current
       onDistanceChange?.(dist)
-      if (dist <= TRANSITION_START_DIST) { setProgress(0); return }
+      if (scalePreview || dist <= TRANSITION_START_DIST) { setProgress(0); return }
       const p = Math.min(1, (dist - TRANSITION_START_DIST) / (TRANSITION_END_DIST - TRANSITION_START_DIST))
       setProgress(p)
       if (p >= 1 && onTransition && !navigateRef.current) {
@@ -759,16 +824,16 @@ export default function GlobeViewer({
       if (p < 0.98) navigateRef.current = false
     }, DIST_POLL_MS)
     return () => clearInterval(interval)
-  }, [onTransition, onDistanceChange])
+  }, [onTransition, onDistanceChange, scalePreview])
 
   useEffect(() => { setProgress(0); navigateRef.current = false }, [texture])
 
   return (
-    <div className="w-full h-full relative">
+    <div ref={viewerRef} className="w-full h-full relative">
       <TransitionPrompt progress={progress} label={resolvedLabel} />
       <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-500">{t('viewer.loadingGlobe')}</div>}>
         <Canvas
-          camera={{ position: [0, 0, 2.8], fov: 40 }}
+          camera={{ position: [0, 0, GLOBE_OVERVIEW_DISTANCE], fov: 40 }}
           gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
           style={{ background: '#030308', borderRadius: frameless ? 0 : '0.75rem' }}
         >
@@ -781,6 +846,8 @@ export default function GlobeViewer({
             regionBoundary={regionBoundary}
             regionFocus={regionFocus}
             regionMoveRevision={regionMoveRevision}
+            scalePreview={scalePreview}
+            regionFlight={regionFlight}
             sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg}
             dayNight={dayNight}
             autoSpin={autoSpin}

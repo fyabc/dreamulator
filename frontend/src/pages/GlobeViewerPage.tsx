@@ -14,7 +14,7 @@ import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import * as THREE from 'three'
-import GlobeViewer, { type GlobeVertex, type GlobeRegion } from '../viewers/GlobeViewer'
+import GlobeViewer, { type GlobeVertex, type GlobeRegion, type GlobeRegionFlight } from '../viewers/GlobeViewer'
 import BranchSelector from '../components/BranchSelector'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapLayerPanel from '../components/map/MapLayerPanel'
@@ -91,6 +91,8 @@ export default function GlobeViewerPage() {
     [rawWindow, planetRadiusM])
   const regionFocus = useMemo(() => readRegionWindow(rawWindow, planetRadiusM / 1000), [rawWindow, planetRadiusM])
   const [regionMoveRevision, setRegionMoveRevision] = useState(0)
+  const scalePreview = searchParams.get('zoomPreview') === '1' && !cleanMode
+  const [regionFlight, setRegionFlight] = useState<GlobeRegionFlight | null>(null)
 
   const globeProjectRef = useRef<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number; ex: number; ey: number; nx: number; ny: number } | null) | null>(null)
   const globePointProjectRef = useRef<PointProjector | null>(null)
@@ -320,7 +322,13 @@ export default function GlobeViewerPage() {
       {!cleanMode && selectedPlanet && (elevation || cvtMesh) && (
         <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
           branch={selectedBranch} radiusKm={planetRadiusM / 1000}
-          onMoveToRegion={() => setRegionMoveRevision((revision) => revision + 1)}
+          onMoveToRegion={() => {
+            setRegionFlight(null)
+            setRegionMoveRevision((revision) => revision + 1)
+          }}
+          onRegionScale={scalePreview && regionFocus
+            ? (scale) => setRegionFlight({ window: regionFocus, scale, radiusKm: planetRadiusM / 1000 }) : undefined}
+          scaleAltitudeKm={globeZoom > 1 ? (globeZoom - 1) * planetRadiusM / 1000 : undefined}
           selectedPoint={selectedCells.size === 1 ? selectedCellData : null} />
       )}
       {!cleanMode && cvtMesh && (
@@ -378,6 +386,8 @@ export default function GlobeViewerPage() {
                 regionBoundary={cleanMode ? null : regionBoundary}
                 regionFocus={regionFocus}
                 regionMoveRevision={regionMoveRevision}
+                scalePreview={scalePreview}
+                regionFlight={scalePreview && regionFlight?.window === regionFocus ? regionFlight : null}
                 sunLongitudeDeg={sunLongitudeDeg}
                 solarDeclinationDeg={solarDeclination}
                 dayNight={dayNightEnabled}
@@ -591,6 +601,8 @@ export default function GlobeViewerPage() {
               regionBoundary={cleanMode ? null : regionBoundary}
               regionFocus={regionFocus}
               regionMoveRevision={regionMoveRevision}
+              scalePreview={scalePreview}
+              regionFlight={scalePreview && regionFlight?.window === regionFocus ? regionFlight : null}
               sunLongitudeDeg={sunLongitudeDeg}
               solarDeclinationDeg={solarDeclination}
               dayNight={dayNightEnabled}
