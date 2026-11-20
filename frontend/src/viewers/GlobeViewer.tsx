@@ -25,6 +25,7 @@ import { sunDirection } from './utils/solar'
 import { measureFromStart } from '../utils/perf'
 import type { PointProjector } from './map/types'
 import type { LonLat } from './map/utils/mapCoords'
+import { lonLatToGlobePosition } from './map/utils/globeCoords'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -68,6 +69,8 @@ interface GlobeViewerProps {
   /** Selected cell IDs (yellow highlight). */
   selectedCellIds?: Set<number>
   regionBoundary?: readonly LonLat[] | null
+  regionFocus?: LonLat | null
+  regionMoveRevision?: number
   /** Sun longitude in degrees (0 = noon at prime meridian). */
   sunLongitudeDeg?: number
   /** Solar declination (subsolar latitude) in degrees — varies with season. */
@@ -301,12 +304,7 @@ function CellPolygon({ vertices, region, color, opacity = 0.55 }: CellPolygonPro
 function RegionOutline({ boundary }: { boundary: readonly LonLat[] }) {
   const { points, dashSize } = useMemo(() => {
     const radius = SPHERE_RADIUS * 1.004
-    const points = boundary.map(({ lon, lat }) => {
-      const theta = THREE.MathUtils.degToRad(lon)
-      const phi = THREE.MathUtils.degToRad(lat)
-      const radial = radius * Math.cos(phi)
-      return new THREE.Vector3(radial * Math.cos(theta), radius * Math.sin(phi), -radial * Math.sin(theta))
-    })
+    const points = boundary.map((point) => new THREE.Vector3(...lonLatToGlobePosition(point, radius)))
     const length = points.slice(1).reduce((total, point, index) => total + point.distanceTo(points[index]), 0)
     return { points, dashSize: length / 28 }
   }, [boundary])
@@ -335,6 +333,8 @@ interface GlobeSceneProps {
   hoveredCellId?: number | null
   selectedCellIds?: Set<number>
   regionBoundary?: readonly LonLat[] | null
+  regionFocus?: LonLat | null
+  regionMoveRevision?: number
   sunLongitudeDeg?: number
   solarDeclinationDeg?: number
   dayNight?: boolean
@@ -361,7 +361,8 @@ interface NorthAnimState {
 
 function GlobeScene({
   texture, renderComposite, distanceRef, onCellHover, onCellClick, onHoverOut,
-  vertices, regions, hoveredCellId, selectedCellIds, regionBoundary,
+  vertices, regions, hoveredCellId, selectedCellIds, regionBoundary, regionFocus,
+  regionMoveRevision,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
   autoSpin = false, chrome = true, interactive = true,
   globeProjectRef, globePointProjectRef,
@@ -378,6 +379,20 @@ function GlobeScene({
   const prevProjectionMatrixRef = useRef<number[] | null>(null)
   const viewProjRef = useRef(new THREE.Matrix4())
   const cameraWorldPosRef = useRef(new THREE.Vector3())
+
+  useEffect(() => {
+    const controls = controlsRef.current
+    if (!regionFocus || !controls) return
+    northAnimRef.current = null
+    const radius = controls.getDistance()
+    const damping = controls.enableDamping
+    controls.enableDamping = false
+    controls.update()
+    controls.target.set(0, 0, 0)
+    controls.object.position.set(...lonLatToGlobePosition(regionFocus, radius))
+    controls.update()
+    controls.enableDamping = damping
+  }, [regionFocus, regionMoveRevision])
 
   // Track drag state so auto-spin yields to the user and resumes on release.
   useEffect(() => {
@@ -718,7 +733,8 @@ function TransitionPrompt({ progress, label }: { progress: number; label: string
 export default function GlobeViewer({
   texture, renderComposite, onTransition, transitionLabel,
   onCellHover, onCellClick, onHoverOut, onDistanceChange,
-  vertices, regions, hoveredCellId, selectedCellIds, regionBoundary,
+  vertices, regions, hoveredCellId, selectedCellIds, regionBoundary, regionFocus,
+  regionMoveRevision,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
   autoSpin = false, chrome = true, interactive = true, frameless = false,
   globeProjectRef, globePointProjectRef,
@@ -763,6 +779,8 @@ export default function GlobeViewer({
             vertices={vertices} regions={regions}
             hoveredCellId={hoveredCellId} selectedCellIds={selectedCellIds}
             regionBoundary={regionBoundary}
+            regionFocus={regionFocus}
+            regionMoveRevision={regionMoveRevision}
             sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg}
             dayNight={dayNight}
             autoSpin={autoSpin}

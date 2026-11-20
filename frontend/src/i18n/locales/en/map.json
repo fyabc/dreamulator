@@ -512,7 +512,7 @@
     "longitude": "Centre longitude (°)",
     "span": "Side length (km)",
     "usePoint": "Use selected point",
-    "apply": "Save selection",
+    "apply": "Move to selection",
     "clear": "Clear selection",
     "summary": "Selected region: {{lat}}°, {{lon}}° · {{spanKm}} × {{spanKm}} km",
     "invalid": "Enter latitude from −90° to 90°, longitude from −180° to 180°, and a positive side length below {{limit}} km.",
@@ -527,13 +527,13 @@
       "span": "Side length of the square region in kilometres. This is not the map resolution.",
       "needsPoint": "Select one map cell first. On desktop, hold Ctrl or Command and click; on a touchscreen, tap the map.",
       "usePoint": "Fill in the coordinates of the selected cell centre, keeping the current side length.",
-      "save": "Save the centre and side length in the URL without generating a map.",
+      "move": "Centre the view on the selection and record its centre and side length in the URL without generating a map.",
       "clear": "Remove the selection from the URL without deleting any maps.",
       "open": "Open the saved selection on the regional map, even if it has not been refined."
     }
   },
   "packs": {
-    "staticModeHint": "To view a region, open a published global map, save a selection, then choose View region. Existing local regional maps are not published here.",
+    "staticModeHint": "To view a region, open a published global map, choose Move to selection, then choose View region. Existing local regional maps are not published here.",
     "hoverPrompt": "Move the cursor for lon/lat",
     "loadingBase": "Loading base map…",
     "clickToProbe": "Click to probe cell values",

@@ -17,9 +17,10 @@ interface RegionWindowPanelProps {
   branch: string | null
   radiusKm: number
   selectedPoint?: LonLat | null
+  onMoveToRegion: () => void
 }
 
-export default function RegionWindowPanel({ world, planet, branch, radiusKm, selectedPoint }: RegionWindowPanelProps) {
+export default function RegionWindowPanel({ world, planet, branch, radiusKm, selectedPoint, onMoveToRegion }: RegionWindowPanelProps) {
   const { t } = useTranslation('map')
   const [search, setSearch] = useSearchParams()
   const location = useLocation()
@@ -31,12 +32,17 @@ export default function RegionWindowPanel({ world, planet, branch, radiusKm, sel
   if (branch) regionParams.set('branch', branch)
   if (window) regionParams.set(REGION_WINDOW_PARAM, encodeRegionWindow(window))
 
-  const save = (nextWindow: RegionWindow | null) => setSearch((previous) => {
+  const writeWindow = (nextWindow: string | null) => setSearch((previous) => {
     const next = new URLSearchParams(previous)
-    if (nextWindow) next.set(REGION_WINDOW_PARAM, encodeRegionWindow(nextWindow))
+    if (nextWindow) next.set(REGION_WINDOW_PARAM, nextWindow)
     else next.delete(REGION_WINDOW_PARAM)
     return next
   }, { replace: true })
+  const move = (nextWindow: RegionWindow) => {
+    const encoded = encodeRegionWindow(nextWindow)
+    if (encoded !== rawWindow) writeWindow(encoded)
+    onMoveToRegion()
+  }
 
   return (
     <section className="shrink-0 border-b border-space-border bg-space-panel px-3 py-2 text-xs sm:px-4">
@@ -54,9 +60,9 @@ export default function RegionWindowPanel({ world, planet, branch, radiusKm, sel
       {expanded && (
         <div className="mt-2 max-h-[40dvh] space-y-2 overflow-y-auto pr-1">
           <RegionWindowForm key={rawWindow ?? ''} initial={window} radiusKm={radiusKm}
-            selectedPoint={selectedPoint} onSave={save} />
+            selectedPoint={selectedPoint} onMove={move} />
           {rawWindow && <button type="button" className={buttonClass} title={t('regionWindow.hint.clear')}
-            onClick={() => save(null)}>
+            onClick={() => writeWindow(null)}>
             {t('regionWindow.clear')}
           </button>}
         </div>
@@ -65,11 +71,11 @@ export default function RegionWindowPanel({ world, planet, branch, radiusKm, sel
   )
 }
 
-function RegionWindowForm({ initial, radiusKm, selectedPoint, onSave }: {
+function RegionWindowForm({ initial, radiusKm, selectedPoint, onMove }: {
   initial: RegionWindow | null
   radiusKm: number
   selectedPoint?: LonLat | null
-  onSave: (window: RegionWindow) => void
+  onMove: (window: RegionWindow) => void
 }) {
   const { t } = useTranslation('map')
   const [lat, setLat] = useState(initial?.lat.toString() ?? '')
@@ -82,7 +88,7 @@ function RegionWindowForm({ initial, radiusKm, selectedPoint, onSave }: {
       event.preventDefault()
       const window = readRegionWindow(`${lat},${lon},${spanKm}`, radiusKm)
       setInvalid(window === null)
-      if (window) onSave(window)
+      if (window) onMove(window)
     }}>
       <label className="flex flex-col gap-1 text-gray-400">
         {t('regionWindow.latitude')}
@@ -108,7 +114,7 @@ function RegionWindowForm({ initial, radiusKm, selectedPoint, onSave }: {
             setInvalid(false)
           }}>{t('regionWindow.usePoint')}</button>
       </span>
-      <button type="submit" className={buttonClass} title={t('regionWindow.hint.save')}>{t('regionWindow.apply')}</button>
+      <button type="submit" className={buttonClass} title={t('regionWindow.hint.move')}>{t('regionWindow.apply')}</button>
       {invalid && <p role="alert" className="text-red-300">
         {t('regionWindow.invalid', { limit: Math.floor(Math.PI * radiusKm) })}
       </p>}

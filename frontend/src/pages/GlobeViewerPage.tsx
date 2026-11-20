@@ -36,7 +36,7 @@ import ImportElevationButton from '../components/map/ImportElevationButton'
 import TerrainSourceSelect from '../components/map/TerrainSourceSelect'
 import GeographyRasterButton from '../components/map/GeographyRasterButton'
 import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
-import { readRegionBoundary, REGION_WINDOW_PARAM } from '../viewers/map/regionWindow'
+import { readRegionBoundary, readRegionWindow, REGION_WINDOW_PARAM } from '../viewers/map/regionWindow'
 
 // ---------------------------------------------------------------------------
 // Page
@@ -89,6 +89,8 @@ export default function GlobeViewerPage() {
   const rawWindow = searchParams.get(REGION_WINDOW_PARAM)
   const regionBoundary = useMemo(() => readRegionBoundary(rawWindow, planetRadiusM / 1000),
     [rawWindow, planetRadiusM])
+  const regionFocus = useMemo(() => readRegionWindow(rawWindow, planetRadiusM / 1000), [rawWindow, planetRadiusM])
+  const [regionMoveRevision, setRegionMoveRevision] = useState(0)
 
   const globeProjectRef = useRef<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number; ex: number; ey: number; nx: number; ny: number } | null) | null>(null)
   const globePointProjectRef = useRef<PointProjector | null>(null)
@@ -318,6 +320,7 @@ export default function GlobeViewerPage() {
       {!cleanMode && selectedPlanet && (elevation || cvtMesh) && (
         <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
           branch={selectedBranch} radiusKm={planetRadiusM / 1000}
+          onMoveToRegion={() => setRegionMoveRevision((revision) => revision + 1)}
           selectedPoint={selectedCells.size === 1 ? selectedCellData : null} />
       )}
       {!cleanMode && cvtMesh && (
@@ -373,6 +376,8 @@ export default function GlobeViewerPage() {
                 hoveredCellId={cleanMode ? null : hoveredCell}
                 selectedCellIds={cleanMode ? emptySelection : selectedCells}
                 regionBoundary={cleanMode ? null : regionBoundary}
+                regionFocus={regionFocus}
+                regionMoveRevision={regionMoveRevision}
                 sunLongitudeDeg={sunLongitudeDeg}
                 solarDeclinationDeg={solarDeclination}
                 dayNight={dayNightEnabled}
@@ -584,6 +589,8 @@ export default function GlobeViewerPage() {
               hoveredCellId={cleanMode ? null : hoveredCell}
               selectedCellIds={cleanMode ? emptySelection : selectedCells}
               regionBoundary={cleanMode ? null : regionBoundary}
+              regionFocus={regionFocus}
+              regionMoveRevision={regionMoveRevision}
               sunLongitudeDeg={sunLongitudeDeg}
               solarDeclinationDeg={solarDeclination}
               dayNight={dayNightEnabled}

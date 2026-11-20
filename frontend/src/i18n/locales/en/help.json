@@ -355,12 +355,12 @@
           "content": "Open **Select region** on the global map or globe. Enter the centre latitude and longitude in degrees. Positive latitude is north, and positive longitude is east. The side length is the physical size of a square region, not the resolution: 550 km means a 550 × 550 km region.\n\nYou can also select one map cell and choose **Use selected point**. On desktop, hold Ctrl or Command and click; on a touchscreen, tap the map. This fills in the cell centre and leaves the side length unchanged."
         },
         {
-          "title": "Save, revisit or clear the selection",
-          "content": "**Save selection** stores the centre and side length in the URL. Both the global map and globe mark the area with a white dashed outline with a dark border, separate from cell highlights. Reopening the URL or switching views keeps the selection. **Clear selection** removes the outline and the saved selection without deleting any maps. Saving does not build, refine or export a map."
+          "title": "Move to the selection",
+          "content": "Choose **Move to selection** to centre the map or globe on the selected region. A white dashed outline with a dark border marks the area. If you drag the view away, choose the button again to return to the centre without changing the coordinates.\n\nThe centre and side length are also stored in the URL. Reloading, reopening the URL or switching views centres the view on the same region. **Clear selection** removes the outline and the selection from the URL without deleting any maps. Moving the view does not build, refine or export a map."
         },
         {
           "title": "View the selected region",
-          "content": "Choose **View region** after saving. Both the local and static sites open a preview from the global heightmap, even without an existing regional map. Use **Back to the global selection** to return. Output size and downloads are on the regional map page."
+          "content": "Choose **Move to selection**, then **View region**. Both the local and static sites open a preview from the global heightmap, even without an existing regional map. **Back to the global selection** returns to the original map or globe and centres it on the selection. Set the output size and download the result on the regional map page."
         }
       ]
     },

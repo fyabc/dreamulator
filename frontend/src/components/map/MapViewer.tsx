@@ -62,6 +62,8 @@ interface MapViewerProps {
   hoveredCell: number | null
   selectedCells: Set<number>
   regionBoundary?: readonly LonLat[] | null
+  regionFocus?: LonLat | null
+  regionMoveRevision?: number
   /** Subsolar longitude in degrees (day/night overlay). */
   sunLongitudeDeg?: number
   /** Solar declination in degrees (day/night overlay). */
@@ -126,6 +128,8 @@ export default function MapViewer({
   hoveredCell,
   selectedCells,
   regionBoundary,
+  regionFocus,
+  regionMoveRevision,
   sunLongitudeDeg = 0,
   solarDeclinationDeg = 0,
   dayNight = false,
@@ -154,11 +158,11 @@ export default function MapViewer({
   const [webgpuReady, setWebgpuReady] = useState(false)
 
   // --- View state ---
-  const [mapCenter, setMapCenter] = useState<LonLat>({ lon: 0, lat: 0 })
+  const [mapCenter, setMapCenter] = useState<LonLat>(() => regionFocus ?? { lon: 0, lat: 0 })
   const [zoom, setZoomState] = useState(1)
 
   // --- Refs for render loop (updated synchronously with state) ---
-  const mapCenterRef = useRef<LonLat>({ lon: 0, lat: 0 })
+  const mapCenterRef = useRef(mapCenter)
   const zoomRef = useRef(1)
   const containerRef2 = useRef({ width: 800, height: 400 })
   /** Allocation-free projector handed to the particle overlay. */
@@ -173,6 +177,9 @@ export default function MapViewer({
     zoomRef.current = z
     setZoomState(z)
   }, [])
+  useEffect(() => {
+    if (regionFocus) syncMapCenter(regionFocus)
+  }, [regionFocus, regionMoveRevision, syncMapCenter])
 
   // Map dimensions
   const mapW = metadata?.width ?? 2048

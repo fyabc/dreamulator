@@ -26,7 +26,7 @@ import SunControl from '../components/map/SunControl'
 import TimeControl from '../components/map/TimeControl'
 import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
-import { readRegionBoundary, REGION_WINDOW_PARAM } from '../viewers/map/regionWindow'
+import { readRegionBoundary, readRegionWindow, REGION_WINDOW_PARAM } from '../viewers/map/regionWindow'
 import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
 
 export default function MapViewerPage() {
@@ -65,6 +65,8 @@ export default function MapViewerPage() {
   const rawWindow = searchParams.get(REGION_WINDOW_PARAM)
   const regionBoundary = useMemo(() => readRegionBoundary(rawWindow, planetRadiusM / 1000),
     [rawWindow, planetRadiusM])
+  const regionFocus = useMemo(() => readRegionWindow(rawWindow, planetRadiusM / 1000), [rawWindow, planetRadiusM])
+  const [regionMoveRevision, setRegionMoveRevision] = useState(0)
 
   // Left panel drawer (mobile only)
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
@@ -195,6 +197,7 @@ export default function MapViewerPage() {
       {!cleanMode && selectedPlanet && (elevation || cvtMesh) && (
         <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
           branch={selectedBranch} radiusKm={planetRadiusM / 1000}
+          onMoveToRegion={() => setRegionMoveRevision((revision) => revision + 1)}
           selectedPoint={selectedCells.size === 1 ? selectedCellData : null} />
       )}
       {!cleanMode && cvtMesh && (
@@ -245,6 +248,8 @@ export default function MapViewerPage() {
                     hoveredCell={cleanMode ? null : hoveredCell}
                     selectedCells={cleanMode ? emptySelection : selectedCells}
                     regionBoundary={cleanMode ? null : regionBoundary}
+                    regionFocus={regionFocus}
+                    regionMoveRevision={regionMoveRevision}
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
@@ -426,6 +431,8 @@ export default function MapViewerPage() {
                     hoveredCell={cleanMode ? null : hoveredCell}
                     selectedCells={cleanMode ? emptySelection : selectedCells}
                     regionBoundary={cleanMode ? null : regionBoundary}
+                    regionFocus={regionFocus}
+                    regionMoveRevision={regionMoveRevision}
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
