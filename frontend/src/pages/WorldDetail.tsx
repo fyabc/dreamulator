@@ -2,7 +2,7 @@ import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
-import { useState } from 'react'
+import { lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatRadius, formatMass } from '../viewers/utils/scale'
 import NarratorPanel from '../components/NarratorPanel'
@@ -13,6 +13,9 @@ import LayerDag from '../components/LayerDag'
 import LayerTabSection from '../components/world/LayerTabSection'
 import WorldBuildPanel from '../components/world/WorldBuildPanel'
 import StarfieldBackground from '../components/StarfieldBackground'
+import { getProject, projectKey } from '../projects/projectStore'
+
+const WorldDataPanel = lazy(() => import('../components/world/WorldDataPanel'))
 
 /** Pick a Unicode glyph + color class based on body type and mass. */
 function bodyIcon(planetType: string | undefined, massEarth: number | undefined) {
@@ -83,6 +86,9 @@ export default function WorldDetail() {
   const { worldName } = useParams<{ worldName: string }>()
   const { t } = useTranslation('worlds')
   const staticMode = isStaticMode()
+  const browserWorld = useQuery({ queryKey: projectKey(worldName ?? ''), queryFn: () => getProject(worldName!),
+    enabled: staticMode && !!worldName, retry: false })
+  const localWorld = staticMode && browserWorld.data && !browserWorld.data.published ? browserWorld.data : null
 
   type TabType =
     | 'overview'
@@ -93,8 +99,11 @@ export default function WorldDetail() {
     | 'civilization'
     | 'design-notes'
     | 'narrate'
-  const availableTabs: TabType[] = staticMode
-    ? ['overview', 'astronomy', 'planets', 'climate', 'ecology', 'civilization', 'design-notes']
+    | 'data'
+  const availableTabs: TabType[] = localWorld
+    ? ['data']
+    : staticMode
+    ? ['overview', 'data', 'astronomy', 'planets', 'climate', 'ecology', 'civilization', 'design-notes']
     : [
         'overview',
         'astronomy',
@@ -107,9 +116,8 @@ export default function WorldDetail() {
       ]
 
   const [searchParams, setSearchParams] = useSearchParams()
-  const [activeTab, setActiveTab] = useState<TabType>(
-    () => (searchParams.get('tab') as TabType) || 'overview',
-  )
+  const requestedTab = searchParams.get('tab') as TabType
+  const activeTab = availableTabs.includes(requestedTab) ? requestedTab : availableTabs[0]
 
   // Branch and tab persisted in URL search params (?branch=ERE-if&tab=civilization)
   const selectedBranch = searchParams.get('branch') || null
@@ -124,7 +132,6 @@ export default function WorldDetail() {
 
   // Sync activeTab to URL
   const setActiveTabAndPersist = (tab: TabType) => {
-    setActiveTab(tab)
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
       if (tab === 'overview') next.delete('tab')
@@ -132,6 +139,7 @@ export default function WorldDetail() {
       // The selected document belongs to the previous tab's layer — drop it
       // so the new tab starts at its own _overview.md.
       next.delete('doc')
+      if (tab !== 'data') next.delete('layer')
       return next
     }, { replace: true })
   }
@@ -143,7 +151,7 @@ export default function WorldDetail() {
   } = useQuery({
     queryKey: ['world', worldName],
     queryFn: () => api.getWorld(worldName!),
-    enabled: !!worldName,
+    enabled: !!worldName && !localWorld && (!staticMode || !browserWorld.isPending),
   })
 
   const { data: stellarSystem } = useQuery({
@@ -194,7 +202,10 @@ export default function WorldDetail() {
     civilization: t('tab.civilization'),
     'design-notes': t('tab.designNotes'),
     narrate: t('tab.narrate'),
+    data: t('worldData.title'),
   }
+  const waiting = isLoading || (staticMode && !!worldName && browserWorld.isPending)
+  const offlineData = staticMode && !!error && browserWorld.data?.published === true
 
   return (
     <div className="relative min-h-screen">
@@ -205,17 +216,17 @@ export default function WorldDetail() {
           <div className="text-center py-12 text-gray-400">{t('status.noWorld')}</div>
         )}
 
-        {isLoading && (
+        {waiting && (
           <div className="text-center py-12 text-gray-400">{t('status.loading')}</div>
         )}
 
-        {error && (
+        {error && !offlineData && (
           <div className="text-center py-12 text-red-400">
             {t('status.loadError')}: {error.message}
           </div>
         )}
 
-        {worldName && !isLoading && !error && (
+        {worldName && !waiting && (!error || offlineData) && (
           <>
             <div className="flex items-center gap-4 mb-4">
               <Link
@@ -225,22 +236,22 @@ export default function WorldDetail() {
                 {t('action.back')}
               </Link>
               <h1 className="text-3xl font-bold text-neon-cyan neon-glow-subtle">
-                {worldName}
+                {localWorld?.name ?? worldName}
               </h1>
               {staticMode && (
                 <span className="text-xs px-2 py-0.5 rounded bg-space-surface text-gray-500 border border-space-border">
-                  {t('detail.readonly')}
+                  {t(localWorld ? 'worldData.localBadge' : 'worldData.publishedBadge')}
                 </span>
               )}
             </div>
 
-            <div className="mb-4">
+            {!localWorld && !offlineData && <div className="mb-4">
               <BranchSelector
                 worldName={worldName!}
                 selectedBranch={selectedBranch}
                 onSelect={setSelectedBranch}
               />
-            </div>
+            </div>}
 
             {!staticMode && world && (
               <WorldBuildPanel
@@ -289,12 +300,12 @@ export default function WorldDetail() {
 
             {/* Tabs — horizontally scrollable on mobile */}
             <div className="flex gap-1 sm:gap-2 mb-4 sm:mb-6 border-b border-space-border overflow-x-auto">
-              {availableTabs.map((tab) => (
+              {(offlineData ? ['data'] as const : availableTabs).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTabAndPersist(tab)}
                   className={`px-3 sm:px-4 py-2 font-medium transition-colors border-b-2 whitespace-nowrap shrink-0 ${
-                    activeTab === tab
+                    (offlineData ? 'data' : activeTab) === tab
                       ? 'border-neon-cyan text-neon-cyan neon-glow-subtle'
                       : 'border-transparent text-gray-500 hover:text-gray-300'
                   }`}
@@ -303,6 +314,10 @@ export default function WorldDetail() {
                 </button>
               ))}
             </div>
+
+            {staticMode && (activeTab === 'data' || offlineData) && <Suspense fallback={<p>{t('worldData.loading')}</p>}>
+              <WorldDataPanel key={worldName} id={worldName} published={!localWorld} />
+            </Suspense>}
 
             {activeTab === 'overview' && world && (
               <div className="space-y-6">

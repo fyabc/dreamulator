@@ -6,6 +6,7 @@ import { api } from '../../api/client'
 import { isStaticMode } from '../../api/mode'
 import MapHelpLink from '../../components/map/MapHelpLink'
 import RegionElevationDownload from '../../components/map/RegionElevationDownload'
+import SaveProjectResult from '../../components/projects/SaveProjectResult'
 import RegionRefinementPanel from './RegionRefinementPanel'
 import TerrainCompute, { type BrowserTerrainResult } from './TerrainCompute'
 import { availableRegionPacks, matchingRegionPacks, regionPackWindow, type RegionWindow } from '../map/regionWindow'
@@ -117,6 +118,9 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
             <RegionElevationDownload fixedSize defaultSize={null} sourceStepKm={spanKm / refined.width} extentKm={spanKm}
               downloadLabel={t('packs.compute.download')} exporting={height.exporting} failed={height.failed}
               onDownload={(_, format) => downloadRefined(format)} />
+            {isStaticMode() && preview && <SaveProjectResult result={result} target={{ worldId: world, planet, branch,
+              sourceName: `${world} · ${planet} · ${lat}°, ${lon}° · ${spanKm} km`, raster: preview.raster,
+              frame: { window, min, max, sea, sourceStepKm: stepKm } }} />}
           </div>}
           {preview && <details className="rounded border border-space-border p-2">
             <summary className="cursor-pointer font-medium text-neon-cyan">{t('packs.compute.exportOriginal')}</summary>

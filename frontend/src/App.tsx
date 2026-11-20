@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { HashRouter, BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import Layout from './components/Layout'
 import { isStaticMode } from './api/mode'
 
@@ -26,6 +26,14 @@ const PageFallback = () => (
   </div>
 )
 
+function LegacyProjectLink() {
+  const { projectId } = useParams()
+  const [current] = useSearchParams()
+  const search = new URLSearchParams(current)
+  search.set('tab', 'data')
+  return <Navigate to={projectId ? `/worlds/${encodeURIComponent(projectId)}?${search}` : '/worlds'} replace />
+}
+
 function App() {
   // HashRouter for GitHub Pages (no server-side SPA fallback),
   // BrowserRouter for local dev with FastAPI backend.
@@ -40,6 +48,10 @@ function App() {
             <Route path="world-info" element={<Navigate to="/worlds" replace />} />
             <Route path="import" element={<ImportPage />} />
             <Route path="worlds" element={<WorldList />} />
+            {isStaticMode() && <>
+              <Route path="projects" element={<Navigate to="/worlds" replace />} />
+              <Route path="projects/:projectId" element={<LegacyProjectLink />} />
+            </>}
             <Route path="worlds/:worldName" element={<WorldDetail />} />
             <Route path="worlds/:worldName/map" element={<MapViewerPage />} />
             <Route path="worlds/:worldName/map/:planetId" element={<MapViewerPage />} />

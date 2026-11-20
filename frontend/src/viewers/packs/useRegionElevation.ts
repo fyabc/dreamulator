@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ElevationWorkerRequest, ElevationWorkerResult } from '../../workers/regionElevation.worker'
 import type { ElevationFormat, ElevationRaster } from './elevationRaster'
+import { downloadBlob } from '../../utils/downloadBlob'
 
 export type ElevationInput = Exclude<ElevationWorkerRequest, { kind: 'export' }>
 type Ready = Extract<ElevationWorkerResult, { kind: 'preview' | 'ready' }>
@@ -26,14 +27,7 @@ export function useRegionElevation(input: ElevationInput | null) {
       worker.onmessage = ({ data }: MessageEvent<ElevationWorkerResult>) => {
         if (data.kind === 'error') fail()
         else if (data.kind === 'file' && filename.current) {
-          const url = URL.createObjectURL(data.blob)
-          const link = document.createElement('a')
-          link.href = url
-          link.download = filename.current
-          document.body.appendChild(link)
-          link.click()
-          link.remove()
-          setTimeout(() => URL.revokeObjectURL(url), 30_000)
+          downloadBlob(data.blob, filename.current)
           setExporting(false)
         } else if (data.kind === 'preview' || data.kind === 'ready') setReady(data)
       }

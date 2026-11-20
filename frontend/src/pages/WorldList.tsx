@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
 import StarfieldBackground from '../components/StarfieldBackground'
+import { createProject, listProjects, projectsKey, restoreWorld, worldDataPath } from '../projects/projectStore'
 
 export default function WorldList() {
   const { t } = useTranslation('worlds')
@@ -51,7 +52,7 @@ export default function WorldList() {
       <div className="relative z-10 px-6 py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-neon-cyan neon-glow-subtle">
-            {staticMode ? t('title.browse') : t('title.list')}
+            {t('title.list')}
           </h1>
           {!staticMode && (
             <button
@@ -62,6 +63,8 @@ export default function WorldList() {
             </button>
           )}
         </div>
+
+        {staticMode && <BrowserWorlds published={worlds} />}
 
         {isLoading && <div className="text-center py-12 text-gray-400">{t('status.loading')}</div>}
 
@@ -183,4 +186,53 @@ export default function WorldList() {
       </div>
     </div>
   )
+}
+
+function BrowserWorlds({ published }: { published?: string[] }) {
+  const { t, i18n } = useTranslation('worlds', { keyPrefix: 'worldData' })
+  const [name, setName] = useState('')
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const data = useQuery({ queryKey: projectsKey, queryFn: listProjects, retry: false })
+  const open = async (id: string) => {
+    await queryClient.invalidateQueries({ queryKey: projectsKey })
+    navigate(worldDataPath(id))
+  }
+  const create = useMutation({ mutationFn: createProject, onSuccess: open })
+  const restore = useMutation({ mutationFn: async (file: File) => {
+    const { readWorldBackup } = await import('../projects/worldDataArchive')
+    return restoreWorld(await readWorldBackup(file))
+  }, onSuccess: open })
+  const busy = create.isPending || restore.isPending
+  const local = data.data?.filter((world) => !world.published || !published?.includes(world.id)) ?? []
+  const bytes = data.data?.reduce((sum, world) => sum + world.bytes, 0)
+  const size = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 }).format((bytes ?? 0) / 1e6)
+  return <section className="mb-8 space-y-4 rounded border border-space-border bg-space-panel p-4">
+    <h2 className="text-xl font-semibold">{t('browserWorlds')}</h2>
+    <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => {
+      event.preventDefault()
+      if (!busy && name.trim()) create.mutate(name)
+    }}>
+      <label className="flex flex-col gap-1 text-sm">{t('name')}
+        <input className="rounded border border-space-border bg-space-bg px-2 py-1" value={name} maxLength={200}
+          disabled={busy} onChange={(event) => setName(event.currentTarget.value)} />
+      </label>
+      <button className="rounded border border-space-border px-2 py-1 text-neon-cyan disabled:opacity-50" disabled={busy || !name.trim()}>{t('new')}</button>
+    </form>
+    <label className="flex flex-wrap items-center gap-2 text-sm">{t('import')}
+      <input type="file" className="max-w-full" accept=".tar,.dreamulator" disabled={busy} onChange={(event) => {
+        const file = event.currentTarget.files?.[0]
+        event.currentTarget.value = ''
+        if (file && !busy) restore.mutate(file)
+      }} />
+    </label>
+    {busy && <p role="status">{t('saving')}</p>}
+    {(data.isError || create.isError || restore.isError) && <p role="alert" className="text-red-300">
+      {t(restore.isError ? 'importFailed' : create.isError ? 'saveFailed' : 'unreadable')}
+    </p>}
+    {bytes !== undefined && <p className="text-sm text-gray-400">{t('usage', { size: `${size} MB` })}</p>}
+    {!!local.length && <ul className="space-y-1 text-sm">{local.map((world) => <li key={world.id}>
+      <Link className="break-all text-neon-cyan hover:underline" to={worldDataPath(world.id)}>{world.name}</Link>
+    </li>)}</ul>}
+  </section>
 }

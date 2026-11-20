@@ -4,6 +4,8 @@ import LanguageSwitcher from './LanguageSwitcher'
 import { useDevModeStore } from '../stores/devModeStore'
 import { useExperimentalStore } from '../stores/experimentalStore'
 import { isStaticMode } from '../api/mode'
+import { useQuery } from '@tanstack/react-query'
+import { getProject, projectKey, worldDataPath } from '../projects/projectStore'
 
 interface SidebarProps {
   open: boolean
@@ -28,6 +30,8 @@ export default function Sidebar({
   // Extract world name from path if we're in a world context
   const worldMatch = location.pathname.match(/^\/worlds\/([^/]+)/)
   const currentWorld = worldMatch ? worldMatch[1] : null
+  const browserWorld = useQuery({ queryKey: projectKey(currentWorld ?? ''), queryFn: () => getProject(currentWorld!),
+    enabled: isStaticMode() && !!currentWorld, retry: false })
 
   const navItems = [
     { path: '/', label: t('nav.home'), icon: '🏠' },
@@ -43,9 +47,14 @@ export default function Sidebar({
   // World-specific nav items (shown when viewing a world)
   // Carry search params (e.g. ?branch=xxx) to preserve branch selection
   const search = location.search
-  const worldNavItems = currentWorld
+  const overviewSearch = new URLSearchParams()
+  const branch = new URLSearchParams(search).get('branch')
+  if (branch) overviewSearch.set('branch', branch)
+  const worldNavItems = currentWorld && browserWorld.data && !browserWorld.data.published
+    ? [{ path: worldDataPath(currentWorld), label: t('worlds:worldData.title'), icon: '🗂️' }]
+    : currentWorld
     ? [
-        { path: `/worlds/${currentWorld}${search}`, label: t('nav.overview'), icon: '📋' },
+        { path: `/worlds/${currentWorld}${branch ? `?${overviewSearch}` : ''}`, label: t('nav.overview'), icon: '📋' },
         { path: `/worlds/${currentWorld}/globe${search}`, label: t('nav.map'), icon: '🗺️' },
         { path: `/worlds/${currentWorld}/viewer3d${search}`, label: t('nav.viewer3d'), icon: '🔭' },
         // API-only view (parameterized engine query) — hidden in static mode.
