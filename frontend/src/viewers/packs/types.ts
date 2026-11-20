@@ -71,16 +71,22 @@ export interface ProbeResult {
   offset_km: { x: number; y: number }
 }
 
-export type RegionRefinementSource = { kind: 'pack'; pack: string } | {
+export type RegionRefinementMode = 'redraw' | 'blend' | 'hydrology'
+
+export type RegionRefinementSource = ({ kind: 'pack'; pack: string } | {
   kind: 'world'; world: string; planet: string; branch: string | null; lat: number; lon: number; span_km: number
   input_px?: number
-}
+}) & { mode?: RegionRefinementMode; native_resolution_km?: number; preserve_wavelength_km?: number; river_threshold?: number }
 
 export interface RegionRefinementPlan {
   span_km: number
   input_px: number
   output_px: number
   native_scale_km: number | null
+  mode: RegionRefinementMode
+  native_resolution_km: number | null
+  preserve_wavelength_km: number | null
+  river_threshold: number | null
 }
 
 export interface RegionDevice {

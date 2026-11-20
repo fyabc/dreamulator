@@ -12,12 +12,14 @@ function runInWorker(job: TerrainJob, signal: AbortSignal, report: Report) {
   } catch {
     return Promise.resolve(null)
   }
-  const cancel = () => worker.postMessage({ kind: 'cancel' } satisfies TerrainRequest)
+  let cancel: () => void
   return new Promise<ElevationRaster | null>((resolve, reject) => {
+    cancel = () => reject(signal.reason)
     worker.onmessage = ({ data }: MessageEvent<TerrainReply>) => {
       if (data.kind === 'progress') report(data.progress)
       else if (data.kind === 'result') resolve(data.raster)
       else if (data.kind === 'unavailable') resolve(null)
+      else if (data.kind === 'deviceLost') reject(new DOMException(data.message, 'WebGpuDeviceLostError'))
       else reject(new Error(data.message))
     }
     worker.onerror = (event) => reject(new Error(event.message || 'Unable to start the terrain worker'))
@@ -37,5 +39,5 @@ export async function runTerrainRefinement(job: TerrainJob, gpu: WebGpuDevice, s
   if (result) return result
   const { refineTerrain } = await import('./terrainRefinement')
   signal.throwIfAborted()
-  return refineTerrain(new URL(job.base), job.hash, gpu, job.raster, job.spanKm, job.sea, signal, report)
+  return refineTerrain(new URL(job.base), job.hash, gpu, job.raster, job.spanKm, job.sea, job.recipe, signal, report)
 }

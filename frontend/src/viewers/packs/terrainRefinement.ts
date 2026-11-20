@@ -1,8 +1,11 @@
 import wasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm?url'
 import type { InferenceSession, Tensor } from 'onnxruntime-web'
-import { sampleCoarseTile, type CoarseSchedule } from './coarseTerrain'
+import { sampleCoarseTile, type CoarseInferenceProgress, type CoarseSchedule } from './coarseTerrain'
 import { type ElevationRaster, resizeElevation } from './elevationRaster'
 import { openTerrainModelCache, saveTerrainModel } from './terrainModelCache'
+import { blendTerrain } from './terrainBlend'
+import { defaultTerrainSeed, type TerrainRecipe } from './terrainRecommendation'
+import { yieldTerrainTask } from './terrainScheduling'
 import { coarseArea, coarseStride, conditioningPadding, decoderInputArea, decoderSize, decoderStride,
   latentArea, latentScale, latentStride, makeTerrainPlan, stitchTiles, synthesisPadding, terrainNoise, tileKey, tileSize,
   type Rect, type Tile } from './terrainTiles'
@@ -10,17 +13,16 @@ import type { WebGpuDevice } from './webGpuDevice'
 
 const initialAngle = Math.fround(Math.atan(80 / 0.5))
 const secondAngle = Math.fround(Math.atan(0.35 / 0.5))
-const seed = 42
 const round = Math.fround
 
 export type TerrainStage = 'coarse' | 'base' | 'decoder'
 type ModelSource = 'network' | 'cache'
 export type TerrainProgress =
-  | { phase: 'prepare' | 'manifest' | 'runtime' | 'finalize'; stage?: never }
+  | { phase: 'prepare' | 'manifest' | 'runtime' | 'finalize' | 'blend'; stage?: never }
   | { phase: 'download' | 'cacheRead'; stage: TerrainStage; received: number; total: number }
   | { phase: 'verify' | 'cacheWrite' | 'merge'; stage: TerrainStage }
   | { phase: 'initialize'; stage: TerrainStage; reusable: boolean }
-  | { phase: 'tiles'; stage: TerrainStage; done: number; total: number }
+  | { phase: 'tiles'; stage: TerrainStage; done: number; total: number; inference?: CoarseInferenceProgress }
 
 type AssetProgress = {
   bytes: number
@@ -38,11 +40,6 @@ type Manifest = CoarseSchedule & {
   residualMean: number
   residualStd: number
   models: Record<TerrainStage, { sha256: string; bytes: number }>
-}
-
-async function yieldToBrowser(signal: AbortSignal) {
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  signal.throwIfAborted()
 }
 
 async function readModel(body: ReadableStream<Uint8Array>, progress: AssetProgress, source: ModelSource, signal: AbortSignal, name: string) {
@@ -111,7 +108,8 @@ export async function checkedAsset(base: URL, name: string, hash: string, signal
   return { data, reusable }
 }
 
-export function coarseCondition(raster: ElevationRaster, tile: Tile, sea: number, manifest: Pick<Manifest, 'means' | 'stds' | 'snr'>) {
+export function coarseCondition(raster: ElevationRaster, tile: Tile, sea: number, manifest: Pick<Manifest, 'means' | 'stds' | 'snr'>,
+  seed = defaultTerrainSeed) {
   const top = tile.row * coarseStride
   const left = tile.col * coarseStride
   const area = tileSize * tileSize
@@ -207,11 +205,13 @@ let running = false
 
 export async function refineTerrain(
   base: URL, hash: string, device: WebGpuDevice, input: ElevationRaster, spanKm: number, sea: number,
-  signal: AbortSignal, progress: (progress: TerrainProgress) => void,
+  recipe: TerrainRecipe, signal: AbortSignal, progress: (progress: TerrainProgress) => void,
+  onDeviceLost?: (message: string) => void,
 ): Promise<ElevationRaster> {
   if (running) throw new Error('TD is already running')
   running = true
   try {
+    const { seed, residualGain } = recipe
     const plan = makeTerrainPlan(spanKm)
     progress({ phase: 'manifest' })
     const cache = await openTerrainModelCache()
@@ -226,9 +226,20 @@ export async function refineTerrain(
       ort.env.wasm.wasmPaths = { wasm: new URL(wasmUrl, globalThis.location.href).href }
       ort.env.webgpu.adapter = device.adapter
     }
-    const stage = async <Result>(name: TerrainStage, compute: (session: InferenceSession, step: () => Promise<void>) => Promise<Result>) => {
+    const watched = new WeakSet<object>()
+    const watchDevice = async () => {
+      const gpu = await ort.env.webgpu.device as { lost: Promise<{ reason: string; message: string }> } | undefined
+      if (!gpu?.lost || watched.has(gpu)) return
+      watched.add(gpu)
+      const { reason, message } = await gpu.lost
+      if (reason !== 'destroyed' && !signal.aborted) onDeviceLost?.(message || reason)
+    }
+    const stage = async <Result>(name: TerrainStage, compute: (
+      session: InferenceSession, step: () => Promise<void>, reportInference: (inference: CoarseInferenceProgress) => void,
+    ) => Promise<Result>) => {
       let done = 0
       const total = plan.totals[name]
+      const reportTiles = (inference?: CoarseInferenceProgress) => progress({ phase: 'tiles', stage: name, done, total, inference })
       const asset = manifest.models[name]
       const initialise = async () => {
         const { data, reusable } = await checkedAsset(base, `${name}.onnx`, asset.sha256, signal, {
@@ -236,32 +247,34 @@ export async function refineTerrain(
           reading: (received, source) => progress({ phase: source === 'cache' ? 'cacheRead' : 'download', stage: name, received, total: asset.bytes }),
           verifying: async () => {
             progress({ phase: 'verify', stage: name })
-            await yieldToBrowser(signal)
+            await yieldTerrainTask(signal)
           },
           saving: () => progress({ phase: 'cacheWrite', stage: name }),
         }, cache)
         progress({ phase: 'initialize', stage: name, reusable })
-        await yieldToBrowser(signal)
+        await yieldTerrainTask(signal)
         return ort.InferenceSession.create(data, { executionProviders: ['webgpu'], enableMemPattern: false })
       }
       const session = await initialise()
       try {
-        progress({ phase: 'tiles', stage: name, done, total })
-        await yieldToBrowser(signal)
+        if (onDeviceLost) void watchDevice().catch((error) => console.warn('Unable to monitor the terrain WebGPU device', error))
+        reportTiles()
+        await yieldTerrainTask(signal)
         return await compute(session, async () => {
-          progress({ phase: 'tiles', stage: name, done: ++done, total })
-          await yieldToBrowser(signal)
-        })
+          done += 1
+          reportTiles()
+          await yieldTerrainTask(signal)
+        }, reportTiles)
       } finally { await session.release() }
     }
     const source = resizeElevation(input, plan.inputSize, plan.inputSize)
-    const coarse = await stage('coarse', async (session, step) => {
+    const coarse = await stage('coarse', async (session, step, reportInference) => {
       const tiles = new Map<string, Float32Array>()
       for (const tile of plan.coarse) {
         const initial = terrainNoise(seed + 1, tile.row * coarseStride, tile.col * coarseStride, tileSize, 6)
           .map((value) => value * manifest.sigmaMax)
-        const condition = coarseCondition(source, tile, sea, manifest)
-        const values = await sampleCoarseTile(ort.Tensor, session, manifest, condition, initial, signal)
+        const condition = coarseCondition(source, tile, sea, manifest, seed)
+        const values = await sampleCoarseTile(ort.Tensor, session, manifest, condition, initial, signal, reportInference)
         const area = tileSize * tileSize
         for (let index = 0; index < values.length; index++) {
           const plane = Math.floor(index / area)
@@ -311,13 +324,17 @@ export async function refineTerrain(
         await step()
       }
       progress({ phase: 'merge', stage: 'decoder' })
-      await yieldToBrowser(signal)
+      await yieldTerrainTask(signal)
+      const amplitude = manifest.residualStd * residualGain
       return stitchTiles(result, plan.padded, decoderSize, decoderStride, 1)
-        .map((value) => round(value * manifest.residualStd) + manifest.residualMean)
+        .map((value) => round(value * amplitude) + manifest.residualMean)
     })
     progress({ phase: 'finalize' })
-    await yieldToBrowser(signal)
+    await yieldTerrainTask(signal)
     const low = stitchTiles(latent, plan.low, tileSize, latentStride, 5)
-    return restoreElevation(residual, low.subarray(low.length * 4 / 5).map((value) => round(value * 38.6) - 31.4), plan.padded, plan.size, sea)
+    const donor = restoreElevation(residual, low.subarray(low.length * 4 / 5).map((value) => round(value * 38.6) - 31.4), plan.padded, plan.size, sea)
+    if (recipe.method !== 'blend') return donor
+    progress({ phase: 'blend' })
+    return await blendTerrain(input, donor, spanKm / plan.size, recipe.preserveKm, sea, () => yieldTerrainTask(signal))
   } finally { running = false }
 }

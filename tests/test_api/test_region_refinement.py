@@ -83,6 +83,10 @@ def test_pack_preflight(setup, monkeypatch):
         "input_px": 256,
         "output_px": 512,
         "native_scale_km": 0.5,
+        "mode": "redraw",
+        "native_resolution_km": None,
+        "preserve_wavelength_km": None,
+        "river_threshold": None,
     }
     meta_file = pack / "input/meta.json"
     meta = json.loads(meta_file.read_text(encoding="utf-8"))
@@ -96,6 +100,59 @@ def test_pack_preflight(setup, monkeypatch):
     assert client.post(f"{PREFIX}/plan", json=PACK_SOURCE).status_code == 503
     monkeypatch.delenv("DREAMULATOR_TD_DIR")
     assert "DREAMULATOR_TD_DIR" in client.post(f"{PREFIX}/plan", json=PACK_SOURCE).json()["detail"]
+
+
+def test_preflight_blend_requires_spacing_larger_than_output_pixel(setup):
+    client, _, _, _ = setup
+    source = {**PACK_SOURCE, "mode": "blend"}
+    for spacing in (None, 0, 0.19, "inf"):
+        response = client.post(f"{PREFIX}/plan", json={**source, "native_resolution_km": spacing})
+        assert response.status_code == 422
+    response = client.post(f"{PREFIX}/plan", json={**source, "native_resolution_km": 0.36})
+    assert response.status_code == 200
+    assert response.json()["mode"] == "blend"
+    assert response.json()["native_resolution_km"] == 0.36
+
+
+def test_preflight_applies_only_valid_settings(setup):
+    client, _, _, _ = setup
+    blend = {**PACK_SOURCE, "mode": "blend", "native_resolution_km": 0.36}
+    for source in (
+        {**blend, "preserve_wavelength_km": 0.7},
+        {**PACK_SOURCE, "preserve_wavelength_km": 1.6},
+        {**PACK_SOURCE, "river_threshold": 0},
+        {**PACK_SOURCE, "river_threshold": 1.5},
+        {**PACK_SOURCE, "river_threshold": 2**31},
+    ):
+        assert client.post(f"{PREFIX}/plan", json=source).status_code == 422
+    response = client.post(
+        f"{PREFIX}/plan", json={**blend, "preserve_wavelength_km": 1.6, "river_threshold": 9000}
+    )
+    assert response.status_code == 200
+    assert response.json()["preserve_wavelength_km"] == 1.6
+    assert response.json()["river_threshold"] == 9000
+
+
+def test_hydrology_job_does_not_require_td(setup, monkeypatch):
+    client, _, _, _ = setup
+    monkeypatch.delenv("DREAMULATOR_TD_DIR")
+
+    def run_worker(_jobs, job, work, staging, _cancelled):
+        assert job.plan.mode == "hydrology"
+        assert job.plan.river_threshold == 9000
+        assert work.td is None
+        output = staging / "pack/refined-out"
+        output.mkdir(parents=True)
+        (output / "height.meters.npy").write_bytes(b"result")
+
+    monkeypatch.setattr(RegionJobs, "_run_worker", run_worker)
+    response = client.post(
+        f"{PREFIX}/jobs", json={**PACK_SOURCE, "mode": "hydrology", "river_threshold": 9000}
+    )
+    assert response.status_code == 202
+    job = client.get(f"{PREFIX}/jobs/{response.json()['id']}").json()
+    assert job["state"] == "succeeded"
+    assert job["plan"]["mode"] == "hydrology"
 
 
 def test_world_requires_monthly_climate(setup, tmp_path, monkeypatch):

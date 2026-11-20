@@ -6,6 +6,7 @@
  */
 
 import type { BuildGrid, BuildJob } from './buildJobs'
+import type { RegionRefinementSource } from '../viewers/packs/types'
 import type { MapResultMetadata } from './resultContract'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
@@ -183,8 +184,8 @@ export const staticApi = {
   getBuildJob: async (): Promise<BuildJob> => notAvailable('getBuildJob'),
   getPackElevation: async (): Promise<Blob> => notAvailable('getPackElevation'),
   getRegionDevice: async () => notAvailable('getRegionDevice'),
-  planRegionRefinement: async () => notAvailable('planRegionRefinement'),
-  startRegionRefinement: async () => notAvailable('startRegionRefinement'),
+  planRegionRefinement: async (_source: RegionRefinementSource) => notAvailable('planRegionRefinement'),
+  startRegionRefinement: async (_source: RegionRefinementSource) => notAvailable('startRegionRefinement'),
   getRegionRefinement: async () => notAvailable('getRegionRefinement'),
   cancelRegionRefinement: async () => notAvailable('cancelRegionRefinement'),
 

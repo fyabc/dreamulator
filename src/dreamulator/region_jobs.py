@@ -21,6 +21,7 @@ from uuid import uuid4
 from pydantic import BaseModel
 
 from dreamulator.build_jobs import BuildBusyError, local_compute_slot
+from dreamulator.media.terrain_blend import RefinementMode
 from dreamulator.utils.resources import available_memory_bytes
 
 RSS_LIMIT = 8 * 2**30
@@ -35,6 +36,10 @@ class RegionPlan(BaseModel):
     input_px: int
     output_px: int
     native_scale_km: float | None
+    mode: RefinementMode = RefinementMode.REDRAW
+    native_resolution_km: float | None = None
+    preserve_wavelength_km: float | None = None
+    river_threshold: int | None = None
 
 
 class RegionJob(BaseModel):
@@ -50,7 +55,7 @@ class RegionJob(BaseModel):
 @dataclass(frozen=True)
 class RegionWork:
     root: Path
-    td: Path
+    td: Path | None
     pack: Path | None = None
     export_args: tuple[str, ...] = ()
 
@@ -138,7 +143,11 @@ class RegionJobs:
         args.write_text(
             json.dumps(
                 {
-                    "td": str(work.td),
+                    "td": str(work.td) if work.td is not None else None,
+                    "mode": job.plan.mode,
+                    "native_resolution_km": job.plan.native_resolution_km,
+                    "preserve_wavelength_km": job.plan.preserve_wavelength_km,
+                    "river_threshold": job.plan.river_threshold,
                     "pack": str(work.pack) if work.pack else None,
                     "export_args": work.export_args,
                     "limit": RSS_LIMIT,

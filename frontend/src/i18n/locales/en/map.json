@@ -537,7 +537,15 @@
     "help": "Regional map help (opens in a new tab)",
     "refinement": {
       "title": "Generate refined terrain",
-      "redraw": "Terrain Diffusion redraws this region. Ridges, valleys and parts of the coastline may change. The source map is kept intact.",
+      "hydrology": "Hydrology only",
+      "riverThreshold": "Channel threshold",
+      "riverThresholdHelp": "A channel is drawn once upstream accumulation reaches this value. Use a lower value for more tributaries. Leave blank to use the grid-based default.",
+      "riverThresholdInvalid": "Enter a whole number from 1 to {{max, number}}, or leave it blank.",
+      "methodHelp": {
+        "redraw": "The model redraws terrain from broad features, then the app computes rivers and lakes.",
+        "blend": "The model adds small-scale detail to the source before rivers and lakes are computed. Enter the native spacing, such as 0.36 km.",
+        "hydrology": "Compute rivers and lakes from the original terrain without loading the model."
+      },
       "grid": "Result grid",
       "plan": "{{span}} km window. The {{input}} × {{input}} input grid produces {{output}} × {{output}} pixels ({{step}} km per output pixel).",
       "nativeScale": "Source scale ≈ {{scale}} km. Generated detail is not measured terrain.",
@@ -550,6 +558,7 @@
         "publishing": "Saving result"
       },
       "start": "Start refinement",
+      "startHydrology": "Compute hydrology",
       "cancel": "Cancel refinement",
       "cancelling": "Cancelling…",
       "cancelled": "Refinement cancelled. Previous results are unchanged.",
@@ -557,6 +566,7 @@
       "missing": "The local job is no longer available. Check saved regional maps before starting again.",
       "reconnect": "Refresh job status",
       "result": "Compare and download result",
+      "hydrologyResult": "View hydrology results",
       "compare": "Compare terrain",
       "original": "Original elevation",
       "adopted": "Refined elevation"
@@ -591,7 +601,57 @@
         "outputValue": "{{size}}×{{size}} px",
         "metres": "{{metres}} m/px",
         "tileCount_one": "{{count}} tile",
-        "tileCount_other": "{{count}} tiles"
+        "tileCount_other": "{{count}} tiles",
+        "hint": {
+          "window": "The ground length of one side of the selection.",
+          "sourceGrid": "The ground distance between adjacent pixel rows in the current heightmap. Enlarging the image reduces this distance.",
+          "inputGrid": "The model reads elevation on this grid and uses it to generate terrain.",
+          "outputGrid": "The number of pixel columns and rows in the generated heightmap.",
+          "outputSpacing": "The ground distance between adjacent pixels in the generated heightmap.",
+          "coarseTiles": "The number of tiles used to generate broad terrain.",
+          "baseTiles": "The number of tiles used to add terrain detail.",
+          "decoderTiles": "The number of tiles used to turn the generated result into a heightmap."
+        }
+      },
+      "method": {
+        "nativeSpacing": "Native spacing (km)",
+        "nativeSpacingHelp": "Enter the ground distance in kilometres between two neighbouring cells in the original elevation data. Leave blank if unknown.",
+        "meshSpacingHint": "Local region builds use elevation from the model mesh. The default is estimated from the average cell area and can be edited.",
+        "nativeSpacingHint": "Use the spacing before any enlargement. Enter 0.36 if the original data has an elevation every 360 metres, or 50 for one every 50 kilometres.",
+        "unknown": "Unknown",
+        "invalidSpacing": "Enter a positive spacing or leave it blank.",
+        "label": "Method",
+        "methodHint": "Redraw to generate new landforms. Blend to keep the broad shapes and add small features.",
+        "choose": "Choose a method",
+        "follow": "Suggested: {{method}}",
+        "redraw": "Redraw",
+        "enhanced": "Redraw with stronger details",
+        "blend": "Blend in details",
+        "help": {
+          "choose": "Choose a method based on the features you want to keep.",
+          "redraw": "Generate new terrain from the broad shapes in your map. Valleys and coastlines can change.",
+          "enhanced": "Generate new terrain as in Redraw, with adjustable strength for fine detail.",
+          "blend": "Add small features on land while keeping the source coastline and seabed."
+        },
+        "blendNeedsSpacing": "Enter a native spacing larger than the output pixel spacing to blend in details.",
+        "reason": {
+          "unknown": "Native spacing is unknown. Choose based on what you want to keep.",
+          "coarse": "The source grid is coarse, so redrawing can add terrain at smaller scales.",
+          "detail": "The source is finer than the model input. Choose Blend to keep the broad shapes and add small features.",
+          "dense": "The source already meets the output sampling density. Choose a method manually if you want to redraw it."
+        }
+      },
+      "parameters": {
+        "advanced": "Advanced settings",
+        "auto": "Auto",
+        "gain": "Detail gain (×)",
+        "gainHelp": "Standard redraw uses 1× and enhanced redraw defaults to 2×. Enter a value from {{min}} to {{max}}. Higher values make small features stronger.",
+        "wavelength": "Blend scale (km)",
+        "wavelengthHelp": "Model detail gradually blends in below this scale. Higher values let the model affect larger features. Leave blank to use four times the native spacing.",
+        "wavelengthMin": "The blend scale must span at least four output pixels.",
+        "seed": "Random seed",
+        "seedHelp": "Change the number to generate a different terrain. Keep it to repeat the run with the same settings. The default is 42.",
+        "seedInvalid": "Enter a whole number from 0 to {{max, number}}, or leave it blank."
       },
       "run": "Start refinement",
       "cancel": "Cancel",
@@ -607,7 +667,8 @@
         "initialize": "Initializing the WebGPU model",
         "tiles": "Computing tiles",
         "merge": "Stitching the decoded terrain tiles",
-        "finalize": "Restoring elevations and preparing the map result"
+        "finalize": "Restoring elevations and preparing the map result",
+        "blend": "Blending model details into the source map"
       },
       "stageProgress": "Stage {{step}} of 3 · {{stage}}: {{phase}}",
       "received": "Read {{received}} of {{total}} MB ({{percent}}%).",
@@ -615,16 +676,26 @@
       "initializeHint": "The browser is preparing the model for your GPU. There is no percentage for this step, and timing depends on your device.",
       "tilesActive": "Computing tile {{next}} of {{total}}; {{done}} complete.",
       "tilesComplete": "Computed {{done}} of {{total}} tiles.",
+      "inferenceProgress": "Completed {{done}} of {{total}} inference steps for this tile.",
+      "inferencePreparing": "Preparing inference inputs for this tile.",
+      "inferenceWaiting": "Step {{step}}: waiting for ONNX Runtime to return ({{elapsed}} elapsed).",
+      "inferenceApplying": "Step {{step}}: inference returned; updating the terrain data.",
+      "firstInferenceHint": "The first call may include GPU shader compilation. Compilation, computation, and result transfer do not expose separate progress while the call is pending.",
+      "firstRunTime": "First coarse tile: inference step 1 took {{first}} seconds.",
+      "firstTwoRunTimes": "First coarse tile: inference step 1 took {{first}} seconds; step 2 took {{second}} seconds.",
+      "foregroundHint": "Keep this tab visible if possible. Computation may slow down or pause if the tab is in the background or the device goes to sleep.",
       "elapsed": "Time in this step: {{phase}}. Total elapsed: {{run}}.",
       "completed": "Refinement complete in {{run}}.",
-      "cancelling": "Cancelling. Any GPU work already submitted must return first.",
+      "cancelling": "Cancelling.",
       "cancelled": "Refinement cancelled. Existing results are unchanged.",
       "failedAt": "Failed at: {{heading}}.",
       "error": "Could not load or run the models. Check your connection and device resources, or use the local version.",
+      "deviceLost": "The browser lost its connection to the GPU and stopped refinement. Existing results are unchanged. If it happens again, check the browser's GPU status.",
       "resultSize": "Refined output: {{width}} × {{height}}, about {{metres}} metres per pixel. Download it before leaving this page.",
+      "resultMethod": "Method: {{method}}",
       "refinedHint": "The map shows elevation generated in the browser. Switch back to the original to compare the same place.",
       "download": "Download refined elevation",
-      "exportOriginal": "Export original elevation"
+      "exportOriginal": "Original elevation map"
     },
     "export": {
       "title": "Export elevation",

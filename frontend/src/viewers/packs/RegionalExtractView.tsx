@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -7,15 +7,15 @@ import { isStaticMode } from '../../api/mode'
 import MapHelpLink from '../../components/map/MapHelpLink'
 import RegionElevationDownload from '../../components/map/RegionElevationDownload'
 import RegionRefinementPanel from './RegionRefinementPanel'
-import TerrainCompute from './TerrainCompute'
+import TerrainCompute, { type BrowserTerrainResult } from './TerrainCompute'
 import { availableRegionPacks, matchingRegionPacks, regionPackWindow, type RegionWindow } from '../map/regionWindow'
-import { generateAdaptiveTerrainScale } from '../map/utils/colorScales'
 import type { LonLat } from '../map/utils/mapCoords'
 import { lonLatToKm } from './packCoords'
 import PackMap from './PackMap'
 import PackStatusBar from './PackStatusBar'
 import { useRegionElevation, type ElevationInput } from './useRegionElevation'
-import type { ElevationFormat, ElevationRaster } from './elevationRaster'
+import { useElevationPreview } from './useElevationPreview'
+import type { ElevationFormat } from './elevationRaster'
 
 interface Props {
   world: string
@@ -25,32 +25,6 @@ interface Props {
   selection: RegionWindow
   globalReturn: string
   regionParams: URLSearchParams
-}
-
-function usePreviewImage(raster: ElevationRaster | null, min: number, max: number, sea: number) {
-  const [base, setBase] = useState<{ url: string } | null>(null)
-  useEffect(() => {
-    setBase(null)
-    if (!raster) return
-    const canvas = document.createElement('canvas')
-    canvas.width = raster.width
-    canvas.height = raster.height
-    const context = canvas.getContext('2d')
-    if (!context) return
-    const image = context.createImageData(raster.width, raster.height)
-    const lut = generateAdaptiveTerrainScale(min, max, sea)
-    const bins = lut.length / 4 - 1
-    raster.values.forEach((height, index) => {
-      const offset = 4 * Math.round(bins * Math.max(0, Math.min(1, (height - min) / (max - min || 1))))
-      image.data[index * 4] = lut[offset]
-      image.data[index * 4 + 1] = lut[offset + 1]
-      image.data[index * 4 + 2] = lut[offset + 2]
-      image.data[index * 4 + 3] = 255
-    })
-    context.putImageData(image, 0, 0)
-    setBase({ url: canvas.toDataURL() })
-  }, [raster, min, max, sea])
-  return base
 }
 
 export default function RegionalExtractView({ world, planet, branch, radiusKm, selection, globalReturn, regionParams }: Props) {
@@ -68,11 +42,11 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
     ? { kind: 'global', blob: elevation.data, min, max, window } : null, [meta.data, elevation.data, min, max, window])
   const height = useRegionElevation(decoded)
   const preview = height.ready?.kind === 'preview' ? height.ready : null
-  const [result, setResult] = useState<{ raster: ElevationRaster; manifestSha256: string } | null>(null)
+  const [result, setResult] = useState<BrowserTerrainResult | null>(null)
   const refined = result?.raster
   const [showRefined, setShowRefined] = useState(false)
   const displayed = (showRefined ? refined : null) ?? preview?.raster ?? null
-  const base = usePreviewImage(displayed, min, max, sea)
+  const base = useElevationPreview(displayed, min, max, sea)
   const stepKm = Math.PI * radiusKm / Math.max(1, (preview?.sourceHeight ?? 1) - 1)
   const defaultSize = Math.max(1, Math.min(2048, Math.floor(spanKm / stepKm)))
   const [hover, setHover] = useState<LonLat | null>(null)
@@ -88,9 +62,12 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
   const missing = meta.isError || elevation.isError || (elevation.isSuccess && !elevation.data)
   const downloadRefined = (format: ElevationFormat) => {
     if (!result) return
-    height.download(`${world}-${planet}-${lat}_${lon}-refined`, null, format, {
-      world, planet, branch, source: 'browser_terrain_diffusion', conditioning: 'elevation_only', seed: 42,
+    height.download(`${world}-${planet}-${lat}_${lon}-${result.recipe.method}`, null, format, {
+      world, planet, branch, source: 'browser_terrain_diffusion', conditioning: 'elevation_only', seed: result.recipe.seed,
       model_manifest_sha256: result.manifestSha256,
+      processing_mode: result.recipe.method, processing_recommendation: result.recommendation, source_native_spacing_km: result.nativeSpacingKm,
+      decoder_residual_gain: result.recipe.residualGain,
+      ...(result.recipe.method === 'blend' && { preserve_wavelength_km: result.recipe.preserveKm }),
       projection: window.projection, center_lat: lat, center_lon: lon, radius_km: radiusKm,
       extent_km: { x: spanKm, y: spanKm }, sea_level_m: sea, pixel_size_m: spanKm * 1000 / result.raster.width,
     }, result.raster)
@@ -126,9 +103,10 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
               params.set('pack', pack)
               return `/packs?${params}`
             }} />}</TerrainCompute>
-          {refined && <div className="space-y-2 rounded border border-space-border p-2">
+          {result && refined && <div className="space-y-2 rounded border border-space-border p-2">
             <p role="status">{t('packs.compute.resultSize', { width: refined.width, height: refined.height,
               metres: Math.round(spanKm * 1000 / refined.width) })}</p>
+            <p>{t('packs.compute.resultMethod', { method: t(`packs.compute.method.${result.recipe.method}`) })}</p>
             <label className="flex flex-wrap items-center gap-2">{t('packs.refinement.compare')}
               <select className="rounded border border-space-border bg-space-surface p-1" value={showRefined ? 'result' : 'input'}
                 onChange={(event) => setShowRefined(event.target.value === 'result')}>
@@ -141,7 +119,7 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
               onDownload={(_, format) => downloadRefined(format)} />
           </div>}
           {preview && <details className="rounded border border-space-border p-2">
-            <summary className="cursor-pointer font-medium text-neon-cyan">{t(refined ? 'packs.compute.exportOriginal' : 'packs.export.title')}</summary>
+            <summary className="cursor-pointer font-medium text-neon-cyan">{t('packs.compute.exportOriginal')}</summary>
             <div className="mt-2">
               <RegionElevationDownload defaultSize={defaultSize} sourceStepKm={stepKm} extentKm={spanKm}
                 exporting={height.exporting} failed={height.failed} onDownload={(size, format) => height.download(
@@ -149,7 +127,7 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
                     world, planet, branch, source: 'global_elevation', projection: window.projection,
                     center_lat: lat, center_lon: lon, radius_km: radiusKm, extent_km: { x: spanKm, y: spanKm },
                     sea_level_m: sea, source_width: preview.sourceWidth, source_height: preview.sourceHeight,
-                    sampling: 'bilinear',
+                    sampling: 'bilinear', source_row_spacing_km: stepKm,
                   })} />
             </div>
           </details>}

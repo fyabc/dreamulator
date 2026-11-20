@@ -727,9 +727,9 @@ const readApi = {
     ),
 
   getRegionDevice: () => isStaticMode() ? staticApi.getRegionDevice() : fetchJson<RegionDevice>('/region-refinement/device'),
-  planRegionRefinement: (source: RegionRefinementSource) => isStaticMode() ? staticApi.planRegionRefinement()
+  planRegionRefinement: (source: RegionRefinementSource) => isStaticMode() ? staticApi.planRegionRefinement(source)
     : fetchJson<RegionRefinementPlan>('/region-refinement/plan', { method: 'POST', body: JSON.stringify(source) }),
-  startRegionRefinement: (source: RegionRefinementSource) => isStaticMode() ? staticApi.startRegionRefinement()
+  startRegionRefinement: (source: RegionRefinementSource) => isStaticMode() ? staticApi.startRegionRefinement(source)
     : fetchJson<RegionRefinementJob>('/region-refinement/jobs', { method: 'POST', body: JSON.stringify(source) }),
   getRegionRefinement: (id: string) => isStaticMode() ? staticApi.getRegionRefinement()
     : fetchJson<RegionRefinementJob>(`/region-refinement/jobs/${encodeURIComponent(id)}`),

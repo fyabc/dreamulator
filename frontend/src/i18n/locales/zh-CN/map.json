@@ -537,7 +537,15 @@
     "help": "区域地图帮助（在新标签页打开）",
     "refinement": {
       "title": "生成细化地形",
-      "redraw": "Terrain Diffusion 会按输入场重绘这个区域。山脊、谷地和局部海岸可能改变；原始地图不会被修改。",
+      "hydrology": "只计算水文",
+      "riverThreshold": "河道起始阈值",
+      "riverThresholdHelp": "上游汇入量达到这个值时才画河道。数值越小，支流越多。留空时按网格自动设定。",
+      "riverThresholdInvalid": "请输入 1 到 {{max, number}} 之间的整数，或留空。",
+      "methodHelp": {
+        "redraw": "模型按大尺度地势重绘地形，再计算河流和湖泊。",
+        "blend": "模型在原图上补一些小尺度起伏，再计算河流和湖泊。请填写原生间距，例如 0.36 公里。",
+        "hydrology": "在原图上计算河流和湖泊，无需加载模型。"
+      },
       "grid": "结果网格",
       "plan": "窗口边长 {{span}} km，输入网格 {{input}} × {{input}}，输出 {{output}} × {{output}} 像素，每像素 {{step}} km。",
       "nativeScale": "来源的代表性尺度约为 {{scale}} km。新增的细节是生成的，不是实测地形。",
@@ -549,6 +557,7 @@
         "publishing": "正在保存结果"
       },
       "start": "开始细化",
+      "startHydrology": "开始计算水文",
       "cancel": "取消细化",
       "cancelling": "正在取消…",
       "cancelled": "细化已取消，已有结果保持不变。",
@@ -556,6 +565,7 @@
       "missing": "本机任务记录已不可用，请先检查已保存的区域地图，再决定是否重试。",
       "reconnect": "刷新任务状态",
       "result": "对照并下载结果",
+      "hydrologyResult": "查看水文结果",
       "compare": "对照地形",
       "original": "原始高程",
       "adopted": "细化高程"
@@ -589,7 +599,57 @@
         "inputValue": "{{size}}×{{size}} · {{km}} km/格",
         "outputValue": "{{size}}×{{size}} px",
         "metres": "{{metres}} m/px",
-        "tileCount": "{{count}} 块"
+        "tileCount": "{{count}} 块",
+        "hint": {
+          "window": "选区一条边在地面上的长度。",
+          "sourceGrid": "当前高程图片相邻两行像素在地面上的距离。放大图片后，这个数值会变小。",
+          "inputGrid": "模型先把选区的高程归到这组格子里，再根据这些格子的高程生成地形。",
+          "outputGrid": "生成的高程图有多少列、多少行像素。",
+          "outputSpacing": "生成图上相邻像素在地面上的距离。",
+          "coarseTiles": "生成大致地形时需要计算的块数。",
+          "baseTiles": "补充地形细节时需要计算的块数。",
+          "decoderTiles": "把生成结果还原成高程图时需要计算的块数。"
+        }
+      },
+      "method": {
+        "nativeSpacing": "原生间距（km）",
+        "nativeSpacingHelp": "填写原始高程数据中相邻两格在地面上相隔多少公里。不知道就留空。",
+        "meshSpacingHint": "本机区域构建使用计算网格的高程。默认值按每格平均面积估算，可手动修改。",
+        "nativeSpacingHint": "用放大之前的格距。例如原数据每隔 360 米有一个高程值，就填 0.36；每隔 50 公里就填 50，即使图片后来放大过。",
+        "unknown": "未知",
+        "invalidSpacing": "请输入大于 0 的间距，或留空。",
+        "label": "处理方式",
+        "methodHint": "想重新生成地貌就选重绘；想沿用原图的大地形并增加小起伏就选混合。",
+        "choose": "请选择",
+        "follow": "按推荐：{{method}}",
+        "redraw": "按输入场重绘",
+        "enhanced": "重绘并增强细节",
+        "blend": "混合细化",
+        "help": {
+          "choose": "按你想保留的地貌选择处理方式。",
+          "redraw": "按原图的大致起伏生成新地形，山谷和海岸可能变化。",
+          "enhanced": "和重绘一样生成新地形，可以调高细小起伏的强度。",
+          "blend": "沿用原图的海岸和海底，在陆地叠入模型的小尺度起伏。"
+        },
+        "blendNeedsSpacing": "混合需要填写原生间距，并且原生间距须大于输出像素间距。",
+        "reason": {
+          "unknown": "原生间距未知，请按创作意图选择。",
+          "coarse": "原图网格较粗，适合按大尺度地势重绘。",
+          "detail": "原图网格比模型输入更细。想保留已有地形，再补些小起伏，可以选混合细化。",
+          "dense": "原图采样已达到输出密度。需要重绘时，请手动选择处理方式。"
+        }
+      },
+      "parameters": {
+        "advanced": "高级参数",
+        "auto": "自动",
+        "gain": "细节强度（倍）",
+        "gainHelp": "普通重绘是 1 倍，增强默认是 2 倍。可填 {{min}} 到 {{max}}，值越大，小尺度起伏越强。",
+        "wavelength": "混合尺度（km）",
+        "wavelengthHelp": "模型细节从这个尺度以下逐渐加入。数值越大，模型影响的地形尺度越大。留空时取原生间距的四倍。",
+        "wavelengthMin": "混合尺度至少要有四个输出像素的长度。",
+        "seed": "随机种子",
+        "seedHelp": "改这个数字可以生成另一套地形。保留同一数字，方便用相同设置重跑。默认是 42。",
+        "seedInvalid": "请输入 0 到 {{max, number}} 之间的整数，或留空。"
       },
       "run": "开始细化",
       "cancel": "取消",
@@ -605,7 +665,8 @@
         "initialize": "正在初始化 WebGPU 模型",
         "tiles": "正在逐块计算",
         "merge": "正在拼接解码后的地形块",
-        "finalize": "正在还原高程并生成地图结果"
+        "finalize": "正在还原高程并生成地图结果",
+        "blend": "正在将模型细节混入原图"
       },
       "stageProgress": "阶段 {{step}} / 3 · {{stage}}：{{phase}}",
       "received": "已读取 {{received}} / {{total}} MB（{{percent}}%）。",
@@ -613,16 +674,26 @@
       "initializeHint": "浏览器正在为显卡准备模型。初始化没有可用的百分比，耗时取决于设备。",
       "tilesActive": "正在计算第 {{next}} 块，共 {{total}} 块；已完成 {{done}} 块。",
       "tilesComplete": "计算已完成 {{done}} / {{total}} 块。",
+      "inferenceProgress": "本块已完成 {{done}} / {{total}} 步推理。",
+      "inferencePreparing": "正在准备本块推理输入。",
+      "inferenceWaiting": "第 {{step}} 步：正在等待 ONNX Runtime 返回，已等待 {{elapsed}}。",
+      "inferenceApplying": "第 {{step}} 步：推理已返回，正在更新地形数据。",
+      "firstInferenceHint": "首次调用可能包含显卡程序编译。等待期间无法分别显示编译、计算和结果回传的进度。",
+      "firstRunTime": "粗地形首块：第 1 步推理调用用时 {{first}} 秒。",
+      "firstTwoRunTimes": "粗地形首块：第 1 步推理调用用时 {{first}} 秒，第 2 步用时 {{second}} 秒。",
+      "foregroundHint": "建议让此标签页保持可见。切到后台或设备休眠时，计算可能变慢或暂停。",
       "elapsed": "本步骤用时 {{phase}}，累计用时 {{run}}。",
       "completed": "细化完成，共用时 {{run}}。",
-      "cancelling": "正在取消。已提交的 GPU 计算须先返回。",
+      "cancelling": "正在取消。",
       "cancelled": "细化已取消，已有结果保持不变。",
       "failedAt": "失败于：{{heading}}。",
       "error": "无法加载或运行细化模型。请检查网络和设备资源后重试，或改用本机版。",
+      "deviceLost": "浏览器失去了与显卡的连接，本次细化已停止。已有结果不受影响。若再次发生，请检查浏览器的 GPU 状态。",
       "resultSize": "细化结果：{{width}} × {{height}}，每像素约 {{metres}} 米。离开本页前请下载。",
+      "resultMethod": "处理方式：{{method}}",
       "refinedHint": "地图显示浏览器生成的高程。可切回原图查看同一位置。",
       "download": "下载细化高程",
-      "exportOriginal": "导出原始高程图"
+      "exportOriginal": "原始高程图"
     },
     "export": {
       "title": "导出高程图",

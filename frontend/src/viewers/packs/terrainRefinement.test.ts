@@ -124,6 +124,9 @@ describe('browser terrain refinement inputs', () => {
     const raised = coarseCondition(raster, tile, 21, settings)
     expect(raised[17 * 64 + 16]).toBe(0)
     expect(raised.subarray(64 * 64)).toEqual(conditioned.subarray(64 * 64))
+    const reseeded = coarseCondition(raster, tile, 5, { ...settings, snr: [0, 1, 1, 1, 1] }, 8)
+    expect(reseeded.subarray(0, 64 * 64)).toEqual(conditioned.subarray(0, 64 * 64))
+    expect(reseeded).not.toEqual(coarseCondition(raster, tile, 5, { ...settings, snr: [0, 1, 1, 1, 1] }))
   })
 
   it('uses one noise field and blends neighbouring tiles in their overlap', () => {
