@@ -27,6 +27,7 @@ import type { PointProjector } from './map/types'
 import type { RegionWindow } from './map/regionWindow'
 import type { LonLat } from './map/utils/mapCoords'
 import { lonLatToGlobePosition } from './map/utils/globeCoords'
+import GlobeRegionMaterial, { type GlobeRegionDetail } from './GlobeRegionMaterial'
 import {
   globeCameraPath, GLOBE_MAX_DISTANCE, GLOBE_OVERVIEW_DISTANCE, GLOBE_PREVIEW_MIN_DISTANCE,
   overviewCameraDistance, regionCameraDistance, type GlobeScale,
@@ -79,6 +80,7 @@ interface GlobeViewerProps {
   regionMoveRevision?: number
   scalePreview?: boolean
   regionFlight?: GlobeRegionFlight | null
+  regionDetail?: GlobeRegionDetail | null
   /** Sun longitude in degrees (0 = noon at prime meridian). */
   sunLongitudeDeg?: number
   /** Solar declination (subsolar latitude) in degrees — varies with season. */
@@ -345,6 +347,7 @@ interface GlobeSceneProps {
   regionMoveRevision?: number
   scalePreview?: boolean
   regionFlight?: GlobeRegionFlight | null
+  regionDetail?: GlobeRegionDetail | null
   sunLongitudeDeg?: number
   solarDeclinationDeg?: number
   dayNight?: boolean
@@ -373,7 +376,7 @@ interface NorthAnimState {
 function GlobeScene({
   texture, renderComposite, distanceRef, onCellHover, onCellClick, onHoverOut,
   vertices, regions, hoveredCellId, selectedCellIds, regionBoundary, regionFocus,
-  regionMoveRevision, scalePreview = false, regionFlight,
+  regionMoveRevision, scalePreview = false, regionFlight, regionDetail,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
   autoSpin = false, chrome = true, interactive = true,
   globeProjectRef, globePointProjectRef,
@@ -738,7 +741,9 @@ function GlobeScene({
         } : undefined}
       >
         <sphereGeometry args={[SPHERE_RADIUS, 64, 32]} />
-        {texture ? (
+        {texture && scalePreview && regionDetail ? (
+          <GlobeRegionMaterial map={texture} detail={regionDetail} />
+        ) : texture ? (
           <meshStandardMaterial map={texture} roughness={0.9} metalness={0.05} />
         ) : (
           <meshStandardMaterial color="#4488aa" roughness={0.8} metalness={0.1} />
@@ -797,7 +802,7 @@ export default function GlobeViewer({
   texture, renderComposite, onTransition, transitionLabel,
   onCellHover, onCellClick, onHoverOut, onDistanceChange,
   vertices, regions, hoveredCellId, selectedCellIds, regionBoundary, regionFocus,
-  regionMoveRevision, scalePreview = false, regionFlight,
+  regionMoveRevision, scalePreview = false, regionFlight, regionDetail,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
   autoSpin = false, chrome = true, interactive = true, frameless = false,
   globeProjectRef, globePointProjectRef,
@@ -848,6 +853,7 @@ export default function GlobeViewer({
             regionMoveRevision={regionMoveRevision}
             scalePreview={scalePreview}
             regionFlight={regionFlight}
+            regionDetail={regionDetail}
             sunLongitudeDeg={sunLongitudeDeg} solarDeclinationDeg={solarDeclinationDeg}
             dayNight={dayNight}
             autoSpin={autoSpin}

@@ -516,6 +516,12 @@
     "zoomToRegion": "拉近选区（试验）",
     "zoomToGlobe": "拉远至整球",
     "scaleAltitude": "距基准球面 {{km}} km",
+    "scaleDetail": {
+      "ready": "拉近时可查看已保存的高清地形。",
+      "loading": "正在读取高清地形，暂用全球底图。",
+      "failed": "无法读取高清地形，继续显示全球底图。",
+      "missing": "此选区没有已保存的高清地形，继续显示全球底图。"
+    },
     "clear": "清除选区",
     "summary": "当前选区：{{lat}}°，{{lon}}°，{{spanKm}} × {{spanKm}} km",
     "invalid": "纬度须在 −90° 到 90° 之间，经度须在 −180° 到 180° 之间，边长须大于 0 且小于 {{limit}} km。",

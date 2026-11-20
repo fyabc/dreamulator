@@ -516,6 +516,12 @@
     "zoomToRegion": "Zoom to selection (preview)",
     "zoomToGlobe": "Zoom out to globe",
     "scaleAltitude": "{{km}} km above the reference sphere",
+    "scaleDetail": {
+      "ready": "Saved terrain detail is available at close range.",
+      "loading": "Reading saved terrain detail. Showing the global terrain for now.",
+      "failed": "Saved terrain detail could not be read. Showing the global terrain.",
+      "missing": "No saved terrain detail for this selection. Showing the global terrain."
+    },
     "clear": "Clear selection",
     "summary": "Selected region: {{lat}}°, {{lon}}° · {{spanKm}} × {{spanKm}} km",
     "invalid": "Enter latitude from −90° to 90°, longitude from −180° to 180°, and a positive side length below {{limit}} km.",

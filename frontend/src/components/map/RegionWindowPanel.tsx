@@ -21,10 +21,11 @@ interface RegionWindowPanelProps {
   onMoveToRegion: () => void
   onRegionScale?: (scale: GlobeScale) => void
   scaleAltitudeKm?: number
+  scaleDetail?: 'ready' | 'loading' | 'failed' | 'missing'
 }
 
 export default function RegionWindowPanel({
-  world, planet, branch, radiusKm, selectedPoint, onMoveToRegion, onRegionScale, scaleAltitudeKm,
+  world, planet, branch, radiusKm, selectedPoint, onMoveToRegion, onRegionScale, scaleAltitudeKm, scaleDetail,
 }: RegionWindowPanelProps) {
   const { t } = useTranslation('map')
   const [search, setSearch] = useSearchParams()
@@ -68,6 +69,7 @@ export default function RegionWindowPanel({
           {scaleAltitudeKm !== undefined && <span className="text-gray-400">
             {t('regionWindow.scaleAltitude', { km: scaleAltitudeKm.toFixed(1) })}
           </span>}
+          {scaleDetail && <span role="status" className="text-gray-400">{t(`regionWindow.scaleDetail.${scaleDetail}`)}</span>}
         </>}
         <div className="ml-auto">
           <MapHelpLink section="region-selection" label={t('regionWindow.help')} />
