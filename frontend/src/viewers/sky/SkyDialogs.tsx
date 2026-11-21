@@ -11,7 +11,7 @@ import SkyLegend from './SkyLegend'
 import type { GridToggles } from './skyGrids'
 
 const DIALOG_SHELL =
-  'border border-space-border bg-space-panel/95 backdrop-blur rounded-lg p-3 space-y-3 shadow-xl'
+  'min-h-0 overflow-y-auto overscroll-contain border border-space-border bg-space-panel/95 rounded-lg p-3 space-y-3'
 
 export interface ObserverOption {
   id: string
@@ -31,8 +31,6 @@ export interface SkyObserverDialogProps {
   onSelectBranch: (branch: string | null) => void
   spinSource?: string | null
   solarDayDays: number | null
-  onPointerEnter: () => void
-  onPointerLeave: () => void
 }
 
 export function SkyObserverDialog({
@@ -48,16 +46,10 @@ export function SkyObserverDialog({
   onSelectBranch,
   spinSource,
   solarDayDays,
-  onPointerEnter,
-  onPointerLeave,
 }: SkyObserverDialogProps) {
   const { t } = useTranslation('sky')
   return (
-    <div
-      className={`${DIALOG_SHELL} w-60`}
-      onPointerEnter={onPointerEnter}
-      onPointerLeave={onPointerLeave}
-    >
+    <section id="sky-observer-settings" className={DIALOG_SHELL} aria-label={t('dialog.observer.title')}>
       <div className="text-xs font-semibold text-neon-cyan">{t('dialog.observer.title')}</div>
       <label className="block space-y-1">
         <span className="text-[11px] text-gray-500">{t('observer.label')}</span>
@@ -112,7 +104,7 @@ export function SkyObserverDialog({
           )}
         </div>
       )}
-    </div>
+    </section>
   )
 }
 
@@ -132,8 +124,6 @@ export interface SkyDisplayDialogProps {
   /** The one open right-side panel, if any (radio behaviour). */
   activePanel: SkyPanel | null
   onSelectPanel: (panel: SkyPanel | null) => void
-  onPointerEnter: () => void
-  onPointerLeave: () => void
 }
 
 export function SkyDisplayDialog({
@@ -148,8 +138,6 @@ export function SkyDisplayDialog({
   hasCulture,
   activePanel,
   onSelectPanel,
-  onPointerEnter,
-  onPointerLeave,
 }: SkyDisplayDialogProps) {
   const { t } = useTranslation('sky')
   const gridRow = (key: keyof GridToggles, label: string, color: string) => (
@@ -165,11 +153,7 @@ export function SkyDisplayDialog({
     </label>
   )
   return (
-    <div
-      className={`${DIALOG_SHELL} w-60`}
-      onPointerEnter={onPointerEnter}
-      onPointerLeave={onPointerLeave}
-    >
+    <section id="sky-display-settings" className={DIALOG_SHELL} aria-label={t('dialog.display.title')}>
       <div className="text-xs font-semibold text-neon-cyan">{t('dialog.display.title')}</div>
       <div className="flex rounded-md overflow-hidden border border-space-border text-[11px]">
         {(['pan', 'disc'] as const).map((m) => (
@@ -217,26 +201,35 @@ export function SkyDisplayDialog({
       )}
       <div className="space-y-1">
         <div className="text-[11px] text-gray-500">{t('dialog.display.panels')}</div>
-        <div className="flex gap-1.5">
-          {(['almanac', 'below'] as const).map((panel) => (
-            <button
-              key={panel}
-              type="button"
-              onClick={() => onSelectPanel(activePanel === panel ? null : panel)}
-              className={`flex-1 px-2 py-1 rounded-md border text-[11px] transition-colors ${
-                activePanel === panel
-                  ? 'bg-neon-cyan/15 border-neon-cyan/40 text-neon-cyan'
-                  : 'bg-space-surface border-space-border text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              {t(`panels.${panel}`)}
-            </button>
-          ))}
+        <div className="divide-y divide-space-border">
+          {(['almanac', 'below'] as const).map((panel) => {
+            const isOn = activePanel === panel
+            return (
+              <button
+                key={panel}
+                type="button"
+                role="switch"
+                aria-checked={isOn}
+                onClick={() => onSelectPanel(isOn ? null : panel)}
+                className="flex min-h-11 w-full items-center justify-between gap-3 px-1.5 text-left text-xs text-gray-300 hover:bg-space-surface focus-visible:relative focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-neon-cyan"
+              >
+                {t(`panels.${panel}`)}
+                <span
+                  aria-hidden="true"
+                  className={`flex h-5 w-9 shrink-0 items-center rounded-full border p-0.5 ${
+                    isOn ? 'justify-end border-neon-cyan/60 bg-neon-cyan/20' : 'border-gray-500 bg-space-surface'
+                  }`}
+                >
+                  <span className={`size-3.5 rounded-full ${isOn ? 'bg-neon-cyan' : 'bg-gray-400'}`} />
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
       <div className="pt-2 border-t border-space-border">
         <SkyLegend variant="inline" />
       </div>
-    </div>
+    </section>
   )
 }

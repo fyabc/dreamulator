@@ -21,7 +21,7 @@ import { phasePathD, brightAngleRad, markerRadius } from './phaseGeometry'
 import { ALTITUDE_RING_DEGREES, skyProjector } from './projector'
 import { buildAsterismGeometry, buildCultureLookup, greatCircleSamples, toVec3 } from './skyCulture'
 import type { SkyBackground } from './types'
-import { dayClock, dayReadout, sliderStep, sliderYearDays } from './timeFormat'
+import { dayClock, dayReadout, epochOffset, julianEpochReadout, sliderStep, sliderYearDays } from './timeFormat'
 import { formatIrradiance } from './units'
 
 describe('skyProjector', () => {
@@ -66,6 +66,19 @@ describe('skyProjector', () => {
 })
 
 describe('timeFormat', () => {
+  it('formats signed offsets from the catalog epoch without a negative zero', () => {
+    expect(epochOffset(0.25)).toBe('+ 0.25')
+    expect(epochOffset(-0.25)).toBe('− 0.25')
+    expect(epochOffset(-0.001)).toBe('+ 0.00')
+  })
+
+  it('renders the Julian reference instant without changing its time scale', () => {
+    expect(julianEpochReadout({ value: 2451545.0, scale: 'TDB' })).toEqual({
+      calendar: '2000-01-01 12:00:00 TDB',
+      julianDate: 'JD 2451545.0 TDB',
+    })
+  })
+
   it('splits days into whole solar days + fraction', () => {
     const r = dayReadout(61.979, 3.2352)
     expect(r.day).toBe(19)

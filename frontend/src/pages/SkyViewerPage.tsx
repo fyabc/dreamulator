@@ -1,30 +1,34 @@
 /** SkyViewerPage — the observer's-sky view (`/worlds/:worldName/sky/:bodyId?`),
- *  Stellarium posture: the sky fills the whole viewport and every control is
- *  chrome that appears on pointer activity and fades when idle.  State lives
+ *  The sky fills the viewport. Observation status stays visible; controls
+ *  appear on pointer activity and fade when idle. State lives
  *  in URL search params (?from=&lat=&lon=&at=&branch=&mode=&look=&fov=&grids=&panels=,
  *  replace writes); the instant commits on gesture end, look/fov the same.
  *  API-only by design (parameterized engine query): static mode renders a
  *  hint panel (packs precedent).
  */
 
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type FocusEvent, type PointerEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
+import AtlasIcon from '../components/AtlasIcon'
+import { useCelestialName } from '../i18n/celestialNames'
 import SkyChart from '../viewers/sky/SkyChart'
 import SkyInspector from '../viewers/sky/SkyInspector'
 import SkyObjectInspector from '../viewers/sky/SkyObjectInspector'
 import SkyPanChart from '../viewers/sky/SkyPanChart'
 import SkyRiseSetTable from '../viewers/sky/SkyRiseSetTable'
 import SkyTimeControl from '../viewers/sky/SkyTimeControl'
+import { epochOffset } from '../viewers/sky/timeFormat'
 import SkyBelowHorizonList from '../viewers/sky/SkyBelowHorizonList'
 import { SkyDisplayDialog, SkyObserverDialog, type SkyPanel } from '../viewers/sky/SkyDialogs'
 import { observerCandidates } from '../viewers/sky/observer'
 import { clampLook, type LookDirection } from '../viewers/sky/panProjector'
 import type { GridToggles } from '../viewers/sky/skyGrids'
+import type { SkyCatalog } from '../viewers/sky/types'
 import { useElementSize } from '../viewers/sky/useElementSize'
 import { useIdleChrome } from '../viewers/sky/useIdleChrome'
 import { useSkyData } from '../viewers/sky/useSkyData'
@@ -37,7 +41,9 @@ function numberParam(params: URLSearchParams, key: string, fallback: number): nu
   return Number.isFinite(value) ? value : fallback
 }
 
-const DEFAULT_LOOK: LookDirection = { azDeg: 0, altDeg: 12, fovDeg: 90 }
+const DEFAULT_LOOK: LookDirection = { azDeg: 0, altDeg: 50, fovDeg: 110 }
+const iconButton = 'inline-flex shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-space-surface hover:text-white'
+const panelShell = 'min-h-0 overflow-y-auto overscroll-contain rounded-lg border border-space-border bg-space-panel/95 p-3'
 
 function lookFromParams(params: URLSearchParams): LookDirection {
   const raw = params.get('look')
@@ -56,7 +62,8 @@ function csvParam(params: URLSearchParams, key: string): Set<string> {
 
 export default function SkyViewerPage() {
   const { worldName, bodyId } = useParams()
-  const { t } = useTranslation(['sky', 'common'])
+  const { t } = useTranslation('sky')
+  const celestialName = useCelestialName(worldName)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const staticMode = isStaticMode()
@@ -65,16 +72,18 @@ export default function SkyViewerPage() {
    *  disjoint from body ids; the two selections are mutually exclusive. */
   const [bgId, setBgId] = useState<string | null>(null)
   const [dialog, setDialog] = useState<'none' | 'observer' | 'display'>('none')
-  const { visible: chromeVisible, pin: chromePin, hold: chromeHold } = useIdleChrome()
+  const [controlsHidden, setControlsHidden] = useState(false)
+  const [controlsHovered, setControlsHovered] = useState(false)
+  const [controlsFocused, setControlsFocused] = useState(false)
+  const dialogTrigger = useRef<HTMLButtonElement | null>(null)
 
   const branch = searchParams.get('branch')
   const lat = numberParam(searchParams, 'lat', 0)
   const lon = numberParam(searchParams, 'lon', 0)
   const mode: 'pan' | 'disc' = searchParams.get('mode') === 'disc' ? 'disc' : 'pan'
   const [look, setLookState] = useState<LookDirection>(() => lookFromParams(searchParams))
-  // Without an explicit ?look=, the first result aims the pan view at the
-  // brightest above-horizon body (altitude capped so the sky patch has
-  // context); a bare north-facing default can be an honestly empty sector.
+  // Without an explicit ?look=, the first result chooses the azimuth of the
+  // brightest suitable body while keeping the horizon in the default frame.
   const aimedRef = useRef(searchParams.has('look'))
   const setLook = (next: LookDirection) => {
     aimedRef.current = true
@@ -101,7 +110,8 @@ export default function SkyViewerPage() {
     enabled: !!worldName && !staticMode,
     retry: false,
   })
-  const catalog = catalogQuery.data
+  const catalog: SkyCatalog | undefined = catalogQuery.data
+  const referenceEpoch = catalog?.reference_epoch
 
   // The universe setting is static per (world, branch): fetch once, rotate
   // client-side — look-around stays fetch-free.
@@ -140,7 +150,7 @@ export default function SkyViewerPage() {
   const time = useSkyTime()
   const data = useSkyData({
     worldName: worldName ?? '',
-    observerId,
+    observerId: staticMode ? null : observerId,
     branch,
     lat,
     lon,
@@ -152,11 +162,11 @@ export default function SkyViewerPage() {
   const solarDay = data.display?.solar_day_days ?? null
   time.setSolarDay(solarDay)
   const { ref: skyRef, size } = useElementSize<HTMLDivElement>()
-
-  // Hold the chrome while a dialog is open.
-  useEffect(() => {
-    chromeHold(dialog !== 'none')
-  }, [dialog, chromeHold])
+  const error = catalogQuery.error ?? data.error
+  const { visible: chromeVisible, poke: revealChrome } = useIdleChrome(
+    (!data.display && !error) || dialog !== 'none' || controlsHovered || controlsFocused,
+  )
+  const controlsVisible = !controlsHidden && chromeVisible
 
   // First-result aim (see aimedRef comment above).  Horizon-grazing winners
   // (a star rising at +1° is the brightest thing but makes an empty view)
@@ -169,15 +179,8 @@ export default function SkyViewerPage() {
       .sort((a, b) => a.apparent_magnitude - b.apparent_magnitude)
     const brightest = above.find((row) => row.altitude_deg >= 10) ?? above[0]
     if (brightest) {
-      setLookState(
-        clampLook({
-          azDeg: brightest.azimuth_deg,
-          altDeg: Math.min(Math.max(brightest.altitude_deg, 0), 60),
-          fovDeg: look.fovDeg,
-        }),
-      )
+      setLookState((current) => clampLook({ ...current, azDeg: brightest.azimuth_deg }))
     }
-    // Aims once on the first result; look.fovDeg is read, not tracked.
   }, [data.display])
 
   const setParam = (key: string, value: string | null) => {
@@ -192,7 +195,12 @@ export default function SkyViewerPage() {
     )
   }
 
-  const observerOptions = useMemo(() => (catalog ? observerCandidates(catalog) : []), [catalog])
+  const observerOptions = useMemo(
+    () => catalog ? observerCandidates(catalog).map((option) => ({
+      ...option, name: celestialName(option.id, option.name),
+    })) : [],
+    [catalog, celestialName],
+  )
 
   const selectBody = (id: string) => {
     setBgId(null)
@@ -237,45 +245,84 @@ export default function SkyViewerPage() {
     setParam('panels', panel)
   }
 
-  const belowRows = useMemo(
-    () => (data.display ? data.display.targets.filter((row) => row.altitude_deg <= 0) : []),
-    [data.display],
-  )
+  const display = useMemo(() => data.display && ({
+    ...data.display,
+    targets: data.display.targets.map((row) => ({ ...row, name: celestialName(row.body_id, row.name) })),
+  }), [celestialName, data.display])
+  const belowRows = useMemo(() => display?.targets.filter((row) => row.altitude_deg <= 0) ?? [], [display])
 
+  const observerName = observerId && (
+    observerOptions.find((option) => option.id === observerId)?.name ?? celestialName(observerId)
+  )
+  const targetName = bodyId
+    ? celestialName(bodyId, data.display?.targets.find((row) => row.body_id === bodyId)?.name
+      ?? catalog?.bodies?.find((body) => body.id === bodyId)?.name
+      ?? catalog?.stars?.find((star) => star.id === bodyId)?.name)
+    : bgId && (background?.stars.find((star) => star.id === bgId)?.name
+      ?? background?.deep_sky.find((object) => object.id === bgId)?.name
+      ?? culture?.cultures.flatMap((entry) => entry.asterisms).find((asterism) => asterism.id === bgId)?.name
+      ?? bgId)
   const safeLook = clampLook(look)
+  const helpTarget = { pathname: '/help', hash: '#sky-viewer' }
 
   // All hooks above; the static-mode guard renders after them (packs pattern).
   if (staticMode) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh] px-6">
-        <div className="max-w-md text-center text-sm text-gray-400 leading-relaxed">
-          <div className="text-3xl mb-3">✨</div>
-          {t('sky:staticModeHint')}
-        </div>
-      </div>
+      <section className="mx-auto max-w-lg space-y-3 px-6 py-16">
+        <h1 className="text-2xl font-semibold text-gray-100">{t('title.sky')}</h1>
+        <p className="text-sm leading-relaxed text-slate-300">{t('staticModeHint')}</p>
+        <Link to={helpTarget} className="inline-flex min-h-11 items-center gap-2 text-sm text-neon-cyan hover:underline">
+          <AtlasIcon name="help" className="size-4" /> {t('ui.guide')}
+        </Link>
+      </section>
     )
   }
 
-  const chromeClass = `transition-opacity duration-300 ${
-    chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+  const chromeClass = `transition-opacity duration-300 motion-reduce:transition-none ${
+    controlsHidden ? 'invisible' : controlsVisible ? 'opacity-100' : 'opacity-0'
   }`
+  const chromeHit = controlsVisible ? 'pointer-events-auto' : ''
+  const chromeEvents = {
+    onPointerEnter: (event: PointerEvent<HTMLElement>) => {
+      if (event.pointerType === 'mouse') setControlsHovered(true)
+    },
+    onPointerLeave: () => setControlsHovered(false),
+    onFocus: () => setControlsFocused(true),
+    onBlur: (event: FocusEvent<HTMLElement>) => {
+      if (!event.currentTarget.contains(event.relatedTarget)) setControlsFocused(false)
+    },
+  }
+  const closeDialog = () => {
+    setDialog('none')
+    dialogTrigger.current?.focus()
+  }
 
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-gray-500">{t('sky:status.loading')}</div>}>
-      <div className="fixed inset-0 z-40 bg-[#030308] overflow-hidden">
+    <Suspense fallback={<div className="p-6 text-sm text-slate-300">{t('status.loading')}</div>}>
+      <main className="fixed inset-0 overflow-hidden bg-[#030308] text-slate-100 [&_:focus-visible]:outline [&_:focus-visible]:outline-2 [&_:focus-visible]:outline-offset-2 [&_:focus-visible]:outline-neon-cyan"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && dialog !== 'none') {
+            event.preventDefault()
+            closeDialog()
+          }
+        }}>
         {/* The sky, filling everything */}
-        <div ref={skyRef} className="absolute inset-0">
-          {data.error ? (
-            <div className="m-4 p-3 rounded bg-red-900/20 border border-red-500/30 text-sm text-red-300">
-              {t('sky:status.error')}: {data.error.message}
+        <div ref={skyRef} className="absolute inset-0"
+          onPointerMove={controlsHidden ? undefined : revealChrome} onPointerDown={controlsHidden ? undefined : revealChrome}>
+          {error ? (
+            <div className="flex h-full items-center justify-center px-8">
+              <div className="max-w-md text-center text-sm text-red-200" role="alert">
+                <p className="font-semibold">{t('status.error')}</p>
+                <p className="mt-1 break-words">{error.message}</p>
+              </div>
             </div>
-          ) : !data.display || (mode === 'pan' && !size) ? (
+          ) : !display || (mode === 'pan' && !size) ? (
             <div className="w-full h-full flex items-center justify-center">
-              <div className="text-sm text-gray-500 animate-pulse">{t('sky:status.loading')}</div>
+              <div className="text-sm text-slate-300" role="status">{t('status.loading')}</div>
             </div>
           ) : mode === 'pan' ? (
             <SkyPanChart
-              result={data.display}
+              result={display}
               catalog={catalog}
               width={size!.width}
               height={size!.height}
@@ -298,7 +345,7 @@ export default function SkyViewerPage() {
           ) : (
             <div className="absolute inset-0 p-4 md:p-8">
               <SkyChart
-                result={data.display}
+                result={display}
                 catalog={catalog}
                 selectedId={bodyId ?? null}
                 hoveredId={hoveredId}
@@ -315,182 +362,143 @@ export default function SkyViewerPage() {
           )}
         </div>
 
-        {/* Right-side column: the selected-body info panel and the one open
-            panel popup, translucent so the sky stays visible through them. */}
-        {(bodyId || bgId || activePanel) && (
-          <div className="absolute top-3 right-3 flex flex-col items-end gap-2 max-h-[calc(100vh-8rem)]">
-            {(bodyId || bgId) && data.display && (
-              <div
-                className="relative w-64 max-h-full overflow-y-auto border border-space-border/60 bg-space-panel/55 backdrop-blur-md rounded-lg p-3 shadow-lg"
-                onPointerEnter={() => chromePin(true)}
-                onPointerLeave={() => chromePin(false)}
-              >
-                <button
-                  type="button"
-                  onClick={clearSelection}
-                  className="absolute top-2 right-2 w-5 h-5 rounded text-gray-500 hover:text-gray-200 hover:bg-space-surface text-xs leading-none"
-                  aria-label={t('sky:info.close')}
-                  title={t('sky:info.close')}
-                >
-                  ✕
-                </button>
-                {bodyId ? (
-                  <SkyInspector result={data.display} selectedId={bodyId} />
-                ) : (
-                  <SkyObjectInspector
-                    background={background ?? undefined}
-                    cultures={culture}
-                    selectedId={bgId}
-                  />
-                )}
-              </div>
-            )}
-            {activePanel && data.display && (
-              <div
-                className="relative w-[min(560px,55vw)] max-h-full overflow-y-auto border border-space-border/60 bg-space-panel/55 backdrop-blur-md rounded-lg p-3 shadow-lg"
-                onPointerEnter={() => chromePin(true)}
-                onPointerLeave={() => chromePin(false)}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <div className="text-xs font-semibold text-neon-cyan">{t(`sky:panels.${activePanel}`)}</div>
-                  <button
-                    type="button"
-                    onClick={() => setPanel(null)}
-                    className="w-5 h-5 rounded text-gray-500 hover:text-gray-200 hover:bg-space-surface text-xs leading-none"
-                    aria-label={t('sky:info.close')}
-                    title={t('sky:info.close')}
-                  >
-                    ✕
-                  </button>
+        <div className="pointer-events-none absolute inset-0 grid grid-rows-[auto_minmax(0,1fr)_auto] gap-2 p-3 sm:p-4">
+          <header className="flex items-start justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2 rounded-xl border border-space-border bg-space-panel/95 pr-3">
+              <Link to={{ pathname: `/worlds/${worldName}`, search: branch ? new URLSearchParams({ branch }).toString() : '' }}
+                className={`${iconButton} pointer-events-auto size-11 self-start`} aria-label={t('ui.back')} title={t('ui.back')}>
+                <AtlasIcon name="back" />
+              </Link>
+              <div className="min-w-0 py-2 text-xs leading-relaxed">
+                <h1 className="truncate font-semibold text-slate-100" title={observerName ?? undefined}>
+                  {observerName ? t('ui.observingFrom', { observer: observerName }) : t('title.sky')}
+                </h1>
+                <div className="flex flex-wrap items-baseline gap-x-3 text-slate-300">
+                  <span className="whitespace-nowrap tabular-nums" title={`${t('observer.lat')}, ${t('observer.lon')}`}>
+                    {lat.toFixed(2)}°, {lon.toFixed(2)}°
+                  </span>
+                  {data.display && <span className="whitespace-nowrap tabular-nums">
+                    {referenceEpoch
+                      ? t('ui.instantFromEpoch', { epoch: referenceEpoch.label, offset: epochOffset(data.display.at_days) })
+                      : t('ui.instant', { days: data.display.at_days.toFixed(2) })}
+                  </span>}
+                  {targetName && <span className="min-w-0 truncate text-neon-cyan" title={targetName}>
+                    {t('ui.target', { name: targetName })}
+                  </span>}
                 </div>
-                {activePanel === 'almanac' ? (
-                  <SkyRiseSetTable
-                    result={data.display}
-                    selectedId={bodyId ?? null}
-                    onSelect={selectBody}
-                    defaultOpen
-                  />
-                ) : (
-                  <SkyBelowHorizonList rows={belowRows} selectedId={bodyId ?? null} />
-                )}
               </div>
+            </div>
+            <button type="button" aria-expanded={controlsVisible} aria-controls="sky-controls sky-time-controls"
+              className="pointer-events-auto inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg border border-space-border bg-space-panel/95 px-3 text-xs font-medium text-slate-200 hover:border-neon-cyan/50 hover:text-neon-cyan"
+              onClick={() => {
+                setControlsHidden(controlsVisible)
+                setControlsHovered(false)
+                setDialog('none')
+                revealChrome()
+              }}>
+              <AtlasIcon name="menu" className="size-4" />
+              {t(controlsVisible ? 'ui.hideControls' : 'ui.showControls')}
+            </button>
+          </header>
+
+          <div className="relative flex min-h-0 items-start gap-2">
+            <div id="sky-controls" className={`${chromeClass} flex max-h-full min-w-0 max-w-full flex-col gap-2`} {...chromeEvents}>
+              <div className={`${chromeHit} flex w-fit shrink-0 items-stretch rounded-lg border border-space-border bg-space-panel/95`}>
+                {([
+                  ['observer', 'globe', t('dialog.observer.title')],
+                  ['display', 'layers', t('dialog.display.title')],
+                ] as const).map(([key, icon, label]) => (
+                  <button key={key} type="button" aria-expanded={dialog === key} aria-controls={`sky-${key}-settings`}
+                    onClick={(event) => {
+                      dialogTrigger.current = event.currentTarget
+                      setDialog(dialog === key ? 'none' : key)
+                    }}
+                    className={`${iconButton} min-h-11 gap-1.5 px-2.5 text-xs aria-expanded:bg-neon-cyan/10 aria-expanded:text-neon-cyan`}>
+                    <AtlasIcon name={icon} className="size-4" /> {label}
+                  </button>
+                ))}
+                <Link to={helpTarget} target="_blank" rel="noreferrer" className={`${iconButton} size-11`} aria-label={t('ui.help')} title={t('ui.help')}>
+                  <AtlasIcon name="help" className="size-4" />
+                </Link>
+              </div>
+              <div className={`${chromeHit} flex min-h-0 w-72 max-w-full flex-col empty:hidden`}>
+                {dialog === 'observer' && <SkyObserverDialog
+                  observerOptions={observerOptions}
+                  observerId={observerId}
+                  onSelectObserver={(id) => setParam('from', id)}
+                  lat={lat}
+                  lon={lon}
+                  onLat={(value) => Number.isFinite(value) && setParam('lat', String(value))}
+                  onLon={(value) => Number.isFinite(value) && setParam('lon', String(value))}
+                  worldName={worldName ?? ''}
+                  branch={branch}
+                  onSelectBranch={(value) => setParam('branch', value)}
+                  spinSource={data.display?.spin_source ?? null}
+                  solarDayDays={solarDay}
+                />}
+                {dialog === 'display' && <SkyDisplayDialog
+                  mode={mode}
+                  onMode={(value) => setParam('mode', value === 'pan' ? null : value)}
+                  grids={grids}
+                  onGrids={setGrids}
+                  backgroundOn={backgroundOn}
+                  onBackgroundOn={(on) => setParam('bg', on ? null : '0')}
+                  cultureOn={cultureOn}
+                  onCultureOn={(on) => setParam('cul', on ? null : '0')}
+                  hasCulture={hasCulture}
+                  activePanel={activePanel}
+                  onSelectPanel={(panel) => {
+                    setPanel(panel)
+                    if (panel) closeDialog()
+                  }}
+                />}
+              </div>
+            </div>
+
+            {display && (bodyId || bgId || activePanel) && (
+              <aside className={`${dialog === 'none' ? 'flex' : 'hidden md:flex'} absolute bottom-0 right-0 max-h-[min(65%,calc(100%-3.5rem))] min-h-0 w-full flex-col items-end gap-2 md:static md:max-h-full md:min-w-0 md:w-auto md:flex-1`} aria-label={t('dialog.display.panels')}>
+                {(bodyId || bgId) && (
+                  <div className={`${panelShell} ${activePanel ? 'hidden md:block' : ''} pointer-events-auto relative w-64 max-w-full`}>
+                    <button type="button" onClick={clearSelection} className={`${iconButton} absolute right-1 top-1 size-9`}
+                      aria-label={t('ui.closeTarget')} title={t('ui.closeTarget')}>
+                      <AtlasIcon name="close" className="size-4" />
+                    </button>
+                    {bodyId ? <SkyInspector result={display} selectedId={bodyId} /> : (
+                      <SkyObjectInspector background={background ?? undefined} cultures={culture} selectedId={bgId} />
+                    )}
+                  </div>
+                )}
+                {activePanel && (
+                  <div className={`${panelShell} pointer-events-auto w-full max-w-xl`}>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <h2 className="text-xs font-semibold text-neon-cyan">{t(`panels.${activePanel}`)}</h2>
+                      <button type="button" onClick={() => setPanel(null)} className={`${iconButton} size-9`}
+                        aria-label={t('ui.closePanel')} title={t('ui.closePanel')}>
+                        <AtlasIcon name="close" className="size-4" />
+                      </button>
+                    </div>
+                    {activePanel === 'almanac' ? (
+                      <SkyRiseSetTable result={display} selectedId={bodyId ?? null} onSelect={selectBody} />
+                    ) : <SkyBelowHorizonList rows={belowRows} selectedId={bodyId ?? null} />}
+                  </div>
+                )}
+              </aside>
             )}
           </div>
-        )}
 
-        {/* Chrome: back + left-edge toolbar + bottom time bar + readout */}
-        <div className={chromeClass}>
-          <Link
-            to={`/worlds/${worldName}`}
-            className="absolute top-3 left-3 w-8 h-8 flex items-center justify-center rounded-lg border border-space-border bg-space-panel/85 backdrop-blur text-gray-400 hover:text-neon-cyan text-sm transition-colors"
-            title={t('sky:ui.back')}
-          >
-            ←
-          </Link>
-
-          {/* Left-edge toolbar (slide-out on hover like Stellarium's) */}
-          <div
-            className="absolute left-3 top-1/2 -translate-y-1/2 flex flex-col gap-2"
-            onPointerEnter={() => chromePin(true)}
-            onPointerLeave={() => chromePin(false)}
-          >
-            {(
-              [
-                ['observer', '📍', t('sky:dialog.observer.title')],
-                ['display', '🧭', t('sky:dialog.display.title')],
-              ] as const
-            ).map(([key, icon, title]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setDialog(dialog === key ? 'none' : key)}
-                className={`w-9 h-9 flex items-center justify-center rounded-lg border text-base transition-colors ${
-                  dialog === key
-                    ? 'bg-neon-cyan/15 border-neon-cyan/40 text-neon-cyan'
-                    : 'border-space-border bg-space-panel/85 backdrop-blur text-gray-400 hover:text-gray-100'
-                }`}
-                title={title}
-              >
-                {icon}
-              </button>
-            ))}
-            <a
-              href="/help#sky-viewer"
-              target="_blank"
-              rel="noreferrer"
-              className="w-9 h-9 flex items-center justify-center rounded-lg border border-space-border bg-space-panel/85 backdrop-blur text-gray-400 hover:text-gray-100 text-base"
-              title={t('sky:ui.help')}
-            >
-              ?
-            </a>
+          <div id="sky-time-controls" className={`${chromeClass} ${chromeHit} mx-auto w-full max-w-3xl rounded-xl border border-space-border bg-space-panel/95 px-3 py-2 sm:px-4`} {...chromeEvents}>
+            {mode === 'pan' && <div className="mb-1.5 flex flex-wrap justify-between gap-x-4 border-b border-space-border pb-1.5 text-xs text-slate-400">
+              <span className="tabular-nums">
+                {t('chart.azimuth')} {safeLook.azDeg.toFixed(0)}° · {t('chart.altitude')}{' '}
+                {safeLook.altDeg >= 0 ? '+' : ''}{safeLook.altDeg.toFixed(0)}° · {t('pan.fov')} {safeLook.fovDeg.toFixed(0)}°
+              </span>
+              <span className="hidden sm:inline">{t('pan.hint')}</span>
+            </div>}
+            <SkyTimeControl time={time} solarDayDays={solarDay} referenceEpoch={referenceEpoch} />
           </div>
-
-          {/* Dialogs next to the toolbar */}
-          {dialog === 'observer' && (
-            <div className="absolute left-16 top-1/2 -translate-y-1/2">
-              <SkyObserverDialog
-                observerOptions={observerOptions}
-                observerId={observerId}
-                onSelectObserver={(id) => setParam('from', id)}
-                lat={lat}
-                lon={lon}
-                onLat={(v) => Number.isFinite(v) && setParam('lat', String(v))}
-                onLon={(v) => Number.isFinite(v) && setParam('lon', String(v))}
-                worldName={worldName ?? ''}
-                branch={branch}
-                onSelectBranch={(b) => setParam('branch', b)}
-                spinSource={data.display?.spin_source ?? null}
-                solarDayDays={solarDay}
-                onPointerEnter={() => chromePin(true)}
-                onPointerLeave={() => chromePin(false)}
-              />
-            </div>
-          )}
-          {dialog === 'display' && (
-            <div className="absolute left-16 top-1/2 -translate-y-1/2">
-              <SkyDisplayDialog
-                mode={mode}
-                onMode={(m) => setParam('mode', m === 'pan' ? null : m)}
-                grids={grids}
-                onGrids={setGrids}
-                backgroundOn={backgroundOn}
-                onBackgroundOn={(on) => setParam('bg', on ? null : '0')}
-                cultureOn={cultureOn}
-                onCultureOn={(on) => setParam('cul', on ? null : '0')}
-                hasCulture={hasCulture}
-                activePanel={activePanel}
-                onSelectPanel={setPanel}
-                onPointerEnter={() => chromePin(true)}
-                onPointerLeave={() => chromePin(false)}
-              />
-            </div>
-          )}
-
-          {/* Bottom time bar (Stellarium's bottom strip) */}
-          <div
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[calc(100vw-1.5rem)] sm:w-[min(760px,calc(100vw-15rem))] border border-space-border bg-space-panel/90 backdrop-blur rounded-xl px-3 sm:px-4 py-2 shadow-xl"
-            onPointerEnter={() => chromePin(true)}
-            onPointerLeave={() => chromePin(false)}
-          >
-            <SkyTimeControl time={time} solarDayDays={solarDay} />
-          </div>
-
-          {/* View readout + hint (bottom-left, quiet like Stellarium's location line) */}
-          {mode === 'pan' && (
-            <div className="absolute bottom-4 left-3 pointer-events-none space-y-0.5 text-[10px] hidden sm:block max-w-[13rem]">
-              <div className="font-mono tabular-nums text-gray-400 bg-space-panel/70 backdrop-blur rounded px-1.5 py-0.5">
-                {t('sky:chart.azimuth')} {safeLook.azDeg.toFixed(0)}° · {t('sky:chart.altitude')}{' '}
-                {safeLook.altDeg >= 0 ? '+' : ''}
-                {safeLook.altDeg.toFixed(0)}° · {t('sky:pan.fov')} {safeLook.fovDeg.toFixed(0)}°
-              </div>
-              <div className="text-gray-600 bg-space-panel/70 backdrop-blur rounded px-1.5 py-0.5">
-                {t('sky:pan.hint')}
-              </div>
-            </div>
-          )}
         </div>
 
-      </div>
+      </main>
     </Suspense>
   )
 }

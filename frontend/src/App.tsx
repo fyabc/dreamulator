@@ -34,7 +34,8 @@ function LegacyProjectLink() {
 function App() {
   // HashRouter for GitHub Pages (no server-side SPA fallback),
   // BrowserRouter for local dev with FastAPI backend.
-  const Router = isStaticMode() ? HashRouter : BrowserRouter
+  const staticMode = isStaticMode()
+  const Router = staticMode ? HashRouter : BrowserRouter
 
   return (
     <Router>
@@ -45,7 +46,7 @@ function App() {
             <Route path="world-info" element={<Navigate to="/worlds" replace />} />
             <Route path="import" element={<ImportPage />} />
             <Route path="worlds" element={<WorldList />} />
-            {isStaticMode() && <>
+            {staticMode && <>
               <Route path="projects" element={<Navigate to="/worlds" replace />} />
               <Route path="projects/:projectId" element={<LegacyProjectLink />} />
             </>}
@@ -55,13 +56,13 @@ function App() {
             <Route path="worlds/:worldName/viewer3d" element={<StellarSystemViewerPage />} />
             <Route path="worlds/:worldName/globe" element={<GlobeViewerPage />} />
             <Route path="worlds/:worldName/globe/:planetId" element={<GlobeViewerPage />} />
-            <Route path="worlds/:worldName/sky" element={<SkyViewerPage />} />
-            <Route path="worlds/:worldName/sky/:bodyId" element={<SkyViewerPage />} />
+            {staticMode && <Route path="worlds/:worldName/sky/:bodyId?" element={<SkyViewerPage />} />}
             <Route path="packs" element={<PackViewerPage />} />
             <Route path="playground" element={<PlaygroundPage />} />
             <Route path="help" element={<HelpPage />} />
           </Route>
-          {/* Full-page editors (no Layout wrapper) */}
+          {/* Full-page workspaces (no Layout wrapper) */}
+          {!staticMode && <Route path="worlds/:worldName/sky/:bodyId?" element={<SkyViewerPage />} />}
           <Route path="worlds/:worldName/civmap" element={<CivMapEditorPage />} />
           <Route path="worlds/:worldName/civmap/:branchName" element={<CivMapEditorPage />} />
         </Routes>

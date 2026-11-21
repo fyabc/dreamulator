@@ -86,7 +86,18 @@ export interface CatalogBody {
   derived?: CatalogBodyDerived
 }
 
+export interface JulianEpochDate {
+  value: number
+  scale: 'TT' | 'TDB' | 'TCB'
+}
+
+export interface ReferenceEpoch {
+  label: string
+  julian_date?: JulianEpochDate
+}
+
 export interface SystemCatalog {
+  reference_epoch?: ReferenceEpoch
   stars?: CatalogStar[]
   orbits?: OrbitalElementsData[]
   bodies?: CatalogBody[]

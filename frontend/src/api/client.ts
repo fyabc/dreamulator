@@ -1,6 +1,7 @@
 import { isStaticMode } from './mode'
 import type { MapResultMetadata } from './resultContract'
 import { staticApi } from './staticClient'
+import type { SystemCatalog } from './catalogAdapter'
 import type { BuildGrid, BuildJob, BuildOptions, BuildSummary } from './buildJobs'
 import { mappingFormFields } from './elevationImport'
 import type {
@@ -514,7 +515,7 @@ const readApi = {
   getSystemCatalog: (name: string, branch?: string | null) =>
     isStaticMode()
       ? staticApi.getSystemCatalog(name, branch)
-      : fetchJson<any>(
+      : fetchJson<SystemCatalog>(
           `/worlds/${name}/system-catalog${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 

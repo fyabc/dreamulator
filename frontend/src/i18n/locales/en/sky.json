@@ -2,7 +2,7 @@
   "title": {
     "sky": "Sky View"
   },
-  "staticModeHint": "The sky view needs the backend engine (a parameterized query over time × location × observer) and is unavailable in static mode. Run `dreamulator serve` locally and open it from there.",
+  "staticModeHint": "The sky view calculates what is visible from a given location and time. Open this view in the local app to run those calculations.",
   "mode": {
     "pan": "Look",
     "disc": "All-sky"
@@ -41,6 +41,9 @@
     "speedUnitSolar": "solar d/s",
     "speedUnitEarth": "Earth d/s",
     "epochHint": "Instant = epoch + N days; the unit button on the right names the dial and input unit",
+    "epochDetails": "About the epoch",
+    "referenceEpoch": "Reference epoch: {{epoch}}",
+    "epochExplanation": "Day 0 is the reference state of this system catalog, not local midnight or the start of a calendar era.",
     "speedHint": "Time-flow speed (log scale; solar days/s = the dial’s own unit)"
   },
   "chart": {
@@ -145,7 +148,17 @@
   },
   "ui": {
     "back": "Back to the world page",
-    "help": "Help (new window)"
+    "help": "Sky view help (new tab)",
+    "guide": "Read the sky view guide",
+    "observingFrom": "Observing from {{observer}}",
+    "instant": "{{days}} Earth days since epoch",
+    "instantFromEpoch": "{{epoch}} {{offset}} Earth days",
+    "target": "Target: {{name}}",
+    "showControls": "Show controls",
+    "hideControls": "Hide controls",
+    "closeTarget": "Close target details",
+    "closePanel": "Close info panel",
+    "tableBody": "Body"
   },
   "info": {
     "close": "Clear selection"

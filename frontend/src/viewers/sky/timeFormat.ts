@@ -6,6 +6,25 @@
  * hour-angle math the engine does not export (an M4 idea, noted in help).
  */
 
+import type { JulianEpochDate } from '../../api/catalogAdapter'
+
+const UNIX_EPOCH_JD = 2440587.5
+const MILLISECONDS_PER_DAY = 86_400_000
+
+export function epochOffset(atDays: number): string {
+  const days = Number(atDays.toFixed(2))
+  return `${days < 0 ? '−' : '+'} ${Math.abs(days).toFixed(2)}`
+}
+
+export function julianEpochReadout({ value, scale }: JulianEpochDate) {
+  const date = new Date(Math.round((value - UNIX_EPOCH_JD) * MILLISECONDS_PER_DAY))
+  const calendar = Number.isFinite(date.getTime())
+    ? `${date.toISOString().replace('T', ' ').replace(/(?:\.000)?Z$/, '')} ${scale}`
+    : null
+  const julianDate = `JD ${Number.isInteger(value) ? value.toFixed(1) : value} ${scale}`
+  return { calendar, julianDate }
+}
+
 export interface DayReadout {
   day: number
   fraction: number

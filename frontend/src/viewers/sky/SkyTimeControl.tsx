@@ -6,12 +6,15 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { dayClock, dayReadout } from './timeFormat'
+import type { ReferenceEpoch } from '../../api/catalogAdapter'
+import AtlasIcon from '../../components/AtlasIcon'
+import { dayClock, dayReadout, julianEpochReadout } from './timeFormat'
 import type { SkyTimeState } from './useSkyTime'
 
 export interface SkyTimeControlProps {
   time: SkyTimeState
   solarDayDays: number | null
+  referenceEpoch?: ReferenceEpoch
 }
 
 const SPEED_MIN = 0.01
@@ -21,7 +24,7 @@ const LOG_MIN = -2
 const LOG_MAX = 1
 const SPEED_TICKS = [0.01, 0.1, 1, 10]
 
-export default function SkyTimeControl({ time, solarDayDays }: SkyTimeControlProps) {
+export default function SkyTimeControl({ time, solarDayDays, referenceEpoch }: SkyTimeControlProps) {
   const { t } = useTranslation('sky')
   const hasSolar = solarDayDays !== null
   const [unit, setUnit] = useState<'solar' | 'earth'>('solar')
@@ -30,6 +33,7 @@ export default function SkyTimeControl({ time, solarDayDays }: SkyTimeControlPro
 
   const readout = dayReadout(time.atLive / dayLen, 1)
   const clock = dayClock(time.atLive / dayLen, 1)
+  const epochDate = referenceEpoch?.julian_date ? julianEpochReadout(referenceEpoch.julian_date) : null
 
   // Local editing buffer for the typed input: commits on Enter/blur.
   const [editDays, setEditDays] = useState<string | null>(null)
@@ -44,14 +48,14 @@ export default function SkyTimeControl({ time, solarDayDays }: SkyTimeControlPro
   const speedSlider = Math.log10(Math.min(SPEED_MAX, Math.max(SPEED_MIN, speed)))
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px] text-gray-400">
+    <div className="relative flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px] text-gray-400">
       {/* Left: instant readout + clock + typed input + unit toggle */}
-      <div className="flex items-center gap-2 font-mono tabular-nums min-w-0" title={t('time.epochHint')}>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-mono tabular-nums" title={t('time.epochHint')}>
         <span className="whitespace-nowrap">
           {t('time.epochDays')} {readout.day}
           {t('time.day')} + {readout.fraction.toFixed(2)}
         </span>
-        {clock !== null && <span className="text-gray-500">{clock}</span>}
+        {clock !== null && <span className="text-slate-300">{clock}</span>}
         <input
           type="number"
           step={0.01}
@@ -61,7 +65,7 @@ export default function SkyTimeControl({ time, solarDayDays }: SkyTimeControlPro
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
           }}
-          className="w-20 px-1.5 py-0.5 rounded bg-space-surface text-[11px] text-gray-300 border border-space-border text-right"
+          className="min-h-8 w-20 rounded border border-space-border bg-space-surface px-1.5 text-right text-xs text-slate-200"
           aria-label={t('time.epochDays')}
           title={t('time.inputHint')}
         />
@@ -69,29 +73,47 @@ export default function SkyTimeControl({ time, solarDayDays }: SkyTimeControlPro
           <button
             type="button"
             onClick={() => setUnit(activeUnit === 'solar' ? 'earth' : 'solar')}
-            className="px-1.5 py-0.5 rounded bg-space-surface text-[10px] text-gray-500 border border-space-border hover:text-gray-300 whitespace-nowrap"
+            className="min-h-8 whitespace-nowrap rounded border border-space-border bg-space-surface px-2 text-xs text-slate-300 hover:text-white"
             title={t('time.unitHint')}
           >
             {t(activeUnit === 'solar' ? 'time.unitSolar' : 'time.unitEarth')}
           </button>
+        )}
+        {referenceEpoch && (
+          <details className="font-sans text-xs text-slate-300" title="">
+            <summary className="cursor-pointer whitespace-nowrap rounded px-1.5 py-2 hover:text-white focus-visible:outline focus-visible:outline-neon-cyan">
+              {t('time.epochDetails')}
+            </summary>
+            <div className="absolute inset-x-0 bottom-full z-20 mb-2 rounded-lg border border-space-border bg-space-panel p-3 sm:right-auto sm:w-80">
+              <p className="font-medium text-slate-100">{t('time.referenceEpoch', { epoch: referenceEpoch.label })}</p>
+              {epochDate && (
+                <p className="mt-1 tabular-nums">
+                  {epochDate.calendar && <span className="block">{epochDate.calendar}</span>}
+                  <span>{epochDate.julianDate}</span>
+                </p>
+              )}
+              <p className="mt-1.5 leading-relaxed">{t('time.epochExplanation')}</p>
+            </div>
+          </details>
         )}
       </div>
 
       {/* Right: play + log speed slider with decade ticks.  When the bar
           wraps (narrow screens) this group spreads across its own full row
           instead of hugging the right edge of a second line. */}
-      <div className="flex items-center gap-2 min-w-[11rem] flex-1 justify-between sm:justify-end">
+      <div className="flex min-w-[13rem] flex-1 items-center justify-between gap-2 sm:justify-end">
         <button
           type="button"
           onClick={() => time.setPlaying(!time.playing)}
+          aria-label={time.playing ? t('time.pause') : t('time.play')}
           title={time.playing ? t('time.pause') : t('time.play')}
-          className={`w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-xs border transition-colors ${
+          className={`flex size-9 shrink-0 items-center justify-center rounded-md border transition-colors ${
             time.playing
               ? 'bg-amber-400/20 text-amber-200 border-amber-400/40'
               : 'bg-space-surface text-gray-400 border-space-border hover:text-amber-200 hover:border-amber-400/30'
           }`}
         >
-          {time.playing ? '⏸' : '▶'}
+          <AtlasIcon name={time.playing ? 'pause' : 'play'} className="size-4" />
         </button>
         <div className="flex-1 max-w-[16rem]" title={t('time.speed')}>
           <input
@@ -104,7 +126,7 @@ export default function SkyTimeControl({ time, solarDayDays }: SkyTimeControlPro
             className="w-full accent-amber-400"
             aria-label={t('time.speed')}
           />
-          <div className="relative h-3 -mt-1 text-[9px] text-gray-600 select-none">
+          <div className="relative -mt-1 h-3 select-none text-[9px] text-slate-400">
             {SPEED_TICKS.map((tick) => (
               <span
                 key={tick}
@@ -118,7 +140,7 @@ export default function SkyTimeControl({ time, solarDayDays }: SkyTimeControlPro
           </div>
         </div>
         <span
-          className="font-mono tabular-nums text-[10px] text-gray-500 whitespace-nowrap w-20 text-right"
+          className="w-20 whitespace-nowrap text-right font-mono text-[10px] tabular-nums text-slate-300"
           title={t('time.speedHint')}
         >
           {speed.toFixed(2)} {t(hasSolar ? 'time.speedUnitSolar' : 'time.speedUnitEarth')}

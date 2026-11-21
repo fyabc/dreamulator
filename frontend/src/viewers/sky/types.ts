@@ -5,6 +5,8 @@
  * `GET /api/worlds/{world}/sky`.
  */
 
+import type { SystemCatalog } from '../../api/catalogAdapter'
+
 export interface TargetPosition {
   body_id: string
   name: string | null
@@ -67,7 +69,7 @@ export interface SkyCatalogBody {
   orbit?: { period_days?: number | null } | null
 }
 
-export interface SkyCatalog {
+export interface SkyCatalog extends Pick<SystemCatalog, 'reference_epoch'> {
   stars?: SkyCatalogStar[] | null
   bodies?: SkyCatalogBody[] | null
   target_body_id?: string | null

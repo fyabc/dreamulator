@@ -440,7 +440,7 @@
       "entries": [
         {
           "title": "Overview",
-          "content": "The sky view answers \"what is above one surface point of a body at one moment\", in a Stellarium-style fullscreen form: the sky fills the viewport and every UI element is a floating overlay that fades out after ~2.5 s of pointer idle. The default Look mode is an immersive perspective view — drag to look around, wheel/pinch to zoom; disc sizes are proportional to true angular diameters (a nearby giant planet can be a half-screen disc); on open the view aims itself at the brightest body comfortably above the horizon; clicking a body opens the detail panel top-left. The left-edge toolbar holds 📍 observation settings (observer / lat-lon / branch), 🧭 display settings (look/all-sky toggle, horizon / equatorial / ecliptic grids, optional below-horizon and almanac panels, legend) and ? help; the bottom floating bar is the time control. The All-sky mode is the whole-hemisphere overview disc marking where the pan view looks. Observer, location, instant, look, grids, panels and branch all live in the URL for sharing."
+          "content": "The sky view shows what is visible from a point on a celestial body at a given time. The top readout keeps the observer, location, instant in Earth days since epoch, and selected target in view. Observation and Display are below it, and the time controls are at the bottom. These controls fade when idle. Move over the chart, press Tab, or choose Show controls to bring them back. Hide controls keeps them out of the way until you choose to show them again.\n\nIn Look mode, drag to look around, and scroll or pinch to zoom. Click a body to open its details. In Display settings, switch to All-sky to see the whole hemisphere, or turn on coordinate grids, the rise/set almanac, and the below-horizon list. The URL records the observer, location, instant, direction, grids, panels, and world branch so you can share the view."
         },
         {
           "title": "Chart conventions",
@@ -448,7 +448,7 @@
         },
         {
           "title": "Time controls",
-          "content": "The slider spans one observer year with steps of 1/24 solar day; while dragging, the chart refreshes over a millisecond-scale fast path, and rise/set events load on release. Play advances time continuously at the chosen hours-per-second speed."
+          "content": "Enter a day count and press Enter to set the observation time. The unit button switches between the observer's solar days and Earth days. The slider sets playback speed, not the date. When playback pauses, the almanac and event predictions update for that instant."
         },
         {
           "title": "Rise/set and events",

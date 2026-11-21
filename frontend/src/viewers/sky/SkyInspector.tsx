@@ -66,13 +66,13 @@ export default function SkyInspector({ result, selectedId }: SkyInspectorProps) 
   ]
   return (
     <div>
-      <div className="text-sm font-semibold text-neon-cyan mb-2">
+      <div className="mb-2 pr-8 text-sm font-semibold text-neon-cyan">
         {row.name ?? row.body_id}
       </div>
       <dl className="space-y-1">
         {fields.map(([label, value]) => (
           <div key={label} className="flex justify-between gap-2 text-[11px]">
-            <dt className="text-gray-500 shrink-0">{label}</dt>
+            <dt className="shrink-0 text-slate-400">{label}</dt>
             <dd className="font-mono tabular-nums text-gray-300 text-right">{value}</dd>
           </div>
         ))}

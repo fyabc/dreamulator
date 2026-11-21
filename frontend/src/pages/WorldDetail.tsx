@@ -387,7 +387,7 @@ export default function WorldDetail() {
                     {/* Body encyclopedia — merged system catalog (auto-generated
                         from stellar.yaml + planets.yaml; planets.yaml is
                         authoritative for shared fields) */}
-                    {systemCatalog && (systemCatalog.bodies?.length > 0 || systemCatalog.stars?.length > 0) && (
+                    {systemCatalog && ((systemCatalog.bodies?.length ?? 0) > 0 || (systemCatalog.stars?.length ?? 0) > 0) && (
                       <section className="mb-6">
                         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
                           {t('detail.bodyEncyclopedia')}

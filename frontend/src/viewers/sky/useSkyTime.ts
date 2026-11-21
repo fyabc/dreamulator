@@ -35,7 +35,7 @@ export interface SkyTimeState {
   setSolarDay: (solarDayDays: number | null) => void
 }
 
-const DEFAULT_SPEED_SOLAR_PER_SEC = 0.08
+const DEFAULT_SPEED_SOLAR_PER_SEC = 0.01
 /** Fallback day length when the engine reports none (Earth days). */
 const FALLBACK_SOLAR_DAY = 1
 

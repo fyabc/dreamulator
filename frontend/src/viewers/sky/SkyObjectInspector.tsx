@@ -58,16 +58,16 @@ export default function SkyObjectInspector({
     }
     return (
       <div className="text-[12px] leading-relaxed">
-        <div className="text-space-accent text-[13px] font-medium mb-1.5 break-words">
+        <div className="mb-1.5 break-words pr-8 text-[13px] font-medium text-space-accent">
           {asterism.name} · {t('objectInspector.asterism')}
         </div>
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
           <div className="contents">
-            <dt className="text-gray-500">{t('objectInspector.culture')}</dt>
+            <dt className="text-slate-400">{t('objectInspector.culture')}</dt>
             <dd className="text-gray-200 text-right">{culture.name}</dd>
           </div>
           <div className="contents">
-            <dt className="text-gray-500">{t('objectInspector.members')}</dt>
+            <dt className="text-slate-400">{t('objectInspector.members')}</dt>
             <dd className="text-gray-200 text-right">{[...members.values()].join(' · ')}</dd>
           </div>
         </dl>
@@ -129,11 +129,11 @@ export default function SkyObjectInspector({
 
   return (
     <div className="text-[12px] leading-relaxed">
-      <div className="text-space-accent text-[13px] font-medium mb-1.5 break-words">{title}</div>
+      <div className="mb-1.5 break-words pr-8 text-[13px] font-medium text-space-accent">{title}</div>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
         {rows.map(([k, v], i) => (
           <div key={`${k}-${i}`} className="contents">
-            <dt className="text-gray-500">{k}</dt>
+            <dt className="text-slate-400">{k}</dt>
             <dd className="text-gray-200 text-right">{v}</dd>
           </div>
         ))}

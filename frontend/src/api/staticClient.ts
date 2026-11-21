@@ -6,6 +6,7 @@
  */
 
 import type { BuildGrid, BuildJob } from './buildJobs'
+import type { SystemCatalog } from './catalogAdapter'
 import type { RegionRefinementSource } from '../viewers/packs/types'
 import type { MapResultMetadata } from './resultContract'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
@@ -209,8 +210,8 @@ export const staticApi = {
 
   getSystemCatalog: (name: string, branch?: string | null) =>
     branch
-      ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/system_catalog.json`)
-      : fetchStaticJson<any>(`/worlds/${name}/system_catalog.json`),
+      ? fetchStaticJson<SystemCatalog>(`/worlds/${name}/branches/${branch}/system_catalog.json`)
+      : fetchStaticJson<SystemCatalog>(`/worlds/${name}/system_catalog.json`),
 
   // Branches
   listBranches: (name: string) =>
