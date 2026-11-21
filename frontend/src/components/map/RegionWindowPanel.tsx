@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -9,7 +9,7 @@ import type { LonLat } from '../../viewers/map/utils/mapCoords'
 import type { GlobeScale } from '../../viewers/map/utils/globeScale'
 import MapHelpLink from './MapHelpLink'
 
-const buttonClass = 'rounded border border-space-border bg-space-surface px-2 py-1 text-gray-200 hover:border-neon-cyan/50'
+const buttonClass = 'atlas-tool-button'
 const inputClass = 'w-24 rounded border border-space-border bg-space-surface px-2 py-1 text-gray-200'
 
 interface RegionWindowPanelProps {
@@ -32,7 +32,9 @@ export default function RegionWindowPanel({
   const location = useLocation()
   const rawWindow = search.get(REGION_WINDOW_PARAM)
   const window = readRegionWindow(rawWindow, radiusKm)
-  const [expanded, setExpanded] = useState(window !== null)
+  const [expanded, setExpanded] = useState(false)
+  const formId = useId()
+  const expandButton = useRef<HTMLButtonElement>(null)
   const regionParams = new URLSearchParams({ world, planet, radius: String(radiusKm),
     view: location.pathname.split('/')[3] === 'globe' ? 'globe' : 'map' })
   if (branch) regionParams.set('branch', branch)
@@ -51,15 +53,18 @@ export default function RegionWindowPanel({
   }
 
   return (
-    <section className="shrink-0 border-b border-space-border bg-space-panel px-3 py-2 text-xs sm:px-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={buttonClass} aria-expanded={expanded}
+    <section className="relative z-20 shrink-0 border-b border-space-border bg-space-panel px-2 py-1 text-xs md:px-4 md:py-2">
+      <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
+        <button ref={expandButton} type="button" className={buttonClass} aria-expanded={expanded} aria-controls={expanded ? formId : undefined}
           title={t('regionWindow.hint.toggle')}
           onClick={() => setExpanded((open) => !open)}>{t('regionWindow.title')}</button>
-        {window && <span className="text-neon-cyan">{t('regionWindow.summary', { ...window })}</span>}
-        {window && <Link className={buttonClass} to={`/packs?${regionParams}`} title={t('regionWindow.hint.open')}
+        {window && <span className="text-gray-300" title={t('regionWindow.summary', { ...window })}>
+          <span className="font-mono tabular-nums md:hidden" aria-hidden="true">{window.spanKm} km</span>
+          <span className="sr-only md:not-sr-only">{t('regionWindow.summary', { ...window })}</span>
+        </span>}
+        {window && <Link className={`${buttonClass} font-semibold !text-neon-cyan`} to={`/packs?${regionParams}`} title={t('regionWindow.hint.open')}
           state={{ regionReturn: `${location.pathname}${location.search}` }}>{t('regionWindow.open')}</Link>}
-        {window && onRegionScale && <>
+        {window && onRegionScale && <div className="hidden flex-wrap items-center gap-2 md:flex">
           <button type="button" className={buttonClass} onClick={() => onRegionScale('region')}>
             {t('regionWindow.zoomToRegion')}
           </button>
@@ -70,13 +75,29 @@ export default function RegionWindowPanel({
             {t('regionWindow.scaleAltitude', { km: scaleAltitudeKm.toFixed(1) })}
           </span>}
           {scaleDetail && <span role="status" className="text-gray-400">{t(`regionWindow.scaleDetail.${scaleDetail}`)}</span>}
-        </>}
+        </div>}
         <div className="ml-auto">
           <MapHelpLink section="region-selection" label={t('regionWindow.help')} />
         </div>
       </div>
       {expanded && (
-        <div className="mt-2 max-h-[40dvh] space-y-2 overflow-y-auto pr-1">
+        <div id={formId} className="absolute inset-x-0 top-full max-h-[55dvh] space-y-2 overflow-y-auto border-b border-space-border bg-space-panel p-3 shadow-lg md:static md:mt-2 md:max-h-[40dvh] md:border-0 md:p-0 md:shadow-none"
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return
+            event.preventDefault()
+            setExpanded(false)
+            expandButton.current?.focus()
+          }}>
+          {window && onRegionScale && <div className="flex flex-wrap items-center gap-2 md:hidden">
+            <button type="button" className={buttonClass} onClick={() => { onRegionScale('region'); setExpanded(false); expandButton.current?.focus() }}>
+              {t('regionWindow.zoomToRegion')}
+            </button>
+            <button type="button" className={buttonClass} onClick={() => { onRegionScale('globe'); setExpanded(false); expandButton.current?.focus() }}>
+              {t('regionWindow.zoomToGlobe')}
+            </button>
+            {scaleAltitudeKm !== undefined && <span className="text-gray-400">{t('regionWindow.scaleAltitude', { km: scaleAltitudeKm.toFixed(1) })}</span>}
+            {scaleDetail && <span role="status" className="text-gray-400">{t(`regionWindow.scaleDetail.${scaleDetail}`)}</span>}
+          </div>}
           <RegionWindowForm key={rawWindow ?? ''} initial={window} radiusKm={radiusKm}
             selectedPoint={selectedPoint} onMove={move} />
           {rawWindow && <button type="button" className={buttonClass} title={t('regionWindow.hint.clear')}

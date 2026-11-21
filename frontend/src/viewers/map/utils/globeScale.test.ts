@@ -1,7 +1,8 @@
 import { Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import {
-  globeCameraPath, GLOBE_OVERVIEW_DISTANCE, GLOBE_PREVIEW_MIN_DISTANCE, overviewCameraDistance, regionCameraDistance,
+  globeCameraPath, GLOBE_OVERVIEW_DISTANCE, GLOBE_PREVIEW_MIN_DISTANCE, overviewCameraDistance,
+  overviewProjectionZoom, regionCameraDistance,
 } from './globeScale'
 
 describe('globe region scale preview', () => {
@@ -25,6 +26,15 @@ describe('globe region scale preview', () => {
   it('fits the globe silhouette in a portrait viewport without changing direction', () => {
     const distance = overviewCameraDistance(40, 0.6)
     expect(Math.asin(1 / distance)).toBeLessThan(Math.atan(Math.tan(Math.PI / 9) * 0.6))
+  })
+
+  it('fits the ordinary overview horizontally without moving the camera into the stellar transition', () => {
+    expect(overviewProjectionZoom(40, 1.5)).toBe(1)
+    const aspect = 390 / 595
+    const zoom = overviewProjectionZoom(40, aspect)
+    const horizontal = Math.tan(Math.PI / 9) * aspect / zoom
+    const angularRadius = Math.asin(1 / GLOBE_OVERVIEW_DISTANCE)
+    expect(horizontal).toBeGreaterThan(Math.tan(angularRadius))
   })
 
   it('approaches the other side of the globe without crossing the surface', () => {

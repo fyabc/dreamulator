@@ -15,6 +15,12 @@ export function overviewCameraDistance(fovDeg: number, aspect: number): number {
   return Math.min(GLOBE_MAX_DISTANCE, Math.max(GLOBE_OVERVIEW_DISTANCE, Math.hypot(1, tangent) / tangent))
 }
 
+export function overviewProjectionZoom(fovDeg: number, aspect: number): number {
+  const globeTangent = 1 / Math.sqrt(GLOBE_OVERVIEW_DISTANCE ** 2 - 1)
+  const horizontalTangent = Math.tan(fovDeg * Math.PI / 360) * aspect
+  return Math.min(1, horizontalTangent * 0.92 / globeTangent)
+}
+
 export function regionCameraDistance(spanKm: number, radiusKm: number, fovDeg: number, aspect: number): number {
   const diagonalAngle = spanKm / (Math.SQRT2 * radiusKm)
   const overviewDistance = overviewCameraDistance(fovDeg, aspect)

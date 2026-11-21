@@ -15,9 +15,9 @@
  *   - Zoom out far enough → "转入星系视图" transition → onTransition
  */
 
-import { Suspense, useRef, useState, useEffect, useMemo } from 'react'
+import { Suspense, useRef, useState, useEffect, useLayoutEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Line, OrbitControls, Stars } from '@react-three/drei'
 import * as THREE from 'three'
 
@@ -30,7 +30,7 @@ import { lonLatToGlobePosition } from './map/utils/globeCoords'
 import GlobeRegionMaterial, { type GlobeRegionDetail } from './GlobeRegionMaterial'
 import {
   globeCameraPath, GLOBE_MAX_DISTANCE, GLOBE_OVERVIEW_DISTANCE, GLOBE_PREVIEW_MIN_DISTANCE,
-  overviewCameraDistance, regionCameraDistance, type GlobeScale,
+  overviewCameraDistance, overviewProjectionZoom, regionCameraDistance, type GlobeScale,
 } from './map/utils/globeScale'
 
 // ---------------------------------------------------------------------------
@@ -381,6 +381,8 @@ function GlobeScene({
   autoSpin = false, chrome = true, interactive = true,
   globeProjectRef, globePointProjectRef,
 }: GlobeSceneProps) {
+  const camera = useThree((state) => state.camera)
+  const { width, height } = useThree((state) => state.size)
   const controlsRef = useRef<any>(null)
   const northAnimRef = useRef<NorthAnimState | null>(null)
   const regionFlightRef = useRef<{ startTime: number; path: ReturnType<typeof globeCameraPath> } | null>(null)
@@ -394,6 +396,12 @@ function GlobeScene({
   const prevProjectionMatrixRef = useRef<number[] | null>(null)
   const viewProjRef = useRef(new THREE.Matrix4())
   const cameraWorldPosRef = useRef(new THREE.Vector3())
+
+  useLayoutEffect(() => {
+    if (!(camera instanceof THREE.PerspectiveCamera) || width <= 0 || height <= 0) return
+    camera.zoom = scalePreview ? 1 : overviewProjectionZoom(camera.fov, width / height)
+    camera.updateProjectionMatrix()
+  }, [camera, height, scalePreview, width])
 
   useEffect(() => {
     const controls = controlsRef.current

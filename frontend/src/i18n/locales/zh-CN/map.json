@@ -5,6 +5,15 @@
     "stellar": "恒星系 3D 可视化",
     "mapFallback": "地图"
   },
+  "workbench": {
+    "views": "地图视图",
+    "flat": "平面",
+    "globe": "球面",
+    "tools": "地图工具",
+    "layers": "图层",
+    "closeLayers": "关闭图层",
+    "changePlanet": "选择天体"
+  },
   "terrainSource": {
     "label": "地形来源",
     "hint": "导入高程和灰度图读取同一张高程图。计算网格用于查看引擎实际使用的格点高程。区域地图始终从高程图裁切。",

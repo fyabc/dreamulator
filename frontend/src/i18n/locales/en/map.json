@@ -5,6 +5,15 @@
     "stellar": "Stellar System 3D",
     "mapFallback": "Map"
   },
+  "workbench": {
+    "views": "Map views",
+    "flat": "Map",
+    "globe": "Globe",
+    "tools": "Map tools",
+    "layers": "Layers",
+    "closeLayers": "Close layers",
+    "changePlanet": "Choose a world body"
+  },
   "terrainSource": {
     "label": "Terrain source",
     "hint": "Imported terrain and grayscale use the same heightmap. The model mesh shows the values used by the simulation. Regional maps always crop from the heightmap.",

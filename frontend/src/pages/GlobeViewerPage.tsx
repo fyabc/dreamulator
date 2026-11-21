@@ -25,6 +25,7 @@ import TimeControl from '../components/map/TimeControl'
 import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import ClimateLegend from '../components/map/ClimateLegend'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
+import { MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import useRafCoalesced from '../viewers/map/useRafCoalesced'
 import { buildCellKDTree, type KDTree3D } from '../components/map/utils/kdtree'
@@ -242,29 +243,14 @@ export default function GlobeViewerPage() {
   return (
     <div className={cleanMode
       ? 'fixed inset-0 z-40 flex flex-col bg-[#030308]'
-      : 'flex flex-col h-[calc(100vh-56px)] md:h-screen'}>
-      {/* Top bar */}
+      : 'atlas-workbench flex flex-col'}>
       {!cleanMode && (
-      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 bg-space-panel border-b border-space-border shrink-0">
-        <Link to={`/worlds/${worldName}`}
-          className="text-gray-400 hover:text-neon-cyan transition-colors text-sm">{t('action.back')}</Link>
-        <h1 className="text-base sm:text-lg font-bold text-neon-cyan neon-glow-subtle">{t('title.globe')}</h1>
-        <span className="text-[10px] sm:text-xs text-gray-600 font-mono hidden sm:inline">{currentPlanet?.name ?? selectedPlanet}</span>
-        <div className="flex-1" />
-        <Link to={`/worlds/${worldName}/map/${selectedPlanet}${mapQS}`}
-          className="px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
-          title={t('label.switchTo2D')}>
-          🗺️ 2D
-        </Link>
-        <Link to={`/worlds/${worldName}/viewer3d${stellarQS}`}
-          className="px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-lg bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
-          title={t('label.switchToStellar')}>
-          🔭 {t('label.stellarShort')}
-        </Link>
-
+      <MapWorkbenchToolbar title={currentPlanet?.name ?? selectedPlanet ?? t('title.globe')} view="globe"
+        backTo={`/worlds/${worldName}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
+        switchTo={selectedPlanet ? `/worlds/${worldName}/map/${selectedPlanet}${mapQS}` : undefined}
+        layersOpen={leftPanelOpen} onToggleLayers={() => setLeftPanelOpen((open) => !open)}>
         {meta?.elevation_import && <TerrainSourceSelect value={terrainSource} onChange={setTerrainSource}
           width={meta.width} height={meta.height} cells={cvtMesh?.cells.length} />}
-        {/* Import elevation (same position as 2D toolbar) */}
         {selectedPlanet && (
           <ImportElevationButton
             worldName={worldName!}
@@ -273,7 +259,6 @@ export default function GlobeViewerPage() {
             onImported={handleImported}
           />
         )}
-        {/* Upload geography raster */}
         <GeographyRasterButton
           worldName={worldName!}
           branch={selectedBranch}
@@ -290,6 +275,7 @@ export default function GlobeViewerPage() {
             from the astronomy catalogs (planets + stellar bodies) */}
         {mapPlanets && mapPlanets.length > 0 && (
           <select
+            aria-label={t('workbench.changePlanet')}
             value={selectedPlanet}
             onChange={(e) => {
               const next = new URLSearchParams(searchParams)
@@ -307,19 +293,11 @@ export default function GlobeViewerPage() {
           </select>
         )}
 
-        <BranchSelector worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} />
-
-        {/* Help button — opens HelpPage in new tab */}
-        <a
-          href="/help#globe-viewer"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border bg-space-surface text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/30 transition-colors"
-          title={t('control.helpButton')}
-        >
-          ?
-        </a>
-      </div>
+        <BranchSelector compact worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} />
+        <Link to={`/worlds/${worldName}/viewer3d${stellarQS}`} className="atlas-tool-button text-sm">
+          {t('label.stellarShort')}
+        </Link>
+      </MapWorkbenchToolbar>
       )}
 
       {/* Error / info banner */}
@@ -478,61 +456,42 @@ export default function GlobeViewerPage() {
           )}
         </div>
 
-        {/* Floating toggle (mobile only) */}
-        {!cleanMode && !leftPanelOpen && (
-          <button
-            onClick={() => setLeftPanelOpen(true)}
-            className="absolute bottom-4 left-4 z-30 w-10 h-10 rounded-full bg-space-panel border border-space-border flex items-center justify-center text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/40 shadow-lg"
-            title={t('label.layerSettings')}
-          >
-            ☰
-          </button>
-        )}
-
-        {/* Left panel drawer overlay (mobile only) */}
         {!cleanMode && leftPanelOpen && (
-          <>
-            <div className="absolute inset-0 bg-black/50 z-40" onClick={() => setLeftPanelOpen(false)} />
-            <div className="absolute left-0 top-0 bottom-0 w-64 bg-space-panel z-50 overflow-y-auto p-3 space-y-4 shadow-xl">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t('label.layerSettings')}</span>
-                <button onClick={() => setLeftPanelOpen(false)} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
-              </div>
-              <TimeControl
-                monthlyMode={monthlyMode}
-                monthlyData={monthlyData}
-                onMonthlyModeChange={handleMonthlyModeChange}
-                seasonDeg={seasonDeg}
-                onSeasonChange={setSeasonDeg}
-                axialTiltDeg={axialTiltDeg}
-                playing={timelapsePlaying}
-                onPlayingChange={setTimelapsePlaying}
-                monthMs={monthMs}
-                onMonthMsChange={setMonthMs}
-                sunSweep={sunSweep}
-                onSunSweepChange={setSunSweep}
+          <MapLayerDrawer onClose={() => setLeftPanelOpen(false)}>
+            <TimeControl
+              monthlyMode={monthlyMode}
+              monthlyData={monthlyData}
+              onMonthlyModeChange={handleMonthlyModeChange}
+              seasonDeg={seasonDeg}
+              onSeasonChange={setSeasonDeg}
+              axialTiltDeg={axialTiltDeg}
+              playing={timelapsePlaying}
+              onPlayingChange={setTimelapsePlaying}
+              monthMs={monthMs}
+              onMonthMsChange={setMonthMs}
+              sunSweep={sunSweep}
+              onSunSweepChange={setSunSweep}
+            />
+            <MapLayerPanel
+              state={layerState}
+              onChange={setLayerState}
+              isEarth={worldName === 'earth'}
+              monthlyMode={monthlyMode}
+              monthlyData={monthlyData}
+              monthIndex={monthlyMonth}
+              onMonthlyModeChange={handleMonthlyModeChange}
+              particleMode={particleMode}
+              onParticleModeChange={setParticleMode}
+            />
+            <div className="mt-3 pt-3 border-t border-space-border">
+              <SunControl
+                sunLongitudeDeg={sunLongitudeDeg}
+                onLongitudeChange={setSunLongitudeDeg}
+                enabled={dayNightEnabled}
+                onEnabledChange={setDayNightEnabled}
               />
-              <MapLayerPanel
-                state={layerState}
-                onChange={setLayerState}
-                isEarth={worldName === 'earth'}
-                monthlyMode={monthlyMode}
-                monthlyData={monthlyData}
-                monthIndex={monthlyMonth}
-                onMonthlyModeChange={handleMonthlyModeChange}
-                particleMode={particleMode}
-                onParticleModeChange={setParticleMode}
-              />
-              <div className="mt-3 pt-3 border-t border-space-border">
-                <SunControl
-                  sunLongitudeDeg={sunLongitudeDeg}
-                  onLongitudeChange={setSunLongitudeDeg}
-                  enabled={dayNightEnabled}
-                  onEnabledChange={setDayNightEnabled}
-                />
-              </div>
             </div>
-          </>
+          </MapLayerDrawer>
         )}
       </div>
 
@@ -540,7 +499,7 @@ export default function GlobeViewerPage() {
         <div className="hidden md:flex absolute inset-0">
           {/* Left panel: layers */}
           {!cleanMode && (
-          <div className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3 space-y-4">
+          <div className="w-56 shrink-0 bg-space-panel border-r border-space-border overflow-y-auto p-3 space-y-4">
             <TimeControl
               monthlyMode={monthlyMode}
               monthlyData={monthlyData}
