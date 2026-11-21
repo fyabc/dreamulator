@@ -3,8 +3,14 @@ import { assertProjectCapacity, projectBytes, type LocalProject } from './elevat
 const storeName = 'projects'
 export const projectsKey = ['browser-projects'] as const
 export const projectKey = (id: string) => [...projectsKey, id]
-export const worldDataPath = (id: string, layerId?: string) =>
-  `/worlds/${encodeURIComponent(id)}?tab=data${layerId ? `&layer=${encodeURIComponent(layerId)}` : ''}`
+export const worldDataPath = (id: string, branch?: string | null) =>
+  `/worlds/${encodeURIComponent(id)}?tab=data${branch ? `&branch=${encodeURIComponent(branch)}` : ''}`
+
+export function projectRegionPath(id: string, layerId: string, branch?: string | null) {
+  const search = new URLSearchParams({ project: id, layer: layerId })
+  if (branch) search.set('branch', branch)
+  return `/packs?${search}`
+}
 
 function openProjects() {
   return new Promise<IDBDatabase>((resolve, reject) => {

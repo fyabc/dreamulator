@@ -1,4 +1,4 @@
-import { useParams, Link, useSearchParams } from 'react-router-dom'
+import { useParams, Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
@@ -13,7 +13,7 @@ import LayerDag from '../components/LayerDag'
 import LayerTabSection from '../components/world/LayerTabSection'
 import WorldBuildPanel from '../components/world/WorldBuildPanel'
 import StarfieldBackground from '../components/StarfieldBackground'
-import { getProject, projectKey } from '../projects/projectStore'
+import { getProject, projectKey, projectRegionPath } from '../projects/projectStore'
 
 const WorldDataPanel = lazy(() => import('../components/world/WorldDataPanel'))
 
@@ -118,6 +118,7 @@ export default function WorldDetail() {
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab') as TabType
   const activeTab = availableTabs.includes(requestedTab) ? requestedTab : availableTabs[0]
+  const legacyLayer = staticMode && activeTab === 'data' ? searchParams.get('layer') : null
 
   // Branch and tab persisted in URL search params (?branch=ERE-if&tab=civilization)
   const selectedBranch = searchParams.get('branch') || null
@@ -151,7 +152,7 @@ export default function WorldDetail() {
   } = useQuery({
     queryKey: ['world', worldName],
     queryFn: () => api.getWorld(worldName!),
-    enabled: !!worldName && !localWorld && (!staticMode || !browserWorld.isPending),
+    enabled: !!worldName && !localWorld && legacyLayer === null && (!staticMode || !browserWorld.isPending),
   })
 
   const { data: stellarSystem } = useQuery({
@@ -207,6 +208,10 @@ export default function WorldDetail() {
   const waiting = isLoading || (staticMode && !!worldName && browserWorld.isPending)
   const offlineData = staticMode && !!error && browserWorld.data?.published === true
 
+  if (worldName && legacyLayer !== null) {
+    return <Navigate to={projectRegionPath(worldName, legacyLayer, selectedBranch)} replace />
+  }
+
   return (
     <div className="relative min-h-screen">
       <StarfieldBackground />
@@ -228,18 +233,18 @@ export default function WorldDetail() {
 
         {worldName && !waiting && (!error || offlineData) && (
           <>
-            <div className="flex items-center gap-4 mb-4">
+            <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
               <Link
                 to="/worlds"
                 className="text-gray-400 hover:text-neon-cyan transition-colors"
               >
                 {t('action.back')}
               </Link>
-              <h1 className="text-3xl font-bold text-neon-cyan neon-glow-subtle">
+              <h1 className="min-w-0 break-words text-2xl font-bold text-neon-cyan neon-glow-subtle sm:text-3xl">
                 {localWorld?.name ?? worldName}
               </h1>
               {staticMode && (
-                <span className="text-xs px-2 py-0.5 rounded bg-space-surface text-gray-500 border border-space-border">
+                <span className="rounded border border-space-border bg-space-surface px-2 py-0.5 text-xs text-gray-300">
                   {t(localWorld ? 'worldData.localBadge' : 'worldData.publishedBadge')}
                 </span>
               )}
@@ -316,7 +321,7 @@ export default function WorldDetail() {
             </div>
 
             {staticMode && (activeTab === 'data' || offlineData) && <Suspense fallback={<p>{t('worldData.loading')}</p>}>
-              <WorldDataPanel key={worldName} id={worldName} published={!localWorld} />
+              <WorldDataPanel key={worldName} id={worldName} published={!localWorld} publishedAvailable={!!world} />
             </Suspense>}
 
             {activeTab === 'overview' && world && (

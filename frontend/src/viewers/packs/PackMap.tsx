@@ -28,6 +28,7 @@ interface PackMapProps {
   base: { url: string; opacity?: number } | null
   rivers: RiverData | null
   graticuleOn: boolean
+  zoomSnap?: number
   pin: LonLat | null
   onHover: (ll: LonLat | null) => void
   onProbe: (ll: LonLat) => void
@@ -75,6 +76,7 @@ export default function PackMap({
   base,
   rivers,
   graticuleOn,
+  zoomSnap = 1,
   pin,
   onHover,
   onProbe,
@@ -139,9 +141,10 @@ export default function PackMap({
     const map = mapRef.current
     if (!map) return
     const bounds = boundsOf(window)
+    map.options.zoomSnap = zoomSnap
     map.setMaxBounds(bounds.pad(0.5))
     map.fitBounds(bounds)
-  }, [window])
+  }, [window, zoomSnap])
 
   // Base layer.
   useEffect(() => {

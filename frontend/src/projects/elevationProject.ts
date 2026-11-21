@@ -25,6 +25,11 @@ export type ElevationResult = LayerBase & {
 export type ProjectLayer = ElevationSource | ElevationResult
 export type LocalProject = { id: string; name: string; updatedAt: number; layers: ProjectLayer[]; published?: true }
 
+export function elevationSource(layers: ProjectLayer[], layer: ProjectLayer): ElevationSource | undefined {
+  return layer.kind === 'elevation-source' ? layer :
+    layers.find((input): input is ElevationSource => input.kind === 'elevation-source' && input.id === layer.sourceId)
+}
+
 export function projectBytes(project: LocalProject) {
   return project.layers.reduce((size, layer) => size + layer.data.size + (layer.kind === 'elevation-source' ? layer.original?.data.size ?? 0 : 0), 0)
 }

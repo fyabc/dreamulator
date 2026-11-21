@@ -22,6 +22,7 @@ import PackStatusBar from '../viewers/packs/PackStatusBar'
 import ProbePanel from '../viewers/packs/ProbePanel'
 import RegionalExtractView from '../viewers/packs/RegionalExtractView'
 import RegionMapWorkspace from '../viewers/packs/RegionMapWorkspace'
+import SavedRegionView from '../viewers/packs/SavedRegionView'
 import PackElevationDownload from '../viewers/packs/PackElevationDownload'
 import RegionRefinementPanel from '../viewers/packs/RegionRefinementPanel'
 import TerrainCompute from '../viewers/packs/TerrainCompute'
@@ -62,9 +63,14 @@ export default function PackViewerPage() {
   const { t } = useTranslation('map')
   const [search] = useSearchParams()
   const { state } = useLocation()
+  const project = search.get('project')
+  const layer = search.get('layer')
+  const branch = search.get('branch') || null
+  if (project !== null) {
+    return <SavedRegionView key={search.toString()} projectId={project} layerId={layer} branch={branch} />
+  }
   const world = search.get('world')
   const planet = search.get('planet')
-  const branch = search.get('branch') || null
   const radiusKm = Number(search.get('radius'))
   const rawWindow = search.get(REGION_WINDOW_PARAM)
   const selection = readRegionWindow(rawWindow, radiusKm)
