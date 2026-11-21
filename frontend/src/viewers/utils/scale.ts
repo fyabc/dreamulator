@@ -92,7 +92,7 @@ export function effectiveVisualRadius(realRadiusAU: number): number {
 // Orbital position computation (real AU, no scaling)
 // ---------------------------------------------------------------------------
 
-interface OrbitalElements {
+export interface OrbitalElements {
   semi_major_axis_au: number
   eccentricity: number
   inclination_deg: number

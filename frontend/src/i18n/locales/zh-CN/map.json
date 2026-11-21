@@ -377,8 +377,8 @@
     "deepestSea": "最深海",
     "plateCount": "板块数",
     "cellCount": "网格单元",
-    "globe3d": "🌐 3D 球面",
-    "map2d": "🗺️ 2D 地图",
+    "globe3d": "3D 球面",
+    "map2d": "2D 地图",
     "sectionOrbit": "轨道",
     "orbitParent": "绕行",
     "semiMajorAxis": "半长轴",
@@ -416,8 +416,7 @@
     "sectionHZ": "宜居带",
     "habitableZoneRange": "保守宜居带",
     "habitableZoneRangeOptimistic": "乐观宜居带",
-    "habitableZoneCenter": "宜居带中心",
-    "focusButton": "🎯 聚焦并拉近"
+    "habitableZoneCenter": "宜居带中心"
   },
   "planetType": {
     "terrestrial": "类地行星",
@@ -441,7 +440,7 @@
     "noData": "无恒星系数据可用于 3D 可视化",
     "renderError": "3D 场景渲染失败，请尝试刷新页面。",
     "loading": "加载 3D 场景...",
-    "controlsHint": "🖱 拖拽旋转 · 滚轮缩放 · 单击选中并居中 · 双击聚焦",
+    "closeDetails": "关闭天体详情",
     "distance": "视距:",
     "habitableZone": "宜居带（保守）",
     "habitableZoneOptimistic": "宜居带（乐观）",

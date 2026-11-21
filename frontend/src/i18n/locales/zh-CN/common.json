@@ -42,8 +42,16 @@
     "fallbackMessage": "此组件在渲染时发生了错误。请尝试刷新页面。"
   },
   "stellar": {
-    "title": "恒星系 3D 可视化",
-    "selectPlanet": "选择行星...",
+    "title": "恒星系",
+    "focusedBody": "聚焦天体",
+    "noFocus": "未选中天体",
+    "backToWorld": "回到世界概览",
+    "details": "天体详情",
+    "viewOrbit": "查看轨道",
+    "closeUp": "近看天体",
+    "openFlatMap": "前往平面地图",
+    "openGlobeMap": "前往球面地图",
+    "help": "帮助",
     "loadFailed": "数据加载失败",
     "loadFailedDetail": "恒星系数据无法加载，请检查网络连接或世界配置。",
     "groupStars": "恒星",

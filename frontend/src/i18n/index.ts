@@ -10,6 +10,7 @@
  * | `worlds`  | World management (CRUD, build, branch) | `worlds:action.newWorld` |
  * | `help`    | Help page (sections, content) — future |
  * | `importer` | Heightmap import journey (mapping, preview, confirm) | `importer:mode.range.label` |
+ * | `celestial` | Catalog display names keyed by world and body ID | `celestial:earth.planet_earth` |
  *
  * ## Adding a new language
  *
@@ -43,6 +44,7 @@ import helpZh from './locales/zh-CN/help.json'
 import playgroundZh from './locales/zh-CN/playground.json'
 import skyZh from './locales/zh-CN/sky.json'
 import importerZh from './locales/zh-CN/importer.json'
+import celestialZh from './locales/zh-CN/celestial.json'
 import commonEn from './locales/en/common.json'
 import mapEn from './locales/en/map.json'
 import worldsEn from './locales/en/worlds.json'
@@ -51,6 +53,7 @@ import helpEn from './locales/en/help.json'
 import playgroundEn from './locales/en/playground.json'
 import skyEn from './locales/en/sky.json'
 import importerEn from './locales/en/importer.json'
+import celestialEn from './locales/en/celestial.json'
 
 /** Languages with at least partial translation coverage. */
 export const SUPPORTED_LANGUAGES = [
@@ -80,13 +83,13 @@ i18n.on('languageChanged', (language) => {
 
 i18n.use(initReactI18next).init({
   resources: {
-    'zh-CN': { common: commonZh, map: mapZh, worlds: worldsZh, civmap: civmapZh, help: helpZh, playground: playgroundZh, sky: skyZh, importer: importerZh },
-    en: { common: commonEn, map: mapEn, worlds: worldsEn, civmap: civmapEn, help: helpEn, playground: playgroundEn, sky: skyEn, importer: importerEn },
+    'zh-CN': { common: commonZh, map: mapZh, worlds: worldsZh, civmap: civmapZh, help: helpZh, playground: playgroundZh, sky: skyZh, importer: importerZh, celestial: celestialZh },
+    en: { common: commonEn, map: mapEn, worlds: worldsEn, civmap: civmapEn, help: helpEn, playground: playgroundEn, sky: skyEn, importer: importerEn, celestial: celestialEn },
   },
   lng: getInitialLanguage(),
   fallbackLng: 'zh-CN',
   defaultNS: 'common',
-  ns: ['common', 'map', 'worlds', 'civmap', 'help', 'playground', 'sky', 'importer'],
+  ns: ['common', 'map', 'worlds', 'civmap', 'help', 'playground', 'sky', 'importer', 'celestial'],
   interpolation: { escapeValue: false }, // React already escapes
   returnNull: false,
   // Show keys in development so missing translations are obvious.

@@ -14,9 +14,9 @@
  * (CatalogBody / CatalogBody.derived), passed down by the page.
  */
 
-import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import AtlasIcon from '../components/AtlasIcon'
 import type { StarData } from './StarMesh'
 import type { PlanetData } from './PlanetMesh'
 import { formatRadius, formatMass } from './utils/scale'
@@ -31,12 +31,6 @@ type SelectedBody =
 interface InfoPanelProps {
   selected: SelectedBody
   onClose: () => void
-  /** World name — enables the "3D globe" link when a planet is selected. */
-  worldName?: string
-  /** Current branch search-param string (e.g. "?branch=foo"). */
-  branchQS?: string
-  /** Set of planet IDs that have 2D map / globe data. */
-  mapPlanetIds?: Set<string>
   /** CVT mesh for the selected planet — enables terrain summary section. */
   cvtMesh?: CVTMesh | null
   /** System-catalog entry for the selected body (rich physical/derived fields). */
@@ -47,8 +41,6 @@ interface InfoPanelProps {
   parentName?: string
   /** How many satellites orbit this body. */
   satelliteCount?: number
-  /** "Focus & zoom in": camera flies to the body and dollies to close range. */
-  onFocus?: () => void
 }
 
 const PLANET_TYPE_LABELS: Record<string, string> = {
@@ -62,9 +54,9 @@ const PLANET_TYPE_LABELS: Record<string, string> = {
 function InfoRow({ label, value }: { label: string; value: string | number | undefined }) {
   if (value == null) return null
   return (
-    <div className="flex justify-between gap-4 text-sm py-px">
-      <span className="text-gray-500">{label}</span>
-      <span className="text-gray-200 font-mono text-right">{value}</span>
+    <div className="flex justify-between gap-3 py-0.5 text-sm">
+      <span className="text-gray-300">{label}</span>
+      <span className="min-w-0 break-words text-right tabular-nums text-gray-100">{value}</span>
     </div>
   )
 }
@@ -73,7 +65,7 @@ function InfoRow({ label, value }: { label: string; value: string | number | und
 function Section({ title }: { title: string }) {
   return (
     <div className="mt-2 pt-2 border-t border-space-border">
-      <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">
+      <div className="text-xs font-semibold text-gray-300">
         {title}
       </div>
     </div>
@@ -88,15 +80,11 @@ function sig(x: number, precision = 3): string {
 export default function InfoPanel({
   selected,
   onClose,
-  worldName,
-  branchQS,
-  mapPlanetIds,
   cvtMesh,
   catalogBody,
   catalogStar,
   parentName,
   satelliteCount,
-  onFocus,
 }: InfoPanelProps) {
   const { t } = useTranslation('map')
   const [terrainOpen, setTerrainOpen] = useState(false)
@@ -114,64 +102,28 @@ export default function InfoPanel({
   }
 
   return (
-    <div
-      className="absolute bottom-4 right-4 z-10 w-80"
-      style={{ pointerEvents: 'auto' }}
-    >
-      <div className="glass-panel p-4 max-h-[70vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <span className="text-xs px-1.5 py-0.5 rounded bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/20 mr-2">
-              {selected.type === 'star' ? t('info.star') : t('info.planet')}
-            </span>
-            <span className="font-semibold text-neon-cyan">
-              {selected.data.name}
-            </span>
-          </div>
+    <aside id="stellar-body-details" aria-labelledby="stellar-body-name"
+      className="absolute inset-x-2 bottom-2 z-10 flex max-h-[42%] flex-col overflow-hidden rounded-xl border border-space-border bg-space-panel sm:left-auto sm:right-4 sm:bottom-4 sm:max-h-[75%] sm:w-80"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.stopPropagation()
+          onClose()
+        }
+      }}>
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-space-border px-3 py-1.5">
+          <h2 id="stellar-body-name" className="min-w-0 break-words font-semibold text-gray-100">
+            {selected.data.name ?? selected.data.id}
+          </h2>
           <button
+            type="button"
+            aria-label={t('viewer.closeDetails')}
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-200 transition-colors p-1"
+            className="grid size-10 shrink-0 place-items-center rounded-md text-gray-300 hover:bg-space-surface"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <AtlasIcon name="close" />
           </button>
         </div>
-
-        {/* Action buttons — at the top so they're reachable without scrolling
-            through the field sections */}
-        {(onFocus || (selected.type === 'planet' && worldName)) && (
-          <div className="mb-3 flex gap-2">
-            {onFocus && (
-              <button
-                onClick={onFocus}
-                className="flex-1 text-center px-2 py-1.5 text-xs rounded bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
-              >
-                {t('info.focusButton')}
-              </button>
-            )}
-            {selected.type === 'planet' && worldName && mapPlanetIds?.has(selected.data.id) && (
-              <Link
-                to={`/worlds/${worldName}/globe/${selected.data.id}${branchQS ?? ''}`}
-                onClick={onClose}
-                className="flex-1 text-center px-2 py-1.5 text-xs rounded bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
-              >
-                {t('info.globe3d')}
-              </Link>
-            )}
-            {selected.type === 'planet' && worldName && mapPlanetIds?.has(selected.data.id) && (
-              <Link
-                to={`/worlds/${worldName}/map/${selected.data.id}${branchQS ?? ''}`}
-                onClick={onClose}
-                className="flex-1 text-center px-2 py-1.5 text-xs rounded bg-space-surface text-gray-300 hover:text-neon-cyan border border-space-border hover:border-neon-cyan/30 transition-colors"
-              >
-                {t('info.map2d')}
-              </Link>
-            )}
-          </div>
-        )}
-
+      <div tabIndex={0} className="min-h-0 overflow-y-auto overscroll-contain px-3 py-2">
         {/* Star details */}
         {selected.type === 'star' && (() => {
           const star = selected.data
@@ -421,7 +373,7 @@ export default function InfoPanel({
           <span className="text-xs text-gray-600 font-mono">{selected.data.id}</span>
         </div>
       </div>
-    </div>
+    </aside>
   )
 }
 

@@ -319,7 +319,7 @@
       "entries": [
         {
           "title": "Basics",
-          "content": "**Drag** — rotate\n**Scroll** — zoom\n**Right-drag** — pan\n\nClick a body → open the info panel and fly/center the camera on it (URL focus param synced). Double-click → center immediately (zoom unchanged). The panel's \"🎯 Focus & zoom\" button → center and pull in to ~4× the body's radius. Click empty space → deselect."
+          "content": "Drag to rotate, scroll or pinch to zoom, and right-drag to pan. The scale and viewing distance appear below the scene.\n\nClick a body or choose it from the Focus menu to select and center it without automatically zooming in. View orbit frames the primary body and the entire orbit, with a crosshair marking the selected body. View close-up frames the body itself. The selection is saved in the URL. Click empty space or choose No body selected to clear it."
         },
         {
           "title": "Planet textures",
@@ -330,8 +330,8 @@
           "content": "A green ring marks the habitable zone (liquid water can exist on the surface), computed per Kopparapu et al. 2013 from stellar luminosity and effective temperature. The darker solid band is the conservative HZ (runaway greenhouse to maximum greenhouse); the fainter dashed halo is the optimistic HZ (recent Venus to early Mars). An eccentric orbit can briefly cross the conservative inner edge at perihelion — the orbit-averaged flux is the climatically relevant measure."
         },
         {
-          "title": "Planet info panel",
-          "content": "Clicking a body opens the InfoPanel (data from the system catalog):\n\n- Orbit (parent, semi-major axis, eccentricity, inclination, period)\n- Physical (mass, radius, surface gravity, magnetic field)\n- Rotation & seasons (rotation, tidal lock, solar day, days per year, season length, polar circles)\n- Atmosphere & hydrosphere (pressure, greenhouse warming, composition, water coverage, salinity, depth)\n- Insolation & thermal (instellation, equilibrium temperature, habitable-zone membership)\n- Lithosphere (plate tectonics, plate count, volcanism)\n- With map data: 🌍 terrain summary + 3D globe / 2D map links"
+          "title": "Body details and maps",
+          "content": "Click a body or its label in the scene to open its details. If you select a body from the dropdown, use Body details to open the panel. Go to flat map and Go to globe map appear in the toolbar only when the selected body has map data. Both links leave the stellar system view without needing to open the details first.\n\nThe details group orbital and physical properties, rotation and seasons, atmosphere and water, radiation and temperature, and plate tectonics. When terrain data is available, the panel also shows an elevation summary."
         }
       ]
     },

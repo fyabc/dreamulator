@@ -42,8 +42,16 @@
     "fallbackMessage": "This component failed to render. Please try refreshing the page."
   },
   "stellar": {
-    "title": "Stellar System 3D",
-    "selectPlanet": "Select planet...",
+    "title": "Stellar system",
+    "focusedBody": "Focus",
+    "noFocus": "No body selected",
+    "backToWorld": "Back to world overview",
+    "details": "Body details",
+    "viewOrbit": "View orbit",
+    "closeUp": "View close-up",
+    "openFlatMap": "Go to flat map",
+    "openGlobeMap": "Go to globe map",
+    "help": "Help",
     "loadFailed": "Data load failed",
     "loadFailedDetail": "Stellar system data could not be loaded. Check your network or world configuration.",
     "groupStars": "Stars",

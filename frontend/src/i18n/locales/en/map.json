@@ -377,8 +377,8 @@
     "deepestSea": "Deepest sea",
     "plateCount": "Plate count",
     "cellCount": "Mesh cells",
-    "globe3d": "🌐 3D Globe",
-    "map2d": "🗺️ 2D Map",
+    "globe3d": "3D globe",
+    "map2d": "2D map",
     "sectionOrbit": "Orbit",
     "orbitParent": "Orbits",
     "semiMajorAxis": "Semi-major axis",
@@ -416,8 +416,7 @@
     "sectionHZ": "Habitable zone",
     "habitableZoneRange": "Conservative HZ",
     "habitableZoneRangeOptimistic": "Optimistic HZ",
-    "habitableZoneCenter": "HZ center",
-    "focusButton": "🎯 Focus & zoom"
+    "habitableZoneCenter": "HZ center"
   },
   "planetType": {
     "terrestrial": "Terrestrial",
@@ -441,7 +440,7 @@
     "noData": "No stellar system data for 3D visualization",
     "renderError": "3D scene rendering failed, try refreshing the page.",
     "loading": "Loading 3D scene...",
-    "controlsHint": "🖱 Drag to rotate · scroll to zoom · click to select & center · double-click to focus",
+    "closeDetails": "Close body details",
     "distance": "Distance:",
     "habitableZone": "HZ (conservative)",
     "habitableZoneOptimistic": "HZ (optimistic)",

@@ -50,10 +50,8 @@ StellarSystemViewer
 - 容器 `h-full` 填满页面 flex 布局的剩余高度（`minHeight: calc(100vh - 140px)`
   兜底——固定 `70vh` 会在高窗口下留出底部空白条）
 - 场景灯光和背景星场（drei `<Stars>`）
-- `<OrbitControls>` 相机控制（maxDistance: 200 AU；minDistance 动态计算：聚焦天体时 = 1.5 × 天体真实半径，无焦点时 = 0.005 AU）
-- **聚焦飞行**：`focusTargetRef` + `useFrame` 中 `controls.target.lerp()` 平滑飞向
-  目标天体；`focusDollyRef` 置位时（InfoPanel「聚焦并拉近」按钮）同时把相机
-  拉到 ~4× 天体真实半径，吸附容差按半径相对化（小天体精确定位）
+- `<OrbitControls>` 将最大视距限制在 200 AU。最小视距是当前相机支点所对应天体半径的 1.5 倍；半径未知时采用默认限值。
+- `useFrame` 平滑移动相机支点，并按距离的对数插值完成跨尺度缩放。居中时保留视距；查看轨道时以母天体为支点，近看时以选中的天体为支点。
 - 组装所有子组件
 - HUD 覆盖层（视距显示、图例）
 
@@ -102,7 +100,6 @@ StellarSystemViewer
 | 辐照与温度 | 恒星辐照（W/m² + ×Earth）、平衡温度、宜居带归属 | catalog `derived` |
 | 岩石圈 | 板块构造、板块数、火山活动 | catalog `lithosphere` |
 | 🌍 地形数据 | 海陆比、面积、高程范围、板块/网格数（折叠） | CVT mesh |
-| 动作 | 🎯 聚焦并拉近 / 🌐 3D 球面 / 🗺️ 2D 地图 | — |
 
 恒星面板：光谱型、温度、半径、光度、质量 + 演化分组（年龄、主序寿命、
 演化进度）+ 宜居带分组（范围、中心）。
@@ -147,11 +144,11 @@ StellarSystemViewer
 
 | 技术 | 参考来源 | 作用 |
 |------|---------|------|
-| Leader line 标注 | Celestia, Space Engine | dot + 引线 + 文字，任意缩放级别可见 |
+| 屏幕标注 | Celestia、SpaceEngine | 准星、引线和文字可定位亚像素天体。所选天体不受普通标签去重叠规则限制。 |
 | 最小 glow 壳（仅恒星） | Universe Sandbox | 0.008 AU 的 additive blending 球体 |
 | 外层软光晕 | Space Engine | 2.5× 最小半径的 BackSide 渲染 |
-| `logarithmicDepthBuffer` | Three.js best practice | 处理 near=0.00001 / far=5000 的极端比 |
-| 动态缩放范围 | Space Engine | 1.5× 天体半径 – 200 AU，minDistance 随聚焦目标自适应 |
+| 对数深度缓冲 | Three.js | 对数深度缓冲改善大尺度场景的深度精度；相机仍需单独调整近裁剪面。 |
+| 动态近裁剪面 | 透视相机的视锥几何 | 近裁剪面通常取视距的 5%，且不超过 0.00001 AU，使微小天体的表面不会在近观时被裁掉。 |
 | 视距 HUD | Space Engine | 实时显示当前观察距离（AU/km 自适应） |
 | 标签去重叠 | Space Engine, Universe Sandbox | 角大小阈值隐藏子天体标签，父天体显示聚合计数 |
 
@@ -272,20 +269,20 @@ catalog body 的 `hydrosphere.water_coverage`，缺省或 <0.5% = 无水）：
 
 在静态模式下，这些端点由 `frontend/public/data/` 中预导出的 JSON 文件提供（通过 `scripts/release/export_static.py` 生成）。
 
-## 选中 / 聚焦与 URL 状态同步
+## 相机取景与选中状态
 
-- **单击** = 选中天体（弹 InfoPanel）+ 镜头飞向居中；选中态写入 URL 的
-  `?focus=<body_id>`（`replace` 不污染历史），取消选中则删除——刷新/分享
-  链接可回到同一聚焦视野（`?focus=` 同时驱动 Scene 的自动聚焦 effect，
-  恒星 id 也合法）。
-- **双击** = 立即居中（不改变缩放距离）；与单击的飞行同路径
-  （`focusTargetRef`）。
-- **InfoPanel 🎯 按钮** = 居中 + 拉近（`focusDollyRef` → 相机 lerp 到
-  ~4× 天体真实半径），替代滚轮从系统尺度逐级缩放。
-- 页首天体下拉以 optgroup 列出恒星与全部天体；选中项始终与 `?focus=`
-  一致，且**所有条目统一为聚焦并拉近**（`focusRequest` 命令式请求 →
-  `focusBody(id, dolly=true)`，与 InfoPanel 按钮同路径）；🌐 后缀仅标记
-  有地图数据，进入球面/地图走 InfoPanel 按钮。
+点击场景中的天体或标签会选中天体、居中并打开详情。下拉菜单只选中并居中，不强制拉近。选中状态写入 URL 的 `?focus=<body_id>`，取景方式和相机距离不写入 URL。
+
+- **查看轨道**以母天体为中心，用轨道远点距离加上选中天体半径，与母天体半径一同确定包围球。相机按横向和纵向视场角中较窄的一侧留出边距，并从接近轨道面法线的方向观察，避免轨道在画面中挤成一条线。选中轨道加亮，准星标记天体在轨道上的位置。
+- **近看天体**按真实半径取景。相机通常停在约四倍天体半径处；如果画布较窄，相机会退到足以容纳整个本体的位置。在近观距离内，隐藏所选天体的轨道线，避免它横穿本体画面。
+
+### 导航设计参考
+
+| 参考 | 可借鉴的做法 |
+|---|---|
+| [SpaceEngine 手册的 Autopilot 小节](https://spaceengine.org/manual/user-manual-0980/)与 [Celestia 的按键说明](https://github.com/CelestiaProject/Celestia/blob/master/controls.txt) | 两者都把居中和飞近分成两个动作。Celestia 还可以独立控制轨道线显示。选中天体不必立即改变观察尺度。 |
+| [OpenSpace 的 Anchor & Aim 导航](https://docs.openspaceproject.com/latest/getting-started/orientation/index.html) | 相机围绕运动的锚点与镜头朝向的目标可以是不同天体。这说明选中的卫星不必同时充当相机支点。 |
+| [CesiumJS 的 `flyToBoundingSphere`](https://cesium.com/learn/cesiumjs/ref-doc/Camera.html#flyToBoundingSphere) | 可以按对象集合的包围球自动计算视距。恒星系的轨道视图也按要展示的范围取景，而不按小天体的本体半径取景。 |
 
 ## 角落控件候选清单（设计盘点，未实现）
 

@@ -13,7 +13,7 @@
 
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useQueries } from '@tanstack/react-query'
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import * as THREE from 'three'
 import { api } from '../api/client'
@@ -24,21 +24,25 @@ import {
 } from '../api/catalogAdapter'
 import StellarSystemViewer from '../viewers/StellarSystemViewer'
 import BranchSelector from '../components/BranchSelector'
+import AtlasIcon from '../components/AtlasIcon'
+import { useCelestialName } from '../i18n/celestialNames'
 import { decodePngToFloat32, generatePlanetTexture } from '../viewers/map/utils/imageCodec'
 import type { SelectedBody } from '../viewers/InfoPanel'
+import type { StellarFocusMode } from '../viewers/utils/stellarCamera'
+
+const actionClass = 'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md border border-space-border px-2.5 text-sm font-medium text-gray-200 hover:bg-space-surface'
+const combineQueryData = <Data,>(results: { data?: Data }[]) => results.map(({ data }) => data)
 
 export default function StellarSystemViewerPage() {
   const { t } = useTranslation('common')
   const { worldName } = useParams<{ worldName: string }>()
+  const celestialName = useCelestialName(worldName)
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedBranch = searchParams.get('branch') || null
-  const focusPlanetId = searchParams.get('focus') || undefined
-  const [selectedBody, setSelectedBody] = useState<SelectedBody>(null)
-  // Imperative focus requests from the body-selector dropdown: fly to the
-  // body AND pull in (dolly), for every entry uniformly — map access stays
-  // in the InfoPanel buttons.  `nonce` makes repeated picks of the same
-  // body re-trigger the flight.
-  const [focusRequest, setFocusRequest] = useState<{ id: string; nonce: number } | null>(null)
+  const requestedBodyId = searchParams.get('focus')
+  const [detailsBodyId, setDetailsBodyId] = useState<string | null>(null)
+  const detailsButton = useRef<HTMLButtonElement>(null)
+  const [focusRequest, setFocusRequest] = useState<{ id: string; mode: StellarFocusMode; nonce: number } | null>(null)
 
   const setSelectedBranch = (branch: string | null) => {
     setSearchParams((prev) => {
@@ -49,18 +53,24 @@ export default function StellarSystemViewerPage() {
     }, { replace: true })
   }
 
-  // Selection ↔ URL: the ?focus= parameter always names the selected body
-  // (replace, not push, so browsing bodies doesn't spam history).  This is
-  // what makes a focused view deep-linkable / refresh-stable.
-  const handleSelectionChange = useCallback((body: SelectedBody) => {
-    setSelectedBody(body)
+  const selectBody = useCallback((id: string | null, openDetails = false) => {
+    setDetailsBodyId(openDetails ? id : null)
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
-      if (body) next.set('focus', body.data.id)
+      if (id) next.set('focus', id)
       else next.delete('focus')
       return next
     }, { replace: true })
   }, [setSearchParams])
+
+  const handleSelectionChange = useCallback((body: SelectedBody) => {
+    selectBody(body?.data.id ?? null, true)
+  }, [selectBody])
+
+  const requestFocus = (id: string, mode: StellarFocusMode) => {
+    if (mode === 'orbit') setDetailsBodyId(null)
+    setFocusRequest((last) => ({ id, mode, nonce: (last?.nonce ?? 0) + 1 }))
+  }
 
   // --- Stellar system data ---
   // The system catalog (derived) is the single merged source for stars,
@@ -77,31 +87,44 @@ export default function StellarSystemViewerPage() {
     retry: false,
   })
 
+  const stars = useMemo(() => (catalog?.stars ?? []).map((star) => ({
+    ...star, name: celestialName(star.id, star.name),
+  })), [catalog, celestialName])
+  const bodies = useMemo(() => (catalog?.bodies ?? []).map((body) => ({
+    ...body, name: celestialName(body.id, body.name),
+  })), [catalog, celestialName])
+
   const stellarSystem = useMemo(
     () =>
       catalog
         ? {
-            stars: (catalog.stars ?? []).map(catalogStarToStarData),
+            stars: stars.map(catalogStarToStarData),
             orbits: catalog.orbits ?? [],
           }
         : null,
-    [catalog],
+    [catalog, stars],
   )
 
   const planets = useMemo(
-    () => (catalog?.bodies ?? []).map(catalogBodyToPlanetData),
-    [catalog],
+    () => bodies.map(catalogBodyToPlanetData),
+    [bodies],
   )
+  const selectedPlanet = planets.find((planet) => planet.id === requestedBodyId)
+  const selectedStar = stellarSystem?.stars.find((star) => star.id === requestedBodyId)
+  const focusBodyId = selectedPlanet?.id ?? selectedStar?.id
+  const hasOrbit = stellarSystem?.orbits.some((orbit) => orbit.body_id === focusBodyId && orbit.semi_major_axis_au > 0)
+  const hasBodyRadius = (selectedPlanet?.radius ?? selectedStar?.derived?.computed_radius ?? selectedStar?.radius ?? 0) > 0
+  const detailsOpen = !!focusBodyId && focusBodyId === detailsBodyId
 
   // Catalog lookups for the InfoPanel's rich field groups (orbit elements,
   // derived thermal/season fields, atmosphere composition, star age/HZ).
   const bodyCatalog = useMemo(
-    () => new Map((catalog?.bodies ?? []).map((b) => [b.id, b])),
-    [catalog],
+    () => new Map(bodies.map((body) => [body.id, body])),
+    [bodies],
   )
   const starCatalog = useMemo(
-    () => new Map((catalog?.stars ?? []).map((s) => [s.id, s])),
-    [catalog],
+    () => new Map(stars.map((star) => [star.id, star])),
+    [stars],
   )
 
   const { data: habitableZones, isError: hzError } = useQuery({
@@ -122,35 +145,37 @@ export default function StellarSystemViewerPage() {
   })
 
   // 2. Fetch CVT mesh for the selected planet (enables terrain summary in InfoPanel)
-  const selectedPlanetId =
-    selectedBody?.type === 'planet' ? selectedBody.data.id : null
-  const selectedHasMap =
-    selectedPlanetId != null && (mapPlanetIds ?? []).includes(selectedPlanetId)
+  const selectedPlanetId = selectedPlanet?.id
+  const mapPath = selectedPlanetId && mapPlanetIds?.includes(selectedPlanetId) ? encodeURIComponent(selectedPlanetId) : null
+  const branchQuery = selectedBranch ? `?${new URLSearchParams({ branch: selectedBranch })}` : ''
+  const worldPath = `/worlds/${encodeURIComponent(worldName ?? '')}`
   const { data: selectedPlanetCvtMesh } = useQuery({
     queryKey: ['cvtMesh', worldName, selectedPlanetId, selectedBranch] as const,
     queryFn: () => api.getCvtMesh(worldName!, selectedPlanetId!, selectedBranch),
-    enabled: !!worldName && selectedHasMap,
+    enabled: !!worldName && !!mapPath && detailsOpen,
     retry: false,
   })
 
   // 3. Batch-load map metadata for each planet that has a map
-  const metaQueries = useQueries({
+  const mapMeta = useQueries({
     queries: (mapPlanetIds ?? []).map((pid) => ({
       queryKey: ['mapMeta', worldName, pid, selectedBranch] as const,
       queryFn: () => api.getMapMeta(worldName!, pid, selectedBranch),
       enabled: !!worldName && !!mapPlanetIds,
       retry: false,
     })),
+    combine: combineQueryData,
   })
 
   // 4. Batch-load elevation PNG blobs
-  const elevQueries = useQueries({
+  const elevationBlobs = useQueries({
     queries: (mapPlanetIds ?? []).map((pid) => ({
       queryKey: ['elevationBlob', worldName, pid, selectedBranch] as const,
       queryFn: () => api.getElevationBlob(worldName!, pid, selectedBranch),
       enabled: !!worldName && !!mapPlanetIds,
       retry: false,
     })),
+    combine: combineQueryData,
   })
 
   // 5. Async: decode each loaded PNG blob → Float32Array, then store
@@ -168,7 +193,7 @@ export default function StellarSystemViewerPage() {
       for (let i = 0; i < mapPlanetIds!.length; i++) {
         if (cancelled) return
         const pid = mapPlanetIds![i]
-        const blob = elevQueries[i]?.data
+        const blob = elevationBlobs[i]
         if (!blob) continue
         try {
           const { data, width, height } = await decodePngToFloat32(blob)
@@ -187,7 +212,7 @@ export default function StellarSystemViewerPage() {
 
     load()
     return () => { cancelled = true }
-  }, [mapPlanetIds, elevQueries])
+  }, [mapPlanetIds, elevationBlobs])
 
   // 6. Generate DataTextures from decoded elevation data + metadata
   // Waterless bodies (no hydrosphere / ~zero water coverage — Mars, Moon,
@@ -208,7 +233,7 @@ export default function StellarSystemViewerPage() {
 
     for (let i = 0; i < mapPlanetIds.length; i++) {
       const pid = mapPlanetIds[i]
-      const meta = metaQueries[i]?.data
+      const meta = mapMeta[i]
       const elev = elevData.get(pid)
       const dims = elevDataDims.get(pid)
       if (!meta || !elev || !dims) continue
@@ -224,7 +249,7 @@ export default function StellarSystemViewerPage() {
       map.set(pid, tex)
     }
     return map
-  }, [mapPlanetIds, metaQueries, elevData, elevDataDims, waterlessIds])
+  }, [mapPlanetIds, mapMeta, elevData, elevDataDims, waterlessIds])
 
   // --- Render ---
 
@@ -239,66 +264,78 @@ export default function StellarSystemViewerPage() {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-space-border">
-        <Link
-          to={`/worlds/${worldName}`}
-          className="text-gray-400 hover:text-neon-cyan transition-colors text-sm"
-        >
-          {t('action.back')}
-        </Link>
-        <h1 className="text-xl font-semibold text-neon-cyan neon-glow-subtle">
-          {t('stellar.title')}
-        </h1>
-
-        <div className="flex-1" />
-
-        {/* Body selector — every entry focuses & pulls in uniformly;
-            🌐 marks bodies with map data (globe/map access via InfoPanel). */}
-        {planets && planets.length > 0 && (
-          <select
-            value={focusPlanetId ?? ''}
-            onChange={(e) => {
-              const pid = e.target.value
-              if (!pid) return
-              setSearchParams((prev) => {
-                const next = new URLSearchParams(prev)
-                next.set('focus', pid)
-                return next
-              }, { replace: true })
-              setFocusRequest({ id: pid, nonce: Date.now() })
-            }}
-            className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
-          >
-            <option value="">{t('stellar.selectPlanet')}</option>
-            {(catalog?.stars ?? []).length > 0 && (
-              <optgroup label={t('stellar.groupStars')}>
-                {(catalog?.stars ?? []).map((s) => (
-                  <option key={s.id} value={s.id}>☀ {s.name ?? s.id}</option>
-                ))}
-              </optgroup>
+    <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col md:min-h-dvh">
+      <header className="space-y-2 border-b border-space-border bg-space-bg px-3 py-2 sm:px-5 sm:py-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Link to={`${worldPath}${branchQuery}`} aria-label={t('stellar.backToWorld')}
+              title={t('stellar.backToWorld')} className={`${actionClass} size-10 shrink-0`}>
+              <AtlasIcon name="back" />
+            </Link>
+            <h1 className="text-lg font-semibold tracking-tight text-gray-100 sm:text-xl">{t('stellar.title')}</h1>
+          </div>
+          <div className="flex min-w-0 items-end gap-2">
+            <BranchSelector worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} compact />
+            <Link to="/help#stellar-viewer" className={`${actionClass} shrink-0`}>
+              <AtlasIcon name="help" className="size-4" />{t('stellar.help')}
+            </Link>
+          </div>
+        </div>
+        {!!stellarSystem?.stars.length && (
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex min-w-0 flex-[1_0_100%] items-center gap-2 text-sm text-gray-300 sm:flex-none">
+              <span className="shrink-0">{t('stellar.focusedBody')}</span>
+              <select
+                value={focusBodyId ?? ''}
+                onChange={(event) => selectBody(event.target.value || null)}
+                className="min-h-10 min-w-0 flex-1 rounded-md border border-space-border bg-space-panel px-2.5 text-sm text-gray-100 sm:w-48"
+              >
+                <option value="">{t('stellar.noFocus')}</option>
+                <optgroup label={t('stellar.groupStars')}>
+                  {stellarSystem.stars.map((star) => <option key={star.id} value={star.id}>{star.name ?? star.id}</option>)}
+                </optgroup>
+                {planets.length > 0 && (
+                  <optgroup label={t('stellar.groupBodies')}>
+                    {planets.map((planet) => <option key={planet.id} value={planet.id}>{planet.name ?? planet.id}</option>)}
+                  </optgroup>
+                )}
+              </select>
+            </label>
+            {focusBodyId && (
+              <>
+                {hasOrbit && (
+                  <button type="button" className={actionClass} onClick={() => requestFocus(focusBodyId, 'orbit')}>
+                    <AtlasIcon name="orbit" className="size-4" />{t('stellar.viewOrbit')}
+                  </button>
+                )}
+                {hasBodyRadius && (
+                  <button type="button" className={actionClass} onClick={() => requestFocus(focusBodyId, 'close-up')}>
+                    <AtlasIcon name="frame" className="size-4" />{t('stellar.closeUp')}
+                  </button>
+                )}
+                <button ref={detailsButton} type="button" className={actionClass}
+                  aria-expanded={detailsOpen} aria-controls={detailsOpen ? 'stellar-body-details' : undefined}
+                  onClick={() => setDetailsBodyId(detailsOpen ? null : focusBodyId)}>
+                  {t('stellar.details')}
+                </button>
+              </>
             )}
-            <optgroup label={t('stellar.groupBodies')}>
-              {planets.map((p: any) => (
-                <option key={p.id} value={p.id}>
-                  {p.name ?? p.id}
-                  {mapPlanetIds?.includes(p.id) ? ' 🌐' : ''}
-                </option>
-              ))}
-            </optgroup>
-          </select>
+            {mapPath && (
+              <div className="flex flex-wrap gap-2 sm:ml-auto">
+                <Link className={`${actionClass} bg-space-panel`} to={`${worldPath}/map/${mapPath}${branchQuery}`}>
+                  {t('stellar.openFlatMap')}<AtlasIcon name="arrow" className="size-4" />
+                </Link>
+                <Link className={`${actionClass} bg-space-panel`} to={`${worldPath}/globe/${mapPath}${branchQuery}`}>
+                  {t('stellar.openGlobeMap')}<AtlasIcon name="arrow" className="size-4" />
+                </Link>
+              </div>
+            )}
+          </div>
         )}
-
-        <BranchSelector
-          worldName={worldName}
-          selectedBranch={selectedBranch}
-          onSelect={setSelectedBranch}
-        />
-      </div>
+      </header>
 
       {/* Viewer */}
-      <div className="flex-1 relative">
+      <div className="relative min-h-[min(24rem,65dvh)] flex-1">
         {catalogError || hzError ? (
           <div className="absolute inset-0 flex items-center justify-center text-gray-400">
             <div className="glass-panel p-6 text-center">
@@ -316,11 +353,13 @@ export default function StellarSystemViewerPage() {
             planets={planets}
             habitableZones={habitableZones}
             planetTextures={planetTextures}
-            worldName={worldName}
-            branchQS={selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}
-            mapPlanetIds={mapPlanetIds ? new Set(mapPlanetIds) : undefined}
-            focusPlanetId={focusPlanetId}
+            focusBodyId={focusBodyId}
             focusRequest={focusRequest}
+            detailsOpen={detailsOpen}
+            onCloseDetails={() => {
+              setDetailsBodyId(null)
+              detailsButton.current?.focus()
+            }}
             selectedPlanetCvtMesh={selectedPlanetCvtMesh ?? null}
             bodyCatalog={bodyCatalog}
             starCatalog={starCatalog}

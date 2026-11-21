@@ -49,14 +49,14 @@ export default function Label({
   const glow = glowColor ?? color
   const lineH = 48
 
-  if (!visible) return null
+  if (!visible && !selected) return null
 
   const crossSize = selected ? 14 : 10
-  const crossColor = selected ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)'
+  const crossColor = selected ? '#9fe5d7' : 'rgba(255,255,255,0.5)'
 
   return (
     <Html
-      zIndexRange={[100, 0]}
+      zIndexRange={selected ? [101, 101] : [100, 0]}
       style={{ pointerEvents: 'none', overflow: 'visible' }}
     >
       {/*

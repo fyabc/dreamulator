@@ -21,15 +21,13 @@ interface OrbitLineProps {
   orbit: OrbitalElementsData
   /** Absolute position of the parent body — orbit path is translated by this */
   parentPosition?: [number, number, number] | null
-  color?: string
-  opacity?: number
+  highlighted?: boolean
 }
 
 export default function OrbitLine({
   orbit,
   parentPosition,
-  color = '#5a5ab8',
-  opacity = 0.55,
+  highlighted = false,
 }: OrbitLineProps) {
   const linePoints = useMemo(() => {
     const path = computeOrbitPath(orbit, 128) as [number, number, number][]
@@ -48,10 +46,11 @@ export default function OrbitLine({
   return (
     <Line
       points={linePoints}
-      color={color}
-      lineWidth={1}
+      color={highlighted ? '#9fe5d7' : '#5a5ab8'}
+      lineWidth={highlighted ? 2 : 1}
       transparent
-      opacity={opacity}
+      opacity={highlighted ? 1 : 0.55}
+      renderOrder={highlighted ? 1 : 0}
     />
   )
 }
