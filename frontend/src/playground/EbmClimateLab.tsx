@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { ClimateTrialForcing, ClimateTrialResult } from '../api/climateTrials'
+import { savedClimateKey } from '../api/climateTrials'
 import { ClimateModelPicker } from './ClimateModelPicker'
 import { EbmTrialProgress } from './EbmTrialProgress'
 
@@ -26,6 +27,7 @@ export default function EbmClimateLab({ search, open, onResult, onShow, onPrevie
   onPreviewMode?: () => void
 }) {
   const { t, i18n } = useTranslation('playground')
+  const queryClient = useQueryClient()
   const world = search.get('world') ?? ''
   const planet = search.get('planet') ?? ''
   const branch = search.get('branch') || null
@@ -82,10 +84,17 @@ export default function EbmClimateLab({ search, open, onResult, onShow, onPrevie
   const retry = inputs.isError ? inputs.refetch : status.isError ? status.refetch : products.isError ? products.refetch : null
   const phase = start.isPending ? 'queued' : job?.state === 'succeeded' ? (products.data ? 'done' : 'loading') : job?.stage
   const format = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 0 })
+  const save = useMutation({
+    mutationFn: (jobId: string) => api.saveClimateTrial(world, planet, jobId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: savedClimateKey(world) }),
+  })
+  const saved = save.data?.id === id && Boolean(id)
+  const saveError = save.variables === id && save.error ? errorCode(save.error) : null
+  const worldData = `/worlds/${encodeURIComponent(world)}?${new URLSearchParams(branch ? { tab: 'data', branch } : { tab: 'data' })}`
 
   return <form className="space-y-3" onSubmit={event => {
     event.preventDefault()
-    if (!current || !valid || busy) return
+    if (!current || !valid || busy || save.isPending) return
     controller.current?.abort()
     controller.current = new AbortController()
     setCancelled(false)
@@ -108,7 +117,7 @@ export default function EbmClimateLab({ search, open, onResult, onShow, onPrevie
     </fieldset>}
     {current && !valid && <p className="text-xs text-amber-200">{t('ebm.error.params')}</p>}
     {current && <div className="flex flex-wrap items-center gap-2">
-      <button type="submit" disabled={!valid || busy} className="atlas-tool-button min-h-9 text-xs">
+      <button type="submit" disabled={!valid || busy || save.isPending} className="atlas-tool-button min-h-9 text-xs">
         {t(lastResult ? 'action.recompute' : 'action.run')}
       </button>
       {lastResult && <button type="button" onClick={onShow} className="atlas-tool-button min-h-9 text-xs">{t('ebm.show')}</button>}
@@ -125,6 +134,20 @@ export default function EbmClimateLab({ search, open, onResult, onShow, onPrevie
         cells: format.format(job?.cells ?? 0), seconds: format.format(job?.elapsed_seconds ?? 0),
       })}
     </p>}
+    {!browser && id && phase === 'done' && !error && <div className="space-y-1.5 border-t border-space-border pt-3 text-xs">
+      {saved ? <>
+        <p role="status" className="text-neon-cyan">{t('ebm.saved.confirmed')}</p>
+        <Link to={worldData} className="inline-flex min-h-9 items-center text-neon-cyan hover:underline">{t('trial.openData')}</Link>
+      </> : <>
+        <button type="button" disabled={save.isPending} onClick={() => save.mutate(id)} className="atlas-tool-button min-h-9 text-xs">
+          {t(save.isPending ? 'ebm.saved.saving' : 'ebm.saved.save')}
+        </button>
+        <p className="text-gray-400">{t('ebm.saved.help')}</p>
+        {saveError && <p role="alert" className="text-red-200">
+          {t(saveError === 'trial_surface_missing' ? 'ebm.saved.surfaceMissing' : 'ebm.saved.saveFailed')}
+        </p>}
+      </>}
+    </div>}
     {reason && <div className="space-y-1 text-xs text-red-200">
       <p role="alert">{t(i18n.exists(errorKey, { ns: 'playground' }) ? errorKey : 'ebm.error.generic')}</p>
       {(reason === 'build_mesh' || reason === 'build_inputs') && <Link to={buildPath} className="inline-flex min-h-8 items-center text-neon-cyan underline">{t('ebm.openWorld')}</Link>}

@@ -41,6 +41,26 @@
       "stageElapsed": "本阶段已用时 {{seconds}} 秒",
       "totalElapsed": "累计用时 {{seconds}} 秒"
     },
+    "saved": {
+      "title": "已保存的气候试算",
+      "list": "气候试算结果",
+      "save": "保存试算结果",
+      "saving": "正在保存试算结果…",
+      "help": "保存到本机的「世界数据」，并纳入完整世界备份。不覆盖正式图层。",
+      "confirmed": "已保存到本机的「世界数据」。",
+      "loading": "正在读取试算数据…",
+      "loadFailed": "无法读取已保存的气候试算。结果可能已被移除。",
+      "saveFailed": "未能保存试算结果。请重试；如果本次结果已过期，请重新运行。",
+      "surfaceMissing": "本次试算缺少可保存的高程，请检查源世界的地图后重新运行。",
+      "restoredHelp": "正在查看已保存的试算结果。图层和高程来自这次试算，不会随正式地图重新构建而变化。",
+      "newTrial": "开始新试算",
+      "empty": "此世界还没有保存过气候试算。",
+      "entry": "EBM · {{planet}} · {{date}}",
+      "scope": "{{branch}}，{{cells}} 个网格单元",
+      "delete": "删除",
+      "deleteNamed": "删除试算「{{name}}」？",
+      "deleteFailed": "未能删除气候试算。"
+    },
     "stage": {
       "queued": "启动本机计算",
       "browserQueued": "准备浏览器试算",

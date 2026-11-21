@@ -1,4 +1,4 @@
-import type { CVTMesh } from '../viewers/map/types'
+import type { CVTMesh, MapMetadata } from '../viewers/map/types'
 import type { MonthlyClimateData } from './monthlyClimate'
 import type { YearlyClimateData } from './yearlyClimate'
 
@@ -29,4 +29,34 @@ export interface ClimateTrialProducts {
   yearly: YearlyClimateData | null
 }
 
-export type ClimateTrialResult = ClimateTrialProducts & { forcing: ClimateTrialForcing }
+export interface SavedClimateTrial {
+  id: string
+  format: 1
+  solver: 'ebm'
+  planet: string
+  branch: string | null
+  saved_at: string
+  cells: number
+  elapsed_seconds: number
+  inputs: {
+    solver_version: string
+    mesh_sha256: string
+    config_sha256: string
+    forcing: ClimateTrialForcing
+    radius_km: number
+  }
+  surface: MapMetadata
+}
+
+export type ClimateTrialResult = ClimateTrialProducts & {
+  forcing: ClimateTrialForcing
+  saved?: { metadata: SavedClimateTrial; elevation: Blob }
+}
+
+export const savedClimateKey = (world: string) => ['saved-climate-trials', world] as const
+
+export function savedClimateMapPath(world: string, result: SavedClimateTrial) {
+  const search = new URLSearchParams({ climateResult: result.id })
+  if (result.branch) search.set('branch', result.branch)
+  return `/worlds/${encodeURIComponent(world)}/map/${encodeURIComponent(result.planet)}?${search}`
+}

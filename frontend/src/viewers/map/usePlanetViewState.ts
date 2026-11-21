@@ -20,6 +20,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
+import { isStaticMode } from '../../api/mode'
 import type { ImportElevationResult } from '../../components/map/ImportElevationButton'
 import type { ImportedState } from '../../api/elevationImport'
 import type { TemperatureOrigin } from '../../playground/temperatureDraft'
@@ -42,6 +43,7 @@ import type { ColorMode, CVTMesh, MapMetadata, VoronoiCell } from './types'
 
 /** The two pages this hook serves — decides the planet-redirect URL base. */
 export type PlanetViewKind = 'map' | 'globe'
+const EMPTY_ELEVATION_DIMENSIONS = { w: 0, h: 0 }
 type ImportMessage = { ok: boolean; text: string; temperatureOrigin?: TemperatureOrigin }
 
 export interface PlanetViewState {
@@ -155,7 +157,10 @@ export function usePlanetViewState(
       const next = new URLSearchParams(prev)
       if (branch) next.set('branch', branch)
       else next.delete('branch')
-      if (branch !== selectedBranch) next.delete('draft')
+      if (branch !== selectedBranch) {
+        next.delete('draft')
+        next.delete('climateResult')
+      }
       return next
     }, { replace: true })
   }
@@ -290,70 +295,77 @@ export function usePlanetViewState(
 
   // --- Planet selection reconciliation ---
   const selectedPlanet = routePlanetId ?? mapPlanets?.[0] ?? worldPlanets?.[0]?.id ?? ''
+  const savedRoute = !isStaticMode() && searchParams.has('climateResult')
   useEffect(() => {
-    if (mapPlanets?.length && (!routePlanetId || !mapPlanets.includes(routePlanetId))) {
+    if (!savedRoute && mapPlanets?.length && (!routePlanetId || !mapPlanets.includes(routePlanetId))) {
       const qs = searchParams.toString()
       navigate(`/worlds/${worldName}/${viewKind}/${mapPlanets[0]}${qs ? `?${qs}` : ''}`, {
         replace: true,
       })
     }
-  }, [mapPlanets, routePlanetId, navigate, worldName, searchParams, viewKind])
+  }, [mapPlanets, routePlanetId, navigate, worldName, searchParams, viewKind, savedRoute])
 
   // --- Map data queries ---
-  const { data: meta, isError: metaError } = useQuery({
+  const saved = ebm?.result.saved
+  const useOfficialMap = !(savedRoute && (saved || trialActive))
+  const { data: formalMeta, isError: formalMetaError } = useQuery({
     queryKey: ['mapMeta', worldName, selectedPlanet, selectedBranch],
     queryFn: () => api.getMapMeta(worldName!, selectedPlanet, selectedBranch),
-    enabled: !!worldName && !!selectedPlanet,
+    enabled: useOfficialMap && !!worldName && !!selectedPlanet,
   })
 
-  const { data: elevationBlob, isError: elevError } = useQuery({
+  const { data: formalElevation, isError: formalElevationError } = useQuery({
     queryKey: ['elevationBlob', worldName, selectedPlanet, selectedBranch],
     queryFn: () => api.getElevationBlob(worldName!, selectedPlanet, selectedBranch),
-    enabled: !!worldName && !!selectedPlanet,
+    enabled: useOfficialMap && !!worldName && !!selectedPlanet,
     retry: false,
   })
+  const meta = saved?.metadata.surface ?? (useOfficialMap ? formalMeta : undefined)
+  const elevationBlob = saved?.elevation ?? (useOfficialMap ? formalElevation : undefined)
+  const metaError = useOfficialMap && formalMetaError
+  const elevError = useOfficialMap && formalElevationError
 
   // Decode the elevation PNG once per blob — both pages render from the same
   // Float32Array; the 3D texture bake also needs the decoded dimensions.
-  const [elevation, setElevation] = useState<Float32Array | null>(null)
-  const [elevationDims, setElevationDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
   const importedElevation = Boolean(meta?.elevation_import)
+  const [decoded, setDecoded] = useState<{ blob: Blob; imported: boolean; data: Float32Array; w: number; h: number } | null>(null)
+  const currentElevation = decoded?.blob === elevationBlob && decoded?.imported === importedElevation ? decoded : null
+  const elevation = currentElevation?.data ?? null
+  const elevationDims = currentElevation ?? EMPTY_ELEVATION_DIMENSIONS
   useEffect(() => {
-    if (!elevationBlob) {
-      setElevation(null)
-      return
-    }
+    if (!elevationBlob) return
     let cancelled = false
     const decode = importedElevation
       ? readElevationPng(elevationBlob, 0, 1).then(({ values, width, height }) => ({ data: values, width, height }))
       : decodePngToFloat32(elevationBlob)
     decode.then(({ data, width, height }) => {
       if (!cancelled) {
-        setElevation(data)
-        setElevationDims({ w: width, h: height })
+        setDecoded({ blob: elevationBlob, imported: importedElevation, data, w: width, h: height })
       }
     }).catch(() => {
       // Decode failure (e.g. corrupted PNG) → treat as no data
-      if (!cancelled) setElevation(null)
+      if (!cancelled) setDecoded(null)
     })
     return () => { cancelled = true }
   }, [elevationBlob, importedElevation])
 
-  const { isError: platesError } = useQuery({
+  const { isError: officialPlatesError } = useQuery({
     queryKey: ['plates', worldName, selectedPlanet, selectedBranch],
     queryFn: () => api.getPlates(worldName!, selectedPlanet, selectedBranch),
-    enabled: !!worldName && !!selectedPlanet,
+    enabled: useOfficialMap && !!worldName && !!selectedPlanet,
     retry: false,
   })
 
   // CVT mesh data for polygon rendering + cell lookups
-  const { data: officialMesh, isError: cvtMeshError } = useQuery({
+  const { data: officialMesh, isError: officialMeshError } = useQuery({
     queryKey: ['cvtMesh', worldName, selectedPlanet, selectedBranch],
     queryFn: () => api.getCvtMesh(worldName!, selectedPlanet, selectedBranch),
-    enabled: !!worldName && !!selectedPlanet,
+    enabled: useOfficialMap && !!worldName && !!selectedPlanet,
     retry: false,
   })
-  const cvtMesh = ebm?.result.mesh ?? officialMesh
+  const platesError = useOfficialMap && officialPlatesError
+  const cvtMeshError = !ebm && useOfficialMap && officialMeshError
+  const cvtMesh = ebm?.result.mesh ?? (useOfficialMap ? officialMesh : undefined)
   // (cvtMeshError is re-declared from the query for the page error banner.)
 
   // Legacy voronoi fallback — fetched only when the CVT mesh is unavailable
@@ -410,7 +422,7 @@ export function usePlanetViewState(
   })
   const koppenDownscale = useKoppenDownscale(koppenActive, downscale, monthlyData, cvtMesh ?? null, cellIdMap,
     meshTextureSize.width, meshTextureSize.height, seaLevelM, native)
-  const officialYearly = useYearlyClimate(ebm ? undefined : worldName, selectedPlanet, selectedBranch)
+  const officialYearly = useYearlyClimate(ebm || !useOfficialMap ? undefined : worldName, selectedPlanet, selectedBranch)
   const yearlyProduct = ebm ? ebm.result.yearly : officialYearly
   const yearlyData = yearlyProduct && cvtMesh && yearlyProduct.numCells === cvtMesh.cells.length ? yearlyProduct : null
   const uccTexture = useUccLayer(
@@ -493,9 +505,10 @@ export function usePlanetViewState(
   // Catalog `radius` is in Earth radii (e.g. Nacrea 1.07); the particle
   // integrator converts m/s to degrees with the planet's own circumference.
   const planetRadiusM = useMemo(() => {
+    if (saved) return saved.metadata.inputs.radius_km * 1000
     const r = bodyByName.get(selectedPlanet)?.radius
     return (typeof r === 'number' && r > 0 ? r : 1) * 6_371_000
-  }, [selectedPlanet, bodyByName])
+  }, [selectedPlanet, bodyByName, saved])
   const axialTiltDeg = useMemo(() => {
     if (ebm) return ebm.result.forcing.axial_tilt_deg
     if (!selectedPlanet) return 0

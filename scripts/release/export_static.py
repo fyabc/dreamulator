@@ -547,6 +547,9 @@ def _export_civmap_reference(
 def export_world(world_dir: Path, skip_branches: set[str] | None = None) -> dict:
     """Export all data for a single world (root, no branch).
 
+    Saved local climate trials are private world data. The public static export
+    excludes them; the full world snapshot preserves them.
+
     Returns a dict with keys:
       - world: world.yaml contents
       - branches: list of branch metadata (excluding ``skip_branches``)

@@ -6,6 +6,7 @@ import type { TemperaturePreview } from '../../playground/temperaturePreview'
 
 const TemperatureLab = lazy(() => import('../../playground/TemperatureLab'))
 const EbmClimateLab = lazy(() => import('../../playground/EbmClimateLab'))
+const SavedClimateLab = lazy(() => import('../../playground/SavedClimateLab'))
 export const trialPanelId = 'map-climate-trial'
 export const trialButtonId = 'map-climate-trial-button'
 
@@ -21,6 +22,7 @@ export function MapTemperatureTrial({ open, onClose, search, onPreview, onResult
   const [previewMode, setPreviewMode] = useState(false)
   const browser = isStaticMode() && !search.has('draft')
   const preview = search.has('draft') || (browser && previewMode)
+  const saved = !browser && !preview && search.has('climateResult')
   const closeButton = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (open) closeButton.current?.focus({ preventScroll: true })
@@ -36,7 +38,7 @@ export function MapTemperatureTrial({ open, onClose, search, onPreview, onResult
         onClose()
       }}>
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-space-border px-3 py-1">
-        <h2 id={`${trialPanelId}-title`} className="text-sm font-semibold text-gray-100">{t(preview ? 'ebm.previewTitle' : 'ebm.title')}</h2>
+        <h2 id={`${trialPanelId}-title`} className="text-sm font-semibold text-gray-100">{t(preview ? 'ebm.previewTitle' : saved ? 'ebm.saved.title' : 'ebm.title')}</h2>
         <button ref={closeButton} type="button" onClick={onClose} className="atlas-tool-button text-xs">{t('trial.collapse')}</button>
       </header>
       <div className="min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-2">
@@ -47,6 +49,7 @@ export function MapTemperatureTrial({ open, onClose, search, onPreview, onResult
             </button>}
             <TemperatureLab search={search} map={{ onPreview, onShowPreview: onShow }} />
           </>
+            : saved ? <SavedClimateLab search={search} onResult={onResult} onShow={onShow} />
             : <EbmClimateLab search={search} open={open} onResult={onResult} onShow={onShow}
                 onPreviewMode={browser ? () => setPreviewMode(true) : undefined} />}
         </Suspense>

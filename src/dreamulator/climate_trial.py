@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from time import monotonic
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from dreamulator import __version__
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -56,6 +61,14 @@ class TrialProgress(BaseModel):
     months_done: int | None = None
     months_total: int | None = None
     moisture_pass: int | None = None
+
+
+class TrialInputs(BaseModel):
+    solver_version: str
+    mesh_sha256: str
+    config_sha256: str
+    forcing: TrialForcing
+    radius_km: float
 
 
 @dataclass(frozen=True)
@@ -145,6 +158,8 @@ def compute_trial(
         publish()
 
     publish()
+    with source.mesh_path.open("rb") as stream:
+        mesh_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
     mesh = load_cvt_mesh_model(source.mesh_path)
     progress.cells = mesh.num_cells
     if mesh.num_cells * 32 * 1024 > budget:
@@ -157,12 +172,54 @@ def compute_trial(
     for name, value in forcing.model_dump(exclude_none=True).items():
         setattr(source.config, forcing.config_field(name), value)
 
+    settings = {
+        field.name: value
+        for field in fields(source.config)
+        if (value := getattr(source.config, field.name)) is None
+        or isinstance(value, (str, float, int, bool))
+    }
+    config_json = json.dumps(settings, sort_keys=True, separators=(",", ":"))
+    trial_inputs = TrialInputs(
+        solver_version=__version__,
+        mesh_sha256=mesh_sha256,
+        config_sha256=hashlib.sha256(config_json.encode("utf-8")).hexdigest(),
+        forcing=TrialForcing.from_config(source.config),
+        radius_km=source.config.radius_km,
+    )
+    (output / "inputs.json").write_text(trial_inputs.model_dump_json(), encoding="utf-8")
+    (output / "config.json").write_text(config_json, encoding="utf-8")
+
     simulate_climate(mesh, source.config, on_progress=phase, on_precipitation_month=month)
     phase("export")
     save_cvt_mesh(output / MESH_FILENAME, mesh)
     export_climate_layers(mesh, output, source.config, diagnostic_pngs=diagnostic_pngs)
     if not (output / "climate_monthly.msgpack").is_file():
         raise TrialUnavailableError("missing_result")
+
+
+def _capture_surface(world: Path, planet: str, branch: str | None, output: Path) -> None:
+    import yaml
+    from pydantic import ValidationError
+
+    from dreamulator.map.manager import MapManager
+    from dreamulator.map.models import MapMetadata
+
+    root = MapManager(world)._map_input_dir(planet)  # noqa: SLF001
+    overlay = world / "branches" / branch / "maps" / planet if branch else None
+    directories = [directory for directory in (overlay, root) if directory is not None]
+    metadata = next((path for base in directories if (path := base / "map.yaml").is_file()), None)
+    elevation = next(
+        (path for base in directories if (path := base / "elevation.png").is_file()), None
+    )
+    if metadata is not None and elevation is not None:
+        try:
+            with metadata.open(encoding="utf-8") as stream:
+                surface = MapMetadata.model_validate(yaml.safe_load(stream))
+            if surface.planet_id == planet:
+                shutil.copyfile(elevation, output / "elevation.png")
+                (output / "surface.json").write_text(surface.model_dump_json(), encoding="utf-8")
+        except (OSError, ValidationError, yaml.YAMLError):
+            (output / "surface.json").unlink(missing_ok=True)
 
 
 def _worker() -> None:
@@ -177,7 +234,9 @@ def _worker() -> None:
         resource.setrlimit(resource.RLIMIT_AS, (limit, hard))
     try:
         request = TrialRequest.model_validate_json((output / "request.json").read_bytes())
-        source = resolve_trial_source(Path(world_dir), planet_id, request.branch)
+        world = Path(world_dir)
+        source = resolve_trial_source(world, planet_id, request.branch)
+        _capture_surface(world, planet_id, request.branch, output)
         compute_trial(source, request.forcing, output, budget)
     except (TrialUnavailableError, MemoryError) as error:
         reason = "memory_budget" if isinstance(error, MemoryError) else str(error)

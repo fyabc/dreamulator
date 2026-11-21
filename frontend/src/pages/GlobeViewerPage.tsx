@@ -290,7 +290,7 @@ export default function GlobeViewerPage() {
       : 'atlas-workbench flex flex-col'}>
       {!cleanMode && (
       <MapWorkbenchToolbar title={currentPlanet?.name ?? selectedPlanet ?? t('title.globe')} view="globe"
-        backTo={searchParams.has('draft') ? worldDataPath(worldName, selectedBranch) :
+        backTo={searchParams.has('draft') || searchParams.has('climateResult') ? worldDataPath(worldName, selectedBranch) :
           `/worlds/${worldName}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/map/${selectedPlanet}${mapQS}` : undefined}
         regionControls={selectedPlanet && (elevation || cvtMesh) ? (
@@ -344,6 +344,7 @@ export default function GlobeViewerPage() {
             const next = new URLSearchParams(searchParams)
             next.delete(REGION_WINDOW_PARAM)
             next.delete('draft')
+            next.delete('climateResult')
             const qs = next.toString()
             navigate(`/worlds/${worldName}/globe/${id}${qs ? `?${qs}` : ''}`)
           }} />}
@@ -485,12 +486,12 @@ export default function GlobeViewerPage() {
               deviation
             />
             </>}
-          </div>
             {legend}
+          </div>
           {!cleanMode && (
             <MobileCellCard
-              cell={selectedCells.size === 1 ? selectedCellData : null}
               seaLevelM={meta?.sea_level_m}
+              cell={selectedCells.size === 1 ? selectedCellData : null}
               cursor={cursor}
               onClose={clearSelection}
               covered={trial.open}
@@ -642,8 +643,8 @@ export default function GlobeViewerPage() {
             deviation
           />
           </>}
-
           {legend}
+
           {/* Recording controls — float in the globe view's bottom-right corner
               (the view area has spare room; the top bar is already crowded).
               Fully hidden in clean mode: the mouse is not controllable during a

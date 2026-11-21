@@ -13,7 +13,7 @@ import type {
 } from './elevationImport'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
-import type { ClimateTrialForcing, ClimateTrialJob, ClimateTrialProducts } from './climateTrials'
+import type { ClimateTrialForcing, ClimateTrialJob, ClimateTrialProducts, ClimateTrialResult, SavedClimateTrial } from './climateTrials'
 import i18n from '../i18n'
 import type { CVTMesh, CVTVertex, CVTRegion, VoronoiCell } from '../viewers/map/types'
 import type { PackHeightSource, PackMeta, PackSummary, ProbeResult, RegionDevice, RegionRefinementJob,
@@ -26,6 +26,10 @@ export const API_BASE = `${base.startsWith('/') ? base.replace(/\/$/, '') : ''}/
 
 function climateTrialsPath(world: string, planet: string) {
   return `/worlds/${encodeURIComponent(world)}/maps/${encodeURIComponent(planet)}/climate-trials`
+}
+
+function savedClimatePath(world: string, id?: string) {
+  return `/worlds/${encodeURIComponent(world)}/climate-results${id ? `/${encodeURIComponent(id)}` : ''}`
 }
 
 /**
@@ -835,6 +839,26 @@ export async function fetchSkyFast(
   return (await response.json()) as SkyEphemerisResult
 }
 
+async function getClimateProducts(path: string): Promise<ClimateTrialProducts> {
+  const [geometry, fields, monthlyBlob, yearlyBlob] = await Promise.all([
+    decodeMsgpackUrl(`${API_BASE}${path}/geometry`, true),
+    decodeMsgpackUrl(`${API_BASE}${path}/fields`, true),
+    fetchBlob(`${path}/monthly`),
+    fetch(`${API_BASE}${path}/yearly`).then(response => {
+      if (response.status === 404) return null
+      if (!response.ok) throw new ApiError(response.status, `HTTP ${response.status}`)
+      return response.arrayBuffer()
+    }),
+  ])
+  const mesh = isSplitGeometry(geometry) && isSplitFields(fields) ? composeSplitMesh(geometry, fields) : null
+  const monthly = decodeMonthlyClimate(await monthlyBlob.arrayBuffer())
+  const yearly = yearlyBlob ? decodeYearlyClimate(yearlyBlob) : null
+  if (!mesh || monthly.numCells !== mesh.cells.length || (yearly && yearly.numCells !== mesh.cells.length)) {
+    throw new Error('Invalid climate trial grid')
+  }
+  return { mesh, monthly, yearly }
+}
+
 export const api = {
   getClimateTrialInputs: (world: string, planet: string, branch: string | null) => isStaticMode()
     ? staticApi.getClimateTrialInputs(world, planet, branch)
@@ -848,27 +872,31 @@ export const api = {
     ? staticApi.getClimateTrial(id)
     : fetchJson<ClimateTrialJob>(`${climateTrialsPath(world, planet)}/${encodeURIComponent(id)}`, { cache: 'no-store', signal }),
 
-  getClimateTrialProducts: async (world: string, planet: string, id: string): Promise<ClimateTrialProducts> => {
-    if (isStaticMode()) return staticApi.getClimateTrialProducts(id)
-    const path = `${climateTrialsPath(world, planet)}/${encodeURIComponent(id)}/products`
-    const [geometry, fields, monthlyBlob, yearlyBlob] = await Promise.all([
-      decodeMsgpackUrl(`${API_BASE}${path}/geometry`, true),
-      decodeMsgpackUrl(`${API_BASE}${path}/fields`, true),
-      fetchBlob(`${path}/monthly`),
-      fetch(`${API_BASE}${path}/yearly`).then(response => {
-        if (response.status === 404) return null
-        if (!response.ok) throw new ApiError(response.status, `HTTP ${response.status}`)
-        return response.arrayBuffer()
-      }),
-    ])
-    const mesh = isSplitGeometry(geometry) && isSplitFields(fields) ? composeSplitMesh(geometry, fields) : null
-    const monthly = decodeMonthlyClimate(await monthlyBlob.arrayBuffer())
-    const yearly = yearlyBlob ? decodeYearlyClimate(yearlyBlob) : null
-    if (!mesh || monthly.numCells !== mesh.cells.length || (yearly && yearly.numCells !== mesh.cells.length)) {
-      throw new Error('Invalid EBM result grid')
-    }
-    return { mesh, monthly, yearly }
+  getClimateTrialProducts: (world: string, planet: string, id: string) => isStaticMode()
+    ? staticApi.getClimateTrialProducts(id)
+    : getClimateProducts(`${climateTrialsPath(world, planet)}/${encodeURIComponent(id)}/products`),
+
+  saveClimateTrial: (world: string, planet: string, id: string) => isStaticMode()
+    ? staticApi.saveClimateTrial()
+    : fetchJson<SavedClimateTrial>(`${climateTrialsPath(world, planet)}/${encodeURIComponent(id)}/save`, { method: 'POST' }),
+
+  listSavedClimateTrials: (world: string) => isStaticMode()
+    ? staticApi.listSavedClimateTrials()
+    : fetchJson<SavedClimateTrial[]>(savedClimatePath(world), { cache: 'no-store' }),
+
+  getSavedClimateTrial: async (world: string, planet: string, branch: string | null, id: string): Promise<ClimateTrialResult> => {
+    if (isStaticMode()) return staticApi.getSavedClimateTrial()
+    const path = savedClimatePath(world, id)
+    const metadata = await fetchJson<SavedClimateTrial>(path, { cache: 'no-store' })
+    if (metadata.planet !== planet || metadata.branch !== branch) throw new Error('Saved climate trial source does not match')
+    const [products, elevation] = await Promise.all([getClimateProducts(`${path}/products`), fetchBlob(`${path}/products/elevation`)])
+    if (metadata.cells !== products.mesh.cells.length) throw new Error('Invalid saved climate grid')
+    return { ...products, forcing: metadata.inputs.forcing, saved: { metadata, elevation } }
   },
+
+  deleteSavedClimateTrial: (world: string, id: string) => isStaticMode()
+    ? staticApi.deleteSavedClimateTrial()
+    : fetchJson<void>(savedClimatePath(world, id), { method: 'DELETE' }),
   ...readApi,
 
   async saveStarterWorld(settings: StarterSettings) {

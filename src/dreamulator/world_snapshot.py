@@ -24,7 +24,16 @@ MANIFEST = "dreamulator-snapshot.json"
 MAX_FILES = 100_000
 MAX_BYTES = 16 * 1024**3
 MAX_MANIFEST = 32 * 1024**2
-WORLD_DIRS = {"layers", "maps", "branches", "packs", "canvases", "design-notes", "civmap"}
+WORLD_DIRS = {
+    "layers",
+    "maps",
+    "branches",
+    "packs",
+    "canvases",
+    "design-notes",
+    "civmap",
+    "experiments",
+}
 
 
 def snapshot_world_id(value: object) -> str:

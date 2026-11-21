@@ -12,6 +12,7 @@ import { deleteProject, getProject, projectKey, projectRegionPath, projectsKey, 
 import { exportWorldData, readWorldBackup } from '../../projects/worldDataArchive'
 import { downloadBlob } from '../../utils/downloadBlob'
 import { heightmapMapPath } from '../../projects/heightmapWorld'
+import SavedClimateTrials from './SavedClimateTrials'
 
 export default function WorldDataPanel({ id, published, publishedAvailable, nativeCreation = false, nativeStarterWithoutMap = false }: {
   id: string
@@ -61,6 +62,7 @@ export default function WorldDataPanel({ id, published, publishedAvailable, nati
   const starter = world.creationKind === 'starter' || nativeStarterWithoutMap
 
   return <div className="space-y-5">
+    {!staticMode && publishedAvailable && <SavedClimateTrials world={id} />}
     {(world.creationSnapshot || nativeCreation) && <section className="space-y-2 border-b border-space-border pb-4">
       <h2 className="text-lg font-semibold">{creationText(starter ? 'starter.savedHeading' : 'savedHeading')}</h2>
       <p className="max-w-prose text-sm text-gray-400">{creationText(starter ? 'starter.savedBrowserHelp' : 'savedHelp')}</p>

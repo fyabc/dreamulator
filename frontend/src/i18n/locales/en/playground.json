@@ -41,6 +41,26 @@
       "stageElapsed": "This stage: {{seconds}} s",
       "totalElapsed": "Total: {{seconds}} s"
     },
+    "saved": {
+      "title": "Saved climate trial",
+      "list": "Climate trial results",
+      "save": "Save trial result",
+      "saving": "Saving trial result…",
+      "help": "Save to World data on this server. The full world backup includes the trial. Official layers are not changed.",
+      "confirmed": "Saved to World data on this server.",
+      "loading": "Reading trial data…",
+      "loadFailed": "Could not read the saved climate trial. The result may have been removed.",
+      "saveFailed": "Could not save the trial result. Try again, or rerun if the result has expired.",
+      "surfaceMissing": "This run has no elevation map to save. Check the source world's map and rerun the trial.",
+      "restoredHelp": "You are viewing a saved trial. Its layers and elevation come from this run and do not change when the official map is rebuilt.",
+      "newTrial": "Start a new trial",
+      "empty": "This world has no saved climate trials yet.",
+      "entry": "EBM · {{planet}} · {{date}}",
+      "scope": "{{branch}}, {{cells}} grid cells",
+      "delete": "Delete",
+      "deleteNamed": "Delete the trial “{{name}}”?",
+      "deleteFailed": "Could not delete the climate trial."
+    },
     "stage": {
       "queued": "Start local computation",
       "browserQueued": "Prepare browser trial",

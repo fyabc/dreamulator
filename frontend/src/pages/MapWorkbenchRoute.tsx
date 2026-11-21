@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Outlet, useMatch, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
+import { isStaticMode } from '../api/mode'
 import type { ClimateTrialResult } from '../api/climateTrials'
 import { MapTemperatureTrial, trialButtonId } from '../components/map/MapTemperatureTrial'
 import { initialLayerState } from '../components/map/layerStateInit'
@@ -19,14 +20,15 @@ export default function MapWorkbenchRoute() {
   if (view === 'map' && planetId && search.get('creation') === '1') return <Outlet />
   const branch = search.get('branch') || null
   const draft = search.get('draft')
+  const saved = isStaticMode() ? null : search.get('climateResult')
   const clean = search.get('clean') === '1'
   if (worldName && planetId && draft) {
     return <DraftWorkbench key={JSON.stringify([worldName, planetId, branch, draft])}
       world={worldName} planet={planetId} branch={branch} draft={draft} clean={clean} />
   }
-  return <TemperatureTrialSession key={JSON.stringify([worldName, planetId, branch])}
-    world={worldName} planet={planetId} branch={branch}
-    clean={clean} initiallyOpen={search.get('trial') === 'climate'} />
+  return <TemperatureTrialSession key={JSON.stringify([worldName, planetId, branch, saved])}
+    world={worldName} planet={planetId} branch={branch} saved={saved}
+    clean={clean} initiallyOpen={Boolean(saved) || search.get('trial') === 'climate'} />
 }
 
 function DraftWorkbench({ world, planet, branch, draft, clean }: TemperatureOrigin & { draft: string; clean: boolean }) {
@@ -50,11 +52,12 @@ function DraftWorkbench({ world, planet, branch, draft, clean }: TemperatureOrig
   return <TemperatureTrialSession world={world} planet={planet} branch={branch} draft={draft} clean={clean} initiallyOpen />
 }
 
-function TemperatureTrialSession({ world, planet, branch, draft, clean, initiallyOpen }: {
+function TemperatureTrialSession({ world, planet, branch, draft, saved, clean, initiallyOpen }: {
   world?: string
   planet?: string
   branch: string | null
   draft?: string
+  saved?: string | null
   clean: boolean
   initiallyOpen: boolean
 }) {
@@ -69,13 +72,14 @@ function TemperatureTrialSession({ world, planet, branch, draft, clean, initiall
   const [panelHost] = useState(() => document.createElement('div'))
   const panelTrigger = useRef<HTMLElement | null>(null)
   const scope = world && planet ? JSON.stringify([world, planet, branch, revision]) : null
-  const mode = modeSelection?.scope === scope ? modeSelection.mode : 'official'
+  const mode = modeSelection?.scope === scope ? modeSelection.mode : saved ? 'trial' : 'official'
   const input = useMemo(() => {
     const params = new URLSearchParams({ world: world ?? '', planet: planet ?? '' })
     if (branch) params.set('branch', branch)
     if (draft) params.set('draft', draft)
+    if (saved) params.set('climateResult', saved)
     return params
-  }, [world, planet, branch, draft])
+  }, [world, planet, branch, draft, saved])
   const trial = useTemperatureTrialPreview(scope, mode, search.get('detail') === 'downscaled')
   const { report } = trial
   const showTrial = useCallback(() => {
@@ -117,7 +121,7 @@ function TemperatureTrialSession({ world, planet, branch, draft, clean, initiall
       if (next === 'official') setOpen(false)
     },
     replaceElevation: () => {
-      if (draft) return
+      if (draft || saved) return
       setEbmResult(null)
       setTrialTime({ monthly: false, month: 0 })
       setLayerState(trialLayerState(null))

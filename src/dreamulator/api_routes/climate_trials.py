@@ -1,4 +1,4 @@
-"""Local-only, short-lived climate runs and their map products."""
+"""Local climate runs and independently saved map products."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Lock
@@ -22,12 +23,14 @@ from pydantic import BaseModel
 
 from dreamulator.climate_trial import (
     TrialForcing,
+    TrialInputs,
     TrialProgress,
     TrialRequest,
     TrialSource,
     TrialUnavailableError,
     resolve_trial_source,
 )
+from dreamulator.map.models import MapMetadata
 from dreamulator.utils.resources import available_memory_bytes
 from dreamulator.world_manager import WorldManager
 
@@ -39,6 +42,7 @@ _limit = 20 * 1024**3
 _retained_runs = 4
 _lock = Lock()
 _route = "/{world_name}/maps/{planet_id}/climate-trials"
+_saved_route = "/{world_name}/climate-results"
 
 Asset = Literal["geometry", "fields", "monthly", "yearly"]
 _assets: dict[Asset, tuple[str, str]] = {
@@ -60,6 +64,19 @@ class TrialJob(BaseModel):
     months_total: int | None = None
     moisture_pass: int | None = None
     error: str | None = None
+
+
+class SavedTrial(BaseModel):
+    format: Literal[1] = 1
+    solver: Literal["ebm"] = "ebm"
+    id: str
+    planet: str
+    branch: str | None
+    saved_at: datetime
+    cells: int
+    elapsed_seconds: float
+    inputs: TrialInputs
+    surface: MapMetadata
 
 
 @dataclass
@@ -170,6 +187,39 @@ def _find(world_name: str, planet_id: str, job_id: str) -> _Run:
     return run
 
 
+def _saved_store(world_name: str) -> Path:
+    if not re.fullmatch(r"[\w-][\w.-]*", world_name):
+        raise HTTPException(404, "World not found")
+    try:
+        world = _manager.world_dir(world_name)
+    except FileNotFoundError as error:
+        raise HTTPException(404, "World not found") from error
+    store = world / "experiments" / "climate"
+    if store.is_symlink() or store.parent.is_symlink():
+        raise HTTPException(409, "Invalid saved climate directory")
+    return store
+
+
+def _saved_entry(store: Path, result_id: str) -> Path:
+    if not re.fullmatch(r"[0-9a-f]{32}", result_id):
+        raise HTTPException(404, "Saved climate result not found")
+    entry = store / result_id
+    metadata = entry / "result.json"
+    if entry.is_symlink() or metadata.is_symlink() or not metadata.is_file():
+        raise HTTPException(404, "Saved climate result not found")
+    return entry
+
+
+def _read_saved(entry: Path) -> SavedTrial:
+    metadata = entry / "result.json"
+    if metadata.is_symlink():
+        raise ValueError("Saved climate result metadata cannot be a link")
+    result = SavedTrial.model_validate_json(metadata.read_bytes())
+    if result.id != entry.name:
+        raise ValueError("Saved climate result ID does not match its directory")
+    return result
+
+
 @router.get(f"{_route}/inputs")
 def get_trial_inputs(world_name: str, planet_id: str, branch: str | None = None) -> TrialForcing:
     _, source = _source(world_name, planet_id, branch)
@@ -216,3 +266,93 @@ def get_trial_product(world_name: str, planet_id: str, job_id: str, asset: Asset
         return FileResponse(
             path, media_type=content_type, headers={"Cache-Control": "private, no-store"}
         )
+
+
+@router.post(f"{_route}/{{job_id}}/save")
+def save_trial(world_name: str, planet_id: str, job_id: str) -> SavedTrial:
+    store = _saved_store(world_name)
+    with _lock:
+        if re.fullmatch(r"[0-9a-f]{32}", job_id) and (store / job_id / "result.json").is_file():
+            result = get_saved_trial(world_name, job_id)
+            if result.planet != planet_id:
+                raise HTTPException(404, "Climate trial not found")
+            return result
+        run = _find(world_name, planet_id, job_id)
+        status = run.snapshot()
+        if status.state != "succeeded" or status.cells is None:
+            raise HTTPException(409, "trial_not_finished")
+        if not (run.output / "surface.json").is_file():
+            raise HTTPException(409, "trial_surface_missing")
+        try:
+            request = TrialRequest.model_validate_json((run.output / "request.json").read_bytes())
+            result = SavedTrial(
+                id=job_id,
+                planet=planet_id,
+                branch=request.branch,
+                saved_at=datetime.now(UTC),
+                cells=status.cells,
+                elapsed_seconds=status.elapsed_seconds,
+                inputs=TrialInputs.model_validate_json((run.output / "inputs.json").read_bytes()),
+                surface=MapMetadata.model_validate_json((run.output / "surface.json").read_bytes()),
+            )
+            store.mkdir(exist_ok=True, parents=True)
+            with TemporaryDirectory(prefix=".saving-", dir=store) as temp:
+                stage = Path(temp) / "result"
+                stage.mkdir()
+                names = [filename for filename, _ in _assets.values()]
+                names.extend(("elevation.png", "config.json"))
+                for name in names:
+                    if name != _assets["yearly"][0] or (run.output / name).is_file():
+                        shutil.copyfile(run.output / name, stage / name)
+                (stage / "result.json").write_text(result.model_dump_json(), encoding="utf-8")
+                stage.rename(store / job_id)
+            return result
+        except (OSError, ValueError) as error:
+            logger.exception("Could not save climate trial %s", job_id)
+            raise HTTPException(500, "trial_save_failed") from error
+
+
+@router.get(_saved_route)
+def list_saved_trials(world_name: str) -> list[SavedTrial]:
+    store = _saved_store(world_name)
+    if not store.is_dir():
+        return []
+    results = []
+    for entry in store.iterdir():
+        if re.fullmatch(r"[0-9a-f]{32}", entry.name) and not entry.is_symlink():
+            try:
+                results.append(_read_saved(entry))
+            except (OSError, ValueError):
+                logger.warning("Could not read saved climate result %s", entry.name)
+    return sorted(results, key=lambda result: result.saved_at, reverse=True)
+
+
+@router.get(f"{_saved_route}/{{result_id}}")
+def get_saved_trial(world_name: str, result_id: str) -> SavedTrial:
+    entry = _saved_entry(_saved_store(world_name), result_id)
+    try:
+        return _read_saved(entry)
+    except (OSError, ValueError) as error:
+        raise HTTPException(409, "Invalid saved climate result") from error
+
+
+@router.get(f"{_saved_route}/{{result_id}}/products/{{asset}}")
+def get_saved_product(
+    world_name: str, result_id: str, asset: Asset | Literal["elevation"]
+) -> FileResponse:
+    entry = _saved_entry(_saved_store(world_name), result_id)
+    filename, content_type = (
+        ("elevation.png", "image/png") if asset == "elevation" else _assets[asset]
+    )
+    path = entry / filename
+    if path.is_symlink() or not path.is_file():
+        raise HTTPException(404, "Saved climate product not found")
+    return FileResponse(
+        path, media_type=content_type, headers={"Cache-Control": "private, no-store"}
+    )
+
+
+@router.delete(f"{_saved_route}/{{result_id}}", status_code=204)
+def delete_saved_trial(world_name: str, result_id: str) -> None:
+    with _lock:
+        shutil.rmtree(_saved_entry(_saved_store(world_name), result_id))
