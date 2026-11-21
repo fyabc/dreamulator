@@ -16,6 +16,7 @@ function isActive(job: BuildJob) {
 }
 
 const jobKey = (world: string, id: string | null) => ['buildJob', world, id] as const
+const secondaryAction = 'inline-flex min-h-11 items-center rounded text-sm font-medium text-gray-200 underline decoration-gray-500 underline-offset-4 hover:text-neon-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-neon-cyan'
 
 export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildPanelProps) {
   const { t, i18n } = useTranslation('worlds')
@@ -49,6 +50,8 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
     },
   })
 
+  const validation = useMutation({ mutationFn: () => api.validateWorld(world) })
+  const snapshotUrl = api.getWorldSnapshotUrl(world)
   const status = useQuery({
     queryKey: jobKey(world, jobId),
     queryFn: () => api.getBuildJob(world, jobId!),
@@ -81,6 +84,7 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
     engine === 'climate' && (state === 'succeeded' || state === 'skipped'),
   )
   const active = !!jobId && !terminal && !lost
+  const snapshotWaiting = active || start.isPending
   const errors = [...new Set([
     ...(job?.error ? [job.error] : []),
     ...(job?.result?.errors ?? []).filter((error) =>
@@ -187,6 +191,41 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
           )}
         </>
       )}
+      <div className="border-t border-space-border pt-1">
+        <div className="flex flex-wrap items-center gap-x-5">
+          <button
+            type="button"
+            className={`${secondaryAction} disabled:text-gray-400 disabled:no-underline`}
+            onClick={() => validation.mutate()}
+            disabled={validation.isPending}
+          >
+            {t(validation.isPending ? 'build.validating' : 'build.validateSettings')}
+          </button>
+          {snapshotUrl && (snapshotWaiting ? (
+            <span className="text-sm text-gray-400" role="status">{t('build.snapshotAfterBuild')}</span>
+          ) : (
+            <>
+              <a href={snapshotUrl} target="_blank" rel="noopener" className={secondaryAction}
+                aria-describedby="world-snapshot-scope">{t('build.downloadSnapshot')}</a>
+              <p id="world-snapshot-scope" className="pb-2 text-sm text-gray-400 sm:pb-0">{t('build.snapshotScope')}</p>
+            </>
+          ))}
+        </div>
+        {validation.isError ? (
+          <p role="alert" className="break-words pb-2 text-sm text-red-300">
+            {t('build.validationError', { error: validation.error.message })}
+          </p>
+        ) : validation.data && !validation.isPending && (
+          <div role="status" className={`pb-2 text-sm ${validation.data.ok ? 'text-green-300' : 'text-red-300'}`}>
+            <p>{t(validation.data.ok ? 'build.validationPassed' : 'build.validationFailed')}</p>
+            {validation.data.errors.length > 0 && (
+              <ul className="list-disc break-words pl-5">
+                {validation.data.errors.map((error, index) => <li key={index}>{error}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
     </section>
   )
 }

@@ -52,6 +52,20 @@ dreamulator delete earth            # 删除世界（--branch 可删分支）
 
 ---
 
+## 完整世界快照
+
+在本机服务的世界页，打开「世界构建」下的「下载世界备份」，即可下载完整世界快照。命令行也支持导出同一格式。请等构建、区域细化和其他写入完成后再导出。
+
+```bash
+uv run dreamulator snapshot export myworld --output myworld.dreamulator.tar.gz
+uv run dreamulator snapshot restore myworld.dreamulator.tar.gz --data-dir ./restored-worlds
+uv run dreamulator serve --data-dir ./restored-worlds
+```
+
+快照保留世界及所有分支的设定、保存在世界目录中的原始高程和换算声明、已有的各层结果、地图、画布与区域包。世界目录内保存的区域细化结果随区域包一起备份；另存于世界目录之外的区域包、浏览器存储和模型缓存不在其中。没有生成的层在恢复后仍然缺失。
+
+恢复命令会验证归档清单与各文件的 SHA-256 校验和，按原世界 ID 恢复，并拒绝覆盖同名目录。恢复不会构建任何层。快照最多包含 10 万个文件，原始文件总大小不能超过 16 GiB。快照包含用户设定和原始数据，分享前请确认这些资料可以公开。
+
 ## 人工语言（conlang）
 
 ```bash

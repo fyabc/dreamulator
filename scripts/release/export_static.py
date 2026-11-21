@@ -9,6 +9,8 @@ Local region packs and their numeric elevation endpoint are not exported. The
 browser extracts static regional heightmaps from the published global PNGs.
 Local refinement plans, job settings, and the compute device require the local
 runtime and are not exported. The browser sets parameters and runs WebGPU independently.
+Full world snapshots include private inputs and local build outputs. This exporter
+publishes no snapshot archives, and the static client exposes no download URL.
 
 Usage:
     python scripts/release/export_static.py

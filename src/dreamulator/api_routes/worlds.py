@@ -3,21 +3,32 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from pathlib import Path
+from shutil import rmtree
+from tempfile import mkdtemp
 from typing import TYPE_CHECKING, Any
 
 import yaml
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 from dreamulator import doc_render
-from dreamulator.build_jobs import BuildBusyError, BuildJob, BuildSummary, build_jobs
+from dreamulator.build_jobs import (
+    BuildBusyError,
+    BuildJob,
+    BuildSummary,
+    build_jobs,
+    local_compute_slot,
+)
 from dreamulator.engine.ephemeris import sky_ephemeris
 from dreamulator.guard.facts import load_entities
 from dreamulator.world_manager import WorldManager
+from dreamulator.world_snapshot import export_snapshot, snapshot_world_id
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
     from dreamulator.engine.base import BaseEngine
     from dreamulator.engine.progress import PipelineEvent
@@ -127,6 +138,41 @@ def validate_world(world_name: str) -> dict[str, Any]:
         return {"ok": len(errors) == 0, "errors": errors}
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.get("/{world_name}/snapshot", response_class=FileResponse)
+def download_world_snapshot(world_name: str) -> FileResponse:
+    """Download a local world's files without rebuilding or changing the world."""
+    try:
+        world = _manager.world_dir(snapshot_world_id(world_name))
+    except FileNotFoundError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    if not local_compute_slot.acquire(blocking=False):
+        raise HTTPException(409, "Wait for local computation to finish before exporting a snapshot")
+    filename = f"{world.name}.dreamulator.tar.gz"
+    try:
+        directory = Path(mkdtemp(prefix="dreamulator-snapshot-"))
+        archive = directory / "snapshot.tar.gz"
+        try:
+            export_snapshot(world, archive)
+        except BaseException:
+            rmtree(directory, ignore_errors=True)
+            raise
+    except FileNotFoundError as error:
+        raise HTTPException(404, str(error)) from error
+    except (ValueError, yaml.YAMLError) as error:
+        raise HTTPException(422, str(error)) from error
+    finally:
+        local_compute_slot.release()
+    return FileResponse(
+        archive,
+        filename=filename,
+        media_type="application/gzip",
+        headers={"Cache-Control": "no-store"},
+        background=BackgroundTask(rmtree, directory, ignore_errors=True),
+    )
 
 
 @router.get("/{world_name}/branches")

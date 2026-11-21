@@ -172,6 +172,8 @@ export const staticApi = {
 
   getWorld: (name: string) => fetchStaticJson<any>(`/worlds/${name}/world.json`),
 
+  getWorldSnapshotUrl: (): null => null,
+
   // Write operations — not available in static mode
   createWorld: () => notAvailable('createWorld'),
   deleteWorld: () => notAvailable('deleteWorld'),

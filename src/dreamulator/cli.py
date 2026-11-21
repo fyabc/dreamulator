@@ -45,6 +45,9 @@ console = Console()
 branch_app = typer.Typer(help="Manage world branches.")
 app.add_typer(branch_app, name="branch")
 
+snapshot_app = typer.Typer(help="Export or restore a complete world snapshot.")
+app.add_typer(snapshot_app, name="snapshot")
+
 # Conlang subcommand group
 conlang_app = typer.Typer(help="Conlang tools for language design and sound change simulation.")
 app.add_typer(conlang_app, name="conlang")
@@ -60,6 +63,45 @@ guard_app = typer.Typer(
     help="Guard (harness): stale detection and decision-record (ADR) management.",
 )
 app.add_typer(guard_app, name="guard")
+
+
+@snapshot_app.command("export")
+def snapshot_export(
+    world: str = typer.Argument(help="World ID (directory name)"),
+    output: Path = typer.Option(..., "--output", "-o", help="New .tar.gz archive to write"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """Back up an idle world, including the results already built on disk."""
+    from yaml import YAMLError
+
+    from dreamulator.world_snapshot import export_snapshot, snapshot_world_id
+
+    _set_data_dir(data_dir)
+    try:
+        export_snapshot(WorldManager().world_dir(snapshot_world_id(world)), output)
+    except (OSError, ValueError, YAMLError) as error:
+        typer.echo(f"Snapshot export failed: {error}", err=True)
+        raise typer.Exit(code=1) from error
+    typer.echo(f"Snapshot exported to {output}")
+
+
+@snapshot_app.command("restore")
+def snapshot_restore(
+    archive: Path = typer.Argument(help="Dreamulator snapshot archive"),
+    data_dir: Path | None = typer.Option(None, "--data-dir", help="Worlds data directory"),
+) -> None:
+    """Verify and restore a snapshot into a new world directory without building."""
+    from yaml import YAMLError
+
+    from dreamulator.world_snapshot import restore_snapshot
+
+    _set_data_dir(data_dir)
+    try:
+        destination = restore_snapshot(archive, WorldManager().worlds_dir)
+    except (OSError, ValueError, YAMLError) as error:
+        typer.echo(f"Snapshot restore failed: {error}", err=True)
+        raise typer.Exit(code=1) from error
+    typer.echo(f"Snapshot restored to {destination}")
 
 
 @guard_app.command("check")

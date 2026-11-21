@@ -94,6 +94,7 @@ export default function WorldDataPanel({ id, published, publishedAvailable }: {
         <Link to="/worlds" className="inline-flex min-h-11 items-center text-neon-cyan hover:underline">{t('restoreFromWorlds')}</Link>
       </div>
       {exportError && <p role="alert" className="text-red-300">{t('exportFailed')}</p>}
+      <p className="max-w-2xl leading-relaxed text-gray-400">{t('fullSnapshotHelp')}</p>
     </section>
 
     {(!published || hasLayers) && <details className="space-y-3 border-t border-space-border pt-2 text-sm">

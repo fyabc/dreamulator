@@ -1,5 +1,5 @@
 import { useParams, Link, Navigate, useSearchParams } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
 import { lazy, Suspense } from 'react'
@@ -190,10 +190,6 @@ export default function WorldDetail() {
     retry: false,
   })
 
-  const validateMutation = useMutation({
-    mutationFn: () => api.validateWorld(worldName!),
-  })
-
   const TAB_LABELS: Record<TabType, string> = {
     overview: t('tab.overview'),
     astronomy: t('tab.astronomy'),
@@ -265,42 +261,6 @@ export default function WorldDetail() {
                 branch={selectedBranch}
                 readOnly={!selectedBranch && (worldName === 'earth' || world.reference_anchor === true)}
               />
-            )}
-
-            {/* Build/Validate buttons — only in API mode */}
-            {!staticMode && (
-              <div className="flex gap-3 mb-6">
-                <button
-                  onClick={() => validateMutation.mutate()}
-                  disabled={validateMutation.isPending}
-                  className="px-4 py-2 rounded-lg font-medium transition-all bg-space-surface text-gray-300 border border-space-border hover:border-neon-cyan/30 disabled:opacity-50"
-                >
-                  {validateMutation.isPending ? t('status.validating') : t('action.validateWorld')}
-                </button>
-              </div>
-            )}
-
-            {validateMutation.data && (
-              <div
-                className={`mb-6 p-4 rounded-lg border ${
-                  validateMutation.data.ok
-                    ? 'bg-green-900/30 border-green-500/20'
-                    : 'bg-red-900/30 border-red-500/20'
-                }`}
-              >
-                <p className="font-semibold mb-2">
-                  {validateMutation.data.ok ? t('detail.valid') : t('detail.invalid')}
-                </p>
-                {validateMutation.data.errors.length > 0 && (
-                  <ul className="list-disc list-inside text-sm">
-                    {validateMutation.data.errors.map((err, i) => (
-                      <li key={i} className="text-red-300">
-                        {err}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
             )}
 
             {/* Tabs — horizontally scrollable on mobile */}

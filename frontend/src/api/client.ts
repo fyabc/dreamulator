@@ -494,6 +494,9 @@ const readApi = {
   getWorld: (name: string) =>
     isStaticMode() ? staticApi.getWorld(name) : fetchJson<any>(`/worlds/${name}`),
 
+  getWorldSnapshotUrl: (name: string) =>
+    isStaticMode() ? staticApi.getWorldSnapshotUrl() : `${API_BASE}/worlds/${encodeURIComponent(name)}/snapshot`,
+
   getStellarSystem: (name: string, branch?: string | null) =>
     isStaticMode()
       ? staticApi.getStellarSystem(name, branch)
