@@ -13,7 +13,10 @@
     "tools": "Map tools",
     "layers": "Layers",
     "closeLayers": "Close layers",
-    "changePlanet": "Choose a world body"
+    "body": "Body",
+    "mode": "Mode",
+    "official": "Official",
+    "trial": "Trial"
   },
   "terrainSource": {
     "label": "Terrain source",
@@ -42,9 +45,9 @@
   },
   "action": {
     "back": "← Back",
-    "uploadRaster": "⬆ Geography Raster",
+    "uploadRaster": "Import Land/Sea Guide",
     "uploading": "Uploading…",
-    "importHeightmap": "⬆ Import Heightmap",
+    "importHeightmap": "Replace Current Heightmap",
     "importing": "Importing…",
     "openBuild": "Open world build"
   },
@@ -158,6 +161,7 @@
     "alfisol": "Alfisol", "inceptisol": "Inceptisol", "entisol": "Entisol"
   },
   "inspector": {
+    "openInspection": "Cells and statistics",
     "loading": "Loading mesh data…",
     "unknownPlanet": "Unknown planet",
     "landSeaRatio": "Land/sea ratio",
@@ -461,6 +465,7 @@
     "monthlyMissing": "No monthly data available. Any colors shown use the full-period result."
   },
   "panel": {
+    "layerUnavailable": "This layer is not present in the current data.",
     "none": "None",
     "collapse": "Collapse",
     "expand": "Expand",
@@ -473,8 +478,8 @@
   },
   "hint": {
     "staticReadonly": "Not writable in static mode",
-    "uploadRasterTitle": "Upload geography raster (Gleba-style probability map, takes effect on next generation)",
-    "importHeightmapTitle": "Import external heightmap (16-bit PNG / TIFF)"
+    "uploadRasterTitle": "Guide land and sea placement on the next terrain generation without replacing current elevation.",
+    "importHeightmapTitle": "Import a PNG or TIFF for this body and branch. Confirming replaces the current elevation."
   },
   "confirm": {
     "uploadRaster": "Upload geography raster (white=land, black=sea, gray=neutral):\n{{name}}\n\nTakes effect on the next terrain generation, combined with geography.yaml. Continue?",

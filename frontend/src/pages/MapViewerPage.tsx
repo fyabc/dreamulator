@@ -23,14 +23,15 @@ import ClimateLegend from '../components/map/ClimateLegend'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapMinimap from '../components/map/MapMinimap'
 import SunControl from '../components/map/SunControl'
-import TimeControl from '../components/map/TimeControl'
+import { MapTimeControl } from '../components/map/TimeControl'
 import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
-import { MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
+import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
 import { MapTemperatureLegend, trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
 import { readRegionBoundary, readRegionWindow, REGION_WINDOW_PARAM } from '../viewers/map/regionWindow'
 import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
 import { useMapTemperatureTrial } from '../viewers/map/useTemperatureTrialPreview'
+import { useMapDisplayLayers } from '../viewers/map/useMapDisplayLayers'
 
 export default function MapViewerPage() {
   const { worldName, planetId: routePlanetId } = useParams<{
@@ -41,7 +42,9 @@ export default function MapViewerPage() {
   const [searchParams] = useSearchParams()
   const { t } = useTranslation('map')
 
-  const vs = usePlanetViewState(worldName, routePlanetId, 'map')
+  const trial = useMapTemperatureTrial()
+  const trialActive = trial.mode === 'trial'
+  const vs = usePlanetViewState(worldName, routePlanetId, 'map', trialActive)
   const {
     selectedBranch, setSelectedBranch,
     cleanMode, setCleanMode,
@@ -61,6 +64,7 @@ export default function MapViewerPage() {
     hoveredCellData, inspectorCell, selectedCellData, selectedCellObjects,
     importMsg, setImportMsg, handleImported,
   } = vs
+  const display = useMapDisplayLayers(trial, layerState, setLayerState, cvtMesh, monthlyData, Boolean(uccTexture))
 
   // Stable empty set — clean mode suppresses hover/selection highlights without
   // changing cell-picking state underneath.
@@ -75,10 +79,8 @@ export default function MapViewerPage() {
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
   const trialFromClimate = searchParams.get('trial') === 'climate'
   const trialReady = Boolean(worldName && selectedPlanet && meta && elevation)
-  const trial = useMapTemperatureTrial()
   const trialOpen = trial.open
-  const trialActive = trial.preview !== null
-  const trialLegend = !cleanMode && trial.preview && <MapTemperatureLegend preview={trial.preview} onRestore={trial.restore} />
+  const trialLegend = !cleanMode && display.texture && trial.preview && <MapTemperatureLegend preview={trial.preview} />
   const openTrial = () => {
     setLeftPanelOpen(false)
     trial.openPanel()
@@ -112,6 +114,19 @@ export default function MapViewerPage() {
     backSearch.set('tab', 'climate')
     if (selectedPlanet) backSearch.set('planet', selectedPlanet)
   }
+  const inspection = <MapCellInspector trialMode={trialActive} trial={trial.preview} cursor={cursor}
+    cell={inspectorCell} cvtMesh={cvtMesh} planetName={currentPlanetName} selectedCells={selectedCellObjects}
+    activeColorMode={trialActive ? display.texture ? 'temperature' : 'terrain' : vs.activeColorMode} monthlyMode={monthlyMode} monthIndex={monthlyMonth}
+    monthlyData={monthlyData} yearlyData={yearlyData} isEarth={worldName === 'earth'} />
+  const layers = <MapLayerPanel state={display.state} onChange={display.onChange} available={display.available} isEarth={worldName === 'earth'}
+    monthlyMode={trialActive ? typeof trial.preview?.period === 'number' : monthlyMode} monthlyData={trialActive ? null : monthlyData}
+    temperaturePeriodLabel={typeof trial.preview?.period === 'number' ? trial.preview.label : undefined}
+    monthIndex={monthlyMonth} onMonthlyModeChange={handleMonthlyModeChange}
+    particleMode={particleMode} onParticleModeChange={setParticleMode}
+    worldTime={<MapTimeControl trialMode={trialActive} preview={trial.preview} monthlyMode={monthlyMode} monthlyData={monthlyData} onMonthlyModeChange={handleMonthlyModeChange}
+      seasonDeg={seasonDeg} onSeasonChange={setSeasonDeg} axialTiltDeg={axialTiltDeg}
+      playing={timelapsePlaying} onPlayingChange={setTimelapsePlaying} monthMs={monthMs} onMonthMsChange={setMonthMs}
+      sunSweep={sunSweep} onSunSweepChange={setSunSweep} />} />
 
   if (!worldName) {
     return <div className="text-center py-12 text-gray-400">{t('status.noWorld')}</div>
@@ -126,7 +141,10 @@ export default function MapViewerPage() {
         backTo={`/worlds/${worldName}${backSearch.size ? `?${backSearch}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/globe/${selectedPlanet}${globeQS}` : undefined}
         trialPanel={trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trialOpen, onToggle: trialOpen ? trial.closePanel : openTrial } : undefined}
-        layersOpen={leftPanelOpen && !trialOpen && !trialActive} onToggleLayers={trialActive || trialOpen ? undefined : () => setLeftPanelOpen((open) => !open)}>
+        layersOpen={leftPanelOpen && !trialOpen} onToggleLayers={() => {
+          if (trialOpen) trial.closePanel()
+          setLeftPanelOpen(open => !open)
+        }}>
         {meta?.elevation_import && <TerrainSourceSelect value={terrainSource} onChange={setTerrainSource}
           width={meta.width} height={meta.height} cells={cvtMesh?.cells.length} />}
         {selectedPlanet && (
@@ -153,33 +171,17 @@ export default function MapViewerPage() {
           }
         />
 
-        {/* Body selector — every body with map data; display names resolved
-            from the astronomy catalogs (planets + stellar bodies) */}
-        {mapPlanets && mapPlanets.length > 0 && (
-          <select
-            aria-label={t('workbench.changePlanet')}
-            value={selectedPlanet}
-            onChange={(e) => {
-              const qs = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
-              navigate(`/worlds/${worldName}/map/${e.target.value}${qs}`)
-            }}
-            className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
-          >
-            {mapPlanets.map((id: string) => (
-              <option key={id} value={id}>
-                {bodyByName.get(id)?.name ?? id}
-              </option>
-            ))}
-          </select>
-        )}
-
-        {/* Branch selector */}
         <BranchSelector
           compact
           worldName={worldName}
           selectedBranch={selectedBranch}
           onSelect={setSelectedBranch}
         />
+        {!!mapPlanets?.length && <MapBodySelector planets={mapPlanets} selected={selectedPlanet}
+          nameOf={id => bodyByName.get(id)?.name ?? id} onSelect={id => {
+            const qs = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
+            navigate(`/worlds/${worldName}/map/${id}${qs}`)
+          }} />}
       </MapWorkbenchToolbar>
       )}
 
@@ -189,15 +191,14 @@ export default function MapViewerPage() {
       {!cleanMode && selectedPlanet && (elevation || cvtMesh) && (
         <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
           branch={selectedBranch} radiusKm={planetRadiusM / 1000}
+          modeControl={trialReady ? { mode: trial.mode, onChange: trial.selectMode } : undefined}
           onMoveToRegion={() => setRegionMoveRevision((revision) => revision + 1)}
           selectedPoint={selectedCells.size === 1 ? selectedCellData : null} />
       )}
-      {!cleanMode && cvtMesh && (
-        <div className={trialActive ? 'invisible' : undefined}>
+      {!cleanMode && !trialActive && cvtMesh && (
         <ClimateLegend layer={activeMainLayer} mesh={cvtMesh} monthlyMode={monthlyMode}
           monthlyData={monthlyThematic ? monthlyData : null} monthlyLoading={monthlyLoading}
           monthIndex={monthlyMonth} yearlyData={yearlyData} />
-        </div>
       )}
       {/* Error banner */}
       {worldPlanetsError && (
@@ -224,9 +225,9 @@ export default function MapViewerPage() {
       )}
 
       {/* Main content */}
-      <div className="flex flex-1 min-h-0 relative">
+      <div className="relative isolate flex min-h-0 flex-1">
         {/* === Mobile layout (default, hidden ≥ md) === */}
-        <div className="flex flex-col flex-1 min-w-0 md:hidden">
+        <div className="flex flex-col flex-1 min-w-0 lg:hidden">
           {/* Map area — full width */}
           <div className="flex-1 flex flex-col min-h-0">
             {elevation ? (
@@ -238,8 +239,8 @@ export default function MapViewerPage() {
                     terrainSource={terrainSource}
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
-                    layers={layerState.layers}
-                    trialTemperature={trial.texture}
+                    layers={display.state.layers}
+                    trialTemperature={display.texture}
 
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
@@ -270,13 +271,14 @@ export default function MapViewerPage() {
                   {trialLegend}
                 </div>
                 {!cleanMode && (
-                  <div className={trialActive ? 'invisible' : undefined}>
                   <MobileCellCard
                     cell={selectedCells.size === 1 ? selectedCellData : null}
                     cursor={cursor}
                     onClose={clearSelection}
+                    covered={trialOpen}
+                    trialMode={trialActive} trial={trial.preview}
+                    inspection={inspection}
                   />
-                  </div>
                 )}
               </>
             ) : (
@@ -295,33 +297,9 @@ export default function MapViewerPage() {
             )}
           </div>
 
-          {!cleanMode && !trialOpen && !trialActive && leftPanelOpen && (
+          {!cleanMode && !trialOpen && leftPanelOpen && (
             <MapLayerDrawer onClose={() => setLeftPanelOpen(false)}>
-              <TimeControl
-                monthlyMode={monthlyMode}
-                monthlyData={monthlyData}
-                onMonthlyModeChange={handleMonthlyModeChange}
-                seasonDeg={seasonDeg}
-                onSeasonChange={setSeasonDeg}
-                axialTiltDeg={axialTiltDeg}
-                playing={timelapsePlaying}
-                onPlayingChange={setTimelapsePlaying}
-                monthMs={monthMs}
-                onMonthMsChange={setMonthMs}
-                sunSweep={sunSweep}
-                onSunSweepChange={setSunSweep}
-              />
-              <MapLayerPanel
-                state={layerState}
-                onChange={setLayerState}
-                isEarth={worldName === 'earth'}
-                monthlyMode={monthlyMode}
-                monthlyData={monthlyData}
-                monthIndex={monthlyMonth}
-                onMonthlyModeChange={handleMonthlyModeChange}
-                particleMode={particleMode}
-                onParticleModeChange={setParticleMode}
-              />
+              {layers}
               {platesError && selectedPlanet && (
                 <div className="text-xs text-gray-500 pt-2">
                   {t('msg.noPlateData')}
@@ -339,37 +317,12 @@ export default function MapViewerPage() {
           )}
         </div>
 
-        {/* === Desktop layout (≥ md, hidden by default) === */}
-        <div className="hidden md:flex flex-1 min-h-0">
+        {/* === Desktop layout (≥ lg, hidden by default) === */}
+        <div className="hidden lg:flex flex-1 min-h-0">
           {/* Left panel: layers */}
           {!cleanMode && (
           <div className="w-56 shrink-0 bg-space-panel border-r border-space-border overflow-y-auto p-3 space-y-4">
-            {trialActive ? <p className="text-xs leading-relaxed text-gray-400">{t('playground:trial.layersPreserved')}</p> : <>
-            <TimeControl
-              monthlyMode={monthlyMode}
-              monthlyData={monthlyData}
-              onMonthlyModeChange={handleMonthlyModeChange}
-              seasonDeg={seasonDeg}
-              onSeasonChange={setSeasonDeg}
-              axialTiltDeg={axialTiltDeg}
-              playing={timelapsePlaying}
-              onPlayingChange={setTimelapsePlaying}
-              monthMs={monthMs}
-              onMonthMsChange={setMonthMs}
-              sunSweep={sunSweep}
-              onSunSweepChange={setSunSweep}
-            />
-            <MapLayerPanel
-              state={layerState}
-              onChange={setLayerState}
-              isEarth={worldName === 'earth'}
-              monthlyMode={monthlyMode}
-              monthlyData={monthlyData}
-              monthIndex={monthlyMonth}
-              onMonthlyModeChange={handleMonthlyModeChange}
-              particleMode={particleMode}
-              onParticleModeChange={setParticleMode}
-            />
+            {layers}
             {platesError && selectedPlanet && (
               <div className="text-xs text-gray-500 pt-2">
                 {t('msg.noPlateData')}
@@ -383,7 +336,6 @@ export default function MapViewerPage() {
                 onEnabledChange={setDayNightEnabled}
               />
             </div>
-            </>}
           </div>
           )}
 
@@ -398,8 +350,8 @@ export default function MapViewerPage() {
                     terrainSource={terrainSource}
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
-                    layers={layerState.layers}
-                    trialTemperature={trial.texture}
+                    layers={display.state.layers}
+                    trialTemperature={display.texture}
 
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
@@ -446,12 +398,12 @@ export default function MapViewerPage() {
 
                   {/* Base-map water/land legend — bottom-left, only while the
                       terrain or landsea base map is the active main layer. */}
-                  {!cleanMode && !trialActive && (
-                    <MapLegend visible={activeMainLayer === 'terrain' || activeMainLayer === 'landsea'} />
+                  {!cleanMode && (
+                    <MapLegend visible={trialActive ? !display.texture : activeMainLayer === 'terrain' || activeMainLayer === 'landsea'} />
                   )}
                 </div>
                 {!cleanMode && (
-                  <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={trialActive ? null : hoveredCellData} />
+                  <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={trialActive ? null : hoveredCellData} trial={trial.preview} />
                 )}
               </>
             ) : (
@@ -472,21 +424,11 @@ export default function MapViewerPage() {
 
           {/* Right panel: cell inspector + minimap */}
           {!cleanMode && (
-          <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border flex flex-col min-h-0">
+          <div ref={element => { if (element) element.inert = trialOpen }}
+            className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border flex flex-col min-h-0">
             {/* Scrollable inspector area */}
-            <div className={`flex-1 min-h-0 overflow-y-auto p-3${trialActive || trialOpen ? ' invisible' : ''}`}>
-              <MapCellInspector
-                cell={inspectorCell}
-                cvtMesh={cvtMesh}
-                planetName={currentPlanetName}
-                selectedCells={selectedCellObjects}
-                activeColorMode={vs.activeColorMode}
-                monthlyMode={monthlyMode}
-                monthIndex={monthlyMonth}
-                monthlyData={monthlyData}
-                yearlyData={yearlyData}
-                isEarth={worldName === 'earth'}
-              />
+            <div className="flex-1 min-h-0 overflow-y-auto p-3">
+              {inspection}
               {selectedCells.size > 1 && (
                 <p className="text-[10px] text-gray-600 mt-2 text-center">
                   {t('msg.escClearSelection')}

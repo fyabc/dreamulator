@@ -21,14 +21,15 @@ import MapStatusBar from '../components/map/MapStatusBar'
 import MapLayerPanel from '../components/map/MapLayerPanel'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
 import SunControl from '../components/map/SunControl'
-import TimeControl from '../components/map/TimeControl'
+import { MapTimeControl } from '../components/map/TimeControl'
 import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import ClimateLegend from '../components/map/ClimateLegend'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
-import { MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
+import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
 import { MapTemperatureLegend, trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import { useMapTemperatureTrial } from '../viewers/map/useTemperatureTrialPreview'
+import { useMapDisplayLayers } from '../viewers/map/useMapDisplayLayers'
 import useRafCoalesced from '../viewers/map/useRafCoalesced'
 import { buildCellKDTree, type KDTree3D } from '../components/map/utils/kdtree'
 import type { PointProjector, VoronoiCell } from '../viewers/map/types'
@@ -59,7 +60,9 @@ export default function GlobeViewerPage() {
   const { t } = useTranslation('map')
   const randomTip = useMemo(() => getRandomTip(t), [t])
 
-  const vs = usePlanetViewState(worldName, planetId, 'globe')
+  const trial = useMapTemperatureTrial()
+  const trialActive = trial.mode === 'trial'
+  const vs = usePlanetViewState(worldName, planetId, 'globe', trialActive)
   const {
     selectedBranch, setSelectedBranch,
     cleanMode, setCleanMode,
@@ -79,6 +82,7 @@ export default function GlobeViewerPage() {
     hoveredCell, hoveredCellData, inspectorCell, selectedCellData, selectedCellObjects,
     importMsg, setImportMsg, handleImported,
   } = vs
+  const display = useMapDisplayLayers(trial, layerState, setLayerState, cvtMesh, monthlyData, Boolean(uccTexture))
 
   // Auto spin (?spin=1): slow continuous orbit for recording.  Independent of
   // clean mode so ?clean=1&spin=1 is the standard recording posture.
@@ -122,7 +126,7 @@ export default function GlobeViewerPage() {
   // --- GPU texture ---
   // Opacity sliders fire many events per frame; coalesce so the composite
   // pass (and any data-driven re-bake) runs at most once per animation frame.
-  const renderLayers = useRafCoalesced(layerState.layers)
+  const renderLayers = useRafCoalesced(display.state.layers)
 
   const { texture: terrainTexture, renderComposite } = useGPUTerrain({
     elevation,
@@ -211,7 +215,10 @@ export default function GlobeViewerPage() {
   }, [elevation, elevationDims, elevMin, elevMax, kdTree, voronoiCells, terrainSource, handleCellHover, setCursor])
 
   const handleCellClickLonLat = useCallback((lon: number, lat: number, ctrlKey: boolean) => {
-    if (!kdTree) return
+    if (!kdTree) {
+      if (trialActive) handleCellHoverLonLat(lon, lat)
+      return
+    }
     const rad = THREE.MathUtils.degToRad(lat)
     const cosLat = Math.cos(rad)
     const cellId = kdTree.nearest(
@@ -221,7 +228,7 @@ export default function GlobeViewerPage() {
     )
     if (cellId < 0) return
     selectCell(cellId, ctrlKey)
-  }, [kdTree, selectCell])
+  }, [kdTree, selectCell, trialActive, handleCellHoverLonLat])
 
   // --- URLs ---
   const branchQS = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
@@ -234,10 +241,8 @@ export default function GlobeViewerPage() {
 
   // --- Mobile panel state ---
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
-  const trial = useMapTemperatureTrial()
   const trialReady = Boolean(worldName && selectedPlanet && meta && elevation)
-  const trialActive = trial.preview !== null
-  const trialLegend = !cleanMode && trial.preview && <MapTemperatureLegend preview={trial.preview} onRestore={trial.restore} />
+  const trialLegend = !cleanMode && display.texture && trial.preview && <MapTemperatureLegend preview={trial.preview} />
   const openTrial = () => {
     setLeftPanelOpen(false)
     trial.openPanel()
@@ -249,6 +254,19 @@ export default function GlobeViewerPage() {
   }
 
   const currentPlanet = selectedPlanet ? bodyByName.get(selectedPlanet) : undefined
+  const inspection = <MapCellInspector trialMode={trialActive} trial={trial.preview} cursor={cursor}
+    cell={inspectorCell} cvtMesh={cvtMesh} planetName={currentPlanet?.name ?? selectedPlanet} selectedCells={selectedCellObjects}
+    activeColorMode={trialActive ? display.texture ? 'temperature' : 'terrain' : vs.activeColorMode} monthlyMode={monthlyMode} monthIndex={monthlyMonth}
+    monthlyData={monthlyData} yearlyData={yearlyData} isEarth={worldName === 'earth'} />
+  const layers = <MapLayerPanel state={display.state} onChange={display.onChange} available={display.available} isEarth={worldName === 'earth'}
+    monthlyMode={trialActive ? typeof trial.preview?.period === 'number' : monthlyMode} monthlyData={trialActive ? null : monthlyData}
+    temperaturePeriodLabel={typeof trial.preview?.period === 'number' ? trial.preview.label : undefined}
+    monthIndex={monthlyMonth} onMonthlyModeChange={handleMonthlyModeChange}
+    particleMode={particleMode} onParticleModeChange={setParticleMode}
+    worldTime={<MapTimeControl trialMode={trialActive} preview={trial.preview} monthlyMode={monthlyMode} monthlyData={monthlyData} onMonthlyModeChange={handleMonthlyModeChange}
+      seasonDeg={seasonDeg} onSeasonChange={setSeasonDeg} axialTiltDeg={axialTiltDeg}
+      playing={timelapsePlaying} onPlayingChange={setTimelapsePlaying} monthMs={monthMs} onMonthMsChange={setMonthMs}
+      sunSweep={sunSweep} onSunSweepChange={setSunSweep} />} />
 
   return (
     <div className={cleanMode
@@ -260,7 +278,10 @@ export default function GlobeViewerPage() {
           `/worlds/${worldName}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/map/${selectedPlanet}${mapQS}` : undefined}
         trialPanel={trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trial.open, onToggle: trial.open ? trial.closePanel : openTrial } : undefined}
-        layersOpen={leftPanelOpen && !trial.open && !trialActive} onToggleLayers={trialActive || trial.open ? undefined : () => setLeftPanelOpen((open) => !open)}>
+        layersOpen={leftPanelOpen && !trial.open} onToggleLayers={() => {
+          if (trial.open) trial.closePanel()
+          setLeftPanelOpen(open => !open)
+        }}>
         {meta?.elevation_import && <TerrainSourceSelect value={terrainSource} onChange={setTerrainSource}
           width={meta.width} height={meta.height} cells={cvtMesh?.cells.length} />}
         {selectedPlanet && (
@@ -286,30 +307,15 @@ export default function GlobeViewerPage() {
           }
         />
 
-        {/* Body selector — every body with map data; display names resolved
-            from the astronomy catalogs (planets + stellar bodies) */}
-        {mapPlanets && mapPlanets.length > 0 && (
-          <select
-            aria-label={t('workbench.changePlanet')}
-            value={selectedPlanet}
-            onChange={(e) => {
-              const next = new URLSearchParams(searchParams)
-              next.delete(REGION_WINDOW_PARAM)
-              next.delete('draft')
-              const qs = next.toString()
-              navigate(`/worlds/${worldName}/globe/${e.target.value}${qs ? `?${qs}` : ''}`)
-            }}
-            className="px-2 py-1 rounded bg-space-surface text-sm text-gray-300 border border-space-border"
-          >
-            {mapPlanets.map((id: string) => (
-              <option key={id} value={id}>
-                {bodyByName.get(id)?.name ?? id}
-              </option>
-            ))}
-          </select>
-        )}
-
         <BranchSelector compact worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} />
+        {!!mapPlanets?.length && <MapBodySelector planets={mapPlanets} selected={selectedPlanet}
+          nameOf={id => bodyByName.get(id)?.name ?? id} onSelect={id => {
+            const next = new URLSearchParams(searchParams)
+            next.delete(REGION_WINDOW_PARAM)
+            next.delete('draft')
+            const qs = next.toString()
+            navigate(`/worlds/${worldName}/globe/${id}${qs ? `?${qs}` : ''}`)
+          }} />}
         <Link to={`/worlds/${worldName}/viewer3d${stellarQS}`} className="atlas-tool-button text-sm">
           {t('label.stellarShort')}
         </Link>
@@ -334,6 +340,7 @@ export default function GlobeViewerPage() {
       {!cleanMode && selectedPlanet && (elevation || cvtMesh) && (
         <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
           branch={selectedBranch} radiusKm={planetRadiusM / 1000}
+          modeControl={trialReady ? { mode: trial.mode, onChange: trial.selectMode } : undefined}
           onMoveToRegion={() => {
             setRegionFlight(null)
             setRegionMoveRevision((revision) => revision + 1)
@@ -357,9 +364,9 @@ export default function GlobeViewerPage() {
       )}
 
       {/* Main content */}
-      <div className="flex-1 min-h-0 relative">
+      <div className="relative isolate min-h-0 flex-1">
         {/* === Mobile layout (visible only < md) === */}
-        <div className="flex flex-col min-h-0 md:hidden absolute inset-0">
+        <div className="flex flex-col min-h-0 lg:hidden absolute inset-0">
           <div className="flex-1 flex flex-col min-h-0">
             <div className="flex-1 min-h-0 relative">
               {!displayTexture ? (
@@ -387,8 +394,8 @@ export default function GlobeViewerPage() {
             ) : (
               <GlobeViewer
                 texture={displayTexture}
-                trialTemperature={trial.texture}
-                renderComposite={trialActive ? undefined : renderComposite}
+                trialTemperature={display.texture}
+                renderComposite={display.texture ? undefined : renderComposite}
                 onTransition={handleTransition}
                 onCellHover={handleCellHoverLonLat}
                 onCellClick={handleCellClickLonLat}
@@ -470,42 +477,21 @@ export default function GlobeViewerPage() {
             />
             </>}
           </div>
-          {!cleanMode && !trialActive && (
+          {!cleanMode && (
             <MobileCellCard
               cell={selectedCells.size === 1 ? selectedCellData : null}
               cursor={cursor}
               onClose={clearSelection}
+              covered={trial.open}
+              trialMode={trialActive} trial={trial.preview}
+              inspection={inspection}
             />
           )}
         </div>
 
-        {!cleanMode && !trial.open && !trialActive && leftPanelOpen && (
+        {!cleanMode && !trial.open && leftPanelOpen && (
           <MapLayerDrawer onClose={() => setLeftPanelOpen(false)}>
-            <TimeControl
-              monthlyMode={monthlyMode}
-              monthlyData={monthlyData}
-              onMonthlyModeChange={handleMonthlyModeChange}
-              seasonDeg={seasonDeg}
-              onSeasonChange={setSeasonDeg}
-              axialTiltDeg={axialTiltDeg}
-              playing={timelapsePlaying}
-              onPlayingChange={setTimelapsePlaying}
-              monthMs={monthMs}
-              onMonthMsChange={setMonthMs}
-              sunSweep={sunSweep}
-              onSunSweepChange={setSunSweep}
-            />
-            <MapLayerPanel
-              state={layerState}
-              onChange={setLayerState}
-              isEarth={worldName === 'earth'}
-              monthlyMode={monthlyMode}
-              monthlyData={monthlyData}
-              monthIndex={monthlyMonth}
-              onMonthlyModeChange={handleMonthlyModeChange}
-              particleMode={particleMode}
-              onParticleModeChange={setParticleMode}
-            />
+            {layers}
             <div className="mt-3 pt-3 border-t border-space-border">
               <SunControl
                 sunLongitudeDeg={sunLongitudeDeg}
@@ -519,36 +505,11 @@ export default function GlobeViewerPage() {
       </div>
 
         {/* === Desktop layout (≥ md) === */}
-        <div className="hidden md:flex absolute inset-0">
+        <div className="hidden lg:flex absolute inset-0">
           {/* Left panel: layers */}
           {!cleanMode && (
           <div className="w-56 shrink-0 bg-space-panel border-r border-space-border overflow-y-auto p-3 space-y-4">
-            {trialActive ? <p className="text-xs leading-relaxed text-gray-400">{t('playground:trial.layersPreserved')}</p> : <>
-            <TimeControl
-              monthlyMode={monthlyMode}
-              monthlyData={monthlyData}
-              onMonthlyModeChange={handleMonthlyModeChange}
-              seasonDeg={seasonDeg}
-              onSeasonChange={setSeasonDeg}
-              axialTiltDeg={axialTiltDeg}
-              playing={timelapsePlaying}
-              onPlayingChange={setTimelapsePlaying}
-              monthMs={monthMs}
-              onMonthMsChange={setMonthMs}
-              sunSweep={sunSweep}
-              onSunSweepChange={setSunSweep}
-            />
-            <MapLayerPanel
-              state={layerState}
-              onChange={setLayerState}
-              isEarth={worldName === 'earth'}
-              monthlyMode={monthlyMode}
-              monthlyData={monthlyData}
-              monthIndex={monthlyMonth}
-              onMonthlyModeChange={handleMonthlyModeChange}
-              particleMode={particleMode}
-              onParticleModeChange={setParticleMode}
-            />
+            {layers}
             <div className="mt-3 pt-3 border-t border-space-border">
               <SunControl
                   sunLongitudeDeg={sunLongitudeDeg}
@@ -557,7 +518,6 @@ export default function GlobeViewerPage() {
                   onEnabledChange={setDayNightEnabled}
                 />
             </div>
-            </>}
           </div>
           )}
 
@@ -589,8 +549,8 @@ export default function GlobeViewerPage() {
           ) : (
             <GlobeViewer
               texture={displayTexture}
-              trialTemperature={trial.texture}
-              renderComposite={trialActive ? undefined : renderComposite}
+              trialTemperature={display.texture}
+              renderComposite={display.texture ? undefined : renderComposite}
               onTransition={handleTransition}
               onCellHover={handleCellHoverLonLat}
               onCellClick={handleCellClickLonLat}
@@ -700,25 +660,15 @@ export default function GlobeViewerPage() {
           )}
         </div>
         {!cleanMode && (
-          <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={trialActive ? null : hoveredCellData} />
+          <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={trialActive ? null : hoveredCellData} trial={trial.preview} />
         )}
       </div>
 
       {/* Right panel: cell inspector */}
       {!cleanMode && (
-      <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border overflow-y-auto p-3">
-        {!trialActive && !trial.open && <MapCellInspector
-          cell={inspectorCell}
-          cvtMesh={cvtMesh}
-          planetName={currentPlanet?.name ?? selectedPlanet}
-          selectedCells={selectedCellObjects}
-          activeColorMode={vs.activeColorMode}
-          monthlyMode={monthlyMode}
-          monthIndex={monthlyMonth}
-          monthlyData={monthlyData}
-          yearlyData={yearlyData}
-          isEarth={worldName === 'earth'}
-        />}
+      <div ref={element => { if (element) element.inert = trial.open }}
+        className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border overflow-y-auto p-3">
+        {inspection}
       </div>
       )}
     </div>

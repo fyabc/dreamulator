@@ -8,6 +8,7 @@
 import { useTranslation } from 'react-i18next'
 import type { CursorInfo } from './MapViewer'
 import type { VoronoiCell } from '../../viewers/map/types'
+import { sampleTemperature, type TemperaturePreview } from '../../playground/temperaturePreview'
 
 const CRUST_LABELS: Record<string, string> = {
   continental: 'crust.continental',
@@ -20,12 +21,14 @@ interface MapStatusBarProps {
   zoom: number
   /** Currently hovered Voronoi cell (from cvtMesh) for geological info. */
   hoveredCell: VoronoiCell | null
+  trial?: TemperaturePreview | null
 }
 
 export default function MapStatusBar({
   cursor,
   zoom,
   hoveredCell,
+  trial,
 }: MapStatusBarProps) {
   const { t } = useTranslation('map')
 
@@ -60,6 +63,10 @@ export default function MapStatusBar({
         {t('field.elevation')} {cursor.elevationM >= 0 ? '+' : ''}
         {cursor.elevationM.toFixed(1)}m
       </span>
+      {trial && <>
+        <span className="text-gray-600">|</span>
+        <span className="text-amber-200">{t('playground:trial.temperatureLayer')} {sampleTemperature(trial.field, cursor).toFixed(1)} °C</span>
+      </>}
 
       {hoveredCell && (
         <>

@@ -145,6 +145,7 @@ export function usePlanetViewState(
   /** Planet ID from the route (optional segment on /map, mandatory on /globe). */
   routePlanetId: string | undefined,
   viewKind: PlanetViewKind,
+  trialActive = false,
 ): PlanetViewState {
   const { t } = useTranslation('map')
   const navigate = useNavigate()
@@ -440,7 +441,7 @@ export function usePlanetViewState(
   // --- Monthly/UCC climate products ---
   const { texture: monthlyThematic, data: monthlyData, loading: monthlyLoading, month: monthlyMonth } = useMonthlyClimate({
     worldName, planetId: selectedPlanet, branch: selectedBranch, seasonDeg,
-    field: monthlyField, active: monthlyActive, playing: timelapsePlaying,
+    field: monthlyField, active: monthlyActive, playing: timelapsePlaying && !trialActive,
     cvtMesh: cvtMesh ?? null, cellIdMap,
     ...meshTextureSize, flipHorizontal: false,
   })
@@ -451,7 +452,7 @@ export function usePlanetViewState(
     meshTextureSize.width, meshTextureSize.height, false,
   )
 
-  const sweeping = timelapsePlaying && monthlyMode && sunSweep
+  const sweeping = timelapsePlaying && monthlyMode && sunSweep && !trialActive
 
   // Lighting URL sync, gated during a sun sweep (continuous rAF → one
   // history.replace on stop, not one per frame).  Keeping the params in the
@@ -505,7 +506,7 @@ export function usePlanetViewState(
   // Month stepper: one discrete step per beat (same semantics as the slider,
   // so ?season= write-back stays at 12 hits per cycle).
   useSeasonTimelapse({
-    playing: timelapsePlaying && monthlyMode,
+    playing: timelapsePlaying && monthlyMode && !trialActive,
     monthMs,
     seasonDeg,
     onSeasonChange: setSeasonDeg,
@@ -567,7 +568,7 @@ export function usePlanetViewState(
       : lastCellData
 
   const selectedCellObjects = useMemo(() => {
-    if (selectedCells.size <= 1) return undefined
+    if (selectedCells.size === 0) return undefined
     return [...selectedCells].map((id) => voronoiCells.find((c) => c.id === id)).filter(Boolean) as VoronoiCell[]
   }, [voronoiCells, selectedCells])
 

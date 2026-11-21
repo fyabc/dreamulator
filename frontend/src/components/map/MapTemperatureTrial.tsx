@@ -6,13 +6,12 @@ const TemperatureLab = lazy(() => import('../../playground/TemperatureLab'))
 export const trialPanelId = 'map-climate-trial'
 export const trialButtonId = 'map-climate-trial-button'
 
-export function MapTemperatureTrial({ open, onClose, search, onPreview, onShow, showing }: {
+export function MapTemperatureTrial({ open, onClose, search, onPreview, onShow }: {
   open: boolean
   onClose: () => void
   search: URLSearchParams
   onPreview: (preview: TemperaturePreview | null) => void
   onShow: () => void
-  showing: boolean
 }) {
   const { t } = useTranslation('playground')
   const closeButton = useRef<HTMLButtonElement>(null)
@@ -22,7 +21,7 @@ export function MapTemperatureTrial({ open, onClose, search, onPreview, onShow, 
 
   return (
     <section id={trialPanelId} hidden={!open} aria-labelledby={`${trialPanelId}-title`}
-      className={`${open ? 'flex' : 'hidden'} absolute inset-x-0 bottom-0 z-[25] max-h-[min(100%,48dvh)] flex-col rounded-t-lg border border-space-border bg-space-panel shadow-xl md:inset-y-0 md:left-auto md:w-72 md:max-h-none md:rounded-none`}
+      className={`${open ? 'flex' : 'hidden'} absolute inset-x-0 bottom-0 z-[35] max-h-[min(100%,48dvh)] flex-col rounded-t-lg border border-space-border bg-space-panel shadow-xl lg:inset-y-0 lg:left-auto lg:right-0 lg:w-80 lg:max-h-none lg:rounded-none`}
       onKeyDown={event => {
         if (event.key !== 'Escape' || event.defaultPrevented) return
         event.preventDefault()
@@ -35,21 +34,18 @@ export function MapTemperatureTrial({ open, onClose, search, onPreview, onShow, 
       </header>
       <div className="min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-2">
         <Suspense fallback={<p role="status" className="text-xs text-gray-400">{t('action.loadingInput')}</p>}>
-          <TemperatureLab search={search} map={{ onPreview, onShowPreview: onShow, showing }} />
+          <TemperatureLab search={search} map={{ onPreview, onShowPreview: onShow }} />
         </Suspense>
       </div>
     </section>
   )
 }
 
-export function MapTemperatureLegend({ preview, onRestore }: { preview: TemperaturePreview; onRestore: () => void }) {
+export function MapTemperatureLegend({ preview }: { preview: TemperaturePreview }) {
   const { t } = useTranslation('playground')
   return (
     <div className="absolute left-2 top-2 z-20 max-w-[calc(100%_-_1rem)] rounded border border-space-border bg-space-panel px-2.5 py-1.5 shadow-md">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 text-xs">
-        <p role="status" className="font-medium text-amber-200">{t('trial.previewLabel', { period: preview.label })}{preview.stale ? ` · ${t('trial.stalePreview')}` : ''}</p>
-        <button type="button" onClick={onRestore} className="min-h-9 text-neon-cyan hover:underline">{t('trial.restoreLayers')}</button>
-      </div>
+      <p role="status" className="mb-1 text-xs font-medium text-amber-200">{t('trial.previewLabel', { period: preview.label })}{preview.stale ? ` · ${t('trial.stalePreview')}` : ''}</p>
       <div className="flex items-center gap-2 text-[10px] text-gray-300">
         <span>−40 °C</span><div className="h-1.5 flex-1 rounded" style={{ background: TEMPERATURE_GRADIENT }} /><span>+40 °C</span>
       </div>

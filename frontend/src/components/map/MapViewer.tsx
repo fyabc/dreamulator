@@ -540,7 +540,7 @@ export default function MapViewer({
         (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
       // Plain click pans (desktop); a tap selects the cell on touch devices.
       if (!ctrl && !isTouch) return
-      if (!kdTree || !onCellClick) return
+      if (!kdTree && !trialTemperature) return
       const rect = containerRef.current?.getBoundingClientRect()
       if (!rect) return
       const ll = unproject(e.clientX - rect.left, e.clientY - rect.top)
@@ -548,11 +548,11 @@ export default function MapViewer({
       const lonRad = (ll.lon * Math.PI) / 180
       const latRad = (ll.lat * Math.PI) / 180
       const cosLat = Math.cos(latRad)
-      const cellId = kdTree.nearest(
+      const cellId = kdTree?.nearest(
         cosLat * Math.cos(lonRad), Math.sin(latRad), cosLat * Math.sin(lonRad),
-      )
-      if (cellId >= 0) {
-        onCellClick(cellId, ctrl)
+      ) ?? -1
+      if (cellId >= 0 || trialTemperature) {
+        if (cellId >= 0) onCellClick?.(cellId, ctrl)
         // A tap fires no mousemove, so update cursor/hover explicitly.
         const ep = lonLatToArrayPixel(ll, mapW, mapH)
         const elev = ep && elevation ? (elevation[ep.py * mapW + ep.px] ?? 0) : 0
@@ -565,10 +565,10 @@ export default function MapViewer({
           pixelX: ep?.px ?? 0,
           pixelY: ep?.py ?? 0,
         })
-        onCellHover?.(cellId)
+        onCellHover?.(cellId >= 0 ? cellId : null)
       }
     },
-    [kdTree, unproject, onCellClick, elevation, elevMin, elevMax, mapW, mapH, onCursorMove, onCellHover, terrainSource, voronoiCells],
+    [kdTree, trialTemperature, unproject, onCellClick, elevation, elevMin, elevMax, mapW, mapH, onCursorMove, onCellHover, terrainSource, voronoiCells],
   )
 
   const handleDoubleClick = useCallback(

@@ -13,12 +13,13 @@
  *   - Annual:  continuous 0–360°, affecting only solar declination (lighting).
  */
 
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { solarDeclinationDeg } from '../../viewers/utils/solar'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import { climateWindowLabel } from './climateTime'
+import type { TemperaturePreview } from '../../playground/temperaturePreview'
 
 interface TimeControlProps {
   monthlyMode: boolean
@@ -37,6 +38,9 @@ interface TimeControlProps {
   /** Continuously sweep the sun longitude (one revolution per model year). */
   sunSweep?: boolean
   onSunSweepChange?: (v: boolean) => void
+  windowLabels?: readonly string[]
+  climateAvailable?: boolean
+  lightingAvailable?: boolean
 }
 
 /** Season-month index (0 = March vernal equinox) from the season angle. */
@@ -69,14 +73,17 @@ export default function TimeControl({
   onMonthMsChange,
   sunSweep = false,
   onSunSweepChange,
+  windowLabels,
+  climateAvailable = true,
+  lightingAvailable = true,
 }: TimeControlProps) {
   const { t } = useTranslation('map')
 
   // Month names in natural order, indexed by season-month (0 = March).
   const months = t('months', { returnObjects: true }) as unknown as string[]
-  const namedMonths = monthlyData?.month0 === 'vernal_equinox'
+  const namedMonths = Boolean(windowLabels) || monthlyData?.month0 === 'vernal_equinox'
   const monthIndex = seasonMonthIndex(seasonDeg)
-  const monthName = climateWindowLabel(t, monthlyData, monthIndex)
+  const monthName = windowLabels?.[monthIndex] ?? climateWindowLabel(t, monthlyData, monthIndex)
 
   const declination = solarDeclinationDeg(seasonDeg, axialTiltDeg)
   const formatDeclination = (dec: number): string => {
@@ -99,7 +106,7 @@ export default function TimeControl({
   // Tick labels: month names (Mar/Jun/Sep/Dec, wrapped) in monthly mode,
   // the four seasonal markers in annual mode.
   const tickLabels = monthlyMode
-    ? namedMonths ? [months[0], months[3], months[6], months[9], months[0]] : [1, 4, 7, 10, 1]
+    ? namedMonths ? [0, 3, 6, 9, 0].map(index => (windowLabels ?? months)[index]) : [1, 4, 7, 10, 1]
     : [t('sun.springEquinox'), t('sun.summerSolstice'), t('sun.autumnEquinox'), t('sun.winterSolstice'), t('sun.springEquinox')]
 
   return (
@@ -123,6 +130,7 @@ export default function TimeControl({
         <button
           type="button"
           onClick={() => onMonthlyModeChange(false)}
+          aria-pressed={!monthlyMode}
           title={t('time.annualHint')}
           className={`flex-1 py-1 px-2 transition-colors ${
             !monthlyMode ? 'bg-neon-cyan/20 text-gray-100' : 'text-gray-500 hover:text-gray-300'
@@ -133,8 +141,10 @@ export default function TimeControl({
         <button
           type="button"
           onClick={() => onMonthlyModeChange(true)}
+          aria-pressed={monthlyMode}
+          disabled={!climateAvailable}
           title={t('time.monthlyHint')}
-          className={`flex-1 py-1 px-2 transition-colors border-l border-gray-700 ${
+          className={`flex-1 py-1 px-2 transition-colors border-l border-gray-700 disabled:opacity-50 ${
             monthlyMode ? 'bg-neon-cyan/20 text-gray-100' : 'text-gray-500 hover:text-gray-300'
           }`}
         >
@@ -179,7 +189,7 @@ export default function TimeControl({
               type="checkbox"
               checked={sunSweep}
               onChange={(e) => onSunSweepChange?.(e.target.checked)}
-              disabled={!monthlyMode || !playing}
+              disabled={!monthlyMode || !playing || !lightingAvailable}
               className="accent-amber-400 w-3 h-3"
             />
             {t('time.sunSweep')}
@@ -196,7 +206,7 @@ export default function TimeControl({
           <span className="text-[10px] font-mono tabular-nums text-amber-300/80">
             {monthlyMode
               ? monthName
-              : t('sun.declination', { declination: formatDeclination(declination) })}
+              : lightingAvailable ? t('sun.declination', { declination: formatDeclination(declination) }) : '—'}
           </span>
         </div>
         <input
@@ -226,4 +236,44 @@ export default function TimeControl({
       </div>
     </div>
   )
+}
+
+export function MapTimeControl({ trialMode, preview, ...official }: TimeControlProps & {
+  trialMode: boolean; preview: TemperaturePreview | null
+}) {
+  return trialMode ? <TrialTimeControl preview={preview} /> : <TimeControl {...official} />
+}
+
+function TrialTimeControl({ preview }: { preview: TemperaturePreview | null }) {
+  const [playing, setPlaying] = useState(false)
+  const [monthMs, setMonthMs] = useState(2000)
+  const [lastMonth, setLastMonth] = useState(0)
+  const index = preview?.periods.findIndex(({ modelIndex }) => modelIndex === preview.period) ?? -1
+  const selectMonth = (month: number) => {
+    const period = preview?.periods[month]
+    if (period) {
+      setLastMonth(month)
+      preview?.selectPeriod(period.modelIndex)
+    }
+  }
+  useEffect(() => {
+    if (!playing || index < 0 || !preview) return
+    const timer = window.setTimeout(() => {
+      const next = (index + 1) % preview.periods.length
+      setLastMonth(next)
+      preview.selectPeriod(preview.periods[next].modelIndex)
+    }, monthMs)
+    return () => window.clearTimeout(timer)
+  }, [playing, index, preview, monthMs])
+
+  return <TimeControl monthlyMode={index >= 0} monthlyData={null}
+    windowLabels={preview?.periods.map(({ label }) => label)} climateAvailable={Boolean(preview)} lightingAvailable={false}
+    onMonthlyModeChange={monthly => {
+      if (monthly && index < 0) selectMonth(lastMonth)
+      if (!monthly) {
+        setPlaying(false)
+        preview?.selectPeriod('annual')
+      }
+    }} seasonDeg={Math.max(0, index) * 30} onSeasonChange={degrees => selectMonth(seasonMonthIndex(degrees))}
+    playing={playing} onPlayingChange={setPlaying} monthMs={monthMs} onMonthMsChange={setMonthMs} />
 }

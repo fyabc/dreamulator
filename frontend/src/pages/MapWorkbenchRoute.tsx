@@ -1,12 +1,13 @@
-import { lazy, useCallback, useMemo, useState } from 'react'
+import { lazy, useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Outlet, useMatch, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import { MapTemperatureTrial, trialButtonId } from '../components/map/MapTemperatureTrial'
+import { initialLayerState } from '../components/map/layerStateInit'
 import type { TemperatureOrigin } from '../playground/temperatureDraft'
-import { useTemperatureTrialPreview, type MapTemperatureTrialSession } from '../viewers/map/useTemperatureTrialPreview'
+import { useTemperatureTrialPreview, type MapMode, type MapTemperatureTrialSession } from '../viewers/map/useTemperatureTrialPreview'
 
 const TemperatureLab = lazy(() => import('../playground/TemperatureLab'))
 
@@ -22,7 +23,8 @@ export default function MapWorkbenchRoute() {
     return <DraftWorkbench key={JSON.stringify([worldName, planetId, branch, draft])}
       world={worldName} planet={planetId} branch={branch} draft={draft} clean={clean} />
   }
-  return <TemperatureTrialSession world={worldName} planet={planetId} branch={branch}
+  return <TemperatureTrialSession key={JSON.stringify([worldName, planetId, branch])}
+    world={worldName} planet={planetId} branch={branch}
     clean={clean} initiallyOpen={search.get('trial') === 'climate'} />
 }
 
@@ -58,35 +60,61 @@ function TemperatureTrialSession({ world, planet, branch, draft, clean, initiall
   const [open, setOpen] = useState(initiallyOpen)
   const [visited, setVisited] = useState(initiallyOpen)
   const [revision, setRevision] = useState(0)
+  const [modeSelection, setModeSelection] = useState<{ scope: string | null; mode: MapMode } | null>(null)
+  const [layerState, setLayerState] = useState(() => trialLayerState(null))
   const [panelHost] = useState(() => document.createElement('div'))
+  const panelTrigger = useRef<HTMLElement | null>(null)
   const scope = world && planet ? JSON.stringify([world, planet, branch, revision]) : null
+  const mode = modeSelection?.scope === scope ? modeSelection.mode : 'official'
   const input = useMemo(() => {
     const params = new URLSearchParams({ world: world ?? '', planet: planet ?? '' })
     if (branch) params.set('branch', branch)
     if (draft) params.set('draft', draft)
     return params
   }, [world, planet, branch, draft])
-  const trial = useTemperatureTrialPreview(scope)
+  const trial = useTemperatureTrialPreview(scope, mode)
+  const showTrial = useCallback(() => {
+    setLayerState(trialLayerState('temperature'))
+    setModeSelection({ scope, mode: 'trial' })
+  }, [scope])
   const attachPanel = useCallback((slot: HTMLDivElement | null) => {
     if (slot) slot.append(panelHost)
     else panelHost.remove()
   }, [panelHost])
   const openPanel = () => {
+    panelTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setVisited(true)
     setOpen(true)
   }
   const closePanel = () => {
     setOpen(false)
-    document.getElementById(trialButtonId)?.focus()
+    const trigger = panelTrigger.current
+    if (trigger && trigger !== document.body && trigger.isConnected) trigger.focus({ preventScroll: true })
+    else document.getElementById(trialButtonId)?.focus({ preventScroll: true })
   }
   const session: MapTemperatureTrialSession = {
-    ...trial, open: open && !clean, openPanel, closePanel, attachPanel,
-    replaceElevation: () => { if (!draft) setRevision(revision => revision + 1) },
+    ...trial, mode, layerState, setLayerState, open: open && !clean, openPanel, closePanel, attachPanel,
+    selectMode: (next) => {
+      setModeSelection({ scope, mode: next })
+      if (next === 'trial' && !trial.available) openPanel()
+      if (next === 'official') setOpen(false)
+    },
+    replaceElevation: () => {
+      if (draft) return
+      setLayerState(trialLayerState(null))
+      setRevision(revision => revision + 1)
+    },
   }
   return <>
     <Outlet context={session} />
     {scope && visited && createPortal(<MapTemperatureTrial search={input}
-      open={session.open} onClose={closePanel} onPreview={trial.report} onShow={trial.show} showing={trial.preview !== null} />,
+      open={session.open} onClose={closePanel} onPreview={trial.report} onShow={showTrial} />,
     panelHost, scope)}
   </>
+}
+
+function trialLayerState(layer: 'temperature' | null) {
+  const state = initialLayerState(layer, false)
+  state.layers.coastlines = 0
+  return state
 }

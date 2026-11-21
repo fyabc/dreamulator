@@ -115,7 +115,6 @@ function NumberField({
 interface MapLab {
   onPreview: (preview: TemperaturePreview | null) => void
   onShowPreview: () => void
-  showing: boolean
 }
 
 export default function TemperatureLab({ search, map, recovery = false }: { search: URLSearchParams; map?: MapLab; recovery?: boolean }) {
@@ -129,9 +128,11 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
   const { t } = useTranslation('playground')
   const { t: tMap } = useTranslation('map')
   const queryClient = useQueryClient()
-  const modelMonths = tMap('months', { returnObjects: true }) as unknown as string[]
-  const monthOptions = modelMonths.map((label, modelIndex) => ({ label, modelIndex }))
-  const calendarMonths = [...monthOptions.slice(MODEL_JANUARY_INDEX), ...monthOptions.slice(0, MODEL_JANUARY_INDEX)]
+  const modelMonths = useMemo(() => tMap('months', { returnObjects: true }) as unknown as string[], [tMap])
+  const calendarMonths = useMemo(() => {
+    const options = modelMonths.map((label, modelIndex) => ({ label, modelIndex }))
+    return [...options.slice(MODEL_JANUARY_INDEX), ...options.slice(0, MODEL_JANUARY_INDEX)]
+  }, [modelMonths])
 
   const [status, setStatus] = useState<Status>('idle')
   const [error, setError] = useState<LabError | null>(null)
@@ -419,8 +420,8 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
   const monthLabel = month === 'annual' ? t('view.annual') : modelMonths[month]
   const field = result && (month === 'annual' ? result.annual : result.monthly[month])
   useEffect(() => {
-    reportPreview?.(field ? { field, label: monthLabel, stale } : null)
-  }, [field, monthLabel, stale, reportPreview])
+    reportPreview?.(field ? { field, label: monthLabel, stale, period: month, periods: calendarMonths, selectPeriod: setMonth } : null)
+  }, [field, monthLabel, stale, reportPreview, month, calendarMonths])
 
   const monthSelect = (
     <select aria-label={t('view.month')} value={month}
@@ -544,10 +545,6 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
   if (map) return (
     <div className="space-y-2">
       <p className="text-xs leading-relaxed text-gray-400">{t(requestedDraft ? 'trial.draftSourceHelp' : 'trial.inlineSourceHelp')}</p>
-      {result && <div className="flex flex-wrap items-center justify-between gap-2 border-b border-space-border pb-2">
-        {monthSelect}
-        {!map.showing && <button type="button" onClick={map.onShowPreview} className="atlas-tool-button text-xs">{t('trial.showPreview')}</button>}
-      </div>}
       {controls}
     </div>
   )

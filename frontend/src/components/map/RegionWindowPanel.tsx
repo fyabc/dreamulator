@@ -8,6 +8,7 @@ import {
 import type { LonLat } from '../../viewers/map/utils/mapCoords'
 import type { GlobeScale } from '../../viewers/map/utils/globeScale'
 import MapHelpLink from './MapHelpLink'
+import type { MapMode } from '../../viewers/map/useTemperatureTrialPreview'
 
 const buttonClass = 'atlas-tool-button'
 const inputClass = 'w-24 rounded border border-space-border bg-space-surface px-2 py-1 text-gray-200'
@@ -22,10 +23,11 @@ interface RegionWindowPanelProps {
   onRegionScale?: (scale: GlobeScale) => void
   scaleAltitudeKm?: number
   scaleDetail?: 'ready' | 'loading' | 'failed' | 'missing'
+  modeControl?: { mode: MapMode; onChange: (mode: MapMode) => void }
 }
 
 export default function RegionWindowPanel({
-  world, planet, branch, radiusKm, selectedPoint, onMoveToRegion, onRegionScale, scaleAltitudeKm, scaleDetail,
+  world, planet, branch, radiusKm, selectedPoint, onMoveToRegion, onRegionScale, scaleAltitudeKm, scaleDetail, modeControl,
 }: RegionWindowPanelProps) {
   const { t } = useTranslation('map')
   const [search, setSearch] = useSearchParams()
@@ -55,6 +57,15 @@ export default function RegionWindowPanel({
   return (
     <section className="relative z-20 shrink-0 border-b border-space-border bg-space-panel px-2 py-1 text-xs md:px-4 md:py-2">
       <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
+        {modeControl && <label className="inline-flex shrink-0 items-center gap-1.5 text-gray-400">
+          {t('workbench.mode')}
+          <select value={modeControl.mode}
+            onChange={event => modeControl.onChange(event.target.value === 'trial' ? 'trial' : 'official')}
+            className="min-h-9 rounded border border-space-border bg-space-bg px-2 text-xs text-gray-100 focus-visible:outline focus-visible:outline-neon-cyan">
+            <option value="official">{t('workbench.official')}</option>
+            <option value="trial">{t('workbench.trial')}</option>
+          </select>
+        </label>}
         <button ref={expandButton} type="button" className={buttonClass} aria-expanded={expanded} aria-controls={expanded ? formId : undefined}
           title={t('regionWindow.hint.toggle')}
           onClick={() => setExpanded((open) => !open)}>{t('regionWindow.title')}</button>

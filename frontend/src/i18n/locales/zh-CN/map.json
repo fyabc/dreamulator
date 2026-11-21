@@ -13,7 +13,10 @@
     "tools": "地图工具",
     "layers": "图层",
     "closeLayers": "关闭图层",
-    "changePlanet": "选择天体"
+    "body": "天体",
+    "mode": "模式",
+    "official": "正式",
+    "trial": "试算"
   },
   "terrainSource": {
     "label": "地形来源",
@@ -42,9 +45,9 @@
   },
   "action": {
     "back": "← 返回",
-    "uploadRaster": "⬆ 锚定灰度图",
+    "uploadRaster": "导入海陆锚定图",
     "uploading": "上传中…",
-    "importHeightmap": "⬆ 导入高度图",
+    "importHeightmap": "替换当前高度图",
     "importing": "导入中…",
     "openBuild": "前往构建世界"
   },
@@ -158,6 +161,7 @@
     "alfisol": "淋溶土", "inceptisol": "始成土", "entisol": "新成土"
   },
   "inspector": {
+    "openInspection": "单元格与统计",
     "loading": "加载网格数据中…",
     "unknownPlanet": "未知行星",
     "landSeaRatio": "海陆比例",
@@ -461,6 +465,7 @@
     "monthlyMissing": "没有可用的月度数据，图层颜色仍按完整时段的结果显示。"
   },
   "panel": {
+    "layerUnavailable": "当前数据不包含此图层。",
     "none": "无",
     "collapse": "折叠",
     "expand": "展开",
@@ -473,8 +478,8 @@
   },
   "hint": {
     "staticReadonly": "静态模式不可写",
-    "uploadRasterTitle": "上传锚定灰度图（Gleba 式概率图，下次生成生效）",
-    "importHeightmapTitle": "导入外部高度图（16-bit PNG / TIFF）"
+    "uploadRasterTitle": "为下次地形生成指定海陆倾向；不会替换当前高程。",
+    "importHeightmapTitle": "为当前天体和分支导入 PNG 或 TIFF 高度图；确认后替换现有高程。"
   },
   "confirm": {
     "uploadRaster": "上传锚定灰度图（白=陆、黑=海、中灰=中立）：\n{{name}}\n\n将于下次地形生成时与 geography.yaml 叠加。继续？",

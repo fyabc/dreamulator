@@ -22,28 +22,28 @@ export function MapWorkbenchToolbar({ title, view, backTo, switchTo, trialPanel,
   const toolsButton = useRef<HTMLElement>(null)
 
   return (
-    <header className="relative z-30 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 border-b border-space-border bg-space-panel px-2 py-1.5 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-3 md:px-4 md:py-2">
+    <header className="relative z-30 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 border-b border-space-border bg-space-panel px-2 py-1.5 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-3 lg:px-4 lg:py-2">
       <div className="flex min-w-0 items-center gap-2">
         <Link to={backTo} className="inline-flex size-11 shrink-0 items-center justify-center rounded text-gray-300 hover:bg-space-surface"
           aria-label={t('action.back')} title={t('action.back')}><AtlasIcon name="back" /></Link>
         <div className="min-w-0">
           <h1 className="truncate text-lg font-semibold text-gray-100" title={title}>{title}</h1>
-          <p className="hidden truncate text-xs text-gray-400 md:block">{t(view === 'map' ? 'title.viewer' : 'title.globe')}</p>
+          <p className="hidden truncate text-xs text-gray-400 lg:block">{t(view === 'map' ? 'title.viewer' : 'title.globe')}</p>
         </div>
       </div>
       {switchTo && (
-        <nav aria-label={t('workbench.views')} className="col-start-1 row-start-2 inline-flex w-fit items-center gap-0.5 rounded border border-space-border bg-space-bg p-0.5 md:col-start-2 md:row-start-1">
+        <nav aria-label={t('workbench.views')} className="col-start-1 row-start-2 inline-flex w-fit items-center gap-0.5 rounded border border-space-border bg-space-bg p-0.5 lg:col-start-2 lg:row-start-1">
           {(['map', 'globe'] as const).map((item) => {
             const label = t(item === 'map' ? 'workbench.flat' : 'workbench.globe')
             const dimension = item === 'map' ? '2D' : '3D'
             const contents = <>{label} <span className="font-mono text-[10px]">{dimension}</span></>
             return view === item
-              ? <span key={item} aria-current="page" className="inline-flex min-h-10 items-center gap-1 rounded bg-space-surface px-2.5 text-sm font-semibold text-neon-cyan md:min-h-9">{contents}</span>
-              : <Link key={item} to={switchTo} className="inline-flex min-h-10 items-center gap-1 rounded px-2.5 text-sm text-gray-300 hover:bg-space-surface md:min-h-9">{contents}</Link>
+              ? <span key={item} aria-current="page" className="inline-flex min-h-10 items-center gap-1 rounded bg-space-surface px-2.5 text-sm font-semibold text-neon-cyan lg:min-h-9">{contents}</span>
+              : <Link key={item} to={switchTo} className="inline-flex min-h-10 items-center gap-1 rounded px-2.5 text-sm text-gray-300 hover:bg-space-surface lg:min-h-9">{contents}</Link>
           })}
         </nav>
       )}
-      <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 md:col-start-3 md:gap-2">
+      <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 lg:col-start-3 lg:gap-2">
         {trialPanel && <button id={trialPanel.buttonId} type="button" onClick={trialPanel.onToggle}
           className="atlas-tool-button text-sm aria-expanded:border-neon-cyan/50 aria-expanded:text-neon-cyan"
           aria-label={t('workbench.climateTrial')} title={t('workbench.climateTrial')}
@@ -51,10 +51,10 @@ export function MapWorkbenchToolbar({ title, view, backTo, switchTo, trialPanel,
           <AtlasIcon name="flask" className="size-4" /> <span className="hidden lg:inline">{t('workbench.climateTrial')}</span>
         </button>}
         {onToggleLayers && <button id={layerButtonId} type="button" aria-expanded={layersOpen} aria-controls={layersOpen ? layerPanelId : undefined}
-          className="atlas-tool-button text-sm md:hidden" onClick={onToggleLayers}>
+          className="atlas-tool-button text-sm lg:hidden" onClick={onToggleLayers}>
           <AtlasIcon name="layers" className="size-4" /> {t('workbench.layers')}
         </button>}
-        <details ref={tools} className="relative" onKeyDown={(event) => {
+        <details ref={tools} className="group relative" onKeyDown={(event) => {
           if (event.key !== 'Escape' || !tools.current?.open || !event.currentTarget.contains(event.target as Node)) return
           event.preventDefault()
           tools.current.open = false
@@ -62,7 +62,11 @@ export function MapWorkbenchToolbar({ title, view, backTo, switchTo, trialPanel,
         }}>
           <summary ref={toolsButton} className="atlas-tool-button cursor-pointer list-none text-sm"
             aria-label={t('workbench.tools')} title={t('workbench.tools')}>
-            <AtlasIcon name="more" className="size-4" /> <span className="hidden lg:inline">{t('workbench.tools')}</span>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round" className="size-4 group-open:rotate-180">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+            <span className="hidden lg:inline">{t('workbench.tools')}</span>
           </summary>
           <div className="absolute right-0 top-full mt-2 flex max-h-[55dvh] w-64 max-w-[calc(100vw-1.5rem)] flex-col gap-2 overflow-y-auto rounded border border-space-border bg-space-panel p-3 shadow-lg">
             {children}
@@ -72,6 +76,19 @@ export function MapWorkbenchToolbar({ title, view, backTo, switchTo, trialPanel,
       </div>
     </header>
   )
+}
+
+export function MapBodySelector({ planets, selected, nameOf, onSelect }: {
+  planets: string[]; selected: string; nameOf: (id: string) => string; onSelect: (id: string) => void
+}) {
+  const { t } = useTranslation('map')
+  return <label className="block space-y-1 min-w-0">
+    <span className="text-[11px] text-gray-500">{t('workbench.body')}</span>
+    <select value={selected} onChange={event => onSelect(event.target.value)}
+      className="w-full min-w-0 bg-space-bg border border-space-border rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-neon-cyan transition-colors">
+      {planets.map(id => <option key={id} value={id}>{nameOf(id)}</option>)}
+    </select>
+  </label>
 }
 
 export function MapLayerDrawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
