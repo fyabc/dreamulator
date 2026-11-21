@@ -78,7 +78,7 @@ def nested_dissection_order(
     def touches_high(cells: np.ndarray) -> np.ndarray:
         """Which of ``cells`` have a neighbour currently marked in ``in_high``."""
         starts = indptr[cells]
-        counts = indptr[cells + 1] - starts
+        counts = (indptr[cells + 1] - starts).astype(np.intp, copy=False)
         total = int(counts.sum())
         if total == 0:
             return np.zeros(cells.size, dtype=bool)
