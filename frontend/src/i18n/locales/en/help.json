@@ -34,18 +34,18 @@
     },
     "koppen": {
       "label": "Köppen Climate",
-      "desc": "Climate classification (Beck 2018 standard colors)",
-      "detail": "Colored by Köppen-Geiger climate class. A=tropical(blue)·B=arid(red/orange)·C=temperate(green/yellow)·D=continental(purple/cyan)·E=polar(grey)·Ocean=deep blue. Mutually exclusive with other thematic layers (single thematic slot, radio)."
+      "desc": "Köppen–Geiger on land, with a marine temperature extension",
+      "detail": "Land uses the Köppen–Geiger colors. The ocean is tropical where the coldest monthly temperature exceeds 18 °C and non-tropical elsewhere. Dark blue marks ocean without classification data. These bands do not indicate sea ice."
     },
     "temperature": {
       "label": "Temperature",
       "desc": "Annual mean temperature (blue=cold → white=0°C → red=hot; monthly mode varies by month)",
-      "detail": "Annual mean temperature (°C) diverging scale. Fixed physical range −40…+40°C, with 0°C (freezing) at the midpoint — cold deep blue, 0°C white, hot deep red. Comparable across worlds; ocean transparent. Mutually exclusive with other thematic layers (radio)."
+      "detail": "On land and at sea, annual and monthly temperatures use the same −40 to +40 °C scale. Blue is cold, white is 0 °C, and red is warm. Areas without data are transparent."
     },
     "precipitation": {
       "label": "Precipitation",
       "desc": "Annual precipitation (yellow=dry → green → blue=wet, log; monthly mode varies by month)",
-      "detail": "Annual precipitation (mm/yr) sequential scale, log-normalized (0…30000mm) because precipitation spans five orders of magnitude. Pale yellow=dry(0mm)→yellow-green=~100mm→blue-green=~1000mm→deep blue=wet(>10000mm). Ocean transparent. Mutually exclusive (radio)."
+      "detail": "The logarithmic scale shows precipitation over land and sea, from pale yellow in dry areas to dark blue in wet areas. Annual totals and monthly totals use separate ranges. Areas without data are transparent."
     },
     "temperatureError": {
       "label": "Temperature Error ΔT",

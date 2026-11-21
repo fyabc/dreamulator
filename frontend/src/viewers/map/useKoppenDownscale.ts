@@ -10,7 +10,7 @@ export function useKoppenDownscale(active: boolean, enabled: boolean, monthly: M
   seaLevelM: number, native: ClimateRasterTerrain | null) {
   const input = useMemo<KoppenRasterInput | null>(() => {
     if (!active || !mesh || !cellIds || !monthly || !hasKoppenMonths(monthly, mesh.cells.length)) return null
-    if (!mesh.cells.some(cell => cell.koppen_class && cell.koppen_class !== 'Ocean')) return null
+    if (!mesh.cells.some(cell => cell.koppen_class || Number.isFinite(cell.temperature_coldest_month_C))) return null
     return {
       cells: mesh.cells.map(({ id, elevation, water_class, koppen_class }) => ({ id, elevation, water_class, koppen_class })),
       cellIds, meshWidth, meshHeight, width: Math.min(meshWidth, 2048), height: Math.min(meshHeight, 1024),

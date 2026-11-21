@@ -90,7 +90,11 @@
     "Dwa": "Monsoon continental (hot)", "Dwb": "Monsoon continental (warm)", "Dwc": "Monsoon subarctic", "Dwd": "Monsoon subarctic (severe)",
     "Dfa": "Humid continental (hot)", "Dfb": "Humid continental (warm)", "Dfc": "Subarctic (cool summer)", "Dfd": "Subarctic (severe winter)",
     "ET": "Tundra", "EF": "Ice cap",
-    "Ocean": "Ocean"
+    "Ocean": "Ocean",
+    "SeaTrop": "Tropical sea",
+    "SeaTemp": "Non-tropical sea",
+    "marineLegend": "Marine temperature bands",
+    "marineHint": "This map extension uses the coldest monthly temperature. Above 18 °C is tropical. These bands do not indicate sea ice."
   },
   "uccClass": {
     "polar/arid": "Polar · arid", "polar/semi_arid": "Polar · semi-arid", "polar/transitional": "Polar · transitional", "polar/humid": "Polar · humid",
@@ -203,6 +207,8 @@
     "climate": "Climate",
     "koppenClimate": "Köppen climate",
     "periodTemp": "Mean temperature (full period)",
+    "subzeroMonths": "Months below 0 °C",
+    "subzeroMonthsHint": "Counts months with a mean temperature below 0 °C. This is a temperature indicator, not sea-ice cover.",
     "climateSource": "Climate data source",
     "hottestColdest": "Hottest / coldest",
     "tempDeviation": "Temp. deviation ΔT",
@@ -301,7 +307,7 @@
     "convergentRun": "History contract: integrated shortening distance along the segment since collision",
     "subgridIslands": "Catalogued islands below cell resolution (count and highest peak)",
     "specialCrust": "Special crust: hotspot chain (Wilson 1963) / ancient orogeny (Şengör 1990) / rift (Burke & Dewey 1973)",
-    "koppen": "Köppen-Geiger climate classification (Beck et al. 2018)",
+    "koppen": "Köppen–Geiger on land, with marine temperature bands where data are available",
     "ucc": "Unified Climate Classification (UCC) profile v0: thermal band × reference supply–demand grade, thresholds shared globally",
     "soilType": "USDA soil order (derived from parent rock + climate)",
     "fertility": "Soil fertility level (direct agricultural potential input)",
@@ -455,7 +461,8 @@
     "lake": "Lake",
     "frozenLake": "Frozen lake",
     "logScale": "Logarithmic scale",
-    "climateMissing": "No land data for this climate layer.",
+    "colorScale": "{{layer}} color scale",
+    "elevationScale": "Elevation colors. Lighting affects the colors drawn on the map.",
     "monthlyLoading": "Loading monthly data…",
     "monthlyMissing": "No monthly data available. Any colors shown use the full-period result."
   },

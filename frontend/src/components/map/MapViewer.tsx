@@ -74,13 +74,7 @@ interface MapViewerProps {
   dayNight?: boolean
   trialTemperature?: THREE.DataTexture | null
   trialTerrain?: TrialTerrain | null
-  /** Monthly temperature/precipitation/pressure textures (Phase 4 / debt 24),
-   *  baked by the caller.  Pressure is monthly-only (no annual counterpart). */
-  monthlyTemperature?: THREE.DataTexture | null
-  monthlyPrecipitation?: THREE.DataTexture | null
-  monthlyPressure?: THREE.DataTexture | null
-  monthlyPressureError?: THREE.DataTexture | null
-  monthlySlp?: THREE.DataTexture | null
+  scalarThematic?: import('../../viewers/map/useMonthlyClimate').ScalarTexture | null
   koppenTexture?: THREE.DataTexture | null
   /** UCC classification thematic texture (UCC-01 step 4a), baked by the caller
    *  from `bakeUccLayer`; null when the yearly file lacks the fields. */
@@ -140,11 +134,7 @@ export default function MapViewer({
   dayNight = false,
   trialTemperature = null,
   trialTerrain = null,
-  monthlyTemperature = null,
-  monthlyPrecipitation = null,
-  monthlyPressure = null,
-  monthlyPressureError = null,
-  monthlySlp = null,
+  scalarThematic = null,
   koppenTexture = null,
   uccTexture = null,
   monthlyWindEast = null,
@@ -257,8 +247,7 @@ export default function MapViewer({
     terrainSource, meshWidth: meshSize.width, meshHeight: meshSize.height,
     elevMinM: elevMin, elevMaxM: elevMax,
     layers: renderLayers, cvtMesh, cellIdMap,
-    monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError,
-    monthlySlp, koppenTexture,
+    scalarThematic, koppenTexture,
     uccTexture,
     flipHorizontal: false,  // PlaneGeometry, not SphereGeometry
     sunLonRad, sunDecRad, dayNight: dayNightNum,

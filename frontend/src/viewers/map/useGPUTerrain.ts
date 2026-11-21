@@ -28,9 +28,10 @@ import { useMemo, useEffect, useCallback } from 'react'
 import type { TerrainSource } from './elevationSource'
 import * as THREE from 'three'
 import type { ColorMode } from './types'
+import type { ScalarTexture } from './useMonthlyClimate'
 import type { CVTMesh } from './types'
 import type { CellIdMap } from './useCellIdMap'
-import { getLayerTextures, type LayerTextures } from './layerBakes'
+import { DEFAULT_WATER_DEPTH_FACTOR, getLayerTextures, type LayerTextures } from './layerBakes'
 
 // ---------------------------------------------------------------------------
 // Shaders
@@ -141,15 +142,7 @@ interface UseGPUTerrainOptions {
   waterDepthFactor?: number
   cvtMesh?: CVTMesh | null
   cellIdMap?: CellIdMap | null
-  /** Monthly temperature/precipitation/pressure textures (Phase 4 / debt 24),
-   *  baked by the caller from `bakeMonthlyLayer`.  When provided they replace
-   *  the annual thematic (the annual SLP is the fallback for pressure). */
-  monthlyTemperature?: THREE.DataTexture | null
-  monthlyPrecipitation?: THREE.DataTexture | null
-  monthlyPressure?: THREE.DataTexture | null
-  monthlyPressureError?: THREE.DataTexture | null
-  /** Monthly absolute SLP texture (obs root only); annual slp is the fallback. */
-  monthlySlp?: THREE.DataTexture | null
+  scalarThematic?: ScalarTexture | null
   koppenTexture?: THREE.DataTexture | null
   /** UCC classification thematic texture (UCC-01 step 4a), baked by the caller
    *  from `bakeUccLayer`.  Null while the yearly file is missing or predates
@@ -200,14 +193,10 @@ export default function useGPUTerrain({
   elevMinM = -11000,
   elevMaxM = 9000,
   layers = { terrain: 1, landsea: 0, plates: 0, boundaries: 0, coastlines: 1, koppen: 0, ucc: 0, currents: 0, winds: 0, biomes: 0, npp: 0, domesticable: 0, soil: 0, provinces: 0, temperature: 0, precipitation: 0, temperatureError: 0, precipitationError: 0, pressureError: 0, windError: 0, currentError: 0, pressure: 0, slp: 0, habitable: 0, agriculture: 0 },
-  waterDepthFactor = 0.5,
+  waterDepthFactor = DEFAULT_WATER_DEPTH_FACTOR,
   cvtMesh,
   cellIdMap,
-  monthlyTemperature = null,
-  monthlyPrecipitation = null,
-  monthlyPressure = null,
-  monthlyPressureError = null,
-  monthlySlp = null,
+  scalarThematic = null,
   koppenTexture = null,
   uccTexture = null,
   flipHorizontal = false,
@@ -225,10 +214,8 @@ export default function useGPUTerrain({
   }, [elevation, width, height, seaLevel, elevMinM, elevMaxM,
       waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight])
 
-  const overrideWidth = Math.max(monthlyTemperature?.image.width ?? 0, monthlyPrecipitation?.image.width ?? 0,
-    monthlyPressure?.image.width ?? 0, monthlyPressureError?.image.width ?? 0, monthlySlp?.image.width ?? 0, koppenTexture?.image.width ?? 0)
-  const overrideHeight = Math.max(monthlyTemperature?.image.height ?? 0, monthlyPrecipitation?.image.height ?? 0,
-    monthlyPressure?.image.height ?? 0, monthlyPressureError?.image.height ?? 0, monthlySlp?.image.height ?? 0, koppenTexture?.image.height ?? 0)
+  const overrideWidth = Math.max(scalarThematic?.texture.image.width ?? 0, koppenTexture?.image.width ?? 0)
+  const overrideHeight = Math.max(scalarThematic?.texture.image.height ?? 0, koppenTexture?.image.height ?? 0)
 
   // --- Composite target + materials (one per bake/size) ---
   const composite = useMemo<CompositeState | null>(() => {
@@ -329,31 +316,32 @@ export default function useGPUTerrain({
     const u = composite.compMat.uniforms
 
     // Determine active thematic texture: terrain (default), landsea, Köppen, biomes, NPP, domesticable
-    const thematicLayers: [number | undefined, THREE.DataTexture][] = [
-      [layers.terrain, baked.terrainThematic],
-      [layers.landsea, baked.landseaThematic],
-      [layers.koppen, koppenTexture ?? baked.koppen],
-      [layers.ucc, uccTexture ?? emptyTexture()],
-      [layers.biomes, baked.biomes],
-      [layers.npp, baked.npp],
-      [layers.domesticable, baked.domesticable],
-      [layers.habitable, baked.habitable],
-      [layers.agriculture, baked.agriculture],
-      [layers.soil, baked.soil],
-      [layers.provinces, baked.provinces],
-      [layers.temperature, monthlyTemperature ?? baked.temperature],
-      [layers.precipitation, monthlyPrecipitation ?? baked.precipitation],
-      [layers.temperatureError, baked.temperatureError],
-      [layers.precipitationError, baked.precipitationError],
-      [layers.pressureError, monthlyPressureError ?? baked.pressure],
-      [layers.pressure, monthlyPressure ?? baked.pressure],
-      [layers.slp, monthlySlp ?? baked.slp],
+    const thematicLayers: [ColorMode, THREE.DataTexture][] = [
+      ['terrain', baked.terrainThematic],
+      ['landsea', baked.landseaThematic],
+      ['koppen', koppenTexture ?? baked.koppen],
+      ['ucc', uccTexture ?? emptyTexture()],
+      ['biomes', baked.biomes],
+      ['npp', baked.npp],
+      ['domesticable', baked.domesticable],
+      ['habitable', baked.habitable],
+      ['agriculture', baked.agriculture],
+      ['soil', baked.soil],
+      ['provinces', baked.provinces],
+      ['temperature', baked.temperature],
+      ['precipitation', baked.precipitation],
+      ['temperatureError', baked.temperatureError],
+      ['precipitationError', baked.precipitationError],
+      ['pressureError', emptyTexture()],
+      ['pressure', baked.pressure],
+      ['slp', baked.slp],
     ]
     let activeThematic = baked.terrainThematic
     let thematicOp = 1.0  // default: terrain on
-    for (const [op, tex] of thematicLayers) {
+    for (const [layer, tex] of thematicLayers) {
+      const op = layers[layer]
       if ((op ?? 0) > 0) {
-        activeThematic = tex
+        activeThematic = scalarThematic?.layer === layer ? scalarThematic.texture : tex
         thematicOp = op ?? 0
         break
       }
@@ -372,7 +360,7 @@ export default function useGPUTerrain({
     // eliminating the "pixel block" look at high zoom levels.
     composite.target.texture.minFilter = overlayActive ? THREE.NearestFilter : THREE.LinearFilter
     composite.target.texture.magFilter = THREE.LinearFilter
-  }, [composite, baked, layers, overlayActive, coastOpacity, monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError, monthlySlp, koppenTexture, uccTexture])
+  }, [composite, baked, layers, overlayActive, coastOpacity, scalarThematic, koppenTexture, uccTexture])
 
   // --- Sun uniforms on the display material (smooth slider, no re-composite) ---
   useEffect(() => {

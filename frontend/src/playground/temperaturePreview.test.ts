@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EARTH_PARAMS, GRID_H, GRID_W } from './temperatureDraft'
+import { GRID_H, GRID_W } from './temperatureDraft'
 import { sampleTemperature, summarizeTemperature, temperaturePreviewPixels } from './temperaturePreview'
 import { temperatureColor } from '../viewers/map/utils/colorScales'
 
@@ -16,9 +16,8 @@ describe('temperature trial texture', () => {
     field[GRID_W - 1] = -20
     field[(GRID_H - 1) * GRID_W] = 20
     field[field.length - 1] = 40
-    const elevation = new Float32Array(field.length).fill(1)
-    elevation[1] = 0
-    const pixels = temperaturePreviewPixels(field, { elevation, params: EARTH_PARAMS })
+    field[1] = NaN
+    const pixels = temperaturePreviewPixels(field)
     const pixel = (index: number) => Array.from(pixels.slice(index * 4, index * 4 + 4))
     expect(pixel(0)).toEqual([...temperatureColor(20), 255])
     expect(pixel(GRID_W - 1)).toEqual([...temperatureColor(40), 255])

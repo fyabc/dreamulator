@@ -20,6 +20,7 @@ import { useCallback, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import type { ColorMode } from '../../viewers/map/types'
+import { marineKoppenBands } from '../../viewers/map/koppenDownscale'
 import { LAYER_HELP, LAYER_GROUPS, type LayerHelpEntry } from './helpContent'
 import { useDevModeStore } from '../../stores/devModeStore'
 import { useExperimentalStore } from '../../stores/experimentalStore'
@@ -306,6 +307,17 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
           {t(detail.pending ? 'panel.downscaling' : 'panel.downscaledReadout')}
         </p>}
       </div>}
+      {section === 'main' && state.layers.koppen > 0 && (!available || available.has('koppen')) && (
+        <div role="group" aria-label={t('koppen.marineLegend')} title={t('koppen.marineHint')}
+          className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-gray-300">
+          {Object.entries(marineKoppenBands).map(([code, color]) => (
+            <span className="inline-flex items-center gap-1" key={code}>
+              <span aria-hidden="true" className="size-2 rounded-sm" style={{ backgroundColor: color }} />
+              {t(`koppen.${code}`)}
+            </span>
+          ))}
+        </div>
+      )}
       {/* Wind/current display style.  The layer opacities still control the
           strength; this switch only swaps arrows for advected particles. */}
       {section === 'overlays' && onParticleModeChange && (

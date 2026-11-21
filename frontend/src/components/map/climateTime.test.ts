@@ -2,9 +2,17 @@ import { describe, expect, it } from 'vitest'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import { EARTH_PARAMS, GRID_H, GRID_W } from '../../playground/temperatureDraft'
 import type { VoronoiCell } from '../../viewers/map/types'
-import { isMonthlyLayer, monthFromSearch, officialMonthlyMeans, trialLandTemperatureMeans } from './climateTime'
+import { countSubzeroMonths, isMonthlyLayer, monthFromSearch, officialMonthlyMeans, trialLandTemperatureMeans } from './climateTime'
 
 describe('monthly temperature chart', () => {
+  it('counts only strictly subzero months in a complete finite year', () => {
+    expect(countSubzeroMonths(12, month => month - 5)).toBe(5)
+    expect(countSubzeroMonths(12, () => -2)).toBe(12)
+    expect(countSubzeroMonths(12, () => 0)).toBe(0)
+    expect(countSubzeroMonths(11, () => -2)).toBeNull()
+    expect(countSubzeroMonths(12, month => month === 5 ? NaN : -2)).toBeNull()
+  })
+
   it('uses official cell areas and ignores ocean cells and non-finite values', () => {
     const tMonthly = new Float32Array([...Array(12).fill(10), ...Array(12).fill(30), ...Array(12).fill(-50)])
     tMonthly[1] = NaN

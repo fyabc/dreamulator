@@ -341,7 +341,7 @@ Dreamulator 可以将这一做法用于右侧检查栏。正式模式定位球�
 
 Dreamulator 的正式模拟使用不规则球面网格，不直接移植对方的高斯网格索引或回归。当前展示采用[地图系统的连续场插值和画布高程修正](pipelines/map-system.md)，保留原始模式网格供对照。
 
-[Web‑ExoPlaSim QoL 的分类模块](https://github.com/Astervolans/web-exoplasim-qol/blob/9d311d538c1e0ea4aa6f6eb3f13f45a38479b922/src/model/climate/gcm/classification/index.ts)先降尺度逐月气温和降水，再逐像素重判柯本类别。它还为海洋细分类降尺度表面温度与海冰。Dreamulator 采用相同的处理顺序，但沿用自身的分类阈值、温度订正和统一海洋类别。
+[Web‑ExoPlaSim QoL 的分类模块](https://github.com/Astervolans/web-exoplasim-qol/blob/9d311d538c1e0ea4aa6f6eb3f13f45a38479b922/src/model/climate/gcm/classification/index.ts)先降尺度逐月气温和降水，再逐像素重判柯本类别。它还为[海洋细分类](https://github.com/Astervolans/web-exoplasim-qol/blob/9d311d538c1e0ea4aa6f6eb3f13f45a38479b922/src/model/climate/classification/koppen/ocean/index.ts)降尺度表面温度与海冰。它用最冷月海温区分热带和温带海域，用逐月覆盖率区分季节性和常年海冰。Dreamulator 采用先插值再分类的顺序。海域分带和数据缺失时的处理见[气候地图技术参考](pipelines/browser-playground.md#地图内的气候试算)。
 
 ## 参考资料
 

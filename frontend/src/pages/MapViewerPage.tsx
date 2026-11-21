@@ -17,6 +17,7 @@ import GeographyRasterButton from '../components/map/GeographyRasterButton'
 import BranchSelector from '../components/BranchSelector'
 import MapViewer from '../components/map/MapViewer'
 import MapLayerPanel from '../components/map/MapLayerPanel'
+import { activeMainLayerId } from '../components/map/layerStateInit'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
 import MapLegend from '../components/map/MapLegend'
 import ClimateLegend from '../components/map/ClimateLegend'
@@ -50,14 +51,14 @@ export default function MapViewerPage() {
     selectedBranch, setSelectedBranch,
     cleanMode, setCleanMode,
     layerState, setLayerState, activeMainLayer,
-    monthlyMode, handleMonthlyModeChange, monthlyField, selectMonth, displayingMonthly, downscale, setDownscale,
+    monthlyMode, handleMonthlyModeChange, selectMonth, displayingMonthly, downscale, setDownscale,
     particleMode, setParticleMode,
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
     selectedPlanet, mapPlanets, meta, bodyByName, currentPlanetName, planetRadiusM,
     worldPlanetsError, platesError,
     elevation, cvtMesh, voronoiCells, awaitingBuild, terrainSource, setTerrainSource,
-    monthlyThematic, koppenDownscale, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
+    scalarThematic, koppenDownscale, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, hoveredCell, handleCellHover, selectedCells,
     selectCell, clearSelection,
     hoveredCellData, inspectorCell, selectedCellData, selectedCellObjects,
@@ -122,7 +123,7 @@ export default function MapViewerPage() {
     <MapCellInspector trialMode={trialActive} trial={trial.preview} cursor={cursor}
     cell={inspectorCell} cvtMesh={cvtMesh} planetName={currentPlanetName} selectedCells={selectedCellObjects}
     activeColorMode={trialActive ? display.texture ? 'temperature' : 'terrain' : vs.activeColorMode} monthlyMode={monthlyMode} monthIndex={monthlyMonth}
-    monthlyData={monthlyData} yearlyData={yearlyData} isEarth={worldName === 'earth'} />
+    monthlyData={monthlyData} yearlyData={yearlyData} isEarth={worldName === 'earth'} seaLevelM={meta?.sea_level_m} />
   </div>
   const layers = <MapLayerPanel state={display.state} onChange={display.onChange} available={display.available} isEarth={worldName === 'earth'}
     monthlyMode={trialActive ? typeof trial.preview?.period === 'number' : monthlyMode} monthlyData={trialActive ? null : monthlyData}
@@ -130,8 +131,13 @@ export default function MapViewerPage() {
     monthIndex={monthlyMonth} onMonthlyModeChange={handleMonthlyModeChange}
     detail={{ downscaled: downscale,
       onChange: setDownscale, pending: koppenDownscale.pending, available: trialActive
-      ? display.state.layers.temperature > 0 && Boolean(trial.preview) : koppenDownscale.available || (Boolean(cvtMesh) && canDownscale(activeMainLayer)) }}
+      ? display.state.layers.temperature > 0 && Boolean(trial.preview)
+      : koppenDownscale.available || (Boolean(cvtMesh) && canDownscale(activeMainLayer) && display.available.has(activeMainLayer)) }}
     particleMode={particleMode} onParticleModeChange={setParticleMode} />
+  const legend = !cleanMode && <ClimateLegend layer={activeMainLayerId(display.state)} mesh={cvtMesh}
+    displayingMonthly={displayingMonthly} monthlyMode={monthlyMode} monthlyData={monthlyData} monthlyLoading={monthlyLoading}
+    monthIndex={monthlyMonth} yearlyData={yearlyData} meta={meta} grayTerrain={terrainSource === 'gray'}
+    preview={trialActive ? trial.preview : null} />
 
   if (!worldName) {
     return <div className="text-center py-12 text-gray-400">{t('status.noWorld')}</div>
@@ -200,11 +206,6 @@ export default function MapViewerPage() {
       {awaitingBuild && !cleanMode && (
         <AwaitingBuildBanner world={worldName} branch={selectedBranch} />
       )}
-      {!cleanMode && trial.mode === 'official' && cvtMesh && (
-        <ClimateLegend layer={activeMainLayer} mesh={cvtMesh} monthlyMode={monthlyMode}
-          monthlyData={displayingMonthly ? monthlyData : null} monthlyLoading={monthlyMode && monthlyLoading}
-          monthIndex={monthlyMonth} yearlyData={yearlyData} />
-      )}
       {/* Error banner */}
       {worldPlanetsError && (
         <div className="bg-red-900/20 border-b border-red-700/30 px-4 py-2 text-sm text-red-300 text-center">
@@ -259,11 +260,7 @@ export default function MapViewerPage() {
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
-                    monthlyTemperature={monthlyField === 'temperature' ? monthlyThematic : null}
-                    monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
-                    monthlyPressure={monthlyField === 'pressure' ? monthlyThematic : null}
-                    monthlyPressureError={monthlyField === 'pressureError' ? monthlyThematic : null}
-                    monthlySlp={monthlyField === 'slp' ? monthlyThematic : null}
+                    scalarThematic={scalarThematic}
                     koppenTexture={koppenDownscale.texture}
                     uccTexture={uccTexture}
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
@@ -275,9 +272,11 @@ export default function MapViewerPage() {
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
+                  {legend}
                 </div>
                 {!cleanMode && (
                   <MobileCellCard
+                    seaLevelM={meta?.sea_level_m}
                     cell={selectedCells.size === 1 ? selectedCellData : null}
                     cursor={cursor}
                     onClose={clearSelection}
@@ -373,11 +372,7 @@ export default function MapViewerPage() {
                     sunLongitudeDeg={sunLongitudeDeg}
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
-                    monthlyTemperature={monthlyField === 'temperature' ? monthlyThematic : null}
-                    monthlyPrecipitation={monthlyField === 'precipitation' ? monthlyThematic : null}
-                    monthlyPressure={monthlyField === 'pressure' ? monthlyThematic : null}
-                    monthlyPressureError={monthlyField === 'pressureError' ? monthlyThematic : null}
-                    monthlySlp={monthlyField === 'slp' ? monthlyThematic : null}
+                    scalarThematic={scalarThematic}
                     uccTexture={uccTexture}
                     koppenTexture={koppenDownscale.texture}
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
@@ -389,6 +384,7 @@ export default function MapViewerPage() {
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
+                  {legend}
 
                   {/* Recording control — float in the map view's bottom-right
                       corner.  Fully hidden in clean mode (zero UI while

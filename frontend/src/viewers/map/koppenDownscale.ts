@@ -1,9 +1,25 @@
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
-import { climateRasterSurface, climateSourceDimensions, temperatureLapseCPerM, type ClimateRasterTerrain } from './climateDownscale'
+import { climateRasterSurface, climateSourceDimensions, isOceanCell, temperatureLapseCPerM, type ClimateRasterTerrain } from './climateDownscale'
 import type { VoronoiCell } from './types'
 import { KOPPEN_COLORS } from './utils/colorScales'
 
 const MONTHS = 12
+
+export const marineKoppenBands = {
+  SeaTrop: '#168582',
+  SeaTemp: '#6898bd',
+} as const
+
+export function classifyKoppenOcean(coldestMonthC: number | null | undefined) {
+  if (coldestMonthC == null || !Number.isFinite(coldestMonthC)) return 'Ocean'
+  return coldestMonthC > 18 ? 'SeaTrop' : 'SeaTemp'
+}
+
+export function displayKoppenClass(cell: Pick<VoronoiCell, 'elevation' | 'water_class' | 'koppen_class' | 'temperature_coldest_month_C'>, seaLevelM: number) {
+  if (!isOceanCell(cell, seaLevelM)) return cell.koppen_class
+  const marine = classifyKoppenOcean(cell.temperature_coldest_month_C)
+  return marine === 'Ocean' && !cell.koppen_class ? null : marine
+}
 
 export function hasKoppenMonths(data: MonthlyClimateData | null, cellCount: number) {
   return data != null && cellCount > 0 && data.numCells === cellCount && data.months === MONTHS &&
@@ -69,17 +85,24 @@ export function koppenRasterPixels({
   cells, cellIds, meshWidth, meshHeight, width, height, seaLevelM, native, tMonthly, pMonthly,
 }: KoppenRasterInput) {
   const byId = new Map(cells.map((cell, index) => [cell.id, index]))
-  const isLand = cells.map(cell => cell.water_class != null ? cell.water_class !== 'ocean' : cell.elevation >= seaLevelM)
+  const isLand = cells.map(cell => !isOceanCell(cell, seaLevelM))
+  const hasTemperature = cells.map((_, index) => {
+    const start = index * MONTHS
+    for (let month = 0; month < MONTHS; month++) {
+      if (!Number.isFinite(tMonthly[start + month])) return false
+    }
+    return true
+  })
   const lapse = cells.map((_, index) => {
-    if (!isLand[index]) return NaN
+    if (!isLand[index] || !hasTemperature[index]) return NaN
     let rain = 0
     for (let month = index * MONTHS; month < (index + 1) * MONTHS; month++) {
-      if (!Number.isFinite(tMonthly[month]) || !Number.isFinite(pMonthly[month])) return NaN
+      if (!Number.isFinite(pMonthly[month])) return NaN
       rain += Math.max(0, pMonthly[month])
     }
     return temperatureLapseCPerM(rain)
   })
-  if (!lapse.some(Number.isFinite)) return null
+  if (!lapse.some(Number.isFinite) && !hasTemperature.some((valid, index) => valid && !isLand[index])) return null
 
   const sourceCell = (x: number, y: number) => byId.get(cellIds[y * meshWidth + x]) ?? -1
   const { gridWidth, gridHeight } = climateSourceDimensions(cells.length, meshWidth, meshHeight)
@@ -88,11 +111,11 @@ export function koppenRasterPixels({
     for (let column = 0; column < gridWidth; column++) {
       const index = sourceCell(Math.round((column + 0.5) * (meshWidth - 1) / gridWidth),
         Math.round((row + 0.5) * (meshHeight - 1) / gridHeight))
-      grid[row * gridWidth + column] = Number.isFinite(lapse[index]) ? index : -1
+      grid[row * gridWidth + column] = index
     }
   }
 
-  const colors = new Map(Object.entries(KOPPEN_COLORS).map(([code, hex]) => [code, parseInt(hex.slice(1), 16)]))
+  const colors = new Map(Object.entries({ ...KOPPEN_COLORS, ...marineKoppenBands }).map(([code, hex]) => [code, parseInt(hex.slice(1), 16)]))
   const pixels = new Uint8Array(width * height * 4)
   const surface = native ? climateRasterSurface(native, width, height) : null
   const modelHeight = cells.map(cell => Math.max(0, cell.elevation - seaLevelM))
@@ -113,31 +136,38 @@ export function koppenRasterPixels({
       const index = sourceCell(meshX, meshY)
       if (!surface && index < 0) continue
       const fineHeight = surface?.(column, row)
-      let code = 'Ocean'
-      if (surface ? Number.isFinite(fineHeight) : isLand[index]) {
-        neighbors[0] = grid[north * gridWidth + west]
-        neighbors[1] = grid[north * gridWidth + east]
-        neighbors[2] = grid[south * gridWidth + west]
-        neighbors[3] = grid[south * gridWidth + east]
-        weights[0] = (1 - eastWeight) * (1 - fraction)
-        weights[1] = eastWeight * (1 - fraction)
-        weights[2] = (1 - eastWeight) * fraction
-        weights[3] = eastWeight * fraction
-        let weightSum = 0, heightSum = 0, lapseSum = 0
-        temperature.fill(0)
-        rain.fill(0)
-        for (let corner = 0; corner < neighbors.length; corner++) {
-          const neighbor = neighbors[corner], weight = weights[corner]
-          if (neighbor < 0 || weight === 0) continue
-          weightSum += weight
+      if (fineHeight != null && !Number.isFinite(fineHeight)) continue
+      const land = fineHeight == null ? isLand[index] : fineHeight >= 0
+      neighbors[0] = grid[north * gridWidth + west]
+      neighbors[1] = grid[north * gridWidth + east]
+      neighbors[2] = grid[south * gridWidth + west]
+      neighbors[3] = grid[south * gridWidth + east]
+      weights[0] = (1 - eastWeight) * (1 - fraction)
+      weights[1] = eastWeight * (1 - fraction)
+      weights[2] = (1 - eastWeight) * fraction
+      weights[3] = eastWeight * fraction
+      let weightSum = 0, heightSum = 0, lapseSum = 0
+      temperature.fill(0)
+      rain.fill(0)
+      for (let corner = 0; corner < neighbors.length; corner++) {
+        const neighbor = neighbors[corner], weight = weights[corner]
+        if (neighbor < 0 || weight === 0 || isLand[neighbor] !== land ||
+          (land ? !Number.isFinite(lapse[neighbor]) : !hasTemperature[neighbor])) continue
+        weightSum += weight
+        if (land) {
           heightSum += weight * modelHeight[neighbor]
           lapseSum += weight * lapse[neighbor]
-          const start = neighbor * MONTHS
-          for (let month = 0; month < MONTHS; month++) {
-            temperature[month] += weight * tMonthly[start + month]
-            rain[month] += weight * Math.max(0, pMonthly[start + month])
-          }
         }
+        const start = neighbor * MONTHS
+        for (let month = 0; month < MONTHS; month++) {
+          temperature[month] += weight * tMonthly[start + month]
+          if (land) rain[month] += weight * Math.max(0, pMonthly[start + month])
+        }
+      }
+      let code: string
+      if (!land) {
+        code = weightSum > 0 ? classifyKoppenOcean(Math.min(...temperature) / weightSum) : 'Ocean'
+      } else {
         if (weightSum === 0) {
           code = isLand[index] ? cells[index].koppen_class ?? '' : ''
         } else {

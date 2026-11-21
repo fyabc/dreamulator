@@ -27,6 +27,7 @@ export function availableWorldLayers(mesh: CVTMesh | null, monthly: MonthlyClima
     if (mesh?.cells.some(cell => cell[field] != null)) available.add(id as ColorMode)
   }
   if (mesh?.cells.some(cell => cell.boundary_type != null)) available.add('boundaries')
+  if (mesh?.cells.some(cell => cell.water_class === 'ocean' && Number.isFinite(cell.temperature_coldest_month_C))) available.add('koppen')
   if (mesh?.cells.some(cell => cell.domesticable_tags?.length)) available.add('domesticable')
   if (hasUcc) available.add('ucc')
   if (monthly?.tMonthly.length) available.add('temperature')

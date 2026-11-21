@@ -28,22 +28,14 @@ import type { CVTMesh, BoundaryType } from './types'
 import type { CellIdMap } from './useCellIdMap'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import type { YearlyClimateData } from '../../api/yearlyClimate'
-import { observedTempAt, observedPrecipAt, observedSlpAnomAt } from './spatialReference'
+import { displayKoppenClass, marineKoppenBands } from './koppenDownscale'
+import { scalarColor, scalarMonthValues, scalarScale, scalarValue, type ScalarLayer } from './scalarLayers'
 import {
   PLATE_COLORS,
   KOPPEN_COLORS,
   UCC_COLORS,
   WHITTAKER_COLORS,
   SOIL_COLORS,
-  NPP_SCALE,
-  TEMPERATURE_SCALE,
-  sequentialColor,
-  temperatureColor,
-  PRECIP_SCALE,
-  PRECIP_TOTAL_LIMIT_MM,
-  PRECIP_WINDOW_LIMIT_MM,
-  HABITABILITY_SCALE,
-  AGRICULTURE_SCALE,
   generateAdaptiveTerrainScale,
 } from './utils/colorScales'
 
@@ -270,7 +262,9 @@ export function makeTexture(
  * Hypsometric colour for one height (adaptive NOAA ETOPO1 ocean + ESRI Natural
  * Earth land LUT), shared by the per-cell palettes and the raster fallback.
  */
-function makeTerrainColor(
+export const DEFAULT_WATER_DEPTH_FACTOR = 0.5
+
+export function makeTerrainColor(
   elevMinM: number,
   elevMaxM: number,
   seaLevel: number,
@@ -344,15 +338,10 @@ function buildCellPalettes(
   const pressure = new Map<number, [number, number, number]>()
   const slp = new Map<number, [number, number, number]>()
 
-  // NPP range for normalisation.  Dynamic rather than the fixed Miami ceiling of
-  // 1425 gC (3000 g dry matter × 0.475): a dim star's PAR suppresses NPP far below
-  // it, and a fixed ceiling washes the whole heatmap out.
-  let nppMax = 0
-  for (const cell of cvtMesh.cells) {
-    const v = cell.npp_gc_m2_yr
-    if (v != null && v > nppMax) nppMax = v
-  }
-  const NPP_MAX = nppMax > 0 ? nppMax : 1425
+  const scalarPalettes = { npp, habitable, agriculture, temperature, precipitation, temperatureError, precipitationError, pressure, slp }
+  const scalarColors = (Object.keys(scalarPalettes) as (keyof typeof scalarPalettes)[]).map(layer => ({
+    layer, colors: scalarPalettes[layer], scale: scalarScale(layer, false, cvtMesh.cells, seaLevel),
+  }))
 
   const terrainColor = makeTerrainColor(elevMinM, elevMaxM, seaLevel, waterDepthFactor)
 
@@ -390,9 +379,10 @@ function buildCellPalettes(
     }
 
     // Köppen thematic
-    const kc = cell.koppen_class
-    if (kc && KOPPEN_COLORS[kc]) {
-      koppen.set(cell.id, hexRgb(KOPPEN_COLORS[kc]))
+    const kc = displayKoppenClass(cell, seaLevel)
+    const climateColor = kc === 'SeaTrop' || kc === 'SeaTemp' ? marineKoppenBands[kc] : kc && KOPPEN_COLORS[kc]
+    if (climateColor) {
+      koppen.set(cell.id, hexRgb(climateColor))
     } else if (isOcean) {
       koppen.set(cell.id, hexRgb(KOPPEN_COLORS['Ocean']))
     }
@@ -420,10 +410,9 @@ function buildCellPalettes(
       biomes.set(cell.id, hexRgb(WHITTAKER_COLORS[bm]))
     }
 
-    // NPP heatmap — continuous
-    const nppVal: number | null | undefined = cell.npp_gc_m2_yr
-    if (nppVal != null) {
-      npp.set(cell.id, sequentialColor(nppVal / NPP_MAX, NPP_SCALE))
+    for (const { layer, colors, scale } of scalarColors) {
+      const value = scalarValue(layer, cell, seaLevel)
+      if (Number.isFinite(value)) colors.set(cell.id, scalarColor(scale, value))
     }
 
     // Civilization cradle — all land gets a neutral dark fill so the
@@ -447,19 +436,6 @@ function buildCellPalettes(
       }
     }
 
-    // Habitability grade (宜居等级) — progressive 0–100 ramp, land only.
-    const habScore: number | null | undefined = cell.habitability_score
-    if (habScore != null && !isOcean) {
-      habitable.set(cell.id, sequentialColor(habScore / 100, HABITABILITY_SCALE))
-    }
-
-    // Agriculture grade (农业等级) — progressive 0–100 ramp, land only
-    // (the hard zero below the tree-line renders as the ramp's dark stop).
-    const agriScore: number | null | undefined = cell.agriculture_score
-    if (agriScore != null && !isOcean) {
-      agriculture.set(cell.id, sequentialColor(agriScore / 100, AGRICULTURE_SCALE))
-    }
-
     // USDA soil order — categorical
     const soilType: string | null = cell.soil_type ?? null
     if (soilType && SOIL_COLORS[soilType]) {
@@ -473,77 +449,6 @@ function buildCellPalettes(
       if (c) provinces.set(cell.id, c)
     }
 
-    // Annual mean temperature — continuous diverging, land only (ocean stays
-    // transparent so the base terrain shows through, matching npp/biomes).
-    const tC: number | null | undefined = cell.temperature_C
-    if (tC != null && Number.isFinite(tC) && !isOcean) {
-      // Fixed −40…+40 °C physical range → 0 °C (freezing) at the centre stop.
-      temperature.set(cell.id, temperatureColor(tC))
-    }
-
-    // Annual precipitation — continuous, log-normalised (0…30000 mm), land only.
-    // Log scale because precipitation spans five orders of magnitude; a linear
-    // ramp would collapse ~95% of cells into the low end.
-    const pMm: number | null | undefined = cell.precipitation_mm
-    if (pMm != null && Number.isFinite(pMm) && !isOcean) {
-      precipitation.set(
-        cell.id,
-        sequentialColor(Math.log10(pMm + 1) / Math.log10(PRECIP_TOTAL_LIMIT_MM + 1), PRECIP_SCALE),
-      )
-    }
-
-    // ΔT / ΔP error vs per-grid observed climatology (Earth-only diagnostic) —
-    // diverging, blue = model too cold/dry, red = model too warm/wet.  Fixed
-    // ranges so the colour stays comparable across regions (like the pressure
-    // anomaly).  The reference is the observed surface climatology at each
-    // cell's (lat, lon) — carrying real orography — not the elevation-blind
-    // zonal mean, so a high plateau no longer reads as a huge cold artifact.
-    if (tC != null && !isOcean) {
-      temperatureError.set(
-        cell.id,
-        sequentialColor((tC - observedTempAt(cell.lat, cell.lon) + 20) / 40, TEMPERATURE_SCALE),
-      )
-    }
-    if (pMm != null && !isOcean) {
-      precipitationError.set(
-        cell.id,
-        sequentialColor((pMm - observedPrecipAt(cell.lat, cell.lon) + 2000) / 4000, TEMPERATURE_SCALE),
-      )
-    }
-
-    // Annual-mean pressure anomaly (canonical ΔP's 12-month mean, M2-A0③) —
-    // diverging ±5 hPa on its OWN scale, ocean + land (subtropical highs /
-    // stationary land–sea contrast).  The annual mean of the full-value
-    // monthly ΔP self-cancels the seasonal land-sea reversal, leaving a
-    // −0.3…+4.1 hPa range on Earth: the monthly ±20 scale squeezed it into
-    // the middle ±3% of the ramp — a visually blank layer (baseline audit
-    // 2026-09-22: display issue, not missing data).  Written by both the
-    // engine (built worlds) and the obs importer; the absolute slp_annual_hpa
-    // is obs-only and no longer drives this layer.
-    // Ice-cap mask (slp_reduction_unreliable, obs root only): on high ice-cap
-    // cells the reanalysis "sea-level" pressure is a hypothetical reduction
-    // through kilometres of ice (NCEP R1 reads +60..+69 hPa ΔSLP artefacts over
-    // the East Antarctic plateau) — greyed out of every pressure display so an
-    // untrustworthy reference never poses as data.
-    const slpMasked = cell.slp_reduction_unreliable === true
-    const dpAnnual: number | null | undefined = cell.pressure_anomaly_annual_hpa
-    if (dpAnnual != null && !slpMasked) {
-      pressure.set(
-        cell.id,
-        sequentialColor((dpAnnual + 5) / 10, TEMPERATURE_SCALE),
-      )
-    }
-
-    // Absolute annual-mean SLP (obs root only — the engine models anomalies,
-    // never absolute pressure).  Raw NCEP field: no band reference, no
-    // artefacts.  Diverging ±40 hPa around 1013.25 (blue = low, red = high).
-    const slpAnnual: number | null | undefined = cell.slp_annual_hpa
-    if (slpAnnual != null && !slpMasked) {
-      slp.set(
-        cell.id,
-        sequentialColor((slpAnnual - 1013.25) / 80 + 0.5, TEMPERATURE_SCALE),
-      )
-    }
   }
 
   return { terrainThematic, landseaThematic, koppen, plates, boundaries,
@@ -688,70 +593,23 @@ function bakeCellLayer(
  *
  * Reads the per-cell monthly value (cell index `i`, month `m` → `i·months + m`)
  * from the backend's compact MessagePack and maps it through a colour scale.
- * Temperature and precipitation are land-only (ocean stays transparent);
- * pressure is an atmospheric field and is drawn over land and ocean alike.
+ * The same scale applies to land and ocean wherever input data are available.
  */
 function buildMonthlyColors(
   monthly: MonthlyClimateData,
   month: number,
-  field: 'temperature' | 'precipitation' | 'pressure' | 'pressureError' | 'slp',
+  field: ScalarLayer,
   cvtMesh: CVTMesh,
 ): Map<number, [number, number, number]> {
   const colors = new Map<number, [number, number, number]>()
-  const { months, tMonthly, pMonthly, pressureMonthly, slpMonthly } = monthly
-  const arr =
-    field === 'temperature'
-      ? tMonthly
-      : field === 'precipitation'
-        ? pMonthly
-        : field === 'slp'
-          ? slpMonthly
-          : pressureMonthly
-  if (!arr) return colors  // field absent in this file → transparent layer
-
-  // Pressure anomaly ΔP uses a symmetric diverging range centred on 0, fixed at
-  // ±20 hPa.  A data-derived max (max |ΔP|) is dominated by the Antarctic polar
-  // vortex (±41 hPa) and washes the Asian monsoon (±12 hPa) into a pale band —
-  // hence the fixed range instead of an auto-scaled one.
-  const pMaxAbs = 20
+  const values = scalarMonthValues(field, monthly)
+  if (!values) return colors
+  const scale = scalarScale(field, true)
 
   for (let i = 0; i < cvtMesh.cells.length; i++) {
     const cell = cvtMesh.cells[i]
-    // Land-only for temperature/precipitation; the pressure family (ΔP, ΔSLP
-    // deviation, absolute SLP) covers the ocean too.
-    const isOceanCell = cell.water_class != null ? cell.water_class === 'ocean' : cell.elevation < 0
-    const isPressureFamily = field === 'pressure' || field === 'pressureError' || field === 'slp'
-    if (!isPressureFamily && isOceanCell) continue
-    // Ice-cap mask: on high ice-cap cells the reanalysis SLP is a hypothetical
-    // reduction (NCEP R1 artefacts up to +69 hPa over East Antarctica) — every
-    // pressure-family layer greys them out.
-    if (isPressureFamily && cell.slp_reduction_unreliable === true) continue
-    const v = arr[i * months + month]
-    if (!Number.isFinite(v)) continue
-    let color: [number, number, number] | null
-    if (field === 'temperature') {
-      color = temperatureColor(v)
-    } else if (field === 'precipitation') {
-      // Monthly precipitation is a per-month flux (mm/month ≈ annual/12), so
-      // it uses its OWN log range (0–2500 mm/month) — not the annual 0–30000.
-      color = sequentialColor(Math.log10(Math.max(v, 0) + 1) / Math.log10(PRECIP_WINDOW_LIMIT_MM + 1), PRECIP_SCALE)
-    } else if (field === 'slp') {
-      // Absolute SLP: diverging ±40 hPa around 1013.25 (raw NCEP field, no
-      // band reference — the artefact-free baseline display).
-      color = sequentialColor((v - 1013.25) / 80 + 0.5, TEMPERATURE_SCALE)
-    } else if (field === 'pressureError') {
-      // ΔSLP deviation (model monthly ΔP − observed monthly ΔSLP), diverging,
-      // ±20 hPa, same fixed range as the pressure anomaly itself.
-      // Month-calendar mapping: model month 0 = March, NCEP month 0 = Jan.
-      // Obs < −50 hPa = the ice-cap sentinel (no trustworthy reference).
-      const obs = observedSlpAnomAt(cell.lat, cell.lon, (month + 2) % 12)
-      color = obs < -50 ? null : sequentialColor((v - obs + pMaxAbs) / (2 * pMaxAbs), TEMPERATURE_SCALE)
-    } else {
-      // Pressure anomaly: diverging, ΔP=0 at the midpoint (reuses the RdBu
-      // temperature scale until a dedicated pressure palette exists).
-      color = sequentialColor((v + pMaxAbs) / (2 * pMaxAbs), TEMPERATURE_SCALE)
-    }
-    if (color) colors.set(cell.id, color)
+    const value = scalarValue(field, cell, 0, values, i * monthly.months + month, month)
+    if (Number.isFinite(value)) colors.set(cell.id, scalarColor(scale, value))
   }
   return colors
 }
@@ -763,7 +621,7 @@ function buildMonthlyColors(
 export function bakeMonthlyLayer(
   monthly: MonthlyClimateData,
   month: number,
-  field: 'temperature' | 'precipitation' | 'pressure' | 'pressureError' | 'slp',
+  field: ScalarLayer,
   cvtMesh: CVTMesh,
   cellIdMap: CellIdMap,
   width: number,

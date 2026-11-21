@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { classifyKoppenLand, hasKoppenMonths, koppenRasterPixels, type KoppenRasterInput } from './koppenDownscale'
+import { classifyKoppenLand, displayKoppenClass, hasKoppenMonths, koppenRasterPixels, marineKoppenBands, type KoppenRasterInput } from './koppenDownscale'
 import { KOPPEN_COLORS } from './utils/colorScales'
 
 const months = (value: number) => new Float32Array(12).fill(value)
 const rgba = (code: string) => {
-  const rgb = parseInt(KOPPEN_COLORS[code].slice(1), 16)
+  const rgb = parseInt(({ ...KOPPEN_COLORS, ...marineKoppenBands } as Record<string, string>)[code].slice(1), 16)
   return [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, 255]
 }
 
@@ -43,6 +43,21 @@ describe('Köppen display downscaling', () => {
       tMonthly: new Float32Array([...months(26), ...months(20)]), pMonthly: new Float32Array([...months(90), ...months(0)]),
     })
     expect(Array.from(pixels!)).toEqual([...rgba('Af'), ...rgba('Af'), ...rgba('BWh'), ...rgba('BWh')])
+  })
+
+  it('classifies marine temperatures after interpolation without mixing land and ocean regimes', () => {
+    const sea = { id: 37, elevation: -500, water_class: 'ocean', koppen_class: 'Ocean' }
+    const land = { id: 96, elevation: 500, water_class: 'land', koppen_class: 'EF' }
+    const native = { elevation: new Float32Array([0, 0, 1, 1]), width: 4, height: 1, minM: -500, maxM: 500, seaLevelM: 0 }
+    const pixels = koppenRasterPixels({ ...input, native, meshWidth: 2,
+      cells: [sea, land], cellIds: new Uint32Array([37, 96]),
+      tMonthly: new Float32Array([...months(25), ...months(-10)]), pMonthly: new Float32Array([...months(NaN), ...months(80)]),
+    })
+    expect(Array.from(pixels!)).toEqual([...rgba('SeaTrop'), ...rgba('SeaTrop'), ...rgba('EF'), ...rgba('EF')])
+    expect(displayKoppenClass({ ...sea, temperature_coldest_month_C: 18 }, 0)).toBe('SeaTemp')
+    expect(displayKoppenClass({ ...sea, temperature_coldest_month_C: 18.5 }, 0)).toBe('SeaTrop')
+    expect(displayKoppenClass(sea, 0)).toBe('Ocean')
+    expect(displayKoppenClass({ ...land, temperature_coldest_month_C: 18.5 }, 0)).toBe('EF')
   })
 
   it('requires paired twelve-month inputs and leaves an incomplete world on the model grid', () => {

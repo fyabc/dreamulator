@@ -90,7 +90,11 @@
     "Dwa": "大陆性季风(热夏)", "Dwb": "大陆性季风(温夏)", "Dwc": "大陆性季风(冷夏)", "Dwd": "大陆性季风(严冬)",
     "Dfa": "湿润大陆性(热夏)", "Dfb": "湿润大陆性(温夏)", "Dfc": "亚寒带针叶林(冷夏)", "Dfd": "亚寒带针叶林(严冬)",
     "ET": "苔原", "EF": "冰原",
-    "Ocean": "海洋"
+    "Ocean": "海洋",
+    "SeaTrop": "热带海域",
+    "SeaTemp": "非热带海域",
+    "marineLegend": "海域温度分带",
+    "marineHint": "此地图扩展按最冷月温度划分海域：高于 18 °C 为热带海域。分带不表示海冰覆盖。"
   },
   "uccClass": {
     "polar/arid": "极地·干旱", "polar/semi_arid": "极地·半干旱", "polar/transitional": "极地·过渡", "polar/humid": "极地·湿润",
@@ -203,6 +207,8 @@
     "climate": "气候",
     "koppenClimate": "Köppen 气候",
     "periodTemp": "完整时段平均温度",
+    "subzeroMonths": "低于 0 °C 的月份",
+    "subzeroMonthsHint": "统计月均温低于 0 °C 的月份。这个数值表示偏冷时段，不代表海冰覆盖。",
     "climateSource": "气候数据来源",
     "hottestColdest": "最热月 / 最冷月",
     "tempDeviation": "温度偏差 ΔT",
@@ -301,7 +307,7 @@
     "convergentRun": "历史契约：汇聚段自碰撞以来的积分缩短距离",
     "subgridIslands": "格内低于格点分辨率的小岛目录（座数与最高峰）",
     "specialCrust": "特殊地壳类型：热点链 (Wilson 1963) / 古造山带 (Şengör 1990) / 裂谷 (Burke & Dewey 1973)",
-    "koppen": "Köppen-Geiger 气候分类 (Beck et al. 2018)",
+    "koppen": "陆地采用柯本–盖格分类，海域在有数据时按温度分带",
     "ucc": "统一气候描述（UCC）profile v0：热量带 × 参考供需档，阈值全局共享",
     "soilType": "USDA 土纲（母岩 + 气候推导）",
     "fertility": "土壤肥力等级（农业潜力直接输入）",
@@ -455,7 +461,8 @@
     "lake": "湖泊",
     "frozenLake": "冰湖",
     "logScale": "对数色标",
-    "climateMissing": "这个气候图层没有陆地数据。",
+    "colorScale": "{{layer}}色阶",
+    "elevationScale": "高程配色。光照会影响地图上的实际颜色。",
     "monthlyLoading": "正在读取月度数据…",
     "monthlyMissing": "没有可用的月度数据，图层颜色仍按完整时段的结果显示。"
   },

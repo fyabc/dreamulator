@@ -21,10 +21,12 @@ import { precipitationBasisKey, uccCode } from '../../api/yearlyClimate'
 import { observedTempAt, observedPrecipAt, observedWindAt, observedCurrentAt, observedSlpAnomAt } from '../../viewers/map/spatialReference'
 import { useDevModeStore } from '../../stores/devModeStore'
 import { useExperimentalStore } from '../../stores/experimentalStore'
-import { climateWindowLabel } from './climateTime'
+import { climateWindowLabel, countSubzeroMonths } from './climateTime'
 import { GRID_H, GRID_W } from '../../playground/temperatureDraft'
 import { sampleTemperature, summarizeTemperature, type TemperaturePreview } from '../../playground/temperaturePreview'
 import { trialTerrainCell, type InspectedCell } from '../../viewers/map/trialInspection'
+import { displayKoppenClass } from '../../viewers/map/koppenDownscale'
+import { isOceanCell } from '../../viewers/map/scalarLayers'
 import AtlasIcon, { type AtlasIconName } from '../AtlasIcon'
 
 interface MapCellInspectorProps {
@@ -35,6 +37,7 @@ interface MapCellInspectorProps {
   cvtMesh: CVTMesh | null
   /** Planet display name (for summary header). */
   planetName: string | null
+  seaLevelM?: number
   /** Multiple selected cells — triggers aggregate stats when cell===null. */
   selectedCells?: VoronoiCell[]
   /** Currently-active map layer — drives which inspector group auto-expands. */
@@ -112,6 +115,7 @@ const KOPPEN_NAMES: Record<string, string> = {
   Dfa: 'koppen.Dfa', Dfb: 'koppen.Dfb', Dfc: 'koppen.Dfc', Dfd: 'koppen.Dfd',
   ET: 'koppen.ET', EF: 'koppen.EF',
   Ocean: 'koppen.Ocean',
+  SeaTrop: 'koppen.SeaTrop', SeaTemp: 'koppen.SeaTemp',
 }
 
 const BIOME_LABELS: Record<string, string> = {
@@ -416,8 +420,10 @@ function CellDetails({
   cellIndexById,
   isEarth = true,
   temperature,
+  seaLevelM,
 }: {
   cell: InspectedCell
+  seaLevelM: number
   activeColorMode?: ColorMode | null
   monthlyMode?: boolean
   monthIndex?: number
@@ -427,7 +433,7 @@ function CellDetails({
   cellIndexById: Map<number, number>
   /** Earth reference world — gates the ΔT/ΔP deviation rows. */
   isEarth?: boolean
-  temperature?: { value: number; window?: string }
+  temperature?: { value: number; window?: string; coldMonths: number | null }
 }) {
   const { t } = useTranslation('map')
   const [displayMode, setDisplayMode] = useState<'default' | 'full'>('default')
@@ -436,6 +442,7 @@ function CellDetails({
   const experimental = useExperimentalStore((s) => s.experimental)
   const highlightGroup = activeColorMode ? COLOR_MODE_TO_GROUP[activeColorMode] ?? null : null
   const elevM = cell.elevation
+  const koppen = displayKoppenClass(cell, seaLevelM)
   const isLand = cell.water_class != null ? cell.water_class === 'land' : cell.elevation > 0
   const boundaryClass = cell.boundary_type
     ? BOUNDARY_COLORS[cell.boundary_type] ?? 'bg-gray-800 text-gray-300'
@@ -446,6 +453,8 @@ function CellDetails({
   const monthName = climateWindowLabel(t, monthlyData, monthIndex)
   const idx = cellIndexById.get(cell.id)
   const nMonths = monthlyData?.months ?? 12
+  const coldMonths = temperature ? temperature.coldMonths : !cell.is_lake && isOceanCell(cell, seaLevelM) && monthlyData && idx != null && idx < monthlyData.numCells
+    ? countSubzeroMonths(nMonths, month => monthlyData.tMonthly[idx * nMonths + month]) : null
   const hasMonthly = monthlyMode && monthlyData != null && idx !== undefined &&
     idx < monthlyData.numCells && monthIndex >= 0 && monthIndex < nMonths
   const mTemp = hasMonthly ? monthlyData!.tMonthly[idx! * nMonths + monthIndex] : undefined
@@ -539,7 +548,7 @@ function CellDetails({
     cell.crust_type || cell.plate_id || cell.boundary_type || cell.hotspot_id || cell.landform,
   )
   const hasClimate = Boolean(
-    temperature || cell.koppen_class || cell.temperature_C != null || cell.precipitation_mm != null ||
+    temperature || coldMonths != null || koppen || cell.temperature_C != null || cell.precipitation_mm != null ||
     (cell.wind_east_m_s != null && cell.wind_north_m_s != null) ||
     (cell.ocean_current_east_m_s != null && cell.ocean_current_north_m_s != null) ||
     (monthlyMode && monthlyData != null && idx !== undefined),
@@ -748,12 +757,12 @@ function CellDetails({
             key={`climate-${displayMode}-${highlightGroup}`}
             defaultOpen={displayMode === 'full' || highlightGroup === 'climate'}
           >
-            {cell.koppen_class && (
+            {koppen && (
               <div className="flex justify-between">
                 <dt className="text-gray-500" title={t('tooltip.koppen')}>{t('inspector.koppenClimate')}</dt>
                 <dd className="text-cyan-300">
-                  {t(KOPPEN_NAMES[cell.koppen_class] ?? cell.koppen_class)}
-                  <span className="text-gray-500 ml-1">({cell.koppen_class})</span>
+                  {t(KOPPEN_NAMES[koppen] ?? koppen)}
+                  <span className="text-gray-500 ml-1">({koppen})</span>
                 </dd>
               </div>
             )}
@@ -762,6 +771,7 @@ function CellDetails({
                 hint={temperature ? t('playground:trial.cellSample', { id: cell.id }) : undefined}
                 value={temperature?.value ?? (hasMonthly ? mTemp : cell.temperature_C)} />
             )}
+            {coldMonths != null && <ColdMonthsRow count={coldMonths} />}
             {!hasMonthly && cell.temperature_hottest_month_C != null && cell.temperature_coldest_month_C != null && (
                   <div className="flex justify-between">
                     <dt className="text-gray-500">{t('inspector.hottestColdest')}</dt>
@@ -1166,6 +1176,20 @@ function OceanCurrentDetail({ u, v, sstAnom }: { u: number; v: number; sstAnom: 
 // Mode C — Multi-cell statistics (>1 selected)
 // ---------------------------------------------------------------------------
 
+function ColdMonthsRow({ count }: { count: number }) {
+  const { t } = useTranslation('map')
+  return <div className="flex justify-between gap-2" title={t('inspector.subzeroMonthsHint')}>
+    <dt className="text-gray-500">{t('inspector.subzeroMonths')}</dt>
+    <dd className="shrink-0 font-mono">{count} / 12</dd>
+  </div>
+}
+
+function trialColdMonths(trial: TemperaturePreview, point: { lon: number; lat: number }) {
+  const elevation = sampleTemperature(trial.terrain.elevation, point)
+  return elevation <= trial.terrain.params.seaLevelM
+    ? countSubzeroMonths(trial.monthly.length, month => sampleTemperature(trial.monthly[month], point)) : null
+}
+
 function TemperatureRow({ value, monthly, hint }: { value?: number | null; monthly: boolean; hint?: string }) {
   const { t } = useTranslation('map')
   return <div className="flex justify-between">
@@ -1174,7 +1198,7 @@ function TemperatureRow({ value, monthly, hint }: { value?: number | null; month
   </div>
 }
 
-function MultiCellStats({ cells, trial }: { cells: InspectedCell[]; trial?: TemperaturePreview | null }) {
+function MultiCellStats({ cells, trial, seaLevelM }: { cells: InspectedCell[]; trial?: TemperaturePreview | null; seaLevelM: number }) {
   const { t } = useTranslation('map')
   const n = cells.length
   let totalArea = 0
@@ -1198,9 +1222,8 @@ function MultiCellStats({ cells, trial }: { cells: InspectedCell[]; trial?: Temp
     const temperature = trial ? sampleTemperature(trial.field, c) : c.temperature_C
     if (temperature != null) { tempSum += temperature; tempCount++ }
     if (c.precipitation_mm != null) { precipSum += c.precipitation_mm; precipCount++ }
-    if (c.koppen_class) {
-      koppenTally.set(c.koppen_class, (koppenTally.get(c.koppen_class) ?? 0) + 1)
-    }
+    const climate = displayKoppenClass(c, seaLevelM)
+    if (climate && climate !== 'Ocean') koppenTally.set(climate, (koppenTally.get(climate) ?? 0) + 1)
   }
 
   // Dominant Köppen
@@ -1302,7 +1325,7 @@ interface WorldStatsData {
 }
 
 /** One pass over all cells → climate & ecology tallies for the stats tab. */
-function computeWorldStats(cells: readonly VoronoiCell[]): WorldStatsData {
+function computeWorldStats(cells: readonly VoronoiCell[], seaLevelM: number): WorldStatsData {
   let tSum = 0, tCount = 0, tMin = Infinity, tMax = -Infinity
   let pSum = 0, pCount = 0
   let nSum = 0, nCount = 0
@@ -1319,7 +1342,8 @@ function computeWorldStats(cells: readonly VoronoiCell[]): WorldStatsData {
     }
     if (c.precipitation_mm != null && Number.isFinite(c.precipitation_mm)) { pSum += c.precipitation_mm; pCount++ }
     if (c.npp_gc_m2_yr != null) { nSum += c.npp_gc_m2_yr; nCount++ }
-    if (c.koppen_class && c.koppen_class !== 'Ocean') koppen.set(c.koppen_class, (koppen.get(c.koppen_class) ?? 0) + 1)
+    const climate = displayKoppenClass(c, seaLevelM)
+    if (climate && climate !== 'Ocean') koppen.set(climate, (koppen.get(climate) ?? 0) + 1)
     if (c.biome && c.biome !== 'ocean') biome.set(c.biome, (biome.get(c.biome) ?? 0) + 1)
     if (c.soil_type) soil.set(c.soil_type, (soil.get(c.soil_type) ?? 0) + 1)
     if (c.biogeographic_province) provinces.add(c.biogeographic_province)
@@ -1335,12 +1359,13 @@ function computeWorldStats(cells: readonly VoronoiCell[]): WorldStatsData {
   }
 }
 
-function WorldStats({ cvtMesh, planetName, yearlyData, trialMode, trial }: {
+function WorldStats({ cvtMesh, planetName, yearlyData, trialMode, trial, seaLevelM }: {
   cvtMesh: CVTMesh | null; planetName: string | null; yearlyData: YearlyClimateData | null
   trialMode?: boolean; trial?: TemperaturePreview | null
+  seaLevelM: number
 }) {
   const { t } = useTranslation('map')
-  const stats = useMemo(() => computeWorldStats(trialMode ? [] : cvtMesh?.cells ?? []), [cvtMesh, trialMode])
+  const stats = useMemo(() => computeWorldStats(trialMode ? [] : cvtMesh?.cells ?? [], seaLevelM), [cvtMesh, trialMode, seaLevelM])
   const field = trial?.field
   const temperature = useMemo(() => field ? summarizeTemperature(field, GRID_W) : null, [field])
   const tempMean = temperature?.mean ?? stats.tempMean
@@ -1437,6 +1462,7 @@ export default function MapCellInspector({
   cell,
   cvtMesh,
   planetName,
+  seaLevelM = 0,
   selectedCells,
   activeColorMode,
   monthlyMode = false,
@@ -1456,6 +1482,7 @@ export default function MapCellInspector({
     if (cvtMesh) cvtMesh.cells.forEach((c, i) => m.set(c.id, i))
     return m
   }, [cvtMesh])
+  const cursorColdMonths = trial && cursor && !cell ? trialColdMonths(trial, cursor) : null
 
   return (
     <div className="space-y-2">
@@ -1484,12 +1511,13 @@ export default function MapCellInspector({
       </div>
 
       {view === 'stats' ? (
-        <WorldStats cvtMesh={cvtMesh} planetName={planetName} yearlyData={trialMode ? null : yearlyData} trialMode={trialMode} trial={trial} />
+        <WorldStats cvtMesh={cvtMesh} planetName={planetName} yearlyData={trialMode ? null : yearlyData} trialMode={trialMode} trial={trial} seaLevelM={seaLevelM} />
       ) : !cell && selectedCells && selectedCells.length > 1 ? (
-        <MultiCellStats cells={trialMode ? selectedCells.map(trialTerrainCell) : selectedCells} trial={trial} />
+        <MultiCellStats cells={trialMode ? selectedCells.map(trialTerrainCell) : selectedCells} trial={trial} seaLevelM={seaLevelM} />
       ) : cell ? (
         <CellDetails
           cell={trialMode ? trialTerrainCell(cell) : cell}
+          seaLevelM={seaLevelM}
           activeColorMode={activeColorMode}
           monthlyMode={!trialMode && monthlyMode}
           monthIndex={monthIndex}
@@ -1497,11 +1525,12 @@ export default function MapCellInspector({
           yearlyData={trialMode ? null : yearlyData}
           cellIndexById={cellIndexById}
           isEarth={!trialMode && isEarth}
-          temperature={trial ? { value: sampleTemperature(trial.field, cell), window } : undefined}
+          temperature={trial ? { value: sampleTemperature(trial.field, cell), window, coldMonths: trialColdMonths(trial, cell) } : undefined}
         />
       ) : trial && cursor ? (
         <FieldGroup icon="climate" label={window ? `${t('inspector.climate')} · ${window}` : t('inspector.climate')} defaultOpen>
           <TemperatureRow value={sampleTemperature(trial.field, cursor)} monthly={Boolean(window)} hint={t('playground:trial.cursorSample')} />
+          {cursorColdMonths != null && <ColdMonthsRow count={cursorColdMonths} />}
         </FieldGroup>
       ) : (
         <p className="text-xs text-gray-600 italic p-2">{t('inspector.hoverHint')}</p>
@@ -1522,6 +1551,7 @@ export function MobileCellCard({
   trialMode,
   covered,
   trial,
+  seaLevelM = 0,
   inspection,
 }: {
   cell: VoronoiCell | null
@@ -1530,10 +1560,12 @@ export function MobileCellCard({
   trialMode?: boolean
   covered?: boolean
   trial?: TemperaturePreview | null
+  seaLevelM?: number
   inspection: ReactNode
 }) {
   const { t } = useTranslation('map')
   const cell = trialMode && sourceCell ? trialTerrainCell(sourceCell) : sourceCell
+  const koppen = cell ? displayKoppenClass(cell, seaLevelM) : null
   const temperature = trial && cell ? sampleTemperature(trial.field, cell) : cell?.temperature_C
   const elevM = cell ? cell.elevation : 0
   const isLand = cell
@@ -1584,8 +1616,8 @@ export function MobileCellCard({
           <span className={elevM >= 0 ? 'text-green-400' : 'text-blue-400'}>
             {t('inspector.elevation')} {elevM >= 0 ? '+' : ''}{elevM.toFixed(1)}m
           </span>
-          {cell.koppen_class && (
-            <span className="text-cyan-300">{t(KOPPEN_NAMES[cell.koppen_class] ?? cell.koppen_class)}</span>
+          {koppen && (
+            <span className="text-cyan-300">{t(KOPPEN_NAMES[koppen] ?? koppen)}</span>
           )}
           {temperature != null && <span>{temperature.toFixed(1)}°C</span>}
           {cell.precipitation_mm != null && <span>{Math.round(cell.precipitation_mm)}mm</span>}

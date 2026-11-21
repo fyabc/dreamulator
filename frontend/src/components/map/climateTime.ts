@@ -46,6 +46,17 @@ export function climateWindowLabel(t: TFunction<'map'>, data: MonthlyClimateData
   return t('time.windowNumber', { number: index + 1 })
 }
 
+export function countSubzeroMonths(months: number, temperatureAt: (month: number) => number) {
+  if (months !== 12) return null
+  let count = 0
+  for (let month = 0; month < months; month++) {
+    const temperature = temperatureAt(month)
+    if (!Number.isFinite(temperature)) return null
+    if (temperature < 0) count++
+  }
+  return count
+}
+
 export function officialMonthlyMeans(layer: MonthlyLayer, data: MonthlyClimateData, cells: readonly VoronoiCell[]) {
   const spec = monthlyLayers[layer]
   const values = data[spec.field]

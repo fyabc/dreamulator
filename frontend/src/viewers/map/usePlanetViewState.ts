@@ -31,7 +31,8 @@ import { readElevationPng } from '../packs/elevationRaster'
 import { meshTextureDimensions, terrainSourceFor, type TerrainSource } from './elevationSource'
 import { solarDeclinationDeg } from '../utils/solar'
 import useCellIdMap from './useCellIdMap'
-import { useMonthlyClimate, type MonthlyField } from './useMonthlyClimate'
+import { useMonthlyClimate } from './useMonthlyClimate'
+import { isScalarLayer } from './scalarLayers'
 import { useKoppenDownscale } from './useKoppenDownscale'
 import { isMonthlyLayer, monthFromSearch } from '../../components/map/climateTime'
 import { useYearlyClimate } from './useYearlyClimate'
@@ -60,7 +61,6 @@ export interface PlanetViewState {
   monthlyMode: boolean
   handleMonthlyModeChange: (mode: boolean) => void
   selectMonth: (index: number) => void
-  monthlyField: MonthlyField | null
   displayingMonthly: boolean
   downscale: boolean
   setDownscale: (enabled: boolean) => void
@@ -106,7 +106,7 @@ export interface PlanetViewState {
   cellIdMap: ReturnType<typeof useCellIdMap>
 
   // --- Monthly/UCC climate products ---
-  monthlyThematic: ReturnType<typeof useMonthlyClimate>['texture']
+  scalarThematic: ReturnType<typeof useMonthlyClimate>['texture']
   koppenDownscale: ReturnType<typeof useKoppenDownscale>
   monthlyData: ReturnType<typeof useMonthlyClimate>['data']
   monthlyLoading: boolean
@@ -194,7 +194,6 @@ export function usePlanetViewState(
   const monthlyMode = ebm?.time.monthly ?? officialMonthlyMode
   const monthlyMonth = ebm?.time.month ?? officialMonth
   const setTrialTime = ebm?.setTime
-  const monthlyField: MonthlyField | null = isMonthlyLayer(activeMainLayer) && activeMainLayer !== 'winds' ? activeMainLayer : null
   const handleMonthlyModeChange = useCallback((monthly: boolean) => {
     if (setTrialTime) setTrialTime({ monthly, month: monthlyMonth })
     else setOfficialMonthlyMode(monthly)
@@ -400,10 +399,11 @@ export function usePlanetViewState(
     elevation, width: elevationDims.w, height: elevationDims.h, minM: meta.elevation_min_m, maxM: meta.elevation_max_m, seaLevelM,
   } : null, [importedElevation, elevation, meta, elevationDims, seaLevelM])
   const koppenActive = !trialActive && activeMainLayer === 'koppen'
-  const { texture: monthlyThematic, data: monthlyData, loading: monthlyLoading, displayingMonthly } = useMonthlyClimate({
+  const { texture: scalarThematic, data: monthlyData, loading: monthlyLoading, displayingMonthly } = useMonthlyClimate({
     worldName, planetId: selectedPlanet, branch: selectedBranch, month: monthlyMonth,
     trialData: ebm?.result.monthly,
-    field: trialActive ? null : monthlyField, active: !trialActive && (koppenActive || monthlyMode || isMonthlyLayer(activeColorMode)),
+    field: !trialActive && isScalarLayer(activeMainLayer) ? activeMainLayer : null,
+    active: !trialActive && (koppenActive || monthlyMode || isMonthlyLayer(activeColorMode)),
     monthlyMode, downscale, native, seaLevelM,
     cvtMesh: cvtMesh ?? null, cellIdMap,
     ...meshTextureSize, flipHorizontal: false,
@@ -556,7 +556,7 @@ export function usePlanetViewState(
     selectedBranch, setSelectedBranch,
     cleanMode, setCleanMode,
     layerState, setLayerState, activeMainLayer, activeColorMode,
-    monthlyMode, handleMonthlyModeChange, monthlyField, selectMonth, displayingMonthly, downscale, setDownscale,
+    monthlyMode, handleMonthlyModeChange, selectMonth, displayingMonthly, downscale, setDownscale,
     particleMode, setParticleMode,
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination,
@@ -566,7 +566,7 @@ export function usePlanetViewState(
     worldPlanetsError, platesError,
     elevation, elevationDims, terrainSource, setTerrainSource, meshTextureSize,
     cvtMesh: cvtMesh ?? null, voronoiCells, cellIdMap,
-    monthlyThematic, koppenDownscale, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
+    scalarThematic, koppenDownscale, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, hoveredCell, handleCellHover, lastCell, selectedCells,
     selectCell, clearSelection,
     selectedCellData, hoveredCellData, inspectorCell, selectedCellObjects,

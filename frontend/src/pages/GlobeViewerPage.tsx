@@ -19,6 +19,7 @@ import GlobeViewer, { type GlobeVertex, type GlobeRegion, type GlobeRegionFlight
 import BranchSelector from '../components/BranchSelector'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapLayerPanel from '../components/map/MapLayerPanel'
+import { activeMainLayerId } from '../components/map/layerStateInit'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
 import SunControl from '../components/map/SunControl'
 import { canDownscale } from '../viewers/map/climateDownscale'
@@ -69,14 +70,14 @@ export default function GlobeViewerPage() {
     selectedBranch, setSelectedBranch,
     cleanMode, setCleanMode,
     layerState, setLayerState, activeMainLayer,
-    monthlyMode, handleMonthlyModeChange, monthlyField, selectMonth, displayingMonthly, downscale, setDownscale,
+    monthlyMode, handleMonthlyModeChange, selectMonth, displayingMonthly, downscale, setDownscale,
     particleMode, setParticleMode,
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
     selectedPlanet, mapPlanets, meta, metaError, elevError, cvtMeshError, awaitingBuild,
     bodyByName, planetRadiusM,
     elevation, elevationDims, cvtMesh, voronoiCells, cellIdMap, terrainSource, setTerrainSource, meshTextureSize,
-    monthlyThematic, koppenDownscale, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
+    scalarThematic, koppenDownscale, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, handleCellHover, selectedCells,
     selectCell, clearSelection,
     hoveredCell, hoveredCellData, inspectorCell, selectedCellData, selectedCellObjects,
@@ -137,11 +138,7 @@ export default function GlobeViewerPage() {
     layers: renderLayers,
     cvtMesh,
     cellIdMap,
-    monthlyTemperature: monthlyField === 'temperature' ? monthlyThematic : null,
-    monthlyPrecipitation: monthlyField === 'precipitation' ? monthlyThematic : null,
-    monthlyPressure: monthlyField === 'pressure' ? monthlyThematic : null,
-    monthlyPressureError: monthlyField === 'pressureError' ? monthlyThematic : null,
-    monthlySlp: monthlyField === 'slp' ? monthlyThematic : null,
+    scalarThematic,
     koppenTexture: koppenDownscale.texture,
     uccTexture,
     flipHorizontal: false,
@@ -271,7 +268,7 @@ export default function GlobeViewerPage() {
     <MapCellInspector trialMode={trialActive} trial={trial.preview} cursor={cursor}
     cell={inspectorCell} cvtMesh={cvtMesh} planetName={currentPlanet?.name ?? selectedPlanet} selectedCells={selectedCellObjects}
     activeColorMode={trialActive ? display.texture ? 'temperature' : 'terrain' : vs.activeColorMode} monthlyMode={monthlyMode} monthIndex={monthlyMonth}
-    monthlyData={monthlyData} yearlyData={yearlyData} isEarth={worldName === 'earth'} />
+    monthlyData={monthlyData} yearlyData={yearlyData} isEarth={worldName === 'earth'} seaLevelM={meta?.sea_level_m} />
   </div>
   const layers = <MapLayerPanel state={display.state} onChange={display.onChange} available={display.available} isEarth={worldName === 'earth'}
     monthlyMode={trialActive ? typeof trial.preview?.period === 'number' : monthlyMode} monthlyData={trialActive ? null : monthlyData}
@@ -279,8 +276,13 @@ export default function GlobeViewerPage() {
     monthIndex={monthlyMonth} onMonthlyModeChange={handleMonthlyModeChange}
     detail={{ downscaled: downscale,
       onChange: setDownscale, pending: koppenDownscale.pending, available: trialActive
-      ? display.state.layers.temperature > 0 && Boolean(trial.preview) : koppenDownscale.available || (Boolean(cvtMesh) && canDownscale(activeMainLayer)) }}
+      ? display.state.layers.temperature > 0 && Boolean(trial.preview)
+      : koppenDownscale.available || (Boolean(cvtMesh) && canDownscale(activeMainLayer) && display.available.has(activeMainLayer)) }}
     particleMode={particleMode} onParticleModeChange={setParticleMode} />
+  const legend = !cleanMode && displayTexture && <ClimateLegend layer={activeMainLayerId(display.state)} mesh={cvtMesh}
+    displayingMonthly={displayingMonthly} monthlyMode={monthlyMode} monthlyData={monthlyData} monthlyLoading={monthlyLoading}
+    monthIndex={monthlyMonth} yearlyData={yearlyData} meta={meta} grayTerrain={terrainSource === 'gray'}
+    preview={trialActive ? trial.preview : null} />
 
   return (
     <div className={cleanMode
@@ -365,11 +367,6 @@ export default function GlobeViewerPage() {
       )}
       {awaitingBuild && !cleanMode && (
         <AwaitingBuildBanner world={worldName} branch={selectedBranch} />
-      )}
-      {!cleanMode && trial.mode === 'official' && cvtMesh && (
-        <ClimateLegend layer={activeMainLayer} mesh={cvtMesh} monthlyMode={monthlyMode}
-          monthlyData={displayingMonthly ? monthlyData : null} monthlyLoading={monthlyMode && monthlyLoading}
-          monthIndex={monthlyMonth} yearlyData={yearlyData} />
       )}
       {(metaError || elevError || (cvtMeshError && !awaitingBuild)) && (
         <div className="bg-red-900/20 border-b border-red-700/30 px-4 py-2 text-sm text-red-300 text-center">
@@ -489,9 +486,11 @@ export default function GlobeViewerPage() {
             />
             </>}
           </div>
+            {legend}
           {!cleanMode && (
             <MobileCellCard
               cell={selectedCells.size === 1 ? selectedCellData : null}
+              seaLevelM={meta?.sea_level_m}
               cursor={cursor}
               onClose={clearSelection}
               covered={trial.open}
@@ -644,6 +643,7 @@ export default function GlobeViewerPage() {
           />
           </>}
 
+          {legend}
           {/* Recording controls — float in the globe view's bottom-right corner
               (the view area has spare room; the top bar is already crowded).
               Fully hidden in clean mode: the mouse is not controllable during a

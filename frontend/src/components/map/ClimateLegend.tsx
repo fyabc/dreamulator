@@ -1,62 +1,88 @@
-import { useMemo } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import { precipitationBasisKey, type YearlyClimateData } from '../../api/yearlyClimate'
-import type { CVTMesh } from '../../viewers/map/types'
+import type { TemperaturePreview } from '../../playground/temperaturePreview'
+import { DEFAULT_WATER_DEPTH_FACTOR, makeTerrainColor } from '../../viewers/map/layerBakes'
+import { isScalarLayer, scalarFields, scalarMonthValues, scalarScale, scalarValue } from '../../viewers/map/scalarLayers'
+import type { ColorMode, CVTMesh, MapMetadata } from '../../viewers/map/types'
+import { scaleGradient } from '../../viewers/map/utils/colorScales'
 import { climateWindowLabel } from './climateTime'
-import {
-  PRECIP_SCALE, PRECIP_TOTAL_LIMIT_MM, PRECIP_WINDOW_LIMIT_MM,
-  TEMPERATURE_LIMIT_C, TEMPERATURE_SCALE, scaleGradient,
-} from '../../viewers/map/utils/colorScales'
 
 interface ClimateLegendProps {
-  layer: string | null
+  layer: ColorMode | null
   mesh: CVTMesh | null
+  displayingMonthly: boolean
   monthlyMode: boolean
   monthlyLoading: boolean
   monthlyData: MonthlyClimateData | null
   monthIndex: number
   yearlyData: YearlyClimateData | null
+  meta?: MapMetadata
+  grayTerrain?: boolean
+  preview?: TemperaturePreview | null
 }
 
 export default function ClimateLegend({
-  layer, mesh, monthlyMode, monthlyLoading, monthlyData, monthIndex, yearlyData,
+  layer, mesh, displayingMonthly, monthlyMode, monthlyLoading, monthlyData, monthIndex, yearlyData, meta, grayTerrain, preview,
 }: ClimateLegendProps) {
-  const { t } = useTranslation('map')
-  const field = layer === 'temperature' ? 'temperature_C' : layer === 'precipitation' ? 'precipitation_mm' : null
-  const hasTotal = useMemo(() => !!field && mesh?.cells.some((cell) =>
-    (cell.water_class != null ? cell.water_class !== 'ocean' : cell.elevation >= 0) && Number.isFinite(cell[field]),
-  ), [field, mesh])
-  if (!field) return null
+  const { t, i18n } = useTranslation(['map', 'help'])
+  const helpId = useId()
+  const [helpOpen, setHelpOpen] = useState(false)
+  const seaLevel = preview?.terrain.params.seaLevelM ?? meta?.sea_level_m ?? 0
+  const minElev = preview?.terrain.params.elevMinM ?? meta?.elevation_min_m
+  const maxElev = preview?.terrain.params.elevMaxM ?? meta?.elevation_max_m
+  const scale = useMemo(() => {
+    if (layer === 'terrain' && minElev != null && maxElev != null && minElev < maxElev) {
+      const color = makeTerrainColor(minElev, maxElev, seaLevel, DEFAULT_WATER_DEPTH_FACTOR)
+      const stops = Array.from({ length: 33 }, (_, index) => {
+        const value = index / 32
+        const elevation = minElev + value * (maxElev - minElev)
+        const shade = Math.round(value * 255)
+        const rgb: [number, number, number] = grayTerrain && !preview ? [shade, shade, shade] : color(elevation, elevation < seaLevel)
+        return { value, color: rgb }
+      })
+      return { min: minElev, max: maxElev, unit: 'm', stops, log: false }
+    }
+    if (!isScalarLayer(layer)) return null
+    const values = displayingMonthly ? scalarMonthValues(layer, monthlyData) : undefined
+    if (!(layer === 'temperature' && preview) && !mesh?.cells.some((cell, index) => Number.isFinite(
+      scalarValue(layer, cell, seaLevel, values, index * (monthlyData?.months ?? 0) + monthIndex, monthIndex),
+    ))) return null
+    return scalarScale(layer, displayingMonthly, mesh?.cells, seaLevel)
+  }, [layer, minElev, maxElev, seaLevel, grayTerrain, preview, displayingMonthly, monthlyData, mesh, monthIndex])
 
-  const monthly = monthlyMode && monthlyData != null
-  const temp = field === 'temperature_C'
-  const min = temp ? -TEMPERATURE_LIMIT_C : 0
-  const max = temp ? TEMPERATURE_LIMIT_C : monthly ? PRECIP_WINDOW_LIMIT_MM : PRECIP_TOTAL_LIMIT_MM
-  const scale = temp ? TEMPERATURE_SCALE : PRECIP_SCALE
-  const gradient = scaleGradient(scale)
+  if (!scale || !layer) return null
   const windowName = climateWindowLabel(t, monthlyData, monthIndex)
-  const basis = monthly
-    ? monthlyData.binDays != null ? t('time.windowWithDuration', { window: windowName, days: monthlyData.binDays }) : windowName
+  const basis = displayingMonthly
+    ? monthlyData?.binDays != null ? t('time.windowWithDuration', { window: windowName, days: monthlyData.binDays }) : windowName
     : t(precipitationBasisKey(yearlyData), { days: yearlyData?.windowDays })
-  const label = temp
-    ? monthly ? `${t('inspector.windowTemp')} · ${basis}` : t('inspector.periodTemp')
-    : t('precipWindow.total', { basis })
+  const name = t(`layer.${layer}.label`, { ns: 'help' })
+  const label = layer === 'temperature'
+    ? preview && typeof preview.period === 'number' ? `${t('inspector.windowTemp')} · ${preview.label}`
+      : displayingMonthly ? `${t('inspector.windowTemp')} · ${basis}` : t('inspector.periodTemp')
+    : layer === 'precipitation' ? t('precipWindow.total', { basis })
+      : layer === 'terrain' ? t('legend.elevationScale') : displayingMonthly ? `${name} · ${basis}` : name
+  const help = [label, scale.log ? t('legend.logScale') : null,
+    !preview && monthlyMode && !displayingMonthly && isScalarLayer(layer) && 'monthly' in scalarFields[layer]
+      ? t(monthlyLoading ? 'legend.monthlyLoading' : 'legend.monthlyMissing') : null].filter(Boolean).join(' · ')
+  const format = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 })
+  const clamped = layer !== 'terrain' && layer !== 'habitable' && layer !== 'agriculture' && layer !== 'npp'
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-space-border bg-space-panel px-4 py-2 text-xs text-gray-300" data-testid="climate-legend">
-      {monthly || hasTotal ? (
-        <>
-          <span>{label}</span>
-          <span>{temp ? '≤ ' : ''}{min}</span>
-          <span className="h-2 w-28 rounded" style={{ background: gradient }} />
-          <span>≥ {max.toLocaleString()} {temp ? '°C' : 'mm'}</span>
-          {!temp && <span className="text-gray-400">{t('legend.logScale')}</span>}
-        </>
-      ) : <span>{t('legend.climateMissing')}</span>}
-      {monthlyMode && !monthly && (
-        <span className="text-amber-200">{t(monthlyLoading ? 'legend.monthlyLoading' : 'legend.monthlyMissing')}</span>
-      )}
+    <div className="group absolute left-3 top-3 z-30 max-w-[calc(100%-1.5rem)]">
+      <button type="button" data-testid="climate-legend" aria-label={t('legend.colorScale', { layer: name })}
+        aria-describedby={helpId} onClick={() => setHelpOpen(value => !value)} onBlur={() => setHelpOpen(false)}
+        onKeyDown={event => { if (event.key === 'Escape') { setHelpOpen(false); event.currentTarget.blur() } }}
+        className="flex min-h-9 max-w-full items-center gap-2 rounded-md border border-space-border bg-space-panel px-2.5 py-1 text-[11px] tabular-nums text-gray-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-neon-cyan">
+        <span className="whitespace-nowrap">{clamped && scale.min !== 0 ? '≤ ' : ''}{format.format(scale.min)}</span>
+        <span aria-hidden="true" className="h-2 w-20 min-w-8 rounded sm:w-28" style={{ background: scaleGradient(scale.stops) }} />
+        <span className="whitespace-nowrap">{clamped ? '≥ ' : ''}{format.format(scale.max)} {scale.unit}</span>
+      </button>
+      <span id={helpId} role="tooltip"
+        className={`${helpOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'} pointer-events-none absolute left-0 top-full mt-1 w-max max-w-[min(16rem,80vw)] rounded border border-space-border bg-space-panel px-2.5 py-1.5 text-xs text-gray-200`}>
+        {help}
+      </span>
     </div>
   )
 }
