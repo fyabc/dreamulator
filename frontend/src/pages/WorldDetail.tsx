@@ -13,6 +13,7 @@ import LayerDag from '../components/LayerDag'
 import LayerTabSection from '../components/world/LayerTabSection'
 import TemperatureTrialEntry from '../components/world/TemperatureTrialEntry'
 import WorldBuildPanel from '../components/world/WorldBuildPanel'
+import WorldParametersPanel from '../components/world/WorldParametersPanel'
 import { getProject, projectKey, projectRegionPath } from '../projects/projectStore'
 
 const WorldDataPanel = lazy(() => import('../components/world/WorldDataPanel'))
@@ -100,13 +101,15 @@ export default function WorldDetail() {
     | 'design-notes'
     | 'narrate'
     | 'data'
+    | 'parameters'
   const availableTabs: TabType[] = localWorld
-    ? ['data']
+    ? ['data', 'parameters']
     : staticMode
-    ? ['overview', 'data', 'astronomy', 'planets', 'climate', 'ecology', 'civilization', 'design-notes']
+    ? ['overview', 'data', 'parameters', 'astronomy', 'planets', 'climate', 'ecology', 'civilization', 'design-notes']
     : [
         'overview',
         'data',
+        'parameters',
         'astronomy',
         'planets',
         'climate',
@@ -206,6 +209,7 @@ export default function WorldDetail() {
     'design-notes': t('tab.designNotes'),
     narrate: t('tab.narrate'),
     data: t('worldData.title'),
+    parameters: t('parameters.title'),
   }
   const waiting = isLoading || (staticMode && !!worldName && browserWorld.isPending)
   const offlineData = staticMode && !!error && browserWorld.data?.published === true
@@ -273,6 +277,7 @@ export default function WorldDetail() {
               {(offlineData ? ['data'] as const : availableTabs).map((tab) => (
                 <button
                   key={tab}
+                  aria-current={activeTab === tab ? 'page' : undefined}
                   onClick={() => setActiveTabAndPersist(tab)}
                   className={`px-3 sm:px-4 py-2 font-medium transition-colors border-b-2 whitespace-nowrap shrink-0 ${
                     (offlineData ? 'data' : activeTab) === tab
@@ -284,6 +289,10 @@ export default function WorldDetail() {
                 </button>
               ))}
             </div>
+
+            {activeTab === 'parameters' && !offlineData && (
+              <WorldParametersPanel key={JSON.stringify([worldName, selectedBranch])} world={worldName} branch={selectedBranch} />
+            )}
 
             {(activeTab === 'data' || offlineData) && <Suspense fallback={<p>{t('worldData.loading')}</p>}>
               <WorldDataPanel key={worldName} id={worldName} published={!localWorld} publishedAvailable={!!world}

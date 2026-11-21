@@ -13,6 +13,8 @@ import type { MapResultMetadata } from './resultContract'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 import type { StarterFiles, StarterSettings, StarterTemplate } from '../projects/starterWorld'
+import type { WorldParameters, WorldParameterUpdate } from './worldParameters'
+import type { GridDefaults } from '../projects/worldParameters'
 
 interface DocumentMeta {
   filename: string
@@ -178,6 +180,39 @@ async function saveCreationWorld(id: string, title: string, archive: Blob, creat
 }
 
 export const staticApi = {
+  async getWorldParameters(id: string, branch: string | null): Promise<WorldParameters> {
+    const { getProject } = await import('../projects/projectStore')
+    const project = await getProject(id)
+    if (project && !project.published && id !== 'earth') {
+      const defaults = await fetchStaticJson<GridDefaults>('/world-grid-defaults.json')
+      if (project.creationSnapshot && !branch) {
+        const { readBrowserGrid } = await import('../projects/worldParameters')
+        return readBrowserGrid(project.creationSnapshot, defaults, String(project.updatedAt))
+      }
+      return { ...defaults, num_cells: null, built_cells: null, source: null, revision: null,
+        reuses_mesh: false, read_only: 'unavailable' }
+    }
+    const root = `/worlds/${encodeURIComponent(id)}`
+    const scope = branch ? `${root}/branches/${encodeURIComponent(branch)}` : root
+    return fetchStaticJson<WorldParameters>(`${scope}/world-parameters.json`)
+  },
+  async saveWorldParameters(id: string, branch: string | null, settings: WorldParameterUpdate) {
+    const { getProject, updateProject } = await import('../projects/projectStore')
+    const project = await getProject(id)
+    if (id === 'earth' || !project?.creationSnapshot || project.published || branch) throw new Error('Read-only world')
+    if (settings.revision !== String(project.updatedAt)) throw new DOMException('World changed', 'InvalidStateError')
+    const [{ writeBrowserGrid }, defaults] = await Promise.all([
+      import('../projects/worldParameters'), fetchStaticJson<GridDefaults>('/world-grid-defaults.json'),
+    ])
+    const archive = await writeBrowserGrid(project.creationSnapshot, settings, defaults)
+    await updateProject(id, current => {
+      if (current.updatedAt !== project.updatedAt || current.published || !current.creationSnapshot) {
+        throw new DOMException('World changed', 'InvalidStateError')
+      }
+      return { ...current, creationSnapshot: archive }
+    })
+    return staticApi.getWorldParameters(id, branch)
+  },
   saveHeightmapWorld: saveCreationWorld,
   async saveStarterWorld(settings: StarterSettings) {
     const [{ exportStarterWorld }, templates] = await Promise.all([import('../projects/starterWorld'),

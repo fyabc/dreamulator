@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { api, ApiError } from '../../api/client'
 import type { BuildJob } from '../../api/buildJobs'
+import { worldParametersKey } from '../../api/worldParameters'
 
 interface WorldBuildPanelProps {
   world: string
@@ -31,8 +32,8 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
   })
 
   const grid = useQuery({
-    queryKey: ['buildGrid', world, branch],
-    queryFn: () => api.getBuildGrid(world, branch),
+    queryKey: worldParametersKey(world, branch),
+    queryFn: () => api.getWorldParameters(world, branch),
     enabled: !readOnly,
     retry: false,
   })
@@ -80,9 +81,6 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
     queryFn: () => api.listMapPlanets(world, branch),
     enabled: showResults && !readOnly,
   })
-  const climateReady = terminal && job.stages.some(({ engine, state }) =>
-    engine === 'climate' && (state === 'succeeded' || state === 'skipped'),
-  )
   const active = !!jobId && !terminal && !lost
   const snapshotWaiting = active || start.isPending
   const errors = [...new Set([
@@ -95,6 +93,8 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
   const worldPath = `/worlds/${encodeURIComponent(world)}`
   const resultParams = new URLSearchParams(branch ? { branch } : {})
   const gridSize = grid.data?.num_cells?.toLocaleString(i18n.resolvedLanguage)
+  const builtCells = grid.data?.built_cells
+  const needsRebuild = grid.data && !grid.data.reuses_mesh && builtCells != null && builtCells !== grid.data.num_cells
   const gridLabel = grid.isPending ? t('build.gridLoading') : gridSize != null
     ? t(grid.data?.reuses_mesh ? 'build.gridReused' : 'build.gridConfigured', { cells: gridSize })
     : t(grid.data?.reuses_mesh ? 'build.gridReusedUnknown' : 'build.gridUnknown')
@@ -106,20 +106,62 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
           <h2 id="build-title" className="font-semibold text-neon-cyan">{t('build.title')}</h2>
           <p className="text-sm text-gray-400">{t('build.target', { branch: branch ?? t('label.baseWorld') })}</p>
           {!readOnly && <p className="text-sm text-gray-400" role="status">{gridLabel}</p>}
+          {needsRebuild && <p role="status" className="text-sm text-amber-200">
+            {t('parameters.rebuild')}
+          </p>}
         </div>
-        {!readOnly && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {snapshotUrl && (
+            <a
+              href={snapshotWaiting ? undefined : snapshotUrl}
+              role={snapshotWaiting ? 'link' : undefined}
+              aria-disabled={snapshotWaiting || undefined}
+              title={t(snapshotWaiting ? 'build.snapshotAfterBuild' : 'build.snapshotScope')}
+              target="_blank"
+              rel="noopener"
+              className={snapshotWaiting ? 'inline-flex min-h-11 cursor-not-allowed items-center text-sm font-medium text-gray-400' : secondaryAction}
+            >
+              {t('build.downloadSnapshot')}
+            </a>
+          )}
           <button
             type="button"
-            onClick={() => start.mutate()}
-            disabled={start.isPending || active || grid.isPending}
-            className="px-4 py-2 rounded-lg font-medium bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
+            className={`${secondaryAction} disabled:text-gray-400 disabled:no-underline`}
+            title={t('build.validateSettingsHelp')}
+            onClick={() => validation.mutate()}
+            disabled={validation.isPending}
           >
-            {start.isPending ? t('build.starting') :
-              lost ? t('build.startNew') :
-                job?.state === 'failed' || start.isError ? t('build.retry') : t('action.buildWorld')}
+            {t(validation.isPending ? 'build.validating' : 'build.validateSettings')}
           </button>
-        )}
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => start.mutate()}
+              disabled={start.isPending || active || grid.isPending}
+              className="px-4 py-2 rounded-lg font-medium bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
+            >
+              {start.isPending ? t('build.starting') :
+                lost ? t('build.startNew') :
+                  job?.state === 'failed' || start.isError ? t('build.retry') : t('action.buildWorld')}
+            </button>
+          )}
+        </div>
       </div>
+
+      {validation.isError ? (
+        <p role="alert" className="break-words text-sm text-red-300">
+          {t('build.validationError', { error: validation.error.message })}
+        </p>
+      ) : validation.data && !validation.isPending && (
+        <div role="status" className={`text-sm ${validation.data.ok ? 'text-green-300' : 'text-red-300'}`}>
+          <p>{t(validation.data.ok ? 'build.validationPassed' : 'build.validationFailed')}</p>
+          {validation.data.errors.length > 0 && (
+            <ul className="list-disc break-words pl-5">
+              {validation.data.errors.map((error, index) => <li key={index}>{error}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
 
       {readOnly ? <p className="text-sm text-gray-400">{t('build.referenceRoot')}</p> : (
         <>
@@ -177,13 +219,10 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
               {maps.data.map((planet) => {
                 const mapPath = `${worldPath}/map/${encodeURIComponent(planet)}`
                 const suffix = branch ? `?${resultParams}` : ''
-                const climateParams = new URLSearchParams(resultParams)
-                climateParams.set('layer', 'temperature')
                 return (
                   <li key={planet} className="flex flex-wrap gap-3">
                     <span className="text-gray-400">{planet}</span>
                     <Link className="text-neon-cyan hover:underline" to={`${mapPath}${suffix}`}>{t('build.openMap')}</Link>
-                    {climateReady && <Link className="text-neon-cyan hover:underline" to={`${mapPath}?${climateParams}`}>{t('build.openTemperature')}</Link>}
                   </li>
                 )
               })}
@@ -191,41 +230,6 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
           )}
         </>
       )}
-      <div className="border-t border-space-border pt-1">
-        <div className="flex flex-wrap items-center gap-x-5">
-          <button
-            type="button"
-            className={`${secondaryAction} disabled:text-gray-400 disabled:no-underline`}
-            onClick={() => validation.mutate()}
-            disabled={validation.isPending}
-          >
-            {t(validation.isPending ? 'build.validating' : 'build.validateSettings')}
-          </button>
-          {snapshotUrl && (snapshotWaiting ? (
-            <span className="text-sm text-gray-400" role="status">{t('build.snapshotAfterBuild')}</span>
-          ) : (
-            <>
-              <a href={snapshotUrl} target="_blank" rel="noopener" className={secondaryAction}
-                aria-describedby="world-snapshot-scope">{t('build.downloadSnapshot')}</a>
-              <p id="world-snapshot-scope" className="pb-2 text-sm text-gray-400 sm:pb-0">{t('build.snapshotScope')}</p>
-            </>
-          ))}
-        </div>
-        {validation.isError ? (
-          <p role="alert" className="break-words pb-2 text-sm text-red-300">
-            {t('build.validationError', { error: validation.error.message })}
-          </p>
-        ) : validation.data && !validation.isPending && (
-          <div role="status" className={`pb-2 text-sm ${validation.data.ok ? 'text-green-300' : 'text-red-300'}`}>
-            <p>{t(validation.data.ok ? 'build.validationPassed' : 'build.validationFailed')}</p>
-            {validation.data.errors.length > 0 && (
-              <ul className="list-disc break-words pl-5">
-                {validation.data.errors.map((error, index) => <li key={index}>{error}</li>)}
-              </ul>
-            )}
-          </div>
-        )}
-      </div>
     </section>
   )
 }

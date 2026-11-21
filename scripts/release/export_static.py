@@ -49,10 +49,18 @@ from local_branches import local_only_branches  # noqa: E402
 
 from dreamulator import doc_render  # noqa: E402
 from dreamulator.civmap.manager import CivMapManager  # noqa: E402
+from dreamulator.io.loader import load_world  # noqa: E402
 from dreamulator.map.manager import MapManager  # noqa: E402
 from dreamulator.map.models import map_metadata_result, sanitize_nonfinite  # noqa: E402
+from dreamulator.map.pipeline_types import TerrainPipelineConfig  # noqa: E402
 from dreamulator.resolver import LayerResolver  # noqa: E402
 from dreamulator.world_manager import STARTER_TEMPLATES, _templates_dir  # noqa: E402
+from dreamulator.world_parameters import (  # noqa: E402
+    MAX_BUILD_CELLS,
+    MIN_BUILD_CELLS,
+    WorldGrid,
+    read_world_grid,
+)
 
 
 def find_project_root() -> Path:
@@ -164,6 +172,18 @@ def _export_layer_data(world_dir: Path, branch: str | None = None) -> dict:
     """
     resolver = LayerResolver(world_dir, branch)
     result: dict = {}
+
+    try:
+        config = load_world(world_dir)
+        grid = read_world_grid(
+            resolver,
+            config.seed.seed,
+            reference=branch is None and (config.reference_anchor or world_dir.name == "earth"),
+            published=True,
+        )
+    except (FileNotFoundError, ValueError, yaml.YAMLError):
+        grid = WorldGrid(reuses_mesh=False, read_only="published")
+    result["world-parameters"] = grid.model_dump()
 
     # Render context for markdown documents (entity-addressed fact context:
     # system_catalog.yaml + per-layer summaries); loaded once per world/branch
@@ -524,6 +544,16 @@ def _export_starter_templates(output_dir: Path) -> None:
         templates[name] = {"root": root, "inputs": inputs}
     (output_dir / "starter-templates.json").write_text(
         json.dumps(templates, ensure_ascii=False), encoding="utf-8"
+    )
+    (output_dir / "world-grid-defaults.json").write_text(
+        json.dumps(
+            {
+                "num_cells": TerrainPipelineConfig().num_nodes,
+                "min_cells": MIN_BUILD_CELLS,
+                "max_cells": MAX_BUILD_CELLS,
+            }
+        ),
+        encoding="utf-8",
     )
 
 

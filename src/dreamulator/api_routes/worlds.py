@@ -13,6 +13,7 @@ import yaml
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from ruamel.yaml.error import YAMLError as RoundTripYAMLError
 from starlette.background import BackgroundTask
 
 from dreamulator import doc_render
@@ -31,6 +32,14 @@ from dreamulator.build_jobs import (
 from dreamulator.engine.ephemeris import sky_ephemeris
 from dreamulator.guard.facts import load_entities
 from dreamulator.world_manager import STARTER_TEMPLATES, WorldManager
+from dreamulator.world_parameters import (
+    WorldGrid,
+    WorldGridUpdate,
+    grid_engine,
+    grid_inherited,
+    read_world_grid,
+    write_world_grid,
+)
 from dreamulator.world_snapshot import export_snapshot, restore_snapshot, snapshot_world_id
 
 if TYPE_CHECKING:
@@ -863,37 +872,54 @@ class BuildGrid(BaseModel):
 @router.get("/{world_name}/build-grid", response_model=BuildGrid)
 def get_build_grid(world_name: str, branch: str | None = None) -> BuildGrid:
     """Describe a full build's grid without constructing or reading the mesh."""
-    from dreamulator.engine.geological import GeologicalEngine
-    from dreamulator.models.layers import Layer, get_layer_index
-
-    config, resolver, fork = _resolve_build_target(world_name, branch)
-    world_dir = resolver.world_dir
-    layers = resolver.resolve_all_layers()
-    target = world_dir / "branches" / branch if branch else world_dir
+    config, resolver, _ = _resolve_build_target(world_name, branch)
     try:
-        engine = GeologicalEngine(
-            world_dir,
-            config.seed.seed,
-            layer_input_dirs={
-                key.value: layer.input_dir
-                for key, layer in layers.items()
-                if layer.input_dir is not None
-            },
-            layer_derived_dirs={
-                key.value: layer.derived_dir
-                for key, layer in layers.items()
-                if layer.derived_dir is not None
-            },
-            maps_output_dir=target / "maps",
-        )
-        num_cells, reuses_mesh = engine.preview_mesh_cells(
-            inherited=fork is not None and get_layer_index(fork) > get_layer_index(Layer.GEOLOGICAL)
-        )
+        engine = grid_engine(resolver, config.seed.seed)
+        num_cells, reuses_mesh = engine.preview_mesh_cells(inherited=grid_inherited(resolver))
         return BuildGrid(num_cells=num_cells, reuses_mesh=reuses_mesh)
     except (ValueError, yaml.YAMLError) as error:
         raise HTTPException(
             status_code=422, detail="Cannot determine the build grid size"
         ) from error
+
+
+@router.get("/{world_name}/world-parameters", response_model=WorldGrid)
+def get_world_parameters(world_name: str, branch: str | None = None) -> WorldGrid:
+    config, resolver, _ = _resolve_build_target(world_name, branch)
+    try:
+        return read_world_grid(
+            resolver,
+            config.seed.seed,
+            reference=branch is None and (config.reference_anchor or world_name == "earth"),
+        )
+    except (ValueError, yaml.YAMLError) as error:
+        raise HTTPException(
+            status_code=422, detail="Cannot read the world grid settings"
+        ) from error
+
+
+@router.put("/{world_name}/world-parameters", response_model=WorldGrid)
+def save_world_parameters(
+    world_name: str, update: WorldGridUpdate, branch: str | None = None
+) -> WorldGrid:
+    if not local_compute_slot.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Another local compute job is already active")
+    try:
+        settings = get_world_parameters(world_name, branch)
+        if settings.read_only:
+            raise HTTPException(status_code=409, detail="The grid is read-only")
+        if settings.revision != update.revision:
+            raise HTTPException(status_code=409, detail="The grid changed since it was opened")
+        if settings.num_cells != update.num_cells:
+            _, resolver, _ = _resolve_build_target(world_name, branch)
+            write_world_grid(resolver, settings, update.num_cells)
+        return get_world_parameters(world_name, branch)
+    except (ValueError, RoundTripYAMLError) as error:
+        raise HTTPException(
+            status_code=422, detail="Cannot update the world grid settings"
+        ) from error
+    finally:
+        local_compute_slot.release()
 
 
 def _prepare_build(

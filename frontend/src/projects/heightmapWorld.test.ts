@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { EARTH_PARAMS, GRID_H, GRID_W } from '../playground/temperatureDraft'
 import { elevationPng } from '../viewers/packs/elevationRaster'
+import { readBrowserGrid, writeBrowserGrid } from './worldParameters'
 import { exportHeightmapWorld, heightmapGrid, importHeightmapWorld, readHeightmapInput, savedTemperature,
   temperatureInputFingerprint, type HeightmapWorld } from './heightmapWorld'
 
@@ -22,6 +23,19 @@ async function fixture(real?: string): Promise<HeightmapWorld> {
 }
 
 describe('heightmap world snapshots', () => {
+  it('changes the formal mesh without changing the saved browser experiment or original image', async () => {
+    const world = await fixture()
+    const archive = await exportHeightmapWorld(world)
+    const defaults = { num_cells: 100_000, min_cells: 100, max_cells: 200_000 }
+    expect((await readBrowserGrid(archive, defaults, 'first')).num_cells).toBe(256)
+    const updated = await writeBrowserGrid(archive, { num_cells: 320, revision: 'first' }, defaults)
+    const restored = await importHeightmapWorld(updated)
+    expect((await readBrowserGrid(updated, defaults, 'second')).num_cells).toBe(320)
+    expect(restored.meshCells).toBe(320)
+    expect(restored.temperature).toEqual(world.temperature)
+    expect(restored.heightmap.sha256).toBe(world.heightmap.sha256)
+  })
+
   it('restores original bytes and month order without running the experiment', async () => {
     const world = await fixture()
     const restored = await importHeightmapWorld(await exportHeightmapWorld(world))

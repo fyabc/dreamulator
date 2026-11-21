@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readCreationSnapshot, writeCreationSnapshot } from './creationSnapshot'
 import { exportStarterWorld, readStarterSnapshot, type StarterFiles, type StarterSettings } from './starterWorld'
+import { readBrowserGrid, writeBrowserGrid } from './worldParameters'
 
 const settings: StarterSettings = { template: 'minimal', id: 'terra-lab', title: '试验世界', seed: 0 }
 const created = '2026-11-21T09:00:00.000Z'
@@ -11,6 +12,21 @@ const template: StarterFiles = {
 }
 
 describe('starter world snapshots', () => {
+  it('stores a formal grid override in a starter snapshot and preserves other inputs', async () => {
+    const defaults = { num_cells: 100_000, min_cells: 100, max_cells: 200_000 }
+    const planets = 'layers/geological/input/planets.yaml'
+    const input = '# Original planets\nplanets:\n  - id: planet_terra\n    radius: 1.0\n'
+    const archive = await exportStarterWorld(settings, { ...template, inputs: { ...template.inputs, [planets]: input } }, created)
+    const before = await readBrowserGrid(archive, defaults, 'first')
+    expect(before).toMatchObject({ num_cells: 100_000, source: planets })
+    const updated = await writeBrowserGrid(archive, { num_cells: 256, revision: 'first' }, defaults)
+    const rebuilt = await readCreationSnapshot(updated)
+    expect(await readStarterSnapshot(rebuilt)).toEqual({ id: settings.id, title: settings.title })
+    expect(await rebuilt.files.get(planets)?.text()).toContain('# Original planets')
+    expect(await rebuilt.files.get('layers/astronomy/input/stellar.yaml')?.text()).toBe('name: Local Star\n')
+    expect((await readBrowserGrid(updated, defaults, 'second')).num_cells).toBe(256)
+  })
+
   it('keeps the template inputs and seed but creates no derived files', async () => {
     const snapshot = await readCreationSnapshot(await exportStarterWorld(settings, template, created))
     expect(await readStarterSnapshot(snapshot)).toEqual({ id: settings.id, title: settings.title })

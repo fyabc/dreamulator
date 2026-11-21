@@ -184,6 +184,34 @@
     "designNotes": "Design Notes",
     "narrate": "Narrate"
   },
+  "parameters": {
+    "title": "World parameters",
+    "intro": "Manage this world's parameters here. After saving changes, rebuild the world to apply them.",
+    "introReadOnly": "View this world's parameters here.",
+    "scope": "{{world}} · {{branch}}",
+    "grid": "Terrain grid cells",
+    "help": "This is how many cells cover the planet in a full build. Finer grids generally take more time and memory.",
+    "range": "Enter {{min}} to {{max}} cells.",
+    "source": "Input file:",
+    "configured": "The terrain grid is configured for {{cells}} cells.",
+    "rebuild": "The existing world still uses the previous settings. Rebuild the world to apply the new settings.",
+    "browser": "This setting stays in the world snapshot in this browser. Download and restore the snapshot locally to run a full build.",
+    "save": "Save parameters",
+    "saving": "Saving…",
+    "reload": "Discard changes and reload",
+    "saved": "Parameters saved. No build was started.",
+    "conflict": "These settings changed elsewhere. Reload them before editing again.",
+    "busy": "Local computation is in progress. Wait for it to finish before saving.",
+    "error": "Could not save parameters. Try again.",
+    "loadError": "Could not load world parameters. Refresh the page and try again.",
+    "readOnly": {
+      "reference": "The Earth reference is read-only and is not built.",
+      "published": "Published worlds are read-only. You can change worlds you create yourself.",
+      "inherited": "This branch uses its upstream terrain grid and cannot change the cell count independently.",
+      "fixed": "This build reuses an existing grid, so the cell count cannot be changed here.",
+      "unavailable": "This world has no editable grid input."
+    }
+  },
   "layer": {
     "physics": "Physics",
     "chemistry": "Chemistry",
@@ -226,6 +254,7 @@
   "build": {
     "title": "World build",
     "validateSettings": "Check base settings",
+    "validateSettingsHelp": "Check the base world's settings files without starting a build.",
     "validating": "Checking…",
     "validationPassed": "The base settings passed the check.",
     "validationFailed": "The base settings have the following problems:",
@@ -252,8 +281,7 @@
     "statusError": "Could not read build status. Retrying the status check: {{error}}",
     "statusLost": "This build's status is no longer available. Check the saved results before starting a new build.",
     "failedHint": "Inputs and saved results are still available. Fix the reported issue and retry; the server can reuse valid results.",
-    "openMap": "Open terrain map",
-    "openTemperature": "Open temperature layer",
+    "openMap": "Open map",
     "job": {
       "queued": "Accepted; waiting to start",
       "running": "Build in progress",

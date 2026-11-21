@@ -3,6 +3,7 @@ import type { MapResultMetadata } from './resultContract'
 import { staticApi } from './staticClient'
 import type { SystemCatalog } from './catalogAdapter'
 import type { BuildGrid, BuildJob, BuildOptions, BuildSummary } from './buildJobs'
+import { worldParametersPath, type WorldParameters, type WorldParameterUpdate } from './worldParameters'
 import { mappingFormFields } from './elevationImport'
 import type {
   ElevationImportResponse,
@@ -881,6 +882,14 @@ export const api = {
 
   getBuildGrid: (...args: Parameters<typeof liveOnlyApi.getBuildGrid>) =>
     isStaticMode() ? staticApi.getBuildGrid() : liveOnlyApi.getBuildGrid(...args),
+
+  getWorldParameters: (name: string, branch: string | null) => isStaticMode()
+    ? staticApi.getWorldParameters(name, branch)
+    : fetchJson<WorldParameters>(worldParametersPath(name, branch), { cache: 'no-store' }),
+
+  saveWorldParameters: (name: string, branch: string | null, update: WorldParameterUpdate) => isStaticMode()
+    ? staticApi.saveWorldParameters(name, branch, update)
+    : fetchJson<WorldParameters>(worldParametersPath(name, branch), { method: 'PUT', body: JSON.stringify(update) }),
 
   startBuildJob: (...args: Parameters<typeof liveOnlyApi.startBuildJob>) =>
     isStaticMode() ? staticApi.startBuildJob() : liveOnlyApi.startBuildJob(...args),

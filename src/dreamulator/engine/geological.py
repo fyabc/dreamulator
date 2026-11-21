@@ -58,8 +58,12 @@ class GeologicalEngine(BaseEngine):
     # defaults; absent geography.yaml = unauthored (random) continents.
     input_files: list[str] = []
     optional_input_files = [
-        "terrain_config.yaml", "geography.yaml", "tidal_heat_history.yaml", "elevation_imports.yaml"
-    ]  # fmt: skip
+        "terrain_config.yaml",
+        "planets.yaml",
+        "geography.yaml",
+        "tidal_heat_history.yaml",
+        "elevation_imports.yaml",
+    ]
     output_files = [
         "maps/{planet_id}/elevation.png",
         "maps/{planet_id}/cvt_mesh.msgpack.gz",

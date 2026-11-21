@@ -184,6 +184,34 @@
     "designNotes": "设计笔记",
     "narrate": "叙述"
   },
+  "parameters": {
+    "title": "世界参数",
+    "intro": "在这里管理本世界的各项参数。保存修改后，需重新构建世界才能应用新设定。",
+    "introReadOnly": "在这里查看本世界的各项参数。",
+    "scope": "{{world}} · {{branch}}",
+    "grid": "地形网格单元数",
+    "help": "这个数值决定正式构建将全球表面划分为多少个单元。单元越多，计算通常越慢，也越占内存。",
+    "range": "可填 {{min}} 至 {{max}} 个单元。",
+    "source": "正式输入文件：",
+    "configured": "地形网格设定为 {{cells}} 个单元。",
+    "rebuild": "现有世界仍使用旧设定。请重新构建世界以应用新设定。",
+    "browser": "参数保存在此浏览器的世界快照中。要正式构建，请下载快照并在本机恢复。",
+    "save": "保存参数",
+    "saving": "正在保存…",
+    "reload": "放弃修改并重新读取",
+    "saved": "参数已保存，未启动构建。",
+    "conflict": "参数已在别处更改。请重新读取后再编辑。",
+    "busy": "本机正在计算。请等任务结束后再保存参数。",
+    "error": "未能保存参数。请重试。",
+    "loadError": "未能读取世界参数。请刷新页面后重试。",
+    "readOnly": {
+      "reference": "真实地球参照只读，不参与正式构建。",
+      "published": "已发布的世界只读。你可以修改自己创建的世界。",
+      "inherited": "这个分支沿用上游地质网格，不能单独修改网格大小。",
+      "fixed": "当前构建复用已有网格，不能直接修改单元数。",
+      "unavailable": "这个世界没有可供编辑的网格输入。"
+    }
+  },
   "layer": {
     "physics": "物理定律",
     "chemistry": "化学",
@@ -226,6 +254,7 @@
   "build": {
     "title": "世界构建",
     "validateSettings": "检查基础设定",
+    "validateSettingsHelp": "检查基础世界的设定文件是否有效，不会启动构建。",
     "validating": "检查中…",
     "validationPassed": "基础设定检查通过。",
     "validationFailed": "基础设定有以下问题：",
@@ -252,8 +281,7 @@
     "statusError": "暂时无法查询构建状态，页面会继续查询：{{error}}",
     "statusLost": "这次构建的状态已无法查询。请先查看已保存的结果，再决定是否重新构建。",
     "failedHint": "输入与已保存的结果仍可查看。处理报错后可以重试，服务会复用仍然有效的结果。",
-    "openMap": "打开地形图",
-    "openTemperature": "打开温度图层",
+    "openMap": "打开地图",
     "job": {
       "queued": "已接受任务，等待开始",
       "running": "正在构建",
