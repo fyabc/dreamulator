@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { tutorialMilestone } from '../../tutorial/tutorialProgress'
 import { Link } from 'react-router-dom'
 import { api, ApiError } from '../../api/client'
 import { nativeTerrainSpacing } from './terrainRecommendation'
@@ -68,7 +69,7 @@ export default function RegionRefinementPanel({ source, resultUrl, globalReturn 
 
   return <details open={open} className="rounded border border-space-border p-2 text-xs text-gray-400"
     onToggle={(event) => setOpen(event.currentTarget.open)}>
-    <summary className="cursor-pointer font-medium text-neon-cyan">{t('packs.refinement.title')}</summary>
+    <summary data-tutorial-anchor="refine" className="cursor-pointer font-medium text-neon-cyan">{t('packs.refinement.title')}</summary>
     <div className="mt-2 space-y-2">
       {!active && <>
         <label className="flex items-center justify-between gap-1">
@@ -113,20 +114,25 @@ export default function RegionRefinementPanel({ source, resultUrl, globalReturn 
         {display.native_scale_km !== null && <p>{t('packs.refinement.nativeScale', { scale: formatKm(display.native_scale_km) })}</p>}
       </>}
       {active && job && <div className="space-y-2">
-        <p role="status">{t(`packs.refinement.stage.${job.stage}`)} · {t('packs.refinement.seconds', { count: job.elapsed_seconds })}</p>
+        <p role="status" data-tutorial-anchor="refining">{t(`packs.refinement.stage.${job.stage}`)} · {t('packs.refinement.seconds', { count: job.elapsed_seconds })}</p>
         {job.stage !== 'publishing' && <button type="button" className={button} disabled={cancel.isPending || cancel.isSuccess}
           onClick={() => cancel.mutate(job.id)}>{t(cancel.isSuccess ? 'packs.refinement.cancelling' : 'packs.refinement.cancel')}</button>}
       </div>}
       {job?.state === 'failed' && <p role="alert" className="break-words text-red-300">{t('packs.refinement.failed')} {job.error}</p>}
       {job?.state === 'cancelled' && <p role="status">{t('packs.refinement.cancelled')}</p>}
-      {job?.result_pack && <Link className="block text-neon-cyan hover:underline" to={resultUrl(job.result_pack)}
+      {job?.result_pack && <Link data-tutorial-anchor={job.plan.mode === 'hydrology' ? undefined : 'regionResult'}
+        onClick={() => {
+          if (source.kind === 'world' && job.plan.mode !== 'hydrology') tutorialMilestone({ type: 'regionResult',
+            world: source.world, planet: source.planet, branch: source.branch })
+        }}
+        className="block text-neon-cyan hover:underline" to={resultUrl(job.result_pack)}
         state={{ regionReturn: globalReturn }}>{t(job.plan.mode === 'hydrology' ? 'packs.refinement.hydrologyResult' : 'packs.refinement.result')}</Link>}
       {query.error && !missing && <button type="button" className={button} onClick={() => void query.refetch()}>
         {t('packs.refinement.reconnect')}</button>}
       {missing && <p role="status">{t('packs.refinement.missing')}</p>}
       {detail && <p role="alert" className="break-words text-red-300">{detail.message}</p>}
       {plan.isError && <button type="button" className={button} onClick={() => void plan.refetch()}>{t('packs.export.retry')}</button>}
-      {!active && <button type="button" className={button} disabled={invalidOptions || !plan.data || plan.isFetching || plan.isError || start.isPending ||
+      {!active && <button type="button" data-tutorial-anchor="refineRun" className={button} disabled={invalidOptions || !plan.data || plan.isFetching || plan.isError || start.isPending ||
         (jobId !== null && !job && !missing)} onClick={() => { cancel.reset(); start.mutate(request) }}>
         {t(mode === 'hydrology' ? 'packs.refinement.startHydrology' : 'packs.refinement.start')}</button>}
     </div>

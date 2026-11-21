@@ -72,6 +72,7 @@ export default function RegionWindowPanel({
         expandButton.current?.focus()
       }}>
         <button ref={expandButton} type="button" className={`${buttonClass} min-h-10 lg:min-h-9 ${window ? '!border-neon-cyan/50 !text-neon-cyan' : ''}`}
+          data-tutorial-anchor="region"
           aria-expanded={expanded} aria-controls={expanded ? formId : undefined}
           title={window ? t('regionWindow.summary', { ...window }) : t('regionWindow.hint.toggle')}
           onClick={() => setExpanded((open) => !open)}>{t('regionWindow.title')}</button>
@@ -93,7 +94,7 @@ export default function RegionWindowPanel({
           <RegionWindowForm key={rawWindow ?? ''} initial={window} radiusKm={radiusKm}
             selectedPoint={selectedPoint} onMove={move} />
           {rawWindow && <div className="flex flex-wrap items-center gap-2 border-t border-space-border pt-2">
-            {window && <Link className={`${buttonClass} font-semibold !text-neon-cyan`} to={`/packs?${regionParams}`} title={t('regionWindow.hint.open')}
+            {window && <Link data-tutorial-anchor="regionOpen" className={`${buttonClass} font-semibold !text-neon-cyan`} to={`/packs?${regionParams}`} title={t('regionWindow.hint.open')}
               state={{ regionReturn: `${location.pathname}${location.search}` }}>{t('regionWindow.open')}</Link>}
             <button type="button" className={buttonClass} title={t('regionWindow.hint.clear')}
               onClick={() => writeWindow(null)}>{t('regionWindow.clear')}</button>
@@ -147,7 +148,7 @@ function RegionWindowForm({ initial, radiusKm, selectedPoint, onMove }: {
             setInvalid(false)
           }}>{t('regionWindow.usePoint')}</button>
       </span>
-      <button type="submit" className={buttonClass} title={t('regionWindow.hint.move')}>{t('regionWindow.apply')}</button>
+      <button type="submit" data-tutorial-anchor="regionForm" className={buttonClass} title={t('regionWindow.hint.move')}>{t('regionWindow.apply')}</button>
       {invalid && <p role="alert" className="text-red-300">
         {t('regionWindow.invalid', { limit: Math.floor(Math.PI * radiusKm) })}
       </p>}

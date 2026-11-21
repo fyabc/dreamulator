@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { HELP_SECTIONS, type HelpSection } from '../components/map/helpContent'
 import { isStaticMode } from '../api/mode'
 import { temperatureSampleOrigins, temperatureTrialMapPath } from '../playground/temperatureDraft'
+import { TutorialEntry } from '../tutorial/WorkflowTutorial'
 
 const startId = 'start'
 
@@ -83,6 +84,7 @@ function GettingStarted() {
     <header id={startId} className="scroll-mt-16 lg:scroll-mt-6">
       <h1 id={`help-heading-${startId}`} tabIndex={-1} className="text-3xl font-semibold tracking-tight text-gray-100">{t('start.title')}</h1>
       <p className="mt-3 leading-relaxed text-gray-300">{t(`start.${mode}.intro`)}</p>
+      <TutorialEntry restart />
       <ol className="mt-5 list-decimal space-y-4 pl-5 marker:font-semibold marker:text-neon-cyan">
         {steps.map(({ key, to }) => (
           <li key={key} className="pl-1">

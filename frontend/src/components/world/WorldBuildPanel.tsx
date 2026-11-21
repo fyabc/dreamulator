@@ -5,6 +5,8 @@ import { Link } from 'react-router-dom'
 import { api, ApiError } from '../../api/client'
 import type { BuildJob } from '../../api/buildJobs'
 import { worldParametersKey } from '../../api/worldParameters'
+import { tutorialMilestone, useWorkflowTutorial } from '../../tutorial/tutorialProgress'
+import WorldBuildProgress from './WorldBuildProgress'
 
 interface WorldBuildPanelProps {
   world: string
@@ -69,6 +71,11 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
   const lost = status.error instanceof ApiError && status.error.status === 404
   const terminal = !!job && !isActive(job) && !status.error
   const showResults = terminal || lost
+  const guideMap = useWorkflowTutorial(state => state.progress?.step === 'map' && state.progress.world === world && !branch)
+
+  useEffect(() => {
+    if (job?.state === 'succeeded' && !status.error) tutorialMilestone({ type: 'built', world, branch })
+  }, [job?.state, world, branch, status.error])
 
   useEffect(() => {
     if (!showResults) return
@@ -104,7 +111,8 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
     : t(grid.data?.reuses_mesh ? 'build.gridReusedUnknown' : 'build.gridUnknown')
 
   return (
-    <section id="build" className="glass-panel mb-4 space-y-3 p-4" aria-labelledby="build-title">
+    <section id="build" data-tutorial-anchor={snapshotWaiting ? 'building' : undefined}
+      className="glass-panel mb-4 space-y-3 p-4" aria-labelledby="build-title">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="build-title" className="font-semibold text-neon-cyan">{t('build.title')}</h2>
@@ -120,6 +128,8 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
               href={snapshotWaiting ? undefined : snapshotUrl}
               role={snapshotWaiting ? 'link' : undefined}
               aria-disabled={snapshotWaiting || undefined}
+              data-tutorial-anchor={snapshotWaiting ? undefined : 'snapshot'}
+              onClick={() => { if (!snapshotWaiting) tutorialMilestone({ type: 'backup', world }) }}
               title={t(snapshotWaiting ? 'build.snapshotAfterBuild' : 'build.snapshotScope')}
               target="_blank"
               rel="noopener"
@@ -140,6 +150,7 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
           {!readOnly && (
             <button
               type="button"
+              data-tutorial-anchor="build"
               onClick={() => start.mutate()}
               disabled={start.isPending || active || grid.isPending}
               className="px-4 py-2 rounded-lg font-medium bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 disabled:opacity-50"
@@ -232,11 +243,11 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
             <ul className="space-y-1 text-sm">
               {maps.data.map((planet) => {
                 const mapPath = `${worldPath}/map/${encodeURIComponent(planet)}`
-                const suffix = branch ? `?${resultParams}` : ''
+                const suffix = branch ? `?${resultParams}` : guideMap ? '?layer=temperature' : ''
                 return (
                   <li key={planet} className="flex flex-wrap gap-3">
                     <span className="text-gray-400">{planet}</span>
-                    <Link className="text-neon-cyan hover:underline" to={`${mapPath}${suffix}`}>{t('build.openMap')}</Link>
+                    <Link data-tutorial-anchor="map" className="text-neon-cyan hover:underline" to={`${mapPath}${suffix}`}>{t('build.openMap')}</Link>
                   </li>
                 )
               })}

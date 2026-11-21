@@ -48,6 +48,7 @@ function TimeControl({ monthlyMode, onMonthlyModeChange, monthIndex, onSelectMon
           {t('time.annual')}
         </button>
         <button type="button" onClick={() => onMonthlyModeChange(true)} aria-pressed={monthlyMode} disabled={!climateAvailable}
+          data-tutorial-anchor="monthly"
           title={t('time.monthlyHint')} className={`flex-1 rounded-r-md border-l border-gray-700 px-2 py-1 transition-colors disabled:opacity-50 ${
             monthlyMode ? 'bg-neon-cyan/20 text-gray-100' : 'text-gray-400 hover:text-gray-200'}`}>
           {t('time.monthly')}

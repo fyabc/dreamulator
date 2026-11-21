@@ -14,6 +14,7 @@ import { defaultHeightmapCells, exportHeightmapWorld, heightmapGrid, isHeightmap
 import { isCreationWorldId } from '../projects/creationSnapshot'
 import { isStarterSeed, starterTemplates, type StarterTemplate } from '../projects/starterWorld'
 import { projectsKey, worldDataPath } from '../projects/projectStore'
+import { tutorialMilestone, useWorkflowTutorial } from '../tutorial/tutorialProgress'
 
 const field = 'w-full min-h-11 rounded border border-space-border bg-space-bg px-3 text-gray-100 focus-visible:outline focus-visible:outline-neon-cyan'
 const action = 'inline-flex min-h-11 items-center justify-center gap-2 rounded border border-space-border px-4 py-2 text-gray-100 hover:border-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan disabled:opacity-50'
@@ -48,8 +49,20 @@ export default function NewWorldPage() {
   const workerRef = useRef<Worker>()
   const query = useQueryClient()
   const navigate = useNavigate()
-  const select = useMutation({ mutationFn: (file: File) => readHeightmapInput(file, file.name), onSuccess: loaded => {
+  const guided = useWorkflowTutorial(state => state.progress?.step === 'source')
+  const select = useMutation({ mutationFn: async (file: File | 'earth') => {
+    if (file !== 'earth') return { loaded: await readHeightmapInput(file, file.name) }
+    const [elevation, meta] = await Promise.all([
+      api.getElevationBlob('earth', 'planet_earth'), api.getMapMeta('earth', 'planet_earth'),
+    ])
+    const loaded = await readHeightmapInput(elevation, 'earth-etopo1.png')
+    if (meta.projection !== 'equirectangular' || loaded.raster.width !== meta.width || loaded.raster.height !== meta.height ||
+      ![meta.sea_level_m, meta.elevation_min_m, meta.elevation_max_m].every(Number.isFinite) ||
+      !(meta.elevation_min_m < meta.elevation_max_m)) throw new Error('Invalid sample heightmap metadata')
+    return { loaded, mapping: { elevMinM: meta.elevation_min_m, elevMaxM: meta.elevation_max_m, seaLevelM: meta.sea_level_m } }
+  }, onSuccess: ({ loaded, mapping }) => {
     setInput(loaded)
+    if (mapping) setParams(previous => ({ ...previous, ...mapping }))
     invalidateTemperature()
   } })
   const save = useMutation({ mutationFn: async () => {
@@ -61,6 +74,7 @@ export default function NewWorldPage() {
     return api.saveHeightmapWorld(id, title, archive)
   }, onSuccess: async ({ id: savedId }) => {
     await Promise.all([query.invalidateQueries({ queryKey: projectsKey }), query.invalidateQueries({ queryKey: ['worlds'] })])
+    if (selected) tutorialMilestone({ type: 'imported', world: savedId })
     navigate(worldDataPath(savedId))
   } })
   useEffect(() => () => workerRef.current?.terminate(), [])
@@ -188,20 +202,26 @@ export default function NewWorldPage() {
       <fieldset disabled={busy} className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,22rem)_1fr]">
         <div className="min-w-0 space-y-4">
           <h2 className="text-lg font-semibold">{t('creation.hasHeightmap')}</h2>
-          <label className="flex flex-col items-start gap-2 text-sm text-gray-200">{t('creation.selectFile')}
-            <span className={`${action} cursor-pointer focus-within:outline focus-within:outline-neon-cyan aria-disabled:cursor-default aria-disabled:opacity-50`} aria-disabled={busy}>
-              {t(input ? 'creation.replaceFile' : 'creation.chooseFile')}
-              <input type="file" aria-label={t('creation.selectFile')} accept="image/png,.png" className="sr-only"
-              onChange={event => {
-                const file = event.currentTarget.files?.[0]
-                event.currentTarget.value = ''
-                if (file) select.mutate(file)
-              }} />
-            </span>
-          </label>
+          <div data-tutorial-anchor="upload" className="space-y-2">
+            <label className="flex flex-col items-start gap-2 text-sm text-gray-200">{t('creation.selectFile')}
+              <span className={`${action} cursor-pointer focus-within:outline focus-within:outline-neon-cyan aria-disabled:cursor-default aria-disabled:opacity-50`} aria-disabled={busy}>
+                {t(input ? 'creation.replaceFile' : 'creation.chooseFile')}
+                <input type="file" aria-label={t('creation.selectFile')} accept="image/png,.png" className="sr-only"
+                onChange={event => {
+                  const file = event.currentTarget.files?.[0]
+                  event.currentTarget.value = ''
+                  if (file) select.mutate(file)
+                }} />
+              </span>
+            </label>
+            {guided && <button type="button" disabled={busy} onClick={() => select.mutate('earth')} className={action}>
+              {t('tutorial:sample')}
+            </button>}
+          </div>
           <p className="text-sm text-gray-400">{t('creation.fileHelp')}</p>
           {select.isPending && <p role="status" className="text-sm">{t('creation.reading')}</p>}
-          {select.isError && <p role="alert" className="text-sm text-red-300">{t('creation.fileError')} {select.error.message}</p>}
+          {select.isError && <p role="alert" className="text-sm text-red-300">{select.variables === 'earth'
+            ? t('tutorial:sampleError') : `${t('creation.fileError')} ${select.error.message}`}</p>}
           {input && <p className="break-all text-sm text-neon-cyan">{input.filename}</p>}
           {importFields.map(key => numberField(key, t(`creation.${key}`), 'any'))}
         </div>
@@ -228,10 +248,12 @@ export default function NewWorldPage() {
           {(temperature || stale) && <p role="status" className="text-sm text-gray-300">{t(temperature ? 'creation.resultReady' : 'creation.stale')}</p>}
         </>}
       </section>
-      <fieldset disabled={busy} className="min-w-0 space-y-4 border-t border-space-border pt-5">
-        {identityFields}
-        {!paramsValid && <p role="alert" className="text-sm text-red-300">{t('playground:error.params')}</p>}
-        {saveFooter}
+      <fieldset disabled={busy} className="min-w-0 border-t border-space-border pt-5">
+        <div data-tutorial-anchor={input ? 'configure' : undefined} className="max-w-prose space-y-4">
+          {identityFields}
+          {!paramsValid && <p role="alert" className="text-sm text-red-300">{t('playground:error.params')}</p>}
+          {saveFooter}
+        </div>
       </fieldset>
     </form>}
   </section>

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, Outlet } from 'react-router-dom'
 import AtlasIcon from './AtlasIcon'
 import Sidebar from './Sidebar'
+import WorkflowTutorial from '../tutorial/WorkflowTutorial'
 
 export default function Layout() {
   const { t } = useTranslation()
@@ -80,6 +81,7 @@ export default function Layout() {
         <main id="main-content" ref={main} tabIndex={-1} className="flex-1 overflow-auto relative">
           <Outlet />
         </main>
+        <WorkflowTutorial />
       </div>
     </div>
   )

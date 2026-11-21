@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { tutorialMilestone } from '../tutorial/tutorialProgress'
 import { api } from '../api/client'
 import type { ClimateTrialForcing, ClimateTrialResult } from '../api/climateTrials'
 import { savedClimateKey } from '../api/climateTrials'
@@ -98,6 +99,7 @@ export default function EbmClimateLab({ search, open, onResult, onShow, onPrevie
   const fork = useMutation({
     mutationFn: (jobId: string) => api.saveClimateTrialBranch(world, planet, jobId, branchName.trim()),
     onSuccess: ({ name }) => {
+      tutorialMilestone({ type: 'forked', world, planet, base: branch, branch: name })
       void queryClient.invalidateQueries({ queryKey: ['world', world] })
       void queryClient.invalidateQueries({ queryKey: ['branches', world] })
       const next = new URLSearchParams(location.search)
@@ -137,7 +139,7 @@ export default function EbmClimateLab({ search, open, onResult, onShow, onPrevie
     </fieldset>}
     {current && !valid && <p className="text-xs text-amber-200">{t('ebm.error.params')}</p>}
     {current && <div className="flex flex-wrap items-center gap-2">
-      <button type="submit" disabled={!valid || busy || saving} className="atlas-tool-button min-h-9 text-xs">
+      <button type="submit" data-tutorial-anchor={busy ? 'trialWait' : 'trialRun'} disabled={!valid || busy || saving} className="atlas-tool-button min-h-9 text-xs">
         {t(lastResult ? 'action.recompute' : 'action.run')}
       </button>
       {lastResult && <button type="button" onClick={onShow} className="atlas-tool-button min-h-9 text-xs">{t('ebm.show')}</button>}
@@ -170,7 +172,7 @@ export default function EbmClimateLab({ search, open, onResult, onShow, onPrevie
       {!browser && <div className="space-y-1.5 border-t border-space-border pt-2">
         <label className="block text-gray-200">
           {t('ebm.fork.name')}
-          <input value={branchName} onChange={event => setBranchName(event.target.value)} maxLength={64}
+          <input data-tutorial-anchor="trialBranch" value={branchName} onChange={event => setBranchName(event.target.value)} maxLength={64}
             disabled={saving} autoComplete="off" placeholder="climate-variant"
             className="mt-1 min-h-9 w-full rounded border border-space-border bg-space-bg px-2 text-gray-100" />
         </label>

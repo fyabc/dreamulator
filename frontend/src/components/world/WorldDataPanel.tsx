@@ -13,6 +13,7 @@ import { exportWorldData, readWorldBackup } from '../../projects/worldDataArchiv
 import { downloadBlob } from '../../utils/downloadBlob'
 import { heightmapMapPath } from '../../projects/heightmapWorld'
 import SavedClimateTrials from './SavedClimateTrials'
+import { tutorialMilestone } from '../../tutorial/tutorialProgress'
 
 export default function WorldDataPanel({ id, published, publishedAvailable, nativeCreation = false, nativeStarterWithoutMap = false }: {
   id: string
@@ -67,12 +68,15 @@ export default function WorldDataPanel({ id, published, publishedAvailable, nati
       <h2 className="text-lg font-semibold">{creationText(starter ? 'starter.savedHeading' : 'savedHeading')}</h2>
       <p className="max-w-prose text-sm text-gray-400">{creationText(starter ? 'starter.savedBrowserHelp' : 'savedHelp')}</p>
       <div className="flex flex-wrap items-center gap-3 text-sm">
-        {!starter && <Link to={heightmapMapPath(id)} className="inline-flex min-h-11 items-center gap-2 text-neon-cyan hover:underline">
+        {!starter && <Link to={heightmapMapPath(id)} data-tutorial-anchor="browserMap" className="inline-flex min-h-11 items-center gap-2 text-neon-cyan hover:underline">
           {creationText('openSavedMap')} <AtlasIcon name="arrow" />
         </Link>}
-        {world.creationSnapshot && <button type="button" className={`${projectButton} min-h-11 px-3`} onClick={() => {
-          if (world.creationSnapshot) downloadBlob(world.creationSnapshot, `${id}.dreamulator.tar.gz`)
-        }}>{creationText('download')}</button>}
+        {world.creationSnapshot && <button type="button" data-tutorial-anchor={starter ? undefined : 'browserBackup'}
+          className={`${projectButton} min-h-11 px-3`} onClick={() => {
+            if (!world.creationSnapshot) return
+            downloadBlob(world.creationSnapshot, `${id}.dreamulator.tar.gz`)
+            if (!starter) tutorialMilestone({ type: 'backup', world: id })
+          }}>{creationText('download')}</button>}
       </div>
     </section>}
     {nativeStarterWithoutMap && <section className="space-y-2 border-b border-space-border pb-4">

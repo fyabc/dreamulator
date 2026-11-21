@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { TutorialEntry } from '../tutorial/WorkflowTutorial'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { isStaticMode } from '../api/mode'
@@ -29,6 +30,7 @@ export default function HomePage() {
             <Link to="/worlds" className="atlas-text-action" data-testid="start-explore">
               {t('worlds:start.explore')} <AtlasIcon name="arrow" />
             </Link>
+            <TutorialEntry />
           </div>
         </div>
       </section>

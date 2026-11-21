@@ -1,0 +1,56 @@
+.workflow-guide,
+.workflow-guide-dock {
+  position: fixed;
+  z-index: 55;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+.workflow-guide {
+  width: min(21rem, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  padding: 0.8rem 0.9rem 0.35rem;
+  border: 1px solid #6f9993;
+  border-radius: 0.625rem;
+  background: #162629;
+  color: #e4eeea;
+}
+
+.workflow-guide-heading {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.94rem;
+}
+
+.workflow-guide-heading span {
+  flex-shrink: 0;
+  color: #a4c4be;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.workflow-guide p {
+  margin-top: 0.35rem;
+  color: #c2d6d2;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.workflow-guide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.9rem;
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+}
+
+.workflow-guide-actions > * { display: inline-flex; align-items: center; min-height: 44px; }
+.workflow-guide-action { color: #a9ebdc; }
+.workflow-guide-actions > :hover { text-decoration: underline; text-underline-offset: 0.2em; }
+.workflow-guide-actions > :focus-visible, .workflow-guide-entry:focus-visible { outline: 2px solid #a9ebdc; outline-offset: 2px; }
+.workflow-guide-entry { gap: 0.4rem; min-height: 44px; }
+[data-tutorial-highlight] { outline: 2px solid #a9ebdc !important; outline-offset: 3px; }
+[data-tutorial-highlight]:focus-visible { outline-width: 3px !important; outline-color: #edf6f0 !important; }

@@ -15,7 +15,8 @@ export default function CreationMapPage() {
     enabled: !!worldName, retry: false, staleTime: 60_000, gcTime: 30_000 })
   const world = query.data
   return <div className="mx-auto max-w-6xl space-y-5 px-4 py-8 sm:px-8">
-    <Link to={worldDataPath(worldName)} className="inline-flex min-h-10 items-center gap-2 text-sm text-gray-300 hover:text-neon-cyan">
+    <Link to={worldDataPath(worldName)} data-tutorial-anchor={world ? 'browserView' : undefined}
+      className="inline-flex min-h-10 items-center gap-2 text-sm text-gray-300 hover:text-neon-cyan">
       <AtlasIcon name="back" />{t('worldData.title')}
     </Link>
     {query.isPending && <p role="status">{t('status.loading')}</p>}

@@ -51,7 +51,7 @@ export function MapWorkbenchToolbar({ title, view, backTo, switchTo, regionContr
       <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 lg:col-start-3 lg:gap-2">
         {trialPanel && <button id={trialPanel.buttonId} type="button" onClick={trialPanel.onToggle}
           className="atlas-tool-button text-sm aria-expanded:border-neon-cyan/50 aria-expanded:text-neon-cyan"
-          aria-label={t('workbench.climateTrial')} title={t('workbench.climateTrial')}
+          data-tutorial-anchor="lab" aria-label={t('workbench.climateTrial')} title={t('workbench.climateTrial')}
           aria-expanded={trialPanel.open} aria-controls={trialPanel.id}>
           <AtlasIcon name="flask" className="size-4" /> <span className="hidden lg:inline">{t('workbench.climateTrial')}</span>
         </button>}
