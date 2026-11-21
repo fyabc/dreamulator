@@ -207,35 +207,7 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
               )}
               {!errors.length && firstStageError && <p className="break-words text-sm text-red-300">{firstStageError}</p>}
               {job.state === 'failed' && <p className="text-sm text-gray-400">{t('build.failedHint')}</p>}
-              {job.stages.length > 0 && (
-                <details key={job.id} open={isActive(job)} className="text-sm">
-                  <summary className="w-fit cursor-pointer rounded text-gray-300 hover:text-neon-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-neon-cyan">
-                    {t('build.stageDetails')}
-                  </summary>
-                  <ol className="mt-2 divide-y divide-space-border rounded border border-space-border">
-                    {job.stages.map((stage) => (
-                      <li key={`${stage.engine}:${stage.bootstrap}`} className="px-3 py-2">
-                        <div className="flex items-baseline justify-between gap-3">
-                          <span>
-                            {t(`layer.${stage.layer}`, { defaultValue: stage.engine })}
-                            {stage.bootstrap && <span className="ml-2 text-xs text-gray-400">{t('build.bootstrap')}</span>}
-                          </span>
-                          <span className={stage.state === 'failed' ? 'text-red-300' :
-                            stage.state === 'succeeded' ? 'text-green-300' :
-                              stage.state === 'running' || stage.state === 'validating' ? 'text-neon-cyan' : 'text-gray-400'}>
-                            {t(`build.stage.${stage.state}`)}
-                          </span>
-                        </div>
-                        {stage.errors.length > 0 && (
-                          <ul className="mt-1 list-disc pl-5 break-words text-red-300">
-                            {stage.errors.map((error, index) => <li key={index}>{error}</li>)}
-                          </ul>
-                        )}
-                      </li>
-                    ))}
-                  </ol>
-                </details>
-              )}
+              {job.stages.length > 0 && <WorldBuildProgress key={job.id} job={job} running={isActive(job)} />}
             </>
           )}
 

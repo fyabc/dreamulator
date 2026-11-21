@@ -39,6 +39,7 @@ class LastEngine(FirstEngine):
     layer = Layer.CLIMATE
     requires = ["first"]
     output_files = ["last.json"]
+    progress_steps = ("write_output",)
 
     def run(self, parameters=None, *, force=False):
         self.output_path("last.json").write_text('{"value": 43}', encoding="utf-8")
@@ -149,6 +150,10 @@ def test_http_reads_and_duplicate_rejection_during_execution(setup, monkeypatch)
         return job
 
     def pause(self, parameters=None, *, force=False):
+        self.report_step("setup")
+        self.report_step("solve", 0, 12, pass_number=1)
+        self.report_step("solve", 12, 12, pass_number=1)
+        self.report_step("solve", 4, 12, pass_number=2)
         entered.set()
         assert release.wait(timeout=10)
         return EngineResult(engine_name=self.name, success=True)
@@ -164,11 +169,25 @@ def test_http_reads_and_duplicate_rejection_during_execution(setup, monkeypatch)
             assert running.json()["current_engine"] == "first"
             assert running.json()["state"] == "running"
             assert running.json()["stages"][1]["state"] == "pending"
+            assert running.json()["stages"][1]["planned_steps"] == ["write_output"]
+            assert running.json()["stages"][1]["steps"] == []
+            first, first_pass, active = running.json()["stages"][0]["steps"]
+            assert first["name"] == "setup" and first["finished_at"] is not None
+            assert first_pass["finished_at"] is not None
+            assert (first_pass["completed"], first_pass["total"], first_pass["pass_number"]) == (
+                12,
+                12,
+                1,
+            )
+            assert active["name"] == "solve" and active["finished_at"] is None
+            assert (active["completed"], active["total"], active["pass_number"]) == (4, 12, 2)
             assert client.post("/api/worlds/sample/build-jobs").status_code == 409
             assert client.post("/api/worlds/other/build").status_code == 409
         finally:
             release.set()
         assert future.result(timeout=5).status_code == 202
+    final = client.get(f"/api/worlds/sample/build-jobs/{reserved[0]}").json()
+    assert final["stages"][0]["steps"][-1]["finished_at"] is not None
 
 
 @pytest.mark.parametrize("failure", ["validation", "result", "exception"])
@@ -180,6 +199,7 @@ def test_failures_preserve_reason_and_release_writer(setup, monkeypatch, failure
     else:
 
         def fail(self, parameters=None, *, force=False):
+            self.report_step("reading")
             if failure == "exception":
                 raise RuntimeError(reason)
             return EngineResult(engine_name=self.name, success=False, warnings=[reason])
@@ -190,6 +210,8 @@ def test_failures_preserve_reason_and_release_writer(setup, monkeypatch, failure
     assert job["state"] == "failed"
     assert [s["state"] for s in job["stages"]] == ["failed", "not_run"]
     assert job["stages"][0]["errors"] == [reason]
+    if failure != "validation":
+        assert job["stages"][0]["steps"][0]["finished_at"] is not None
     assert job["result"]["errors"] == [reason]
     assert client.post("/api/worlds/sample/build-jobs").status_code == 202
     legacy = client.post("/api/worlds/sample/build")

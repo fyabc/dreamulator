@@ -85,7 +85,8 @@
 
 `run_terrain_pipeline(config, output_dir, stages, ...)`（`terrain_pipeline.py:189`）按固定
 顺序执行 8 个相位（`_STAGE_NAMES` :69-78，控制台 `1/8`-`8/8`）；`stages` 参数可选子集，
-`_resolve_stages`（:116）校验阶段名称，并按管线顺序执行选定阶段；调用方提供其前置状态。行号锚为 `terrain_pipeline.py` 当前值，
+`resolve_terrain_stages` 校验阶段名称，并按管线顺序列出选定阶段，供执行器与构建时间线使用。调用方提供选定阶段所需的前置状态。
+行号锚为 `terrain_pipeline.py` 当前值，
 细节章节在 §3-§10 展开。
 
 | 相位 | 名称 | 行号 | 调用 | 产出 → 下游 |

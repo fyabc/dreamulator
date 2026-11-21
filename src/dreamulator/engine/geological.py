@@ -53,6 +53,9 @@ class GeologicalEngine(BaseEngine):
 
     name = "geological"
     layer = Layer.GEOLOGICAL
+    _generated_steps = ("mesh", "plates", "tectonics", "boundaries", "terrain", "ice", "export")
+    _import_steps = ("prepare_terrain", "read_elevation", "mesh", "sample_elevation", "export")
+    progress_steps = ("prepare_terrain",)
     requires: list[str] = ["astronomy"]
     # Both optional: absent terrain_config falls back to planet-derived
     # defaults; absent geography.yaml = unauthored (random) continents.
@@ -95,9 +98,10 @@ class GeologicalEngine(BaseEngine):
         Returns:
             EngineResult describing the outcome.
         """
-        from dreamulator.map.terrain_pipeline import run_terrain_pipeline
+        from dreamulator.map.terrain_pipeline import resolve_terrain_stages, run_terrain_pipeline
 
         warnings: list[str] = []
+        self.report_step("prepare_terrain")
         pars = parameters or {}
 
         # ---- Load configuration ----
@@ -134,6 +138,7 @@ class GeologicalEngine(BaseEngine):
         # with recovery instructions — not a silent success that surfaces
         # later as an unrelated "No CVT mesh" climate error (M1-P0/BUILD-01).
         if config.elevation_source == "imported":
+            self.report_step("reuse_terrain", plan=("prepare_terrain", "reuse_terrain"))
             mesh_path = self._find_imported_mesh(planet_id)
             if mesh_path is None:
                 expected = self.maps_output_dir / planet_id
@@ -183,16 +188,11 @@ class GeologicalEngine(BaseEngine):
             # Polar ice sheets stack on top of the terrain, leaving the
             # calibrated coastline untouched.  Rivers are routed on the canvas
             # chain, not on the global mesh.
-            stage_list = [
-                "mesh",
-                "plates",
-                "tectonics",
-                "boundaries",
-                "terrain",
-                "ice",
-                "export",
-            ]
+            stage_list = list(self._generated_steps)
 
+        if self.on_step:
+            planned = resolve_terrain_stages(stage_list)
+            self.report_step("prepare_terrain", plan=("prepare_terrain", *planned))
         # ---- Run pipeline ----
         logger.info(
             "Running terrain pipeline: %d nodes, %d plates, seed=%d",
@@ -226,6 +226,9 @@ class GeologicalEngine(BaseEngine):
 
                 cache = CacheConfig(enabled=True, geography_hash=geography_hash)
 
+            def report_tectonics(completed: int, total: int) -> None:
+                self.report_step("tectonics", completed, total)
+
             result = run_terrain_pipeline(
                 config,
                 output_dir,
@@ -233,6 +236,8 @@ class GeologicalEngine(BaseEngine):
                 geography_raster=raster,
                 cache=cache,
                 geography_hash=geography_hash,
+                on_progress=self.report_step if self.on_step else None,
+                on_tectonic_step=report_tectonics if self.on_step else None,
             )
         except RuntimeError as e:
             return EngineResult(
@@ -300,10 +305,14 @@ class GeologicalEngine(BaseEngine):
         from dreamulator.map.manager import MapManager
         from dreamulator.map.models import MapMetadata
 
+        self.report_step("read_elevation", plan=self._import_steps)
         validate_elevation_input_target(self.world_dir, self._branch_name())
         imported = read_elevation_source(source, self.find_input(source.relative_path))
+        self.report_step("mesh")
         mesh = generate_cvt_mesh(config)
+        self.report_step("sample_elevation")
         sample_elevation_import(mesh, imported)
+        self.report_step("export")
         output_dir = self.maps_output_dir / planet_id
         mgr = MapManager(self.world_dir, self._branch_name())
         mapping = source.provenance.mapping

@@ -230,6 +230,7 @@ def simulate_climate(
     *,
     on_progress: Callable[[str], None] | None = None,
     on_precipitation_month: Callable[[int, int], None] | None = None,
+    on_ocean_basin: Callable[[int, int], None] | None = None,
 ) -> dict[str, float]:
     """Run climate simulation on the CVT mesh, filling cell climate fields.
 
@@ -1107,6 +1108,8 @@ def simulate_climate(
             # skipping them saves GMRES setup cost (sparse matrix assembly etc.).
             _MIN_BASIN_CELLS = 20
             for b_idx, b_cells in enumerate(basins):
+                if on_ocean_basin is not None:
+                    on_ocean_basin(b_idx, len(basins))
                 n_b = len(b_cells)
                 if n_b < _MIN_BASIN_CELLS:
                     _console.print(
@@ -1161,6 +1164,9 @@ def simulate_climate(
                     c.ocean_current_east_m_s = float(np.dot(vel[li], east[gi]))
                     c.ocean_current_north_m_s = float(np.dot(vel[li], north[gi]))
                     c.sst_anomaly_c = float(sst_anom[gi])
+
+            if on_ocean_basin is not None:
+                on_ocean_basin(len(basins), len(basins))
 
             # ── 3A.3: upwelling → SST cooling ──
             if config.ocean_upwelling_enabled:

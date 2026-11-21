@@ -272,7 +272,7 @@ export const staticApi = {
   deleteWorld: () => notAvailable('deleteWorld'),
   validateWorld: () => notAvailable('validateWorld'),
 
-  // Build and simulation — not available in static mode
+  // Local builds and their live progress snapshots are not available in static mode.
   buildWorld: () => notAvailable('buildWorld'),
   getBuildGrid: async (): Promise<BuildGrid> => notAvailable('getBuildGrid'),
   startBuildJob: async (): Promise<BuildJob> => notAvailable('startBuildJob'),

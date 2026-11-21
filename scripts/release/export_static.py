@@ -5,6 +5,7 @@ to frontend/public/data/ for static site hosting.
 
 Build jobs are process-local execution state and are not exported. The static
 client rejects startBuildJob and getBuildJob instead of requesting stale job files.
+Engine step timings and counters are part of the same non-exported snapshots.
 Local region packs and their numeric elevation endpoint are not exported. The
 browser extracts static regional heightmaps from the published global PNGs.
 Local refinement plans, job settings, and the compute device require the local

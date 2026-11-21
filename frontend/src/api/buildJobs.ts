@@ -18,6 +18,15 @@ export interface BuildSummary {
   errors: string[]
 }
 
+export interface BuildStep {
+  name: string
+  started_at: string
+  finished_at: string | null
+  completed: number | null
+  total: number | null
+  pass_number: number | null
+}
+
 export interface BuildStage {
   engine: string
   layer: string
@@ -26,6 +35,8 @@ export interface BuildStage {
   started_at: string | null
   finished_at: string | null
   errors: string[]
+  steps?: BuildStep[]
+  planned_steps?: string[]
 }
 
 export interface BuildJob {

@@ -388,7 +388,7 @@ const liveOnlyApi = {
       body: JSON.stringify(options),
     }),
 
-  getBuildJob: (name: string, jobId: string) =>
+  getBuildJob: (name: string, jobId: string): Promise<BuildJob> =>
     fetchJson<BuildJob>(`/worlds/${encodeURIComponent(name)}/build-jobs/${encodeURIComponent(jobId)}`, {
       cache: 'no-store',
     }),

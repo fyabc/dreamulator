@@ -44,6 +44,7 @@ from .terrain_cache import (
 from .terrain_synthesizer import synthesize_terrain
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from .island_catalog import IslandCatalog
@@ -81,8 +82,10 @@ _STAGE_NAMES: dict[str, str] = {
 }
 
 
-def _stage_begin(stage: str) -> None:
-    """Print a user-facing stage header."""
+def _stage_begin(stage: str, on_progress: Callable[[str], None] | None) -> None:
+    """Print and report the start of an uncached computation."""
+    if on_progress is not None:
+        on_progress(stage)
     name = _STAGE_NAMES.get(stage, stage)
     _console.print(f"[bold bright_cyan]>>[/] [bold]{name}[/]")
 
@@ -116,7 +119,7 @@ class TerrainPipelineResult:
     island_catalog: IslandCatalog | None = None
 
 
-def _resolve_stages(requested: list[str] | None) -> list[str]:
+def resolve_terrain_stages(requested: list[str] | None) -> list[str]:
     """Resolve requested stages to an ordered list.
 
     If ``requested`` is None, returns all stages in order.
@@ -199,6 +202,8 @@ def run_terrain_pipeline(
     geography_hash: str = "",
     source_fields: dict[str, np.ndarray] | None = None,
     tectonic_state: TerrainPipelineResult | None = None,
+    on_progress: Callable[[str], None] | None = None,
+    on_tectonic_step: Callable[[int, int], None] | None = None,
 ) -> TerrainPipelineResult:
     """Run the terrain generation pipeline.
 
@@ -220,6 +225,8 @@ def run_terrain_pipeline(
             history contract. A private copy is consumed by the requested downstream
             stages. Callers retain and verify the source artifact's provenance.
             Requires an explicit downstream stage list and disabled stage caching.
+        on_progress: Observe the start of each computed stage, excluding cache hits.
+        on_tectonic_step: Observe completed tectonic iterations and their total.
 
     Returns:
         TerrainPipelineResult with generated data.
@@ -227,7 +234,7 @@ def run_terrain_pipeline(
     t_start = time.time()
     result = TerrainPipelineResult()
 
-    ordered = _resolve_stages(stages)
+    ordered = resolve_terrain_stages(stages)
     frozen_fingerprint = ""
     if tectonic_state is not None:
         if stages is None or any(
@@ -286,7 +293,7 @@ def run_terrain_pipeline(
                 result.stage_timings["mesh"] = time.time() - t
                 _stage_end(result.stage_timings["mesh"])
         if result.mesh is None:
-            _stage_begin("mesh")
+            _stage_begin("mesh", on_progress)
             t = time.time()
             result.mesh = generate_cvt_mesh(config)
             result.stages_completed.append("mesh")
@@ -338,7 +345,7 @@ def run_terrain_pipeline(
                 result.stage_timings["plates"] = time.time() - t
                 _stage_end(result.stage_timings["plates"])
         if not result.plates:
-            _stage_begin("plates")
+            _stage_begin("plates", on_progress)
             t = time.time()
             result.plates, cell_plate_map = generate_plates(
                 result.mesh, _config_plates, raster_bias=raster_bias
@@ -387,12 +394,12 @@ def run_terrain_pipeline(
                 result.stage_timings["tectonics"] = time.time() - t
                 _stage_end(result.stage_timings["tectonics"])
         if "tectonics" not in result.stages_completed:
-            _stage_begin("tectonics")
+            _stage_begin("tectonics", on_progress)
             t = time.time()
             from .tectonic_simulator import run_tectonic_evolution
 
             # Rich progress bar for long-running tectonic steps
-            progress_cb = None
+            progress_cb = on_tectonic_step
             _progress = None
             try:
                 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
@@ -411,6 +418,8 @@ def run_terrain_pipeline(
                 _progress.start()
 
                 def _cb(step: int, total: int) -> None:
+                    if on_tectonic_step is not None:
+                        on_tectonic_step(step, total)
                     if _progress is not None:
                         # duration mode derives the step count inside the evolution
                         _progress.update(task_id, completed=step, total=total)
@@ -485,7 +494,7 @@ def run_terrain_pipeline(
                 result.stage_timings["boundaries"] = time.time() - t
                 _stage_end(result.stage_timings["boundaries"])
         if "boundaries" not in result.stages_completed:
-            _stage_begin("boundaries")
+            _stage_begin("boundaries", on_progress)
             t = time.time()
             result.boundary_cell_ids = detect_boundaries(
                 result.mesh, result.plates, cell_plate_map, config
@@ -562,7 +571,7 @@ def run_terrain_pipeline(
                 result.stage_timings["terrain"] = time.time() - t
                 _stage_end(result.stage_timings["terrain"])
         if "terrain" not in result.stages_completed:
-            _stage_begin("terrain")
+            _stage_begin("terrain", on_progress)
             t = time.time()
             synthesize_terrain(
                 result.mesh,
@@ -670,7 +679,7 @@ def run_terrain_pipeline(
 
     # ---- Stage 6: Climate ----
     if "climate" in ordered:
-        _stage_begin("climate")
+        _stage_begin("climate", on_progress)
         try:
             from .climate_simulator import simulate_climate
 
@@ -694,7 +703,7 @@ def run_terrain_pipeline(
     # ---- Stage 7: Polar ice sheets (the calibrated coastline is untouched, ice only
     #      stacks onto land cells) ----
     if "ice" in ordered:
-        _stage_begin("ice")
+        _stage_begin("ice", on_progress)
         t = time.time()
         from .ice_sheets import apply_polar_ice_sheets
 
@@ -705,7 +714,7 @@ def run_terrain_pipeline(
 
     # ---- Stage 8: Export ----
     if "export" in ordered:
-        _stage_begin("export")
+        _stage_begin("export", on_progress)
         t = time.time()
 
         # Large endorheic lakes (Caspian analogues) are ocean-like for climate —

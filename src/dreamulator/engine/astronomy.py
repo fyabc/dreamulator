@@ -36,6 +36,13 @@ class AstronomyEngine(BaseEngine):
 
     name = "astronomy"
     layer = Layer.ASTRONOMY
+    progress_steps = (
+        "read_stars",
+        "compute_stars",
+        "body_catalog",
+        "sky_background",
+        "save_astronomy",
+    )
     requires: list[str] = []
     input_files = ["stellar.yaml"]
     # planets.yaml feeds the catalog join (authoritative physical parameters),
@@ -66,6 +73,7 @@ class AstronomyEngine(BaseEngine):
             EngineResult describing the computation outcome.
         """
         warnings: list[str] = []
+        self.report_step("read_stars")
 
         # Load input
         input_path = self.find_input("stellar.yaml")
@@ -83,7 +91,8 @@ class AstronomyEngine(BaseEngine):
         hz_data: list[dict[str, object]] = []
         computed_stars: dict[str, dict[str, float]] = {}
 
-        for star in system.stars:
+        self.report_step("compute_stars", 0, len(system.stars))
+        for index, star in enumerate(system.stars, start=1):
             # Determine input mode and check consistency
             star_warnings = _compute_star_derived(
                 star_id=star.id,
@@ -148,6 +157,9 @@ class AstronomyEngine(BaseEngine):
                 }
             )
 
+            self.report_step("compute_stars", index, len(system.stars))
+
+        self.report_step("body_catalog")
         # Merge stellar.yaml + planets.yaml into a single per-body catalog
         # (frontend 3D viewer, body-encyclopedia, and the fact context in
         # guard/facts.py consume this one file — the single source of truth).
@@ -160,6 +172,7 @@ class AstronomyEngine(BaseEngine):
         # galactic band and transient-event hooks.  Directions are frozen as
         # unit vectors here so every consumer (sky view, ecology, civilization)
         # reads one resolved table.
+        self.report_step("sky_background")
         bg_input_path = self.find_input("sky_background.yaml")
         if bg_input_path is not None:
             background = derive_sky_background(load_yaml_model(bg_input_path, SkyBackgroundInput))
@@ -167,6 +180,7 @@ class AstronomyEngine(BaseEngine):
             background = SkyBackgroundDerived()
 
         # Write output files
+        self.report_step("save_astronomy")
         self._write_yaml("stellar_derived.yaml", {"stars": stars_derived})
         self._write_yaml("habitable_zones.yaml", {"stars": hz_data})
         self._write_system_catalog(catalog)

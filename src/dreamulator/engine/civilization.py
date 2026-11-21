@@ -96,6 +96,13 @@ class CivilizationEngine(BaseEngine):
 
     name = "civilization"
     layer = Layer.CIVILIZATION
+    progress_steps = (
+        "sky_culture",
+        "read_habitability",
+        "habitability",
+        "settlement_seeds",
+        "save_civilization",
+    )
     requires = ["ecology", "climate", "geological"]
     input_files: list[str] = []
     optional_input_files: list[str] = ["sky_culture.yaml"]
@@ -170,6 +177,7 @@ class CivilizationEngine(BaseEngine):
         """
         warnings: list[str] = []
 
+        self.report_step("sky_culture")
         # ---- 0. Sky culture (mesh-independent; bad id references fail fast) ----
         culture_derived, culture_warnings, culture_errors = self._prepare_sky_culture()
         warnings.extend(culture_warnings)
@@ -181,6 +189,7 @@ class CivilizationEngine(BaseEngine):
             )
 
         # ---- 1. Load CVT mesh ----
+        self.report_step("read_habitability")
         mesh, mwarnings = _load_cvt_mesh(self)
         warnings.extend(mwarnings)
         if mesh is None:
@@ -222,6 +231,7 @@ class CivilizationEngine(BaseEngine):
         )
         sub_planet_longitude_deg = config.sub_planet_longitude_deg
 
+        self.report_step("habitability", 0, n_cells)
         # ---- 4. Classify every cell ----
         counts: dict[str, int] = {
             "habitable_coast": 0,
@@ -240,6 +250,8 @@ class CivilizationEngine(BaseEngine):
         is_lake_arr = np.array([c.is_lake for c in mesh.cells], dtype=bool)
         near_freshwater = _compute_near_freshwater(mesh, is_land_arr, is_lake_arr)
         for i, cell in enumerate(mesh.cells):
+            if self.on_step and i and i % 1024 == 0:
+                self.report_step("habitability", i, n_cells)
             is_ocean = not is_land_arr[i] or is_lake_arr[i]
             if not is_ocean:
                 n_land += 1
@@ -285,11 +297,14 @@ class CivilizationEngine(BaseEngine):
                 counts["neither"] += 1
 
         # ---- 4.5 Discover seed candidate regions (derived, deterministic) ----
+        self.report_step("habitability", n_cells, n_cells)
+        self.report_step("settlement_seeds")
         candidates = discover_seed_candidates(
             mesh, sub_planet_longitude_deg=sub_planet_longitude_deg
         )
 
         # ---- 5. Write habitability data back to the source mesh ----
+        self.report_step("save_civilization")
         _write_mesh_with_habitability(mesh, self.maps_output_dir, planet_id)
 
         # ---- 6. Write summary + seed-candidate YAML ----

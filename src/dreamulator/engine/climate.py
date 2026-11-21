@@ -48,6 +48,17 @@ class ClimateEngine(BaseEngine):
 
     name = "climate"
     layer = Layer.CLIMATE
+    _output_steps = ("save_climate", "export_climate", "summarize_climate")
+    progress_steps = (
+        "reading",
+        "temperature",
+        "wind",
+        "ocean",
+        "precipitation",
+        "koppen",
+        "writeback",
+        *_output_steps,
+    )
     requires = ["astronomy", "geological"]  # geological data is loaded via maps, not DAG
     input_files = [
         "stellar.yaml",  # → astronomy input (star luminosity, orbits)
@@ -105,6 +116,7 @@ class ClimateEngine(BaseEngine):
                 ],
             )
 
+        self.report_step("reading")
         # ---- 1. Load planet data ----
         planet_path = self.find_input("planets.yaml")
         if planet_path is None:
@@ -173,6 +185,9 @@ class ClimateEngine(BaseEngine):
         climate_source = self._climate_source()
         gcm_provenance: dict[str, object] | None = None
         if climate_source is ClimateSource.GCM:
+            self.report_step(
+                "pinned_climate", plan=("reading", "pinned_climate", *self._output_steps)
+            )
             pinned = self._apply_pinned_gcm_climate(mesh)
             if isinstance(pinned, str):
                 return EngineResult(
@@ -198,12 +213,29 @@ class ClimateEngine(BaseEngine):
                 if key in pars:
                     setattr(config, key, pars[key])
 
-            # simulate_climate returns per-phase wall-clock timings (M0)
-            phase_timings = simulate_climate(mesh, config)
+            moisture_pass = 0
+
+            def report_month(completed: int, total: int) -> None:
+                nonlocal moisture_pass
+                if completed == 0:
+                    moisture_pass += 1
+                self.report_step("precipitation", completed, total, pass_number=moisture_pass)
+
+            def report_basin(completed: int, total: int) -> None:
+                self.report_step("ocean", completed, total)
+
+            phase_timings = simulate_climate(
+                mesh,
+                config,
+                on_progress=self.report_step if self.on_step else None,
+                on_precipitation_month=report_month if self.on_step else None,
+                on_ocean_basin=report_basin if self.on_step else None,
+            )
 
         # ---- 5b. Write climate data back to the source mesh file ----
         # The frontend reads the mesh (geological layer) and expects
         # koppen_class / temperature_C / precipitation_mm to be populated.
+        self.report_step("save_climate")
         self._update_source_mesh(mesh, mesh_target)
 
         # ---- 6. Export outputs ----
@@ -212,9 +244,11 @@ class ClimateEngine(BaseEngine):
 
         from dreamulator.map.export import export_climate_layers
 
+        self.report_step("export_climate")
         export_climate_layers(mesh, export_dir, config, climate_provenance=gcm_provenance)
 
         # ---- 7. Write summary YAML ----
+        self.report_step("summarize_climate")
         summary = climate_summary(mesh, planet, config)
         summary["climate_source"] = climate_source.value
         if gcm_provenance is not None:

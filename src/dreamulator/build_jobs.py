@@ -39,6 +39,17 @@ class BuildSummary(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
+class BuildStep(BaseModel):
+    """Observed work within an engine stage, with its most recent counter."""
+
+    name: str
+    started_at: datetime
+    finished_at: datetime | None = None
+    completed: int | None = None
+    total: int | None = None
+    pass_number: int | None = None
+
+
 class BuildStage(BaseModel):
     """An engine stage, distinguished from upstream preparation."""
 
@@ -49,6 +60,8 @@ class BuildStage(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     errors: list[str] = Field(default_factory=list)
+    steps: list[BuildStep] = Field(default_factory=list)
+    planned_steps: tuple[str, ...] = ()
 
 
 class BuildJob(BaseModel):
@@ -151,6 +164,27 @@ class BuildJobs:
                     job.stages.insert(position, stage)
                 else:
                     job.stages.append(stage)
+            if event.planned_steps is not None:
+                stage.planned_steps = event.planned_steps
+            if event.step is not None:
+                report = event.step
+                if report.plan is not None:
+                    stage.planned_steps = report.plan
+                last = stage.steps[-1] if stage.steps else None
+                new_pass = (
+                    last is not None
+                    and last.pass_number is not None
+                    and last.pass_number != report.pass_number
+                )
+                if last is None or last.name != report.name or new_pass:
+                    if last is not None:
+                        last.finished_at = now
+                    last = BuildStep(name=report.name, started_at=now)
+                    stage.steps.append(last)
+                last.completed = report.completed
+                last.total = report.total
+                last.pass_number = report.pass_number
+                return
             stage.state = event.state
             stage.errors = list(event.errors)
             if event.state in {StageState.VALIDATING, StageState.RUNNING}:
@@ -158,6 +192,8 @@ class BuildJobs:
                 job.current_engine = event.engine
             elif event.state != StageState.PENDING:
                 stage.finished_at = now
+                if stage.steps:
+                    stage.steps[-1].finished_at = now
                 job.current_engine = None
 
     def execute(
@@ -213,6 +249,8 @@ class BuildJobs:
                         stage.state = StageState.FAILED
                         stage.errors = [job.error or "Build interrupted"]
                         stage.finished_at = now
+                        if stage.steps:
+                            stage.steps[-1].finished_at = now
                     elif stage.state == StageState.PENDING:
                         stage.state = StageState.NOT_RUN
                 snapshot = job.model_copy(deep=True)

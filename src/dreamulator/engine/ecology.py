@@ -42,6 +42,7 @@ class EcologyEngine(BaseEngine):
 
     name = "ecology"
     layer = Layer.ECOLOGY
+    progress_steps = ("read_ecology", "biosphere", "provinces", "save_ecology")
     requires = ["climate", "geological"]  # geological for mesh, climate for T/P
     input_files: list[str] = []
     optional_input_files: list[str] = []
@@ -74,6 +75,7 @@ class EcologyEngine(BaseEngine):
         warnings: list[str] = []
 
         # ---- 1. Load CVT mesh ----
+        self.report_step("read_ecology")
         mesh, mwarnings = _load_cvt_mesh(self)
         warnings.extend(mwarnings)
         if mesh is None:
@@ -114,9 +116,12 @@ class EcologyEngine(BaseEngine):
         # Authoritative land/ocean split: water_class (connectivity fallback
         # for legacy meshes), never a bare elevation sign and never crust_type
         # (that is the plate split, not the surface water split).
+        self.report_step("biosphere", 0, n_cells)
         is_land_arr = resolve_land_mask(mesh.cells)
         biome_counts: dict[str, int] = {}
         for i, cell in enumerate(mesh.cells):
+            if self.on_step and i and i % 1024 == 0:
+                self.report_step("biosphere", i, n_cells)
             is_ocean = not is_land_arr[i]
             eco = classify_cell_ecology(
                 temperature_c=cell.temperature_C,
@@ -143,11 +148,14 @@ class EcologyEngine(BaseEngine):
             biome_counts[eco.biome.value] = biome_counts.get(eco.biome.value, 0) + 1
 
         # ---- 5. Biogeographic partition (realm → province) ----
+        self.report_step("biosphere", n_cells, n_cells)
+        self.report_step("provinces")
         province_ids, province_meta = partition_biogeographic_provinces(mesh)
         for cell, pid in zip(mesh.cells, province_ids, strict=True):
             cell.biogeographic_province = pid
 
         # ---- 6. Write ecology data back to source mesh ----
+        self.report_step("save_ecology")
         _write_mesh_with_ecology(mesh, self.maps_output_dir, planet_id)
 
         # ---- 7. Write summary YAML ----

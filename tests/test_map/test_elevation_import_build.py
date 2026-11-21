@@ -152,15 +152,48 @@ def test_full_climate_build_reads_imported_water_mask_and_sea_datum(imported_wor
     original = climate_simulator.simulate_climate
     used_datums = []
 
-    def capture(mesh, config):
+    def capture(mesh, config, **kwargs):
         used_datums.append(config.sea_level_offset_m)
-        return original(mesh, config)
+        return original(mesh, config, **kwargs)
 
     monkeypatch.setattr(climate_simulator, "simulate_climate", capture)
-    results = run_pipeline([AstronomyEngine, GeologicalEngine, ClimateEngine], world, seed=42)
+    events = []
+    results = run_pipeline(
+        [AstronomyEngine, GeologicalEngine, ClimateEngine],
+        world,
+        seed=42,
+        on_progress=events.append,
+    )
     assert [r.engine_name for r in results] == ["astronomy", "geological", "climate"]
     assert all(r.success for r in results), results
     assert used_datums == [2000.0]
+    assert [event.step.name for event in events if event.engine == "geological" and event.step] == [
+        "prepare_terrain",
+        "read_elevation",
+        "mesh",
+        "sample_elevation",
+        "export",
+    ]
+    climate_steps = [event.step for event in events if event.engine == "climate" and event.step]
+    assert list(dict.fromkeys(step.name for step in climate_steps)) == [
+        "reading",
+        "temperature",
+        "wind",
+        "ocean",
+        "precipitation",
+        "koppen",
+        "writeback",
+        "save_climate",
+        "export_climate",
+        "summarize_climate",
+    ]
+    months = [
+        step
+        for step in climate_steps
+        if step.name == "precipitation" and step.completed is not None
+    ]
+    assert months[0].completed == 0 and months[0].pass_number == 1
+    assert months[-1].completed == months[-1].total
     mesh = load_cvt_mesh(world / "maps" / "planet_gaia" / MESH_FILENAME)
     for cell in mesh["cells"]:
         assert cell["water_class"] == ("land" if cell["lon"] < 0 else "ocean")

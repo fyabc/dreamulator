@@ -11,7 +11,7 @@ from dreamulator.resolver import LayerResolver
 from dreamulator.utils.logging import setup_logging
 
 from .base import BaseEngine, EngineResult
-from .progress import PipelineEvent, StageState
+from .progress import EngineStep, PipelineEvent, StageState
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -20,6 +20,15 @@ if TYPE_CHECKING:
 logger = setup_logging()
 
 _console = Console()
+
+
+def _attach_step_observer(
+    engine: BaseEngine, observe: Callable[[PipelineEvent], None], *, bootstrap: bool = False
+) -> None:
+    def report(step: EngineStep) -> None:
+        observe(PipelineEvent(engine.name, engine.layer, StageState.RUNNING, bootstrap, step=step))
+
+    engine.on_step = report
 
 
 def topological_sort(engines: list[type[BaseEngine]]) -> list[type[BaseEngine]]:
@@ -81,7 +90,7 @@ def run_pipeline(
         only_engine: If set, run only this engine and its dependencies.
         branch: Branch name to build (None for root world).
         start_layer: Start building from this layer (skip earlier layers).
-        on_progress: Observe real engine boundaries, without estimating a percentage.
+        on_progress: Observe engine boundaries and reported steps without estimating progress.
 
     Returns:
         List of EngineResults from each engine run.
@@ -117,7 +126,14 @@ def run_pipeline(
 
     if on_progress:
         for engine_cls in sorted_engines:
-            on_progress(PipelineEvent(engine_cls.name, engine_cls.layer, StageState.PENDING))
+            on_progress(
+                PipelineEvent(
+                    engine_cls.name,
+                    engine_cls.layer,
+                    StageState.PENDING,
+                    planned_steps=engine_cls.progress_steps,
+                )
+            )
 
     # Create resolver for layer-aware path resolution
     resolver = LayerResolver(world_dir, branch)
@@ -232,6 +248,7 @@ def run_pipeline(
         _t0 = _time.time()
         if on_progress:
             on_progress(PipelineEvent(engine.name, engine.layer, StageState.RUNNING))
+            _attach_step_observer(engine, on_progress)
         try:
             result = engine.run(force=should_force)
         except Exception as error:
@@ -401,8 +418,15 @@ def _bootstrap_missing_upstream(
         )
         if on_progress:
             on_progress(
-                PipelineEvent(engine.name, engine.layer, StageState.RUNNING, bootstrap=True)
+                PipelineEvent(
+                    engine.name,
+                    engine.layer,
+                    StageState.RUNNING,
+                    bootstrap=True,
+                    planned_steps=engine.progress_steps,
+                )
             )
+            _attach_step_observer(engine, on_progress, bootstrap=True)
         try:
             result = engine.run()
         except Exception as error:

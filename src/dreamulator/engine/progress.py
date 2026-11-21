@@ -1,4 +1,4 @@
-"""Stage boundaries observed while executing a pipeline."""
+"""Stage boundaries and engine steps observed while executing a pipeline."""
 
 from dataclasses import dataclass
 from enum import StrEnum
@@ -19,6 +19,17 @@ class StageState(StrEnum):
 
 
 @dataclass(frozen=True)
+class EngineStep:
+    """A named computation with optional units completed and iteration number."""
+
+    name: str
+    completed: int | None = None
+    total: int | None = None
+    pass_number: int | None = None
+    plan: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True)
 class PipelineEvent:
     """An actual engine boundary, including source-context preparation."""
 
@@ -27,3 +38,5 @@ class PipelineEvent:
     state: StageState
     bootstrap: bool = False
     errors: tuple[str, ...] = ()
+    step: EngineStep | None = None
+    planned_steps: tuple[str, ...] | None = None

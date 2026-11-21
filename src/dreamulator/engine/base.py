@@ -2,12 +2,16 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from dreamulator.engine.progress import EngineStep
 from dreamulator.models.layers import Layer
 from dreamulator.utils.rng import create_rng
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class EngineResult(BaseModel):
@@ -44,6 +48,7 @@ class BaseEngine(ABC):
     input_files: list[str] = []
     optional_input_files: list[str] = []
     output_files: list[str] = []
+    progress_steps: tuple[str, ...] = ()
 
     def __init__(
         self,
@@ -68,6 +73,7 @@ class BaseEngine(ABC):
         self.world_dir = world_dir
         self.seed = seed
         self.rng = create_rng(seed)
+        self.on_step: Callable[[EngineStep], None] | None = None
 
         # Layer-aware paths
         self.layer_input_dirs = layer_input_dirs or {}
@@ -77,6 +83,18 @@ class BaseEngine(ABC):
         )
         # Unified maps output directory (top-level maps/ for the world or branch)
         self.maps_output_dir = maps_output_dir or (world_dir / "maps")
+
+    def report_step(
+        self,
+        name: str,
+        completed: int | None = None,
+        total: int | None = None,
+        *,
+        pass_number: int | None = None,
+        plan: tuple[str, ...] | None = None,
+    ) -> None:
+        if self.on_step is not None:
+            self.on_step(EngineStep(name, completed, total, pass_number, plan))
 
     def find_input(self, relative_path: str) -> Path | None:
         """Find an input file by searching layer input and derived directories.
