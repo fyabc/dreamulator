@@ -56,6 +56,12 @@ export function temperatureTrialPath(origin: TemperatureOrigin, draft?: string, 
   return `/playground?${search}`
 }
 
+export function temperatureTrialMapPath({ world, planet, branch }: TemperatureOrigin) {
+  const search = new URLSearchParams({ trial: 'climate' })
+  if (branch) search.set('branch', branch)
+  return `/worlds/${encodeURIComponent(world)}/map/${encodeURIComponent(planet)}?${search}`
+}
+
 export function temperatureTrialReturnPath({ world, planet, branch }: TemperatureOrigin, trial: URLSearchParams) {
   if (!world || !planet) return '/help'
   const from = trial.get('from')

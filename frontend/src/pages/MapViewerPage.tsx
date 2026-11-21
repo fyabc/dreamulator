@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import ImportElevationButton from '../components/map/ImportElevationButton'
 import TerrainSourceSelect from '../components/map/TerrainSourceSelect'
@@ -27,9 +27,10 @@ import TimeControl from '../components/map/TimeControl'
 import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
 import { MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
+import { MapTemperatureLegend, trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
 import { readRegionBoundary, readRegionWindow, REGION_WINDOW_PARAM } from '../viewers/map/regionWindow'
 import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
-import { temperatureTrialPath } from '../playground/temperatureDraft'
+import { useMapTemperatureTrial } from '../viewers/map/useTemperatureTrialPreview'
 
 export default function MapViewerPage() {
   const { worldName, planetId: routePlanetId } = useParams<{
@@ -72,6 +73,16 @@ export default function MapViewerPage() {
 
   // Left panel drawer (mobile only)
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
+  const trialFromClimate = searchParams.get('trial') === 'climate'
+  const trialReady = Boolean(worldName && selectedPlanet && meta && elevation)
+  const trial = useMapTemperatureTrial()
+  const trialOpen = trial.open
+  const trialActive = trial.preview !== null
+  const trialLegend = !cleanMode && trial.preview && <MapTemperatureLegend preview={trial.preview} onRestore={trial.restore} />
+  const openTrial = () => {
+    setLeftPanelOpen(false)
+    trial.openPanel()
+  }
 
   // Effective zoom (reported by MapViewer for status bar display)
   const [displayZoom, setDisplayZoom] = useState(1)
@@ -90,7 +101,15 @@ export default function MapViewerPage() {
   })
 
   // Forward current lighting (sun/season/night) + branch to the 3D globe link.
-  const globeQS = searchParams.toString() ? `?${searchParams.toString()}` : ''
+  const globeSearch = new URLSearchParams(searchParams)
+  globeSearch.delete('trial')
+  const globeQS = globeSearch.size ? `?${globeSearch}` : ''
+  const backSearch = new URLSearchParams()
+  if (selectedBranch) backSearch.set('branch', selectedBranch)
+  if (trialFromClimate) {
+    backSearch.set('tab', 'climate')
+    if (selectedPlanet) backSearch.set('planet', selectedPlanet)
+  }
 
   if (!worldName) {
     return <div className="text-center py-12 text-gray-400">{t('status.noWorld')}</div>
@@ -102,11 +121,10 @@ export default function MapViewerPage() {
       : 'atlas-workbench flex flex-col'}>
       {!cleanMode && (
       <MapWorkbenchToolbar title={currentPlanetName ?? selectedPlanet ?? t('title.mapFallback')} view="map"
-        backTo={`/worlds/${worldName}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
+        backTo={`/worlds/${worldName}${backSearch.size ? `?${backSearch}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/globe/${selectedPlanet}${globeQS}` : undefined}
-        trialTo={selectedPlanet && meta && elevation ? temperatureTrialPath({ world: worldName, planet: selectedPlanet, branch: selectedBranch },
-          undefined, { kind: 'map', search: searchParams }) : undefined}
-        layersOpen={leftPanelOpen} onToggleLayers={() => setLeftPanelOpen((open) => !open)}>
+        trialPanel={trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trialOpen, onToggle: trialOpen ? trial.closePanel : openTrial } : undefined}
+        layersOpen={leftPanelOpen && !trialOpen && !trialActive} onToggleLayers={trialActive || trialOpen ? undefined : () => setLeftPanelOpen((open) => !open)}>
         {meta?.elevation_import && <TerrainSourceSelect value={terrainSource} onChange={setTerrainSource}
           width={meta.width} height={meta.height} cells={cvtMesh?.cells.length} />}
         {selectedPlanet && (
@@ -114,7 +132,10 @@ export default function MapViewerPage() {
             worldName={worldName!}
             planetId={selectedPlanet}
             branch={selectedBranch}
-            onImported={handleImported}
+            onImported={(result) => {
+              trial.replaceElevation()
+              handleImported(result)
+            }}
           />
         )}
 
@@ -170,9 +191,11 @@ export default function MapViewerPage() {
           selectedPoint={selectedCells.size === 1 ? selectedCellData : null} />
       )}
       {!cleanMode && cvtMesh && (
+        <div className={trialActive ? 'invisible' : undefined}>
         <ClimateLegend layer={activeMainLayer} mesh={cvtMesh} monthlyMode={monthlyMode}
           monthlyData={monthlyThematic ? monthlyData : null} monthlyLoading={monthlyLoading}
           monthIndex={monthlyMonth} yearlyData={yearlyData} />
+        </div>
       )}
       {/* Error banner */}
       {worldPlanetsError && (
@@ -191,11 +214,10 @@ export default function MapViewerPage() {
           } border-b px-4 py-2 text-sm text-center`}
         >
           {importMsg.text}
-          {importMsg.temperatureOrigin && <Link
-            to={temperatureTrialPath(importMsg.temperatureOrigin, undefined, { kind: 'map', search: searchParams })}
+          {importMsg.temperatureOrigin && trialReady && <button type="button" onClick={openTrial}
             className="mx-2 inline-flex min-h-11 items-center font-medium text-neon-cyan underline underline-offset-4">
             {t('msg.tryTemperature')}
-          </Link>}
+          </button>}
         </div>
       )}
 
@@ -207,7 +229,7 @@ export default function MapViewerPage() {
           <div className="flex-1 flex flex-col min-h-0">
             {elevation ? (
               <>
-                <div className="flex-1 min-h-0">
+                <div className="relative flex-1 min-h-0">
                   <MapViewer
                     metadata={meta ?? null}
                     elevation={elevation}
@@ -215,6 +237,7 @@ export default function MapViewerPage() {
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
                     layers={layerState.layers}
+                    trialTemperature={trial.texture}
 
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
@@ -242,13 +265,16 @@ export default function MapViewerPage() {
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
+                  {trialLegend}
                 </div>
                 {!cleanMode && (
+                  <div className={trialActive ? 'invisible' : undefined}>
                   <MobileCellCard
                     cell={selectedCells.size === 1 ? selectedCellData : null}
                     cursor={cursor}
                     onClose={clearSelection}
                   />
+                  </div>
                 )}
               </>
             ) : (
@@ -267,7 +293,7 @@ export default function MapViewerPage() {
             )}
           </div>
 
-          {!cleanMode && leftPanelOpen && (
+          {!cleanMode && !trialOpen && !trialActive && leftPanelOpen && (
             <MapLayerDrawer onClose={() => setLeftPanelOpen(false)}>
               <TimeControl
                 monthlyMode={monthlyMode}
@@ -316,6 +342,7 @@ export default function MapViewerPage() {
           {/* Left panel: layers */}
           {!cleanMode && (
           <div className="w-56 shrink-0 bg-space-panel border-r border-space-border overflow-y-auto p-3 space-y-4">
+            {trialActive ? <p className="text-xs leading-relaxed text-gray-400">{t('playground:trial.layersPreserved')}</p> : <>
             <TimeControl
               monthlyMode={monthlyMode}
               monthlyData={monthlyData}
@@ -354,6 +381,7 @@ export default function MapViewerPage() {
                 onEnabledChange={setDayNightEnabled}
               />
             </div>
+            </>}
           </div>
           )}
 
@@ -369,6 +397,7 @@ export default function MapViewerPage() {
                     voronoiCells={voronoiCells}
                     cvtMesh={cvtMesh}
                     layers={layerState.layers}
+                    trialTemperature={trial.texture}
 
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
@@ -396,6 +425,7 @@ export default function MapViewerPage() {
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
+                  {trialLegend}
 
                   {/* Recording control — float in the map view's bottom-right
                       corner.  Fully hidden in clean mode (zero UI while
@@ -414,12 +444,12 @@ export default function MapViewerPage() {
 
                   {/* Base-map water/land legend — bottom-left, only while the
                       terrain or landsea base map is the active main layer. */}
-                  {!cleanMode && (
+                  {!cleanMode && !trialActive && (
                     <MapLegend visible={activeMainLayer === 'terrain' || activeMainLayer === 'landsea'} />
                   )}
                 </div>
                 {!cleanMode && (
-                  <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={hoveredCellData} />
+                  <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={trialActive ? null : hoveredCellData} />
                 )}
               </>
             ) : (
@@ -442,7 +472,7 @@ export default function MapViewerPage() {
           {!cleanMode && (
           <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border flex flex-col min-h-0">
             {/* Scrollable inspector area */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-3">
+            <div className={`flex-1 min-h-0 overflow-y-auto p-3${trialActive || trialOpen ? ' invisible' : ''}`}>
               <MapCellInspector
                 cell={inspectorCell}
                 cvtMesh={cvtMesh}
@@ -483,6 +513,8 @@ export default function MapViewerPage() {
           </div>
           )}
         </div>
+
+        <div className="contents" ref={trial.attachPanel} />
 
 {/* Help is now a standalone page at /help, opened via the ? button above. */}
       </div>

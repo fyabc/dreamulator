@@ -56,6 +56,7 @@ export interface GlobeRegionFlight { window: RegionWindow; radiusKm: number; sca
 
 interface GlobeViewerProps {
   texture: THREE.Texture | null
+  trialTemperature?: THREE.Texture | null
   /** Layer-composite pass (useGPUTerrain) — called once per frame before the
    *  scene renders; refreshes the shared composited texture when dirty. */
   renderComposite?: (renderer: THREE.WebGLRenderer) => void
@@ -331,8 +332,13 @@ function RegionOutline({ boundary }: { boundary: readonly LonLat[] }) {
   )
 }
 
+const preserveTemperaturePalette: THREE.Material['onBeforeCompile'] = shader => {
+  shader.fragmentShader = shader.fragmentShader.replace('#include <colorspace_fragment>', '')
+}
+
 interface GlobeSceneProps {
   texture: THREE.Texture | null
+  trialTemperature?: THREE.Texture | null
   renderComposite?: (renderer: THREE.WebGLRenderer) => void
   distanceRef: React.MutableRefObject<number>
   onCellHover?: (lon: number, lat: number) => void
@@ -374,7 +380,7 @@ interface NorthAnimState {
 }
 
 function GlobeScene({
-  texture, renderComposite, distanceRef, onCellHover, onCellClick, onHoverOut,
+  texture, trialTemperature, renderComposite, distanceRef, onCellHover, onCellClick, onHoverOut,
   vertices, regions, hoveredCellId, selectedCellIds, regionBoundary, regionFocus,
   regionMoveRevision, scalePreview = false, regionFlight, regionDetail,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
@@ -749,7 +755,9 @@ function GlobeScene({
         } : undefined}
       >
         <sphereGeometry args={[SPHERE_RADIUS, 64, 32]} />
-        {texture && scalePreview && regionDetail ? (
+        {trialTemperature ? (
+          <meshBasicMaterial map={trialTemperature} toneMapped={false} onBeforeCompile={preserveTemperaturePalette} />
+        ) : texture && scalePreview && regionDetail ? (
           <GlobeRegionMaterial map={texture} detail={regionDetail} />
         ) : texture ? (
           <meshStandardMaterial map={texture} roughness={0.9} metalness={0.05} />
@@ -807,7 +815,7 @@ function TransitionPrompt({ progress, label }: { progress: number; label: string
 // ---------------------------------------------------------------------------
 
 export default function GlobeViewer({
-  texture, renderComposite, onTransition, transitionLabel,
+  texture, trialTemperature, renderComposite, onTransition, transitionLabel,
   onCellHover, onCellClick, onHoverOut, onDistanceChange,
   vertices, regions, hoveredCellId, selectedCellIds, regionBoundary, regionFocus,
   regionMoveRevision, scalePreview = false, regionFlight, regionDetail,
@@ -851,7 +859,7 @@ export default function GlobeViewer({
           style={{ background: '#030308', borderRadius: frameless ? 0 : '0.75rem' }}
         >
           <GlobeScene
-            texture={texture} renderComposite={renderComposite} distanceRef={distanceRef}
+            texture={texture} trialTemperature={trialTemperature} renderComposite={renderComposite} distanceRef={distanceRef}
             onCellHover={onCellHover} onCellClick={onCellClick}
             onHoverOut={onHoverOut}
             vertices={vertices} regions={regions}

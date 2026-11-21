@@ -18,6 +18,7 @@ const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage'))
 const ImportPage = lazy(() => import('./pages/ImportPage'))
 const NewWorldPage = lazy(() => import('./pages/NewWorldPage'))
 const CreationMapPage = lazy(() => import('./pages/CreationMapPage'))
+const MapWorkbenchRoute = lazy(() => import('./pages/MapWorkbenchRoute'))
 
 function PlanetMapRoute() {
   const [search] = useSearchParams()
@@ -60,11 +61,12 @@ function App() {
               <Route path="projects/:projectId" element={<LegacyProjectLink />} />
             </>}
             <Route path="worlds/:worldName" element={<WorldDetail />} />
-            <Route path="worlds/:worldName/map" element={<MapViewerPage />} />
-            <Route path="worlds/:worldName/map/:planetId" element={<PlanetMapRoute />} />
+            <Route element={<MapWorkbenchRoute />}>
+              <Route path="worlds/:worldName/map" element={<MapViewerPage />} />
+              <Route path="worlds/:worldName/map/:planetId" element={<PlanetMapRoute />} />
+              <Route path="worlds/:worldName/globe/:planetId?" element={<GlobeViewerPage />} />
+            </Route>
             <Route path="worlds/:worldName/viewer3d" element={<StellarSystemViewerPage />} />
-            <Route path="worlds/:worldName/globe" element={<GlobeViewerPage />} />
-            <Route path="worlds/:worldName/globe/:planetId" element={<GlobeViewerPage />} />
             {staticMode && <Route path="worlds/:worldName/sky/:bodyId?" element={<SkyViewerPage />} />}
             <Route path="packs" element={<PackViewerPage />} />
             <Route path="playground" element={<PlaygroundPage />} />

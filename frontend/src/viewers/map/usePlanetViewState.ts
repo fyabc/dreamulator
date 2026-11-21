@@ -333,30 +333,15 @@ export function usePlanetViewState(
   }, [stellarSystem, worldPlanets])
 
   // --- Planet selection reconciliation ---
-  // Mirror of the route: state initialised from the (optional) route segment,
-  // redirected to the branch's first available map when the ID is stale
-  // (map IDs differ per branch — climate-dev stores "planet_earth" while
-  // terrain-dev stores "earth" — so a branch switch can leave a 404ing ID).
-  const [selectedPlanet, setSelectedPlanet] = useState(routePlanetId ?? '')
+  const selectedPlanet = routePlanetId ?? mapPlanets?.[0] ?? worldPlanets?.[0]?.id ?? ''
   useEffect(() => {
-    if (selectedPlanet && mapPlanets && mapPlanets.includes(selectedPlanet)) return
-    if (selectedPlanet && !mapPlanets) return // list not loaded yet — wait
-
-    if (mapPlanets && mapPlanets.length > 0) {
-      const target = mapPlanets[0]
-      setSelectedPlanet(target)
+    if (mapPlanets?.length && (!routePlanetId || !mapPlanets.includes(routePlanetId))) {
       const qs = searchParams.toString()
-      navigate(`/worlds/${worldName}/${viewKind}/${target}${qs ? `?${qs}` : ''}`, {
+      navigate(`/worlds/${worldName}/${viewKind}/${mapPlanets[0]}${qs ? `?${qs}` : ''}`, {
         replace: true,
       })
-      return
     }
-    // No maps available anywhere — fall back to a defined planet ID (no map
-    // to navigate to; the page shows its no-data state).
-    if (!selectedPlanet && worldPlanets && worldPlanets.length > 0) {
-      setSelectedPlanet(worldPlanets[0].id)
-    }
-  }, [mapPlanets, worldPlanets, selectedPlanet, navigate, worldName, searchParams, viewKind])
+  }, [mapPlanets, routePlanetId, navigate, worldName, searchParams, viewKind])
 
   // --- Map data queries ---
   const { data: meta, isError: metaError } = useQuery({

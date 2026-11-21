@@ -158,6 +158,7 @@ interface UseGPUTerrainOptions {
    *  UV u=0 maps to lon=+180°, mirroring the equirectangular convention).
    *  Set false for PlaneGeometry (2D map, u=0 = left = lon=-180°). */
   flipHorizontal?: boolean
+  trialTemperature?: THREE.DataTexture | null
   /** Subsolar longitude in radians — drives the day/night overlay. */
   sunLonRad?: number
   /** Solar declination in radians — drives the day/night overlay. */
@@ -208,6 +209,7 @@ export default function useGPUTerrain({
   monthlyPressureError = null,
   monthlySlp = null,
   uccTexture = null,
+  trialTemperature = null,
   flipHorizontal = false,
   sunLonRad = 0,
   sunDecRad = 0,
@@ -357,23 +359,23 @@ export default function useGPUTerrain({
     u.u_featureOp.value = layers.boundaries ?? 0
     u.u_coastlinesOp.value = coastOpacity
     const d = composite.displayMat.uniforms
-    d.u_useComposite.value = overlayActive ? 1 : 0
-    d.u_directBase.value = coastOpacity > 0 ? baked.terrainWithCoastlines : baked.terrainThematic
+    d.u_useComposite.value = overlayActive && !trialTemperature ? 1 : 0
+    d.u_directBase.value = trialTemperature ?? (coastOpacity > 0 ? baked.terrainWithCoastlines : baked.terrainThematic)
     // Minification: NearestFilter when cell layers are visible (crisp cell edges
     // when zoomed out), LinearFilter for smooth terrain-only view.
     // Magnification: always LinearFilter — smooth interpolation when zoomed in,
     // eliminating the "pixel block" look at high zoom levels.
     composite.target.texture.minFilter = overlayActive ? THREE.NearestFilter : THREE.LinearFilter
     composite.target.texture.magFilter = THREE.LinearFilter
-  }, [composite, baked, layers, overlayActive, coastOpacity, monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError, monthlySlp, uccTexture])
+  }, [composite, baked, layers, overlayActive, coastOpacity, monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError, monthlySlp, uccTexture, trialTemperature])
 
   // --- Sun uniforms on the display material (smooth slider, no re-composite) ---
   useEffect(() => {
     if (!composite) return
     composite.displayMat.uniforms.u_sunLonRad.value = sunLonRad
     composite.displayMat.uniforms.u_sunDecRad.value = sunDecRad
-    composite.displayMat.uniforms.u_dayNight.value = dayNight
-  }, [composite, sunLonRad, sunDecRad, dayNight])
+    composite.displayMat.uniforms.u_dayNight.value = trialTemperature ? 0 : dayNight
+  }, [composite, sunLonRad, sunDecRad, dayNight, trialTemperature])
 
   // --- Composite pass — consumers call it once per frame, before the main render. ---
   // Re-composites only while overlay layers are active (one fullscreen quad,
@@ -383,7 +385,7 @@ export default function useGPUTerrain({
   // by one would leave the other's framebuffer stale.
   const renderComposite = useCallback(
     (renderer: THREE.WebGLRenderer) => {
-      if (!composite || !overlayActive) return
+      if (!composite || !overlayActive || trialTemperature) return
       // The composite pass is just layer blending, not a final render.  Disable
       // tone mapping so the composite blends the raw layer colours unchanged;
       // colour space is handled symmetrically by the sRGB target + sRGB sources.
@@ -397,7 +399,7 @@ export default function useGPUTerrain({
       renderer.toneMapping = prevTM
       renderer.toneMappingExposure = prevExp
     },
-    [composite, overlayActive],
+    [composite, overlayActive, trialTemperature],
   )
 
   /** The texture consumers (3D globe) should sample: the FBO

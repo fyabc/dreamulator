@@ -70,6 +70,7 @@ interface MapViewerProps {
   solarDeclinationDeg?: number
   /** Enable the day/night overlay. */
   dayNight?: boolean
+  trialTemperature?: THREE.DataTexture | null
   /** Monthly temperature/precipitation/pressure textures (Phase 4 / debt 24),
    *  baked by the caller.  Pressure is monthly-only (no annual counterpart). */
   monthlyTemperature?: THREE.DataTexture | null
@@ -133,6 +134,7 @@ export default function MapViewer({
   sunLongitudeDeg = 0,
   solarDeclinationDeg = 0,
   dayNight = false,
+  trialTemperature = null,
   monthlyTemperature = null,
   monthlyPrecipitation = null,
   monthlyPressure = null,
@@ -245,6 +247,7 @@ export default function MapViewer({
   const renderLayers = useRafCoalesced(layers)
 
   const { material: gpuMaterial, renderComposite: gpuRenderComposite } = useGPUTerrain({
+    trialTemperature,
     elevation, width: mapW, height: mapH, seaLevel,
     terrainSource, meshWidth: meshSize.width, meshHeight: meshSize.height,
     elevMinM: elevMin, elevMaxM: elevMax,
@@ -625,7 +628,7 @@ export default function MapViewer({
     >
       <canvas ref={canvasRef} className="absolute inset-0" style={{ background: '#0a0a1a' }} />
 
-      {particleMode && (
+      {particleMode && !trialTemperature && (
         <>
           <FlowParticles
             projectRef={mapPointProjectRef}
@@ -672,8 +675,8 @@ export default function MapViewer({
         hoveredCell={hoveredCell}
         selectedCells={selectedCells}
         regionBoundary={regionBoundary}
-        currentOpacity={particleMode ? 0 : layers?.currents ?? 0}
-        windOpacity={particleMode ? 0 : layers?.winds ?? 0}
+        currentOpacity={particleMode || trialTemperature ? 0 : layers?.currents ?? 0}
+        windOpacity={particleMode || trialTemperature ? 0 : layers?.winds ?? 0}
         monthlyWindEast={monthlyWindEast}
         monthlyWindNorth={monthlyWindNorth}
         month={month}

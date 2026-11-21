@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
 import { isStaticMode } from '../../api/mode'
-import { temperatureTrialPath } from '../../playground/temperatureDraft'
+import { temperatureTrialMapPath } from '../../playground/temperatureDraft'
 import { projectButton } from '../projects/SaveProjectResult'
 
 export default function TemperatureTrialEntry({ world, branch, preferred }: {
@@ -30,7 +30,7 @@ export default function TemperatureTrialEntry({ world, branch, preferred }: {
         {planets.map(id => <option key={id} value={id}>{catalog.data?.bodies?.find(body => body.id === id)?.name ?? id}</option>)}
       </select>}
       <Link className={`${projectButton} inline-flex min-h-11 items-center justify-center text-sm`}
-        to={temperatureTrialPath({ world, branch, planet })}>{t('open')}</Link>
+        to={temperatureTrialMapPath({ world, branch, planet })}>{t('open')}</Link>
     </div> : maps.isPending ? <p role="status" className="text-sm text-gray-400">{t('loading')}</p>
       : <div className="text-sm">
         <p className="text-gray-400">{t(maps.isError ? 'error' : 'noElevation')}</p>

@@ -14,7 +14,6 @@ import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { temperatureTrialPath } from '../playground/temperatureDraft'
 import * as THREE from 'three'
 import GlobeViewer, { type GlobeVertex, type GlobeRegion, type GlobeRegionFlight } from '../viewers/GlobeViewer'
 import BranchSelector from '../components/BranchSelector'
@@ -27,7 +26,9 @@ import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import ClimateLegend from '../components/map/ClimateLegend'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
 import { MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
+import { MapTemperatureLegend, trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
+import { useMapTemperatureTrial } from '../viewers/map/useTemperatureTrialPreview'
 import useRafCoalesced from '../viewers/map/useRafCoalesced'
 import { buildCellKDTree, type KDTree3D } from '../components/map/utils/kdtree'
 import type { PointProjector, VoronoiCell } from '../viewers/map/types'
@@ -233,6 +234,14 @@ export default function GlobeViewerPage() {
 
   // --- Mobile panel state ---
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
+  const trial = useMapTemperatureTrial()
+  const trialReady = Boolean(worldName && selectedPlanet && meta && elevation)
+  const trialActive = trial.preview !== null
+  const trialLegend = !cleanMode && trial.preview && <MapTemperatureLegend preview={trial.preview} onRestore={trial.restore} />
+  const openTrial = () => {
+    setLeftPanelOpen(false)
+    trial.openPanel()
+  }
 
   // --- Render ---
   if (!worldName) {
@@ -249,9 +258,8 @@ export default function GlobeViewerPage() {
       <MapWorkbenchToolbar title={currentPlanet?.name ?? selectedPlanet ?? t('title.globe')} view="globe"
         backTo={`/worlds/${worldName}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/map/${selectedPlanet}${mapQS}` : undefined}
-        trialTo={selectedPlanet && meta && elevation ? temperatureTrialPath({ world: worldName, planet: selectedPlanet, branch: selectedBranch },
-          undefined, { kind: 'globe', search: searchParams }) : undefined}
-        layersOpen={leftPanelOpen} onToggleLayers={() => setLeftPanelOpen((open) => !open)}>
+        trialPanel={trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trial.open, onToggle: trial.open ? trial.closePanel : openTrial } : undefined}
+        layersOpen={leftPanelOpen && !trial.open && !trialActive} onToggleLayers={trialActive || trial.open ? undefined : () => setLeftPanelOpen((open) => !open)}>
         {meta?.elevation_import && <TerrainSourceSelect value={terrainSource} onChange={setTerrainSource}
           width={meta.width} height={meta.height} cells={cvtMesh?.cells.length} />}
         {selectedPlanet && (
@@ -259,7 +267,10 @@ export default function GlobeViewerPage() {
             worldName={worldName!}
             planetId={selectedPlanet}
             branch={selectedBranch}
-            onImported={handleImported}
+            onImported={(result) => {
+              trial.replaceElevation()
+              handleImported(result)
+            }}
           />
         )}
         <GeographyRasterButton
@@ -309,11 +320,10 @@ export default function GlobeViewerPage() {
           importMsg.ok ? 'bg-green-900/20 border-green-700/30 text-green-300' : 'bg-red-900/20 border-red-700/30 text-red-300'
         }`}>
           {importMsg.text}
-          {importMsg.temperatureOrigin && <Link
-            to={temperatureTrialPath(importMsg.temperatureOrigin, undefined, { kind: 'globe', search: searchParams })}
+          {importMsg.temperatureOrigin && trialReady && <button type="button" onClick={openTrial}
             className="mx-2 inline-flex min-h-11 items-center font-medium text-neon-cyan underline underline-offset-4">
             {t('msg.tryTemperature')}
-          </Link>}
+          </button>}
         </div>
       )}
       {awaitingBuild && !cleanMode && (
@@ -328,12 +338,12 @@ export default function GlobeViewerPage() {
           }}
           onRegionScale={scalePreview && regionFocus
             ? (scale) => setRegionFlight({ window: regionFocus, scale, radiusKm: planetRadiusM / 1000 }) : undefined}
-          scaleDetail={detailEnabled ? regionDetail ? 'ready' : savedWorld.isPending || (savedDetail && detail.isPending)
+          scaleDetail={!trialActive && detailEnabled ? regionDetail ? 'ready' : savedWorld.isPending || (savedDetail && detail.isPending)
             ? 'loading' : savedWorld.isError || detail.isError ? 'failed' : 'missing' : undefined}
           scaleAltitudeKm={globeZoom > 1 ? (globeZoom - 1) * planetRadiusM / 1000 : undefined}
           selectedPoint={selectedCells.size === 1 ? selectedCellData : null} />
       )}
-      {!cleanMode && cvtMesh && (
+      {!cleanMode && !trialActive && cvtMesh && (
         <ClimateLegend layer={activeMainLayer} mesh={cvtMesh} monthlyMode={monthlyMode}
           monthlyData={monthlyThematic ? monthlyData : null} monthlyLoading={monthlyLoading}
           monthIndex={monthlyMonth} yearlyData={yearlyData} />
@@ -375,7 +385,8 @@ export default function GlobeViewerPage() {
             ) : (
               <GlobeViewer
                 texture={displayTexture}
-                renderComposite={renderComposite}
+                trialTemperature={trial.texture}
+                renderComposite={trialActive ? undefined : renderComposite}
                 onTransition={handleTransition}
                 onCellHover={handleCellHoverLonLat}
                 onCellClick={handleCellClickLonLat}
@@ -402,7 +413,8 @@ export default function GlobeViewerPage() {
                 globePointProjectRef={globePointProjectRef}
               />
             )}
-            {particleMode ? (
+            {trialLegend}
+            {!trialActive && <>{particleMode ? (
               <>
                 <FlowParticles
                   projectRef={globePointProjectRef}
@@ -454,8 +466,9 @@ export default function GlobeViewerPage() {
               windOpacity={layerState.layers.windError ?? 0}
               deviation
             />
+            </>}
           </div>
-          {!cleanMode && (
+          {!cleanMode && !trialActive && (
             <MobileCellCard
               cell={selectedCells.size === 1 ? selectedCellData : null}
               cursor={cursor}
@@ -464,7 +477,7 @@ export default function GlobeViewerPage() {
           )}
         </div>
 
-        {!cleanMode && leftPanelOpen && (
+        {!cleanMode && !trial.open && !trialActive && leftPanelOpen && (
           <MapLayerDrawer onClose={() => setLeftPanelOpen(false)}>
             <TimeControl
               monthlyMode={monthlyMode}
@@ -508,6 +521,7 @@ export default function GlobeViewerPage() {
           {/* Left panel: layers */}
           {!cleanMode && (
           <div className="w-56 shrink-0 bg-space-panel border-r border-space-border overflow-y-auto p-3 space-y-4">
+            {trialActive ? <p className="text-xs leading-relaxed text-gray-400">{t('playground:trial.layersPreserved')}</p> : <>
             <TimeControl
               monthlyMode={monthlyMode}
               monthlyData={monthlyData}
@@ -541,6 +555,7 @@ export default function GlobeViewerPage() {
                   onEnabledChange={setDayNightEnabled}
                 />
             </div>
+            </>}
           </div>
           )}
 
@@ -572,7 +587,8 @@ export default function GlobeViewerPage() {
           ) : (
             <GlobeViewer
               texture={displayTexture}
-              renderComposite={renderComposite}
+              trialTemperature={trial.texture}
+              renderComposite={trialActive ? undefined : renderComposite}
               onTransition={handleTransition}
               onCellHover={handleCellHoverLonLat}
               onCellClick={handleCellClickLonLat}
@@ -599,7 +615,8 @@ export default function GlobeViewerPage() {
               globePointProjectRef={globePointProjectRef}
             />
           )}
-          {particleMode ? (
+          {trialLegend}
+          {!trialActive && <>{particleMode ? (
             <>
               <FlowParticles
                 projectRef={globePointProjectRef}
@@ -651,6 +668,7 @@ export default function GlobeViewerPage() {
             windOpacity={layerState.layers.windError ?? 0}
             deviation
           />
+          </>}
 
           {/* Recording controls — float in the globe view's bottom-right corner
               (the view area has spare room; the top bar is already crowded).
@@ -680,14 +698,14 @@ export default function GlobeViewerPage() {
           )}
         </div>
         {!cleanMode && (
-          <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={hoveredCellData} />
+          <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={trialActive ? null : hoveredCellData} />
         )}
       </div>
 
       {/* Right panel: cell inspector */}
       {!cleanMode && (
       <div className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border overflow-y-auto p-3">
-        <MapCellInspector
+        {!trialActive && !trial.open && <MapCellInspector
           cell={inspectorCell}
           cvtMesh={cvtMesh}
           planetName={currentPlanet?.name ?? selectedPlanet}
@@ -698,10 +716,12 @@ export default function GlobeViewerPage() {
           monthlyData={monthlyData}
           yearlyData={yearlyData}
           isEarth={worldName === 'earth'}
-        />
+        />}
       </div>
       )}
     </div>
+
+    <div className="contents" ref={trial.attachPanel} />
 
 {/* Help is now a standalone page at /help, opened via the ? button above. */}
   </div>

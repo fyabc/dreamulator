@@ -7,14 +7,14 @@ import MapHelpLink from './MapHelpLink'
 const layerPanelId = 'map-layer-panel'
 const layerButtonId = 'map-layer-button'
 
-export function MapWorkbenchToolbar({ title, view, backTo, switchTo, trialTo, layersOpen, onToggleLayers, children }: {
+export function MapWorkbenchToolbar({ title, view, backTo, switchTo, trialPanel, layersOpen, onToggleLayers, children }: {
   title: string
   view: 'map' | 'globe'
   backTo: string
   switchTo?: string
-  trialTo?: string
+  trialPanel?: { id: string; buttonId: string; open: boolean; onToggle: () => void }
   layersOpen: boolean
-  onToggleLayers: () => void
+  onToggleLayers?: () => void
   children: ReactNode
 }) {
   const { t } = useTranslation('map')
@@ -44,14 +44,16 @@ export function MapWorkbenchToolbar({ title, view, backTo, switchTo, trialTo, la
         </nav>
       )}
       <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 md:col-start-3 md:gap-2">
-        {trialTo && <Link to={trialTo} className="atlas-tool-button text-sm"
-          aria-label={t('workbench.climateTrial')} title={t('workbench.climateTrial')}>
+        {trialPanel && <button id={trialPanel.buttonId} type="button" onClick={trialPanel.onToggle}
+          className="atlas-tool-button text-sm aria-expanded:border-neon-cyan/50 aria-expanded:text-neon-cyan"
+          aria-label={t('workbench.climateTrial')} title={t('workbench.climateTrial')}
+          aria-expanded={trialPanel.open} aria-controls={trialPanel.id}>
           <AtlasIcon name="flask" className="size-4" /> <span className="hidden lg:inline">{t('workbench.climateTrial')}</span>
-        </Link>}
-        <button id={layerButtonId} type="button" aria-expanded={layersOpen} aria-controls={layersOpen ? layerPanelId : undefined}
+        </button>}
+        {onToggleLayers && <button id={layerButtonId} type="button" aria-expanded={layersOpen} aria-controls={layersOpen ? layerPanelId : undefined}
           className="atlas-tool-button text-sm md:hidden" onClick={onToggleLayers}>
           <AtlasIcon name="layers" className="size-4" /> {t('workbench.layers')}
-        </button>
+        </button>}
         <details ref={tools} className="relative" onKeyDown={(event) => {
           if (event.key !== 'Escape' || !tools.current?.open || !event.currentTarget.contains(event.target as Node)) return
           event.preventDefault()

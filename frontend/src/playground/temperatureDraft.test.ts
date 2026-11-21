@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { temperatureTrialPath, temperatureTrialReturnPath } from './temperatureDraft'
+import { temperatureTrialMapPath, temperatureTrialPath, temperatureTrialReturnPath } from './temperatureDraft'
 
 const origin = { world: 'earth', planet: 'planet_earth', branch: 'ERE-if' }
 
 describe('climate experiment navigation', () => {
+  it('opens the 2D map with the lab expanded on the originating branch', () => {
+    expect(temperatureTrialMapPath(origin)).toBe('/worlds/earth/map/planet_earth?trial=climate&branch=ERE-if')
+    expect(temperatureTrialMapPath({ ...origin, branch: null })).toBe('/worlds/earth/map/planet_earth?trial=climate')
+  })
   it.each(['map', 'globe'] as const)('returns to the same %s view and selection', kind => {
     const view = new URLSearchParams({ window: '24.1,121.45,150', layer: 'temperature', monthly: '1', terrain: 'original' })
     const trial = new URL(temperatureTrialPath(origin, undefined, { kind, search: view }), 'https://example.invalid')
