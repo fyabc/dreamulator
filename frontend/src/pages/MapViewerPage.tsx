@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import ImportElevationButton from '../components/map/ImportElevationButton'
 import TerrainSourceSelect from '../components/map/TerrainSourceSelect'
@@ -29,6 +29,7 @@ import RegionWindowPanel from '../components/map/RegionWindowPanel'
 import { MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
 import { readRegionBoundary, readRegionWindow, REGION_WINDOW_PARAM } from '../viewers/map/regionWindow'
 import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
+import { temperatureTrialPath } from '../playground/temperatureDraft'
 
 export default function MapViewerPage() {
   const { worldName, planetId: routePlanetId } = useParams<{
@@ -188,6 +189,11 @@ export default function MapViewerPage() {
           } border-b px-4 py-2 text-sm text-center`}
         >
           {importMsg.text}
+          {importMsg.temperatureOrigin && <Link
+            to={temperatureTrialPath(importMsg.temperatureOrigin, undefined, 'map')}
+            className="mx-2 inline-flex min-h-11 items-center font-medium text-neon-cyan underline underline-offset-4">
+            {t('msg.tryTemperature')}
+          </Link>}
         </div>
       )}
 

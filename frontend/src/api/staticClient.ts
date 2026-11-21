@@ -170,6 +170,17 @@ export interface StaticNarrateUsage {
 }
 
 export const staticApi = {
+  async saveHeightmapWorld(id: string, title: string, archive: Blob) {
+    const { addProject } = await import('../projects/projectStore')
+    const published = await staticApi.listWorlds()
+    if (published.some(world => world.toLowerCase() === id)) throw new Error('This world ID is already in use')
+    return { id: await addProject({ id, name: title, updatedAt: Date.now(), layers: [], creationSnapshot: archive }) }
+  },
+  async getHeightmapWorld(id: string) {
+    const { getProject } = await import('../projects/projectStore')
+    const archive = (await getProject(id))?.creationSnapshot
+    return archive ? (await import('../projects/heightmapWorld')).importHeightmapWorld(archive) : null
+  },
   // World operations (read-only)
   listWorlds: () => fetchStaticJson<string[]>('/worlds.json'),
 

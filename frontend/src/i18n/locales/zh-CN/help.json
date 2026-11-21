@@ -222,6 +222,7 @@
     }
   },
   "start": {
+    "temperatureSamples": "打开地球和 Nacrea 的气候样例",
     "title": "网页快速上手",
     "contents": "帮助目录",
     "local": {

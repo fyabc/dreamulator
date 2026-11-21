@@ -10,7 +10,6 @@ export default function WorldList() {
   const { t } = useTranslation('worlds')
   const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
-  // `?create=1` (the home page's "create from a template") opens the dialog directly.
   const [showCreateDialog, setShowCreateDialog] = useState(() => searchParams.get('create') === '1' && !isStaticMode())
   const [newWorldName, setNewWorldName] = useState('')
   const [newWorldTemplate, setNewWorldTemplate] = useState('minimal')
@@ -52,17 +51,15 @@ export default function WorldList() {
           <h1 className="text-3xl font-bold text-neon-cyan neon-glow-subtle">
             {t('title.list')}
           </h1>
-          {!staticMode && (
-            <button
-              onClick={() => setShowCreateDialog(true)}
+            <Link
+              to="/new-world"
               className="px-4 py-2 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 hover:shadow-[0_0_12px_rgba(0,212,255,0.15)]"
             >
               + {t('action.newWorld')}
-            </button>
-          )}
+            </Link>
         </div>
 
-        {staticMode && <BrowserWorlds published={worlds} />}
+        {staticMode && <BrowserWorlds published={worlds} fromScratch={searchParams.get('create') === '1'} />}
 
         {isLoading && <div className="text-center py-12 text-gray-400">{t('status.loading')}</div>}
 
@@ -110,12 +107,12 @@ export default function WorldList() {
               {staticMode ? t('status.noWorldsStatic') : t('status.noWorlds')}
             </p>
             {!staticMode && (
-              <button
-                onClick={() => setShowCreateDialog(true)}
+              <Link
+                to="/new-world"
                 className="px-6 py-3 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25"
               >
                 {t('action.createFirstWorld')}
-              </button>
+              </Link>
             )}
           </div>
         )}
@@ -186,7 +183,7 @@ export default function WorldList() {
   )
 }
 
-function BrowserWorlds({ published }: { published?: string[] }) {
+function BrowserWorlds({ published, fromScratch }: { published?: string[]; fromScratch: boolean }) {
   const { t, i18n } = useTranslation('worlds', { keyPrefix: 'worldData' })
   const [name, setName] = useState('')
   const navigate = useNavigate()
@@ -198,6 +195,12 @@ function BrowserWorlds({ published }: { published?: string[] }) {
   }
   const create = useMutation({ mutationFn: createProject, onSuccess: open })
   const restore = useMutation({ mutationFn: async (file: File) => {
+    const magic = new Uint8Array(await file.slice(0, 2).arrayBuffer())
+    if (magic[0] === 31 && magic[1] === 139) {
+      const { importHeightmapWorld } = await import('../projects/heightmapWorld')
+      const world = await importHeightmapWorld(file)
+      return (await api.saveHeightmapWorld(world.id, world.title, file)).id
+    }
     const { readWorldBackup } = await import('../projects/worldDataArchive')
     return restoreWorld(await readWorldBackup(file))
   }, onSuccess: open })
@@ -207,7 +210,7 @@ function BrowserWorlds({ published }: { published?: string[] }) {
   const size = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 }).format((bytes ?? 0) / 1e6)
   return <section className="mb-8 space-y-4 rounded border border-space-border bg-space-panel p-4">
     <h2 className="text-xl font-semibold">{t('browserWorlds')}</h2>
-    <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => {
+    {fromScratch && <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => {
       event.preventDefault()
       if (!busy && name.trim()) create.mutate(name)
     }}>
@@ -216,9 +219,9 @@ function BrowserWorlds({ published }: { published?: string[] }) {
           disabled={busy} onChange={(event) => setName(event.currentTarget.value)} />
       </label>
       <button className="rounded border border-space-border px-2 py-1 text-neon-cyan disabled:opacity-50" disabled={busy || !name.trim()}>{t('new')}</button>
-    </form>
+    </form>}
     <label className="flex flex-wrap items-center gap-2 text-sm">{t('import')}
-      <input type="file" className="max-w-full" accept=".tar,.dreamulator" disabled={busy} onChange={(event) => {
+      <input type="file" className="max-w-full" accept=".tar,.gz,.dreamulator" disabled={busy} onChange={(event) => {
         const file = event.currentTarget.files?.[0]
         event.currentTarget.value = ''
         if (file && !busy) restore.mutate(file)
@@ -226,7 +229,7 @@ function BrowserWorlds({ published }: { published?: string[] }) {
     </label>
     {busy && <p role="status">{t('saving')}</p>}
     {(data.isError || create.isError || restore.isError) && <p role="alert" className="text-red-300">
-      {t(restore.isError ? 'importFailed' : create.isError ? 'saveFailed' : 'unreadable')}
+      {t(restore.isError ? 'importFailed' : create.isError ? 'saveFailed' : 'unreadable')}{restore.isError && ` ${restore.error.message}`}
     </p>}
     {bytes !== undefined && <p className="text-sm text-gray-400">{t('usage', { size: `${size} MB` })}</p>}
     {!!local.length && <ul className="space-y-1 text-sm">{local.map((world) => <li key={world.id}>

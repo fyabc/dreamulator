@@ -93,6 +93,9 @@ function GettingStarted() {
         ))}
       </ol>
       <p className="mt-5 text-sm leading-relaxed text-gray-300">{t(`start.${mode}.backup`)}</p>
+      <Link to="/playground" className="mt-3 inline-flex min-h-11 items-center text-sm text-neon-cyan hover:underline">
+        {t('start.temperatureSamples')}
+      </Link>
     </header>
   )
 }

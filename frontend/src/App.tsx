@@ -16,6 +16,13 @@ const PackViewerPage = lazy(() => import('./pages/PackViewerPage'))
 const HelpPage = lazy(() => import('./pages/HelpPage'))
 const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage'))
 const ImportPage = lazy(() => import('./pages/ImportPage'))
+const NewWorldPage = lazy(() => import('./pages/NewWorldPage'))
+const CreationMapPage = lazy(() => import('./pages/CreationMapPage'))
+
+function PlanetMapRoute() {
+  const [search] = useSearchParams()
+  return search.get('creation') === '1' ? <CreationMapPage /> : <MapViewerPage />
+}
 
 const PageFallback = () => (
   <div className="flex items-center justify-center min-h-[60vh]">
@@ -46,6 +53,7 @@ function App() {
             <Route index element={<HomePage />} />
             <Route path="world-info" element={<Navigate to="/worlds" replace />} />
             <Route path="import" element={<ImportPage />} />
+            <Route path="new-world" element={<NewWorldPage />} />
             <Route path="worlds" element={<WorldList />} />
             {staticMode && <>
               <Route path="projects" element={<Navigate to="/worlds" replace />} />
@@ -53,7 +61,7 @@ function App() {
             </>}
             <Route path="worlds/:worldName" element={<WorldDetail />} />
             <Route path="worlds/:worldName/map" element={<MapViewerPage />} />
-            <Route path="worlds/:worldName/map/:planetId" element={<MapViewerPage />} />
+            <Route path="worlds/:worldName/map/:planetId" element={<PlanetMapRoute />} />
             <Route path="worlds/:worldName/viewer3d" element={<StellarSystemViewerPage />} />
             <Route path="worlds/:worldName/globe" element={<GlobeViewerPage />} />
             <Route path="worlds/:worldName/globe/:planetId" element={<GlobeViewerPage />} />

@@ -11,6 +11,7 @@ import LayerDocuments from '../components/LayerDocuments'
 import CivMapEntry from '../components/civmap/CivMapEntry'
 import LayerDag from '../components/LayerDag'
 import LayerTabSection from '../components/world/LayerTabSection'
+import TemperatureTrialEntry from '../components/world/TemperatureTrialEntry'
 import WorldBuildPanel from '../components/world/WorldBuildPanel'
 import { getProject, projectKey, projectRegionPath } from '../projects/projectStore'
 
@@ -105,6 +106,7 @@ export default function WorldDetail() {
     ? ['overview', 'data', 'astronomy', 'planets', 'climate', 'ecology', 'civilization', 'design-notes']
     : [
         'overview',
+        'data',
         'astronomy',
         'planets',
         'climate',
@@ -278,8 +280,9 @@ export default function WorldDetail() {
               ))}
             </div>
 
-            {staticMode && (activeTab === 'data' || offlineData) && <Suspense fallback={<p>{t('worldData.loading')}</p>}>
-              <WorldDataPanel key={worldName} id={worldName} published={!localWorld} publishedAvailable={!!world} />
+            {(activeTab === 'data' || offlineData) && <Suspense fallback={<p>{t('worldData.loading')}</p>}>
+              <WorldDataPanel key={worldName} id={worldName} published={!localWorld} publishedAvailable={!!world}
+                nativeCreation={!staticMode && world?.metadata?.tags?.includes('browser-heightmap') && !selectedBranch} />
             </Suspense>}
 
             {activeTab === 'overview' && world && (
@@ -713,7 +716,8 @@ export default function WorldDetail() {
               />
             )}
 
-            {activeTab === 'climate' && (
+            {activeTab === 'climate' && <>
+              <TemperatureTrialEntry key={selectedBranch ?? ''} world={worldName!} branch={selectedBranch} preferred={searchParams.get('planet')} />
               <LayerTabSection
                 worldName={worldName!}
                 tab="climate"
@@ -730,7 +734,7 @@ export default function WorldDetail() {
               </div>
                 }
               />
-            )}
+            </>}
 
             {activeTab === 'ecology' && (
               <LayerTabSection

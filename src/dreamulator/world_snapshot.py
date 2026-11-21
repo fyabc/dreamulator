@@ -12,10 +12,13 @@ from io import BytesIO
 from pathlib import Path, PureWindowsPath
 from stat import S_ISDIR, S_ISREG
 from tempfile import TemporaryDirectory
-from typing import Never, Self
+from typing import TYPE_CHECKING, Never, Self
 
 from dreamulator import __version__
 from dreamulator.io.loader import load_world
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 MANIFEST = "dreamulator-snapshot.json"
 MAX_FILES = 100_000
@@ -141,14 +144,23 @@ def export_snapshot(world: Path, output: Path) -> None:
         raise
 
 
-def restore_snapshot(source: Path, worlds: Path) -> Path:
+def restore_snapshot(
+    source: Path,
+    worlds: Path,
+    *,
+    max_bytes: int = MAX_BYTES,
+    max_files: int = MAX_FILES,
+    validate: Callable[[Path, str], None] | None = None,
+) -> Path:
     worlds.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix=".restore-", dir=worlds) as staging:
         staged = Path(staging)
         try:
-            world_id = _restore_files(source, staged, worlds)
+            world_id = _restore_files(source, staged, worlds, max_bytes, max_files)
         except (EOFError, RecursionError, OverflowError, tarfile.TarError) as error:
             raise ValueError("Invalid or truncated world snapshot") from error
+        if validate is not None:
+            validate(staged, world_id)
         load_world(staged)
         destination = worlds / world_id
         destination.mkdir()
@@ -163,7 +175,7 @@ def restore_snapshot(source: Path, worlds: Path) -> Path:
     return destination
 
 
-def _restore_files(source: Path, staged: Path, worlds: Path) -> str:
+def _restore_files(source: Path, staged: Path, worlds: Path, max_bytes: int, max_files: int) -> str:
     world_id = ""
     total = 0
     checksums: dict[str, str] = {}
@@ -197,7 +209,7 @@ def _restore_files(source: Path, staged: Path, worlds: Path) -> str:
                     raise ValueError("Invalid or duplicate snapshot path")
                 names.add(name.casefold())
                 total += entry.size
-                if total > MAX_BYTES or len(names) > MAX_FILES:
+                if total > max_bytes or len(names) > max_files:
                     raise ValueError("World exceeds snapshot size limits")
                 path = staged / name
                 path.parent.mkdir(parents=True, exist_ok=True)

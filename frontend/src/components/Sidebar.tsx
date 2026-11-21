@@ -9,6 +9,7 @@ import { useExperimentalStore } from '../stores/experimentalStore'
 import { isStaticMode } from '../api/mode'
 import { useQuery } from '@tanstack/react-query'
 import { getProject, projectKey, worldDataPath } from '../projects/projectStore'
+import { heightmapMapPath } from '../projects/heightmapWorld'
 
 interface SidebarProps {
   open: boolean
@@ -75,13 +76,11 @@ export default function Sidebar({
   const navItems: NavigationItem[] = [
     { path: '/', label: t('nav.home'), icon: 'home' },
     { path: '/worlds', label: t('nav.worlds'), icon: 'globe' },
-    ...(isStaticMode() ? [] : [{ path: '/import', label: t('nav.import'), icon: 'import' as const }]),
+    { path: '/new-world', label: t('worlds:action.newWorld'), icon: 'import' },
   ]
   const utilityItems: NavigationItem[] = [
     // Region pack QA page — local packs only, hidden in the static build.
     ...(isStaticMode() ? [] : [{ path: '/packs', label: t('nav.packs'), icon: 'frame' as const }]),
-    // Experimental browser Pyodide playground — opt-in via the experimental flag.
-    ...(experimental ? [{ path: '/playground', label: t('nav.playground'), icon: 'flask' as const }] : []),
     { path: '/help', label: t('nav.help'), icon: 'help' },
   ]
 
@@ -92,7 +91,8 @@ export default function Sidebar({
   const branch = new URLSearchParams(search).get('branch')
   if (branch) overviewSearch.set('branch', branch)
   const worldNavItems: NavigationItem[] = currentWorld && browserWorld.data && !browserWorld.data.published
-    ? [{ path: worldDataPath(currentWorld), label: t('worlds:worldData.title'), icon: 'folder' }]
+    ? [{ path: worldDataPath(currentWorld), label: t('worlds:worldData.title'), icon: 'folder' },
+      ...(browserWorld.data.creationSnapshot ? [{ path: heightmapMapPath(currentWorld), label: t('nav.map'), icon: 'globe' as const }] : [])]
     : currentWorld
     ? [
         { path: `/worlds/${currentWorld}${branch ? `?${overviewSearch}` : ''}`, label: t('nav.overview'), icon: 'overview' },

@@ -222,6 +222,7 @@
     }
   },
   "start": {
+    "temperatureSamples": "Open the Earth and Nacrea climate samples",
     "title": "Getting started on the web",
     "contents": "Contents",
     "local": {

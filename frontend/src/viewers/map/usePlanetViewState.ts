@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
 import type { ImportElevationResult } from '../../components/map/ImportElevationButton'
 import type { ImportedState } from '../../api/elevationImport'
+import type { TemperatureOrigin } from '../../playground/temperatureDraft'
 import { saveLastWorld } from '../../utils/lastWorld'
 import { LAYER_HELP } from '../../components/map/helpContent'
 import { initialLayerState, activeMainLayerId } from '../../components/map/layerStateInit'
@@ -39,6 +40,7 @@ import type { ColorMode, CVTMesh, MapMetadata, VoronoiCell } from './types'
 
 /** The two pages this hook serves — decides the planet-redirect URL base. */
 export type PlanetViewKind = 'map' | 'globe'
+type ImportMessage = { ok: boolean; text: string; temperatureOrigin?: TemperatureOrigin }
 
 export interface PlanetViewState {
   // --- URL-derived posture (shared across 2D↔3D navigation) ---
@@ -133,8 +135,8 @@ export interface PlanetViewState {
   selectedCellObjects: VoronoiCell[] | undefined
 
   // --- Heightmap / geography import (live mode write ops) ---
-  importMsg: { ok: boolean; text: string } | null
-  setImportMsg: React.Dispatch<React.SetStateAction<{ ok: boolean; text: string } | null>>
+  importMsg: ImportMessage | null
+  setImportMsg: React.Dispatch<React.SetStateAction<ImportMessage | null>>
   handleImported: (r: ImportElevationResult) => void
 }
 
@@ -602,7 +604,7 @@ export function usePlanetViewState(
 
   // --- Heightmap import (write op; live mode only) ---
   const queryClient = useQueryClient()
-  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [importMsg, setImportMsg] = useState<ImportMessage | null>(null)
   const handleImported = useCallback(
     (r: ImportElevationResult) => {
       for (const key of ['elevationBlob', 'voronoi', 'cvtMesh', 'plates', 'mapMeta']) {
@@ -616,6 +618,7 @@ export function usePlanetViewState(
         : ''
       setImportMsg({
         ok: true,
+        temperatureOrigin: worldName && selectedPlanet ? { world: worldName, planet: selectedPlanet, branch: selectedBranch } : undefined,
         text: t('msg.importedHeightmap', {
           format: r.source_format,
           resolution: res,

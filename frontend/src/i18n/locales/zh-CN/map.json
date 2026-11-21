@@ -507,6 +507,7 @@
     "uploadFailed": "上传失败：{{detail}}",
     "unknownError": "未知错误",
     "importedHeightmap": "已导入 {{format}}{{resolution}}，陆地约占行星表面 {{land}}{{stale}}。地图已显示新高程；导入的高度图不含板块构造数据，气候要在重新构建后才会使用新地形。",
+    "tryTemperature": "用这份高程运行气候",
     "sourceFormatFallback": "高度图",
     "outputResolution": "，输出 {{w}}×{{h}}",
     "staleLayers": "；已标记过期：{{layers}}",

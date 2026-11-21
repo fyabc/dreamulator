@@ -1,10 +1,27 @@
 {
-  "title": "Browser temperature lab",
+  "title": "Browser climate lab",
   "badge": "Experimental",
-  "subtitle": "Try a built-in sample or your own elevation map. Parameters and results stay in this experiment and do not change the world.",
+  "subtitle": "Run a climate experiment with a sample or your own elevation map. The current model estimates annual and monthly temperatures.",
   "back": "← Back to worlds",
+  "trial": {
+    "title": "World climate lab",
+    "subtitle": "Start with this world's elevation and settings. The current model estimates annual and monthly temperatures without changing the world's climate layers.",
+    "root": "Main world",
+    "backMap": "Back to map",
+    "backClimate": "Back to climate",
+    "backHelp": "Back to help",
+    "sourceHelp": "The lab resamples this world's global elevation for a faster run. You can substitute another global heightmap.",
+    "defaults": "Some settings are missing from the world data and use Earth sample defaults. Check the inputs before running.",
+    "saving": "Saving climate draft…",
+    "saved": "Saved in this browser",
+    "save": "Save climate draft",
+    "openData": "Open world data",
+    "saveHelp": "The draft saves settings and resampled elevation in this browser's World data, but does not save the results.",
+    "saveError": "Could not save this climate draft. Check available browser storage or remove an older draft.",
+    "retry": "Retry loading"
+  },
   "params": {
-    "title": "Experiment settings",
+    "title": "Climate settings",
     "advanced": "Advanced settings",
     "presetEarth": "Earth",
     "luminosity": "Stellar luminosity (L☉)",
@@ -21,27 +38,27 @@
   },
   "heightmap": {
     "title": "Choose an elevation source",
-    "start": "A sample loads both the elevation map and its preset settings.",
+    "start": "A sample loads both the elevation map and its climate settings.",
     "drop": "Choose or drop your own elevation map",
     "hint": "PNG, JPEG, and WebP are supported. The image is resampled to 180 × 90. Grayscale values map to the elevation range in advanced settings.",
     "sampleEarth": "Earth sample",
     "sampleNacrea": "Nacrea sample"
   },
   "action": {
-    "run": "Calculate temperature",
-    "recompute": "Recompute",
-    "retryRun": "Retry calculation",
+    "run": "Run climate",
+    "recompute": "Run again",
+    "retryRun": "Retry run",
     "retrySample": "Retry loading sample",
     "loadingInput": "Reading the elevation map…",
     "loadingEngine": "Loading and starting the browser runtime…",
-    "computing": "Computing…"
+    "computing": "Running climate experiment…"
   },
   "status": {
     "engineLoaded": "Runtime ready. Reruns reuse it on this page. Initial load: {{seconds}} s.",
-    "previousResult": "Showing the previous result. Recompute to apply the current settings."
+    "previousResult": "Showing the previous result. Run again to apply the current settings."
   },
   "view": {
-    "title": "Temperature field",
+    "title": "Climate results: temperature",
     "heightmapPreview": "Elevation preview",
     "annual": "Annual",
     "month": "Temperature period",
@@ -51,14 +68,16 @@
     "globalMean": "Global mean (energy balance)",
     "areaMean": "Field area mean",
     "range": "Temperature range",
-    "computeTime": "This computation",
+    "computeTime": "Run time",
     "gridInfo": "{{name}} · {{width}}×{{height}} regular lon/lat grid"
   },
   "error": {
+    "world": "Could not load this world's global elevation. Check that the chosen planet and branch have an elevation map.",
+    "draft": "Could not open this climate draft. It may have been deleted or saved in another browser.",
     "sample": "The elevation sample could not load. Retry or choose your own elevation map.",
     "file": "This elevation map could not be read. Choose a valid PNG, JPEG, or WebP file.",
     "runtime": "The browser runtime could not start. Retry, or open the technical details if it still fails.",
-    "compute": "The temperature calculation did not finish. Check your settings and retry.",
+    "compute": "The climate experiment did not finish. Check your settings and retry.",
     "params": "Enter valid values and make sure the minimum elevation is below the maximum.",
     "details": "Technical details"
   },

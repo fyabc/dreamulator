@@ -507,6 +507,7 @@
     "uploadFailed": "Upload failed: {{detail}}",
     "unknownError": "Unknown error",
     "importedHeightmap": "Imported {{format}}{{resolution}}; land covers about {{land}} of the planet{{stale}}. The map shows the new elevation; an imported heightmap has no plate tectonics data, and climate uses the new terrain after the next build.",
+    "tryTemperature": "Run climate with this elevation",
     "sourceFormatFallback": "heightmap",
     "outputResolution": ", output {{w}}×{{h}}",
     "staleLayers": "; marked stale: {{layers}}",

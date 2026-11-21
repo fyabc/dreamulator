@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from pathlib import Path
 from shutil import rmtree
-from tempfile import mkdtemp
+from tempfile import TemporaryDirectory, mkdtemp
 from typing import TYPE_CHECKING, Any
 
 import yaml
@@ -15,6 +15,11 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from dreamulator import doc_render
+from dreamulator.browser_creation import (
+    MAX_CREATION_BYTES,
+    browser_creation_files,
+    validate_browser_creation,
+)
 from dreamulator.build_jobs import (
     BuildBusyError,
     BuildJob,
@@ -25,7 +30,7 @@ from dreamulator.build_jobs import (
 from dreamulator.engine.ephemeris import sky_ephemeris
 from dreamulator.guard.facts import load_entities
 from dreamulator.world_manager import WorldManager
-from dreamulator.world_snapshot import export_snapshot, snapshot_world_id
+from dreamulator.world_snapshot import export_snapshot, restore_snapshot, snapshot_world_id
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -119,6 +124,48 @@ def get_world(world_name: str) -> WorldInfoResponse:
         return WorldInfoResponse(data=data)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post("/from-heightmap", status_code=201)
+def create_world_from_heightmap(file: UploadFile = File(...)) -> dict[str, str]:
+    """Restore the browser's initial world without running a build."""
+    if file.size is None or file.size > MAX_CREATION_BYTES:
+        raise HTTPException(413, "World creation archive is too large")
+    with TemporaryDirectory(prefix="dreamulator-creation-") as temporary:
+        archive = Path(temporary) / "world.tar.gz"
+        try:
+            with archive.open("xb") as output:
+                remaining = MAX_CREATION_BYTES
+                while chunk := file.file.read(1024 * 1024):
+                    remaining -= len(chunk)
+                    if remaining < 0:
+                        raise HTTPException(413, "World creation archive is too large")
+                    output.write(chunk)
+            world = restore_snapshot(
+                archive,
+                _manager.worlds_dir,
+                max_bytes=MAX_CREATION_BYTES,
+                max_files=10,
+                validate=validate_browser_creation,
+            )
+        except FileExistsError as error:
+            raise HTTPException(409, str(error)) from error
+        except (ValueError, OSError, yaml.YAMLError) as error:
+            raise HTTPException(422, str(error)) from error
+    return {"id": world.name}
+
+
+@router.get("/{world_name}/heightmap-creation/{artifact}", response_class=FileResponse)
+def read_world_creation_artifact(world_name: str, artifact: str) -> FileResponse:
+    try:
+        artifacts = browser_creation_files(_manager.world_dir(snapshot_world_id(world_name)))
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(404, "World creation data not found") from error
+    path = artifacts.get(artifact)
+    if path is None:
+        raise HTTPException(404, "World creation data not found")
+    media_type = "image/png" if artifact == "heightmap.png" else "application/json"
+    return FileResponse(path, media_type=media_type)
 
 
 @router.delete("/{world_name}", status_code=204)

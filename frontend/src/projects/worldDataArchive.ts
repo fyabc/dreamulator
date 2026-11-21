@@ -1,5 +1,6 @@
 import { assertProjectCapacity, importProject, maxProjectBytes, readElevationLayers, record,
   type ElevationSource, type LocalProject, type ProjectLayer } from './elevationProject'
+import { maxTemperatureDrafts, restoreTemperatureDraft } from '../playground/temperatureDraft'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
@@ -8,12 +9,17 @@ const maxMetadata = 8 * 1024
 const worldId = /^[a-zA-Z0-9_-]{1,100}$/
 const layerId = /^[a-f0-9-]{36}$/
 const archivePath = /^[a-zA-Z0-9_./-]{1,100}$/
-const maxFiles = 2 + 128 * 3
+const maxFiles = 2 + 128 * 3 + maxTemperatureDrafts * 2
 const maxArchive = maxProjectBytes + maxFiles * (maxMetadata + 2 * blockSize) + 2 * blockSize
 
 function tarHeader(path: string, bytes: number) {
   const header = new Uint8Array(blockSize)
-  header.set(encoder.encode(path))
+  const split = path.length > 100 ? path.lastIndexOf('/') : -1
+  const name = encoder.encode(path.slice(split + 1))
+  const prefix = encoder.encode(split < 0 ? '' : path.slice(0, split))
+  if (name.length > 100 || prefix.length > 155) throw new Error('World archive path is too long')
+  header.set(name)
+  header.set(prefix, 345)
   header.set(encoder.encode('0000644\0'), 100)
   header.set(encoder.encode('0000000\0' + '0000000\0'), 108)
   header.set(encoder.encode(bytes.toString(8).padStart(11, '0') + '\0'), 124)
@@ -26,7 +32,7 @@ function tarHeader(path: string, bytes: number) {
   return header
 }
 
-function writeTar(files: Map<string, Blob>) {
+export function writeTar(files: Map<string, Blob>) {
   const parts: BlobPart[] = []
   for (const [path, blob] of files) {
     parts.push(tarHeader(path, blob.size), blob, new Uint8Array((blockSize - blob.size % blockSize) % blockSize))
@@ -34,7 +40,7 @@ function writeTar(files: Map<string, Blob>) {
   return new Blob([...parts, new Uint8Array(2 * blockSize)], { type: 'application/x-tar' })
 }
 
-async function readTar(file: Blob) {
+export async function readTar(file: Blob, allowPrefix = false) {
   if (file.size < 3 * blockSize || file.size > maxArchive || file.size % blockSize) throw new Error('Invalid world archive size')
   const files = new Map<string, Blob>()
   for (let offset = 0; offset + 2 * blockSize <= file.size;) {
@@ -45,11 +51,13 @@ async function readTar(file: Blob) {
       return files
     }
     const field = (start: number, length: number) => decoder.decode(header.subarray(start, start + length)).split('\0')[0].trim()
-    const path = field(0, 100)
+    const prefix = field(345, 155)
+    const path = prefix ? `${prefix}/${field(0, 100)}` : field(0, 100)
     const size = field(124, 12)
     const checksum = field(148, 8)
-    if (files.size >= maxFiles || !archivePath.test(path) || path.split('/').some((part) => !part || part === '.' || part === '..') ||
-      files.has(path) || header[156] !== 48 || field(257, 6) !== 'ustar' || header.subarray(345, 500).some(Boolean) ||
+    if (files.size >= maxFiles || !(allowPrefix ? /^[a-zA-Z0-9_./-]{1,256}$/ : archivePath).test(path) ||
+      path.split('/').some((part) => !part || part === '.' || part === '..') ||
+      files.has(path) || header[156] !== 48 || field(257, 6) !== 'ustar' || (!allowPrefix && header.subarray(345, 500).some(Boolean)) ||
       !/^[0-7]{1,11}$/.test(size) || !/^[0-7]{1,7}$/.test(checksum) ||
       parseInt(checksum, 8) !== header.reduce((sum, byte, index) => sum + (index >= 148 && index < 156 ? 32 : byte), 0)) {
       throw new Error('Invalid world archive entry')
@@ -103,7 +111,14 @@ export function exportWorldData(world: LocalProject) {
     files.set(path, blob)
   }
   json('world-data.json', { type: 'dreamulator-world-data', version: 1, id: world.id, name: world.name,
-    published: world.published === true, layers: world.layers.map((layer) => layer.id) })
+    published: world.published === true, layers: world.layers.map((layer) => layer.id),
+    ...(world.temperatureDrafts?.length && { temperature_drafts: world.temperatureDrafts.map(draft => draft.id) }) })
+  for (const draft of world.temperatureDrafts ?? []) {
+    const { id, grid, ...metadata } = draft
+    if (!layerId.test(id)) throw new Error('Invalid temperature draft ID')
+    json(`experiments/temperature/${id}.json`, metadata)
+    files.set(`experiments/temperature/${id}.f32`, grid)
+  }
   if (!world.published) {
     const timestamp = new Date(world.updatedAt).toISOString()
     json('world.yaml', { metadata: { name: world.id, description: world.name, created: timestamp, modified: timestamp }, seed: { seed: 0 } })
@@ -165,9 +180,18 @@ export async function importWorldData(file: Blob): Promise<LocalProject> {
     }
     return blob.slice(header.length)
   })
+  const draftIds = manifest.temperature_drafts ?? []
+  if (!Array.isArray(draftIds) || draftIds.length > maxTemperatureDrafts || new Set(draftIds).size !== draftIds.length) {
+    throw new Error('Invalid temperature draft manifest')
+  }
+  const temperatureDrafts = await Promise.all(draftIds.map(async (id: unknown) => {
+    if (typeof id !== 'string' || !layerId.test(id)) throw new Error('Invalid temperature draft ID')
+    const path = `experiments/temperature/${id}`
+    return restoreTemperatureDraft(await json(`${path}.json`), id, take(`${path}.f32`))
+  }))
   if (files.size) throw new Error('Unexpected world archive entries')
   const world: LocalProject = { id: manifest.id, name: manifest.name, updatedAt: Date.now(), layers,
-    ...(manifest.published && { published: true }) }
+    ...(manifest.published && { published: true }), ...(temperatureDrafts.length && { temperatureDrafts }) }
   assertProjectCapacity(world)
   return world
 }

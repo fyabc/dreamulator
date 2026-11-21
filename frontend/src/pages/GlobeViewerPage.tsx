@@ -14,6 +14,7 @@ import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
+import { temperatureTrialPath } from '../playground/temperatureDraft'
 import * as THREE from 'three'
 import GlobeViewer, { type GlobeVertex, type GlobeRegion, type GlobeRegionFlight } from '../viewers/GlobeViewer'
 import BranchSelector from '../components/BranchSelector'
@@ -306,6 +307,11 @@ export default function GlobeViewerPage() {
           importMsg.ok ? 'bg-green-900/20 border-green-700/30 text-green-300' : 'bg-red-900/20 border-red-700/30 text-red-300'
         }`}>
           {importMsg.text}
+          {importMsg.temperatureOrigin && <Link
+            to={temperatureTrialPath(importMsg.temperatureOrigin, undefined, 'globe')}
+            className="mx-2 inline-flex min-h-11 items-center font-medium text-neon-cyan underline underline-offset-4">
+            {t('msg.tryTemperature')}
+          </Link>}
         </div>
       )}
       {awaitingBuild && !cleanMode && (

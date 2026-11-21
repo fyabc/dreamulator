@@ -831,6 +831,22 @@ export async function fetchSkyFast(
 export const api = {
   ...readApi,
 
+  saveHeightmapWorld: (id: string, title: string, archive: Blob) => isStaticMode()
+    ? staticApi.saveHeightmapWorld(id, title, archive)
+    : fetchForm<{ id: string }>('/worlds/from-heightmap', new File([archive], 'world.tar.gz'), {}),
+
+  async getHeightmapWorld(id: string) {
+    if (isStaticMode()) return staticApi.getHeightmapWorld(id)
+    const path = `/worlds/${encodeURIComponent(id)}/heightmap-creation`
+    const { readHeightmapWorldParts } = await import('../projects/heightmapWorld')
+    const metadata = await fetchJson<unknown>(`${path}/manifest.json`).catch(error => {
+      if (error instanceof ApiError && error.status === 404) return null
+      throw error
+    })
+    return metadata ? readHeightmapWorldParts(id, metadata, () => fetchBlob(`${path}/heightmap.png`),
+      () => fetchJson<unknown>(`${path}/temperature.json`)) : null
+  },
+
   // Write operations — only work in API mode, gracefully fail in static mode
   createWorld: (...args: Parameters<typeof liveOnlyApi.createWorld>) =>
     isStaticMode()

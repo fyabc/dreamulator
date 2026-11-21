@@ -14,19 +14,22 @@ export interface KernelResult {
 }
 
 export type TemperatureRequest = {
-  elevation: Float32Array
+  elevation: Float32Array | Float64Array
   params: Record<string, number | boolean>
   runtimeBase: string
 }
 
 export type TemperatureResponse =
   | { type: 'runtime-ready'; seconds: number }
-  | { type: 'result'; result: KernelResult }
+  | { type: 'result'; result: KernelResult; version: string }
   | { type: 'error'; stage: 'runtime' | 'compute'; detail: string }
 
 let runtime: PyodideInterface | undefined
+let modelVersion = ''
 
 async function loadRuntime(indexURL: string): Promise<PyodideInterface> {
+  const code = new TextEncoder().encode(JSON.stringify([climatePhysicsSrc, climateSeasonalitySrc, temperatureKernelSrc]))
+  modelVersion = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', code)), value => value.toString(16).padStart(2, '0')).join('')
   const { loadPyodide } = await import(/* @vite-ignore */ `${indexURL}pyodide.mjs`) as typeof import('pyodide')
   const py = await loadPyodide({ indexURL })
   await py.loadPackage('numpy')
@@ -62,7 +65,7 @@ self.onmessage = async ({ data }: MessageEvent<TemperatureRequest>) => {
     runtime.globals.set('elev_json', JSON.stringify(Array.from(data.elevation)))
     runtime.globals.set('params_json', JSON.stringify(data.params))
     const result: KernelResult = JSON.parse(runtime.runPython('compute_temperature(elev_json, params_json)'))
-    send({ type: 'result', result })
+    send({ type: 'result', result, version: modelVersion })
   } catch (error) {
     send({ type: 'error', stage: runtime ? 'compute' : 'runtime', detail: String(error) })
   }

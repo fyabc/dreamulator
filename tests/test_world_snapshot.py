@@ -155,3 +155,19 @@ def test_non_ascii_world_id(world: Path, tmp_path: Path) -> None:
     restored = restore_snapshot(archive, tmp_path / "restored")
     assert restored.name == renamed.name
     assert _contents(restored) == _contents(renamed)
+
+
+def test_create_heightmap_endpoint_does_not_restore_arbitrary_world_snapshots(
+    world: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive = tmp_path / "snapshot.tar.gz"
+    export_snapshot(world, archive)
+    destination = tmp_path / "new-worlds"
+    monkeypatch.setattr(worlds_route, "_manager", WorldManager(destination))
+    api = FastAPI()
+    api.include_router(worlds_route.router)
+    response = TestClient(api).post(
+        "/api/worlds/from-heightmap", files={"file": (archive.name, archive.read_bytes())}
+    )
+    assert response.status_code == 422
+    assert not list(destination.iterdir())

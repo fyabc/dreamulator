@@ -3,39 +3,55 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import AtlasIcon from '../AtlasIcon'
+import { isStaticMode } from '../../api/mode'
+import { temperatureTrialPath } from '../../playground/temperatureDraft'
 import ImportProjectElevation from '../projects/ImportProjectElevation'
 import { projectButton } from '../projects/SaveProjectResult'
 import { elevationSource, projectBytes } from '../../projects/elevationProject'
-import { deleteProject, getProject, projectKey, projectRegionPath, projectsKey, publishedWorld, removeProjectLayer, updateProject } from '../../projects/projectStore'
-import { exportWorldData } from '../../projects/worldDataArchive'
+import { deleteProject, getProject, projectKey, projectRegionPath, projectsKey, publishedWorld, removeProjectLayer, restoreWorld, updateProject } from '../../projects/projectStore'
+import { exportWorldData, readWorldBackup } from '../../projects/worldDataArchive'
 import { downloadBlob } from '../../utils/downloadBlob'
+import { heightmapMapPath } from '../../projects/heightmapWorld'
 
-export default function WorldDataPanel({ id, published, publishedAvailable }: {
+export default function WorldDataPanel({ id, published, publishedAvailable, nativeCreation = false }: {
   id: string
   published: boolean
   publishedAvailable: boolean
+  nativeCreation?: boolean
 }) {
   const { t, i18n } = useTranslation('worlds', { keyPrefix: 'worldData' })
+  const { t: creationText } = useTranslation('worlds', { keyPrefix: 'creation' })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [search] = useSearchParams()
   const [exportError, setExportError] = useState(false)
+  const staticMode = isStaticMode()
   const query = useQuery({ queryKey: projectKey(id), queryFn: () => getProject(id), retry: false })
   const remove = useMutation({ mutationFn: (layerId: string) => updateProject(id, (world) => removeProjectLayer(world, layerId)),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: projectsKey }) })
+  const removeDraft = useMutation({ mutationFn: (draftId: string) => updateProject(id, project => ({ ...project,
+    temperatureDrafts: project.temperatureDrafts?.filter(draft => draft.id !== draftId),
+  })), onSuccess: () => queryClient.invalidateQueries({ queryKey: projectsKey }) })
+  const restore = useMutation({ mutationFn: async (file: File) => {
+    const backup = await readWorldBackup(file)
+    if (!backup.published || backup.id !== id) throw new Error('Backup belongs to another world')
+    await restoreWorld(backup)
+  }, onSuccess: () => queryClient.invalidateQueries({ queryKey: projectsKey }) })
   const erase = useMutation({ mutationFn: () => deleteProject(id), onSuccess: async () => {
     if (!published) navigate('/worlds')
     setExportError(false)
     await queryClient.invalidateQueries({ queryKey: projectsKey })
   } })
   const world = query.data ?? (published && query.isSuccess ? publishedWorld(id) : null)
-  const busy = remove.isPending || erase.isPending
+  const busy = remove.isPending || removeDraft.isPending || erase.isPending || restore.isPending
   const layerPath = (layerId: string) => projectRegionPath(id, layerId, search.get('branch'))
 
   if (query.isPending) return <p role="status">{t('loading')}</p>
   if (!world || query.isError) return <p role="alert" className="text-red-300">{t('unreadable')}</p>
 
   const hasLayers = world.layers.length > 0
+  const drafts = world.temperatureDrafts ?? []
+  const hasLocalData = hasLayers || drafts.length > 0
   const overviewSearch = new URLSearchParams(search)
   for (const param of ['doc', 'layer', 'tab']) overviewSearch.delete(param)
   const formatNumber = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 })
@@ -43,14 +59,26 @@ export default function WorldDataPanel({ id, published, publishedAvailable }: {
   const size = formatNumber.format(bytes >= 1e6 ? bytes / 1e6 : bytes / 1e3)
 
   return <div className="space-y-5">
+    {(world.creationSnapshot || nativeCreation) && <section className="space-y-2 border-b border-space-border pb-4">
+      <h2 className="text-lg font-semibold">{creationText('savedHeading')}</h2>
+      <p className="text-sm text-gray-400">{creationText('savedHelp')}</p>
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <Link to={heightmapMapPath(id)} className="inline-flex min-h-11 items-center gap-2 text-neon-cyan hover:underline">
+          {creationText('openSavedMap')} <AtlasIcon name="arrow" />
+        </Link>
+        {world.creationSnapshot && <button type="button" className={`${projectButton} min-h-11 px-3`} onClick={() => {
+          if (world.creationSnapshot) downloadBlob(world.creationSnapshot, `${id}.dreamulator.tar.gz`)
+        }}>{creationText('download')}</button>}
+      </div>
+    </section>}
     {published && <section aria-labelledby="published-data-heading"
       className="flex flex-wrap items-center justify-between gap-x-5 gap-y-1 border-b border-space-border pb-3">
       <div className="space-y-1">
-        <h2 id="published-data-heading" className="text-sm font-semibold text-gray-200">{t('publishedData')}</h2>
-        <p className="text-sm leading-relaxed text-gray-400">{t(publishedAvailable ? 'publishedHelp' : 'publishedUnavailable')}</p>
+        <h2 id="published-data-heading" className="text-sm font-semibold text-gray-200">{t(staticMode ? 'publishedData' : 'serverData')}</h2>
+        <p className="text-sm leading-relaxed text-gray-400">{t(!staticMode ? 'serverHelp' : publishedAvailable ? 'publishedHelp' : 'publishedUnavailable')}</p>
       </div>
       {publishedAvailable && <Link to={{ search: overviewSearch.toString() }}
-        className="inline-flex min-h-11 items-center text-sm text-neon-cyan hover:underline">{t('openPublished')}</Link>}
+        className="inline-flex min-h-11 items-center text-sm text-neon-cyan hover:underline">{t(staticMode ? 'openPublished' : 'openServer')}</Link>}
     </section>}
 
     <section aria-labelledby="browser-data-heading" className="space-y-4">
@@ -58,7 +86,7 @@ export default function WorldDataPanel({ id, published, publishedAvailable }: {
         <h2 id="browser-data-heading" className="text-xl font-semibold text-gray-100">{t('browserData')}</h2>
         <p className="text-sm text-gray-400">{t('usage', { size: `${size} ${bytes >= 1e6 ? 'MB' : 'kB'}` })}</p>
       </header>
-      <div className="max-w-2xl space-y-3">
+      {(staticMode || hasLayers) && <div className="max-w-2xl space-y-3">
         <h3 className="text-sm font-medium text-gray-200">{t('layers')}</h3>
         {hasLayers ? <ul className="divide-y divide-space-border border-y border-space-border text-sm">
           {world.layers.map((layer) => {
@@ -78,26 +106,52 @@ export default function WorldDataPanel({ id, published, publishedAvailable }: {
             </li>
           })}
         </ul> : <p role="status" className="text-sm text-gray-400">{t('noLayers')}</p>}
-        <ImportProjectElevation world={world} onSaved={(savedId) => navigate(layerPath(savedId))} />
-      </div>
+        {staticMode && <ImportProjectElevation world={world} onSaved={(savedId) => navigate(layerPath(savedId))} />}
+      </div>}
+      {published && <div className="max-w-2xl space-y-2">
+        <h3 className="text-sm font-medium text-gray-200">{t('temperatureDrafts')}</h3>
+        {drafts.length ? <ul className="divide-y divide-space-border border-y border-space-border text-sm">
+          {drafts.map(draft => <li key={draft.id} className="flex flex-wrap items-center gap-x-3 px-3 py-1">
+            <Link to={temperatureTrialPath({ world: id, planet: draft.planet, branch: draft.branch }, draft.id)}
+              className="flex min-h-11 min-w-0 flex-1 basis-48 flex-col justify-center break-words py-1.5 text-neon-cyan hover:underline">
+              {draft.source}
+              <span className="text-xs text-gray-400">{draft.branch || t('rootBranch')} · {new Date(draft.updatedAt).toLocaleString(i18n.language)}</span>
+            </Link>
+            <button type="button" className="min-h-11 px-2 text-red-300 hover:underline disabled:opacity-50" disabled={busy}
+              aria-label={t('deleteDraftNamed', { name: draft.source })}
+              onClick={() => { if (window.confirm(t('deleteDraftNamed', { name: draft.source }))) removeDraft.mutate(draft.id) }}>{t('deleteDraft')}</button>
+          </li>)}
+        </ul> : <p className="text-sm text-gray-400">{t('noTemperatureDrafts')}</p>}
+        {removeDraft.isError && <p role="alert" className="text-sm text-red-300">{t('deleteFailed')}</p>}
+      </div>}
     </section>
 
     <section aria-labelledby="world-backup-heading" className="space-y-2 border-t border-space-border pt-4 text-sm">
       <h2 id="world-backup-heading" className="font-semibold text-gray-200">{t('backup')}</h2>
       <p className="max-w-2xl leading-relaxed text-gray-400">{t(published ? 'publishedBackupHelp' : 'localHelp')}</p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        {hasLayers && <button type="button" className={`${projectButton} min-h-11 px-3`} disabled={busy} onClick={() => {
+        {hasLocalData && <button type="button" className={`${projectButton} min-h-11 px-3`} disabled={busy} onClick={() => {
           setExportError(false)
           try { downloadBlob(exportWorldData(world), `${world.id}-world-data.tar`) }
           catch { setExportError(true) }
         }}>{t('export')}</button>}
-        <Link to="/worlds" className="inline-flex min-h-11 items-center text-neon-cyan hover:underline">{t('restoreFromWorlds')}</Link>
+        {staticMode ? <Link to="/worlds" className="inline-flex min-h-11 items-center text-neon-cyan hover:underline">{t('restoreFromWorlds')}</Link>
+          : <label className="inline-flex min-h-11 cursor-pointer items-center text-neon-cyan hover:underline focus-within:outline">
+            {t('restoreHere')}
+            <input type="file" accept=".tar,.dreamulator" className="sr-only" disabled={busy} onChange={event => {
+              const file = event.currentTarget.files?.[0]
+              event.currentTarget.value = ''
+              if (file) restore.mutate(file)
+            }} />
+          </label>}
       </div>
       {exportError && <p role="alert" className="text-red-300">{t('exportFailed')}</p>}
-      <p className="max-w-2xl leading-relaxed text-gray-400">{t('fullSnapshotHelp')}</p>
+      {restore.isError && <p role="alert" className="text-red-300">{t('restoreHereFailed')}</p>}
+      {restore.isSuccess && <p role="status" className="text-green-300">{t('restoredHere')}</p>}
+      <p className="max-w-2xl leading-relaxed text-gray-400">{t(staticMode ? 'fullSnapshotHelp' : 'serverSnapshotHelp')}</p>
     </section>
 
-    {(!published || hasLayers) && <details className="space-y-3 border-t border-space-border pt-2 text-sm">
+    {(!published || hasLocalData) && <details className="space-y-3 border-t border-space-border pt-2 text-sm">
       <summary className="min-h-11 cursor-pointer content-center font-medium text-gray-300">{t('manageStorage')}</summary>
       {hasLayers && <ul className="max-w-2xl divide-y divide-space-border border-y border-space-border">
         {world.layers.map((layer) => {

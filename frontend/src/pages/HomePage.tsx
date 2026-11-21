@@ -12,7 +12,6 @@ export default function HomePage() {
   const staticMode = isStaticMode()
   const lastWorld = staticMode ? null : loadLastWorld()
   const { data: worlds } = useQuery({ queryKey: ['worlds'], queryFn: api.listWorlds, enabled: !!lastWorld })
-  const primaryAction = staticMode ? 'explore' : 'import'
 
   return (
     <div className="atlas-home flex min-h-[calc(100svh-3.5rem)] flex-col bg-space-bg md:min-h-screen">
@@ -24,19 +23,12 @@ export default function HomePage() {
           </h1>
           <p>{t(staticMode ? 'home.atlas.staticIntro' : 'home.atlas.localIntro')}</p>
           <div className="atlas-hero-actions">
-            <Link to={staticMode ? '/worlds' : '/import'} className="atlas-primary" data-testid={`start-${primaryAction}`}>
-              {t(`worlds:start.${primaryAction}`)} <AtlasIcon name="arrow" />
+            <Link to="/new-world" className="atlas-primary" data-testid="start-create">
+              {t('worlds:action.newWorld')} <AtlasIcon name="arrow" />
             </Link>
-            {!staticMode && (
-              <>
-                <Link to="/worlds" className="atlas-text-action" data-testid="start-explore">
-                  {t('worlds:start.explore')} <AtlasIcon name="arrow" />
-                </Link>
-                <Link to="/worlds?create=1" className="atlas-text-action" data-testid="start-template">
-                  {t('worlds:start.template')}
-                </Link>
-              </>
-            )}
+            <Link to="/worlds" className="atlas-text-action" data-testid="start-explore">
+              {t('worlds:start.explore')} <AtlasIcon name="arrow" />
+            </Link>
           </div>
         </div>
       </section>

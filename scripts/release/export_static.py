@@ -11,6 +11,8 @@ Local refinement plans, job settings, and the compute device require the local
 runtime and are not exported. The browser sets parameters and runs WebGPU independently.
 Full world snapshots include private inputs and local build outputs. This exporter
 publishes no snapshot archives, and the static client exposes no download URL.
+The static heightmap creation workflow keeps new worlds and climate experiments in
+the browser. Its private creation artifacts are not published by this exporter.
 
 Usage:
     python scripts/release/export_static.py

@@ -1,4 +1,5 @@
 import { assertProjectCapacity, projectBytes, type LocalProject } from './elevationProject'
+import type { TemperatureDraft } from '../playground/temperatureDraft'
 
 const storeName = 'projects'
 export const projectsKey = ['browser-projects'] as const
@@ -84,6 +85,12 @@ export function publishedWorld(id: string): LocalProject {
   return { id, name: id, published: true, updatedAt: Date.now(), layers: [] }
 }
 
+export function saveTemperatureDraft(worldId: string, draft: TemperatureDraft) {
+  return updateProject(worldId, project => ({ ...project,
+    temperatureDrafts: [draft, ...(project.temperatureDrafts ?? []).filter(item => item.id !== draft.id)],
+  }), publishedWorld(worldId))
+}
+
 export async function restoreWorld(world: LocalProject) {
   if (!world.published) {
     try { return await addProject(world) }
@@ -95,7 +102,10 @@ export async function restoreWorld(world: LocalProject) {
   await updateProject(world.id, (current) => {
     const existing = new Set(current.layers.map((layer) => layer.id))
     const imported = world.layers.some((layer) => existing.has(layer.id)) ? copyLayers(world) : world.layers
-    return { ...current, layers: [...current.layers, ...imported] }
+    const drafts = new Set(current.temperatureDrafts?.map(draft => draft.id))
+    const incoming = world.temperatureDrafts?.map(draft => drafts.has(draft.id) ? { ...draft, id: crypto.randomUUID() } : draft)
+    return { ...current, layers: [...current.layers, ...imported],
+      ...(incoming?.length && { temperatureDrafts: [...incoming, ...(current.temperatureDrafts ?? [])] }) }
   }, publishedWorld(world.id))
   return world.id
 }

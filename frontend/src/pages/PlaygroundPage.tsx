@@ -11,39 +11,28 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { api } from '../api/client'
+import { getProject, projectsKey, saveTemperatureDraft, worldDataPath } from '../projects/projectStore'
 
 import earthSample from '../playground/earth-180x90.json'
 import earthHeightmap from '../playground/earth-180x90.png'
 import nacreaSample from '../playground/nacrea-180x90.json'
 import nacreaHeightmap from '../playground/nacrea-180x90.png'
-import type { KernelResult, TemperatureRequest, TemperatureResponse } from '../playground/temperature.worker'
+import type { KernelResult, TemperatureResponse } from '../playground/temperature.worker'
+import { temperatureRequest } from '../playground/temperatureRequest'
+import { EARTH_PARAMS, GRID_W, GRID_H, MODEL_JANUARY_INDEX, isTemperatureParams, readTemperatureGrid, type PlanetParams } from '../playground/temperatureDraft'
+import { loadTemperatureElevation, temperatureInputCatalog, worldTemperatureParams } from '../playground/worldTemperature'
 
-const GRID_W = 180
-const GRID_H = 90
 const CANVAS_W = 900
 const CANVAS_H = 450
-const MODEL_JANUARY_INDEX = 10
 
 type Status = 'idle' | 'sample' | 'loading' | 'running'
 type MonthSelection = 'annual' | number
 type Sample = 'earth' | 'nacrea'
-type LabError = { stage: 'sample' | 'file' | 'runtime' | 'compute'; detail: string; sample?: Sample }
-
-interface PlanetParams {
-  luminosity: number
-  distanceAu: number
-  albedo: number
-  greenhouseK: number
-  tiltDeg: number
-  yearDays: number
-  rotationDays: number
-  seaLevelM: number
-  elevMinM: number
-  elevMaxM: number
-  variableLapse: boolean
-}
+type LabError = { stage: 'sample' | 'world' | 'draft' | 'file' | 'runtime' | 'compute'; detail: string; sample?: Sample }
 
 const NACREA_PARAMS: PlanetParams = {
   luminosity: 0.1227,
@@ -55,20 +44,6 @@ const NACREA_PARAMS: PlanetParams = {
   rotationDays: 3.1336,
   seaLevelM: 0,
   elevMinM: -12116.5,
-  elevMaxM: 9000,
-  variableLapse: true,
-}
-
-const EARTH_PARAMS: PlanetParams = {
-  luminosity: 1,
-  distanceAu: 1,
-  albedo: 0.306,
-  greenhouseK: 33,
-  tiltDeg: 23.44,
-  yearDays: 365.25,
-  rotationDays: 1,
-  seaLevelM: 0,
-  elevMinM: -11000,
   elevMaxM: 9000,
   variableLapse: true,
 }
@@ -162,8 +137,21 @@ function NumberField({
 }
 
 export default function PlaygroundPage() {
+  const [search] = useSearchParams()
+  return <TemperatureLab key={search.toString()} search={search} />
+}
+
+function TemperatureLab({ search }: { search: URLSearchParams }) {
+  const world = search.get('world') || ''
+  const planet = search.get('planet') || ''
+  const branch = search.get('branch') || null
+  const requestedDraft = search.get('draft') || null
+  const from = search.get('from')
+  const mapView = from === 'map' || from === 'globe' ? from : null
+  const contextual = !!world && !!planet
   const { t } = useTranslation('playground')
   const { t: tMap } = useTranslation('map')
+  const queryClient = useQueryClient()
   const modelMonths = tMap('months', { returnObjects: true }) as unknown as string[]
   const monthOptions = modelMonths.map((label, modelIndex) => ({ label, modelIndex }))
   const calendarMonths = [...monthOptions.slice(MODEL_JANUARY_INDEX), ...monthOptions.slice(0, MODEL_JANUARY_INDEX)]
@@ -179,11 +167,28 @@ export default function PlaygroundPage() {
   const [selectedSample, setSelectedSample] = useState<Sample | null>(null)
   const [month, setMonth] = useState<MonthSelection>('annual')
   const [dragging, setDragging] = useState(false)
+  const [bodyName, setBodyName] = useState(planet)
+  const [usesDefaults, setUsesDefaults] = useState(false)
+  const [draftId, setDraftId] = useState<string | null>(null)
+  const [savedSnapshot, setSavedSnapshot] = useState<{ params: PlanetParams; gray: Float32Array } | null>(null)
 
   const workerRef = useRef<Worker | null>(null)
   const inputRequest = useRef(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const save = useMutation({
+    mutationFn: async ({ id, grid, values }: { id: string; grid: Float32Array; values: PlanetParams }) => {
+      await saveTemperatureDraft(world, { id, planet, branch, params: values, defaults: usesDefaults,
+        source: heightmapName.slice(0, 200), updatedAt: Date.now(), grid: new Blob([new Float32Array(grid).buffer]) })
+      return { id, params: values, gray: grid }
+    },
+    onSuccess: ({ id, params, gray }) => {
+      setDraftId(id)
+      setSavedSnapshot({ params, gray })
+      void queryClient.invalidateQueries({ queryKey: projectsKey })
+    },
+  })
 
   // --- Heightmap sample ----------------------------------------------------
   const loadSample = useCallback(async (world: Sample) => {
@@ -212,21 +217,62 @@ export default function PlaygroundPage() {
     }
   }, [])
 
+  const loadContext = useCallback(async () => {
+    const request = ++inputRequest.current
+    setStatus('sample')
+    setError(null)
+    try {
+      if (requestedDraft) {
+        const project = await getProject(world)
+        const draft = project?.temperatureDrafts?.find(item => item.id === requestedDraft && item.planet === planet && item.branch === branch)
+        if (!draft) throw new Error('Temperature draft is missing')
+        const values = await readTemperatureGrid(draft.grid)
+        if (request !== inputRequest.current) return
+        setParams(draft.params)
+        setGray(values)
+        setHeightmapName(draft.source)
+        setUsesDefaults(draft.defaults)
+        setDraftId(draft.id)
+        setSavedSnapshot({ params: draft.params, gray: values })
+        return
+      }
+      let catalog = await api.getSystemCatalog(world, branch).catch(() => null)
+      if (!catalog?.bodies?.some(body => body.id === planet)) {
+        const [stellar, planets] = await Promise.all([
+          api.getStellarSystem(world, branch).catch(() => null), api.getPlanets(world, branch).catch(() => []),
+        ])
+        catalog = temperatureInputCatalog(stellar, planets)
+      }
+      const settings = worldTemperatureParams(catalog, planet)
+      if (request !== inputRequest.current) return
+      setBodyName(settings.name)
+      setUsesDefaults(settings.defaults)
+      setParams(settings.params)
+      const [meta, blob] = await Promise.all([api.getMapMeta(world, planet, branch), api.getElevationBlob(world, planet, branch)])
+      const { gray: values, ...mapping } = await loadTemperatureElevation(blob, meta)
+      if (request !== inputRequest.current) return
+      setGray(values)
+      setParams({ ...settings.params, ...mapping })
+      setHeightmapName(`${world} · ${settings.name}${branch ? ` · ${branch}` : ''}`)
+    } catch (err) {
+      if (request === inputRequest.current) setError({ stage: requestedDraft ? 'draft' : 'world', detail: String(err) })
+    } finally {
+      if (request === inputRequest.current) setStatus('idle')
+    }
+  }, [world, planet, branch, requestedDraft])
+
   useEffect(() => {
-    void loadSample('earth')
+    if (contextual) void loadContext()
+    else void loadSample('earth')
     return () => {
       inputRequest.current += 1
       workerRef.current?.terminate()
       workerRef.current = null
     }
-  }, [loadSample])
+  }, [contextual, loadContext, loadSample])
 
   // --- Compute -------------------------------------------------------------
-  const validParams = Object.values(params).every(value => typeof value === 'boolean' || Number.isFinite(value))
-    && params.luminosity >= 0 && params.distanceAu >= 0.001
-    && params.albedo >= 0 && params.albedo <= 1 && params.greenhouseK >= 0
-    && params.tiltDeg >= 0 && params.tiltDeg <= 90 && params.yearDays >= 0.1
-    && params.rotationDays >= 0.01 && params.elevMinM < params.elevMaxM
+  const validParams = isTemperatureParams(params)
   const run = () => {
     if (!gray || !validParams || status !== 'idle') return
     setError(null)
@@ -260,22 +306,7 @@ export default function PlaygroundPage() {
         }
       }
       const elev = elevationFromGray(gray, params)
-      const payload = {
-        width: GRID_W,
-        height: GRID_H,
-        sea_level_m: params.seaLevelM,
-        stellar_luminosity_sol: params.luminosity,
-        orbital_distance_au: params.distanceAu,
-        albedo: params.albedo,
-        greenhouse_warming_K: params.greenhouseK,
-        axial_tilt_deg: params.tiltDeg,
-        orbital_period_days: params.yearDays,
-        rotation_period_days: params.rotationDays,
-        variable_lapse_rate: params.variableLapse,
-      }
-      const runtimeBase = new URL(`${import.meta.env.BASE_URL}${__PLAYGROUND_RUNTIME_PATH__}`, document.baseURI)
-      const request: TemperatureRequest = { elevation: elev, params: payload, runtimeBase: runtimeBase.href }
-      worker.postMessage(request, [elev.buffer])
+      worker.postMessage(temperatureRequest(elev, params), [elev.buffer])
     } catch (err) {
       workerRef.current?.terminate()
       workerRef.current = null
@@ -399,6 +430,10 @@ export default function PlaygroundPage() {
   const busy = status !== 'idle'
   const failedSample = error?.sample
   const sourceLabel = selectedSample === 'earth' ? t('params.presetEarth') : heightmapName
+  const saved = savedSnapshot?.params === params && savedSnapshot.gray === gray
+  const backQuery = new URLSearchParams(mapView ? undefined : { tab: 'climate', planet })
+  if (branch) backQuery.set('branch', branch)
+  const backTo = contextual ? `/worlds/${encodeURIComponent(world)}${mapView ? `/${mapView}/${encodeURIComponent(planet)}` : ''}${backQuery.size ? `?${backQuery}` : ''}` : '/help'
   const stale = resultParams != null && (Object.keys(params) as Array<keyof PlanetParams>)
     .some(key => params[key] !== resultParams[key])
   const phase = status === 'sample' ? t('action.loadingInput')
@@ -410,14 +445,17 @@ export default function PlaygroundPage() {
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-neon-cyan neon-glow-subtle">{t('title')}</h1>
+            <h1 className="text-xl font-bold text-neon-cyan neon-glow-subtle">{t(contextual ? 'trial.title' : 'title')}</h1>
             <span className="rounded border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 text-[10px] text-amber-200">
               {t('badge')}
             </span>
           </div>
-          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-gray-400">{t('subtitle')}</p>
+          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-gray-400">{t(contextual ? 'trial.subtitle' : 'subtitle')}</p>
+          {contextual && <p className="mt-2 break-words text-sm text-gray-200">
+            {world} · {bodyName} · {branch || t('trial.root')}
+          </p>}
         </div>
-        <Link to="/worlds" className="text-sm text-gray-400 hover:text-neon-cyan">{t('back')}</Link>
+        <Link to={backTo} className="text-sm text-gray-400 hover:text-neon-cyan">{t(contextual ? mapView ? 'trial.backMap' : 'trial.backClimate' : 'trial.backHelp')}</Link>
       </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-[310px,minmax(0,1fr)] xl:grid-cols-[340px,minmax(0,1fr)]">
@@ -425,8 +463,8 @@ export default function PlaygroundPage() {
         <aside className="space-y-4">
           <section className="rounded-xl border border-space-border bg-space-panel/60 p-4">
             <h2 className="font-semibold text-gray-100">{t('heightmap.title')}</h2>
-            <p className="mt-1 text-xs text-gray-400">{t('heightmap.start')}</p>
-            <div className="my-3 flex flex-wrap gap-2">
+            <p className="mt-1 text-xs text-gray-400">{t(contextual ? 'trial.sourceHelp' : 'heightmap.start')}</p>
+            {!contextual && <div className="my-3 flex flex-wrap gap-2">
               {(['earth', 'nacrea'] as const).map(sample => (
                 <button
                   key={sample}
@@ -439,7 +477,7 @@ export default function PlaygroundPage() {
                   {t(sample === 'earth' ? 'heightmap.sampleEarth' : 'heightmap.sampleNacrea')}
                 </button>
               ))}
-            </div>
+            </div>}
             <button
               type="button"
               disabled={busy}
@@ -447,7 +485,7 @@ export default function PlaygroundPage() {
               onDragLeave={() => setDragging(false)}
               onDrop={onDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`w-full rounded-lg border border-dashed p-3 text-left text-xs leading-relaxed transition-colors focus-visible:outline focus-visible:outline-neon-cyan disabled:opacity-60 ${
+              className={`mt-2 w-full rounded-lg border border-dashed p-3 text-left text-xs leading-relaxed transition-colors focus-visible:outline focus-visible:outline-neon-cyan disabled:opacity-60 ${
                 dragging ? 'border-neon-cyan bg-neon-cyan/10 text-neon-cyan' : 'border-space-border text-gray-300 hover:border-neon-cyan/40'
               }`}
             >
@@ -465,6 +503,7 @@ export default function PlaygroundPage() {
 
           <section className="rounded-xl border border-space-border bg-space-panel/60 p-4">
             <h2 className="mb-3 font-semibold text-gray-100">{t('params.title')}</h2>
+            {usesDefaults && <p className="mb-3 text-xs leading-relaxed text-amber-200">{t('trial.defaults')}</p>}
             <fieldset disabled={busy} className="min-w-0 space-y-2 disabled:opacity-60">
               <NumberField label={t('params.albedo')} value={params.albedo} step={0.001} min={0} max={1} onChange={(v) => setParams((p) => ({ ...p, albedo: v }))} />
               <NumberField label={t('params.greenhouse')} value={params.greenhouseK} step={0.5} min={0} onChange={(v) => setParams((p) => ({ ...p, greenhouseK: v }))} />
@@ -497,6 +536,18 @@ export default function PlaygroundPage() {
             {phase || (error?.stage === 'runtime' || error?.stage === 'compute'
               ? t('action.retryRun') : result ? t('action.recompute') : t('action.run'))}
           </button>
+          {contextual && <div className="space-y-2 text-xs leading-relaxed text-gray-400">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <button type="button" disabled={busy || !gray || !validParams || save.isPending || saved}
+                className="min-h-10 rounded border border-space-border px-3 text-gray-200 hover:border-neon-cyan disabled:opacity-50"
+                onClick={() => { if (gray) save.mutate({ id: draftId ?? crypto.randomUUID(), grid: gray, values: params }) }}>
+                {t(save.isPending ? 'trial.saving' : saved ? 'trial.saved' : 'trial.save')}
+              </button>
+              {draftId && <Link to={worldDataPath(world, branch)} className="text-neon-cyan hover:underline">{t('trial.openData')}</Link>}
+            </div>
+            <p>{t('trial.saveHelp')}</p>
+            {save.isError && <p role="alert" className="text-red-300">{t('trial.saveError')}</p>}
+          </div>}
 
           <p role="status" className="text-xs leading-relaxed text-gray-400 empty:hidden">
             {phase || (loadSeconds != null ? t('status.engineLoaded', { seconds: loadSeconds.toFixed(1) }) : '')}
@@ -506,6 +557,8 @@ export default function PlaygroundPage() {
             <div className="border-l-2 border-red-400/70 pl-3 text-xs leading-relaxed text-red-200">
               <p role="alert">{t(`error.${error.stage}`)}</p>
               {failedSample && <button type="button" className="my-1 text-neon-cyan underline" onClick={() => void loadSample(failedSample)}>{t('action.retrySample')}</button>}
+              {(error.stage === 'world' || error.stage === 'draft') && <button type="button"
+                className="my-1 text-neon-cyan underline" onClick={() => void loadContext()}>{t('trial.retry')}</button>}
               <details className="mt-1 text-gray-400">
                 <summary className="cursor-pointer">{t('error.details')}</summary>
                 <p className="max-h-32 overflow-auto whitespace-pre-wrap break-words">{error.detail}</p>

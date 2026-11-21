@@ -3,6 +3,7 @@ import type { BrowserTerrainResult } from '../viewers/packs/TerrainCompute'
 import type { PackWindow } from '../viewers/packs/packCoords'
 import { supportsTerrainSpan } from '../viewers/packs/terrainTiles'
 import { terrainRecipe } from '../viewers/packs/terrainRecommendation'
+import { maxTemperatureDrafts, type TemperatureDraft } from '../playground/temperatureDraft'
 
 export const maxProjectBytes = 256 * 2 ** 20
 export const maxSourceBytes = 32 * 2 ** 20
@@ -23,7 +24,7 @@ export type ElevationResult = LayerBase & {
   settings: Omit<BrowserTerrainResult, 'raster'>
 }
 export type ProjectLayer = ElevationSource | ElevationResult
-export type LocalProject = { id: string; name: string; updatedAt: number; layers: ProjectLayer[]; published?: true }
+export type LocalProject = { id: string; name: string; updatedAt: number; layers: ProjectLayer[]; published?: true; temperatureDrafts?: TemperatureDraft[]; creationSnapshot?: Blob }
 
 export function elevationSource(layers: ProjectLayer[], layer: ProjectLayer): ElevationSource | undefined {
   return layer.kind === 'elevation-source' ? layer :
@@ -32,6 +33,7 @@ export function elevationSource(layers: ProjectLayer[], layer: ProjectLayer): El
 
 export function projectBytes(project: LocalProject) {
   return project.layers.reduce((size, layer) => size + layer.data.size + (layer.kind === 'elevation-source' ? layer.original?.data.size ?? 0 : 0), 0)
+    + (project.temperatureDrafts?.reduce((size, draft) => size + draft.grid.size, 0) ?? 0) + (project.creationSnapshot?.size ?? 0)
 }
 
 function encodeRaster(raster: ElevationRaster) {
@@ -57,7 +59,8 @@ export function makeElevationResult(name: string, sourceId: string, { raster, ..
 }
 
 export function assertProjectCapacity(project: LocalProject) {
-  if (project.layers.length > maxLayers || projectBytes(project) > maxProjectBytes) throw new Error('Project capacity exceeded')
+  if (project.layers.length > maxLayers || (project.temperatureDrafts?.length ?? 0) > maxTemperatureDrafts ||
+      projectBytes(project) > maxProjectBytes) throw new Error('Project capacity exceeded')
 }
 
 export const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)

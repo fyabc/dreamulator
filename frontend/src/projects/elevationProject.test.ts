@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { exportProject, importProject, makeElevationResult, makeElevationSource, openProjectRaster, projectBytes } from './elevationProject'
 import { removeProjectLayer } from './projectStore'
 import { exportWorldData, importWorldData } from './worldDataArchive'
+import { EARTH_PARAMS, GRID_H, GRID_W, readTemperatureGrid } from '../playground/temperatureDraft'
 
 function exampleProject() {
   const raster = { width: 2, height: 2, values: Float32Array.of(-4.25, 1.125, 5, 7.75) }
@@ -50,6 +51,22 @@ describe('portable elevation projects', () => {
 })
 
 describe('world data archives', () => {
+  it('restores a temperature-only archive with its source branch, parameters, and exact normalized samples', async () => {
+    const values = new Float32Array(GRID_W * GRID_H).fill(0.75)
+    const draft = { id: crypto.randomUUID(), planet: 'planet_earth', branch: 'ERE-if',
+      source: 'Earth terrain', defaults: false, updatedAt: 100, params: { ...EARTH_PARAMS, albedo: 0.4 },
+      grid: new Blob([values.buffer]) }
+    const world = { ...exampleProject(), id: 'earth', published: true as const, layers: [], temperatureDrafts: [draft] }
+    const restored = await importWorldData(exportWorldData(world))
+    expect(restored).toMatchObject({ id: 'earth', published: true, layers: [], temperatureDrafts: [draft] })
+    const saved = restored.temperatureDrafts![0]
+    expect(await readTemperatureGrid(saved.grid)).toEqual(values)
+    expect(projectBytes(world)).toBe(values.byteLength)
+    values[0] = NaN
+    await expect(readTemperatureGrid(new Blob([values.buffer]))).rejects.toThrow('Invalid temperature draft grid')
+    await expect(readTemperatureGrid(new Blob())).rejects.toThrow('Invalid temperature draft grid size')
+  })
+
   it('round-trips a browser world with its original, parameters and exact samples', async () => {
     const world = exampleProject()
     const archive = exportWorldData(world)

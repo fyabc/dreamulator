@@ -31,7 +31,7 @@ function paeth(left: number, above: number, corner: number) {
     : aboveDistance <= cornerDistance ? above : corner
 }
 
-export async function readElevationPng(blob: Blob, min: number, max: number): Promise<ElevationRaster> {
+export async function readElevationPng(blob: Blob, min: number, max: number, strict = false): Promise<ElevationRaster & { depth: 8 | 16 }> {
   const bytes = new Uint8Array(await blob.arrayBuffer())
   const header = new DataView(bytes.buffer)
   if (bytes.length < 33 || !PNG_SIGNATURE.every((value, index) => bytes[index] === value) ||
@@ -45,14 +45,22 @@ export async function readElevationPng(blob: Blob, min: number, max: number): Pr
     throw new Error('Expected a non-interlaced grayscale heightmap')
   }
   const chunks: Uint8Array<ArrayBuffer>[] = []
+  let ended = false
+  if (strict && pngCrc(bytes, 12, 29) !== header.getUint32(29)) throw new Error('Invalid PNG checksum')
   for (let offset = 33; offset + 12 <= bytes.length;) {
     const length = header.getUint32(offset)
     const kind = header.getUint32(offset + 4)
-    if (offset + 12 + length > bytes.length) throw new Error('Truncated heightmap')
+    const last = offset + 8 + length
+    if (last + 4 > bytes.length) throw new Error('Truncated heightmap')
+    if (strict && pngCrc(bytes, offset + 4, last) !== header.getUint32(last)) throw new Error('Invalid PNG checksum')
     if (kind === 0x49444154) chunks.push(bytes.subarray(offset + 8, offset + 8 + length))
-    if (kind === 0x49454e44) break
+    if (kind === 0x49454e44) {
+      ended = length === 0 && last + 4 === bytes.length
+      break
+    }
     offset += 12 + length
   }
+  if (strict && (!ended || !chunks.length)) throw new Error('Incomplete heightmap')
   const stride = width * (depth / 8) + 1
   const scanlines = new Uint8Array(height * stride)
   const reader = new Blob(chunks).stream().pipeThrough(new DecompressionStream('deflate')).getReader()
@@ -88,7 +96,7 @@ export async function readElevationPng(blob: Blob, min: number, max: number): Pr
       values[row * width + col] = min + sample * scale
     }
   }
-  return { width, height, values }
+  return { width, height, values, depth }
 }
 
 export function readElevationNpy(buffer: ArrayBuffer): ElevationRaster {
@@ -166,17 +174,19 @@ function elevationDescription(raster: ElevationRaster, metadata: Record<string, 
     .replace(/[^\x20-\x7e]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`)
 }
 
+function pngCrc(bytes: Uint8Array, start: number, end: number) {
+  let crc = 0xffffffff
+  for (let index = start; index < end; index++) crc = (crc >>> 8) ^ PNG_CRC_TABLE[(crc ^ bytes[index]) & 255]
+  return (crc ^ 0xffffffff) >>> 0
+}
+
 function pngChunk(kind: number, body: Uint8Array) {
   const bytes = new Uint8Array(body.length + 12)
   const header = new DataView(bytes.buffer)
   header.setUint32(0, body.length)
   header.setUint32(4, kind)
   bytes.set(body, 8)
-  let crc = 0xffffffff
-  for (let index = 4; index < bytes.length - 4; index++) {
-    crc = (crc >>> 8) ^ PNG_CRC_TABLE[(crc ^ bytes[index]) & 255]
-  }
-  header.setUint32(bytes.length - 4, crc ^ 0xffffffff)
+  header.setUint32(bytes.length - 4, pngCrc(bytes, 4, bytes.length - 4))
   return bytes
 }
 
