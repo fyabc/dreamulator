@@ -58,7 +58,7 @@ description: |
   路线 1 重标定采年长锁定（a ×1.0328 配 M* 0.65 → P 精确还原 99.8 d），本节
   历法与相位数字全部保持原值：φ=ϖ_A−Ω_N=82.7° → perihelion_day≈22.9 d，
   近日点领先北夏至 ~2.0 d（配大陆 ~25 d 热滞后，增温峰与盛夏重合）。
-  ϖ_A 循环周期 ~44 yr、Nacrea 节点（=其自转轴）进动 ~10 yr → 近日点-季节相位
+  ϖ_A 循环周期 ~50 yr、Nacrea 节点（=其自转轴）进动 ~10 yr → 近日点-季节相位
   以 ~13 yr 周期走完全循环（「近日点大年」——行星际岁差，一代人可见）。
   恒星第三体项 ×0.9999 → 认证时序数字近乎精确继承（确认跑见 orbits 横幅）。
 
@@ -128,7 +128,7 @@ orbits:
     eccentricity: 0.06786252      # β+ 安静模态历元值（带 0.065–0.081）
     inclination_deg: 0.025812
     longitude_ascending_node_deg: 131.099119
-    argument_of_periapsis_deg: 88.993305  # ϖ_A=220.1°；循环周期 ~44 yr（近日点大年 ~13 yr 见文件头）
+    argument_of_periapsis_deg: 88.993305  # ϖ_A=220.1°；循环周期 ~50 yr（近日点大年 ~13 yr 见文件头）
     mean_anomaly_epoch_deg: 47.539366
     epoch_year: 0.0
 
