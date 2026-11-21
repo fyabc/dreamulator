@@ -11,6 +11,7 @@
     "backClimate": "Back to climate",
     "backHelp": "Back to help",
     "sourceHelp": "The lab resamples this world's global elevation for a faster run. You can substitute another global heightmap.",
+    "mapSourceHelp": "The lab uses the whole planet's elevation, not just the area selected on the map. You can substitute another global heightmap.",
     "defaults": "Some settings are missing from the world data and use Earth sample defaults. Check the inputs before running.",
     "saving": "Saving climate draft…",
     "saved": "Saved in this browser",

@@ -139,7 +139,8 @@
 | P1 | LLM 叙事桥（3E 史诗叙事） | 2 周 | ★★★★ |
 | P3 | **UCC 天体区分度配套**（① 学界天体气候划分文献调研——部分已由 worldbuildingpasta 调研覆盖；② 前端天体 profile 声明显示） | 调研 1–2 天 | ★★ |
 | P3 | **nullschool 式粒子流可视化** ✅ 2026-10-23：风/洋流粒子平流拖尾并入 2D/3D 查看器；技术参考见 `pipelines/map-system.md` | — | ★★ |
-| P1 | **前端入口与用户旅程**：先验收[统一创建入口](proposals/frontend-entry.md#统一创建入口)中从已有全球高度图到运行、保存和迁移世界的流程，再接入从头创建。 | 按验收阶段拆分。 | ★★★★ |
+| P1 | **前端入口与用户旅程**：世界创建使用[统一入口](proposals/frontend-entry.md#统一创建入口)，平面和球面地图均可往返[气候实验台](pipelines/browser-playground.md)。 | 后续阶段见前端入口提案。 | ★★★★ |
+| P1 | **正式世界参数编辑**：在首次构建前及查看结果后使用同一个[世界参数入口](proposals/frontend-entry.md#正式世界参数编辑)，保存输入与重新构建分开。 | 在创作旅程打通后安排。 | ★★★★ |
 | P3 | **完整浏览器气候计算**：温度原型已实现，后端与资源产品化见[浏览器计算提案](proposals/browser-playground.md)，入口体验见[前端旅程](proposals/frontend-entry.md)。 | 按科学与资源验证结果。 | ★★ |
 | P3 | **草案七转正 + Hycean 调研**（创作线） | ①1–2 天 ②周级 | ★★ |
 | P2 | **earth 观测锚 1km 升级**（CHELSA/WorldClim 30″ 面积加权聚合；须在 LGM 分支之前） | 1–2 天 | ★★★ |

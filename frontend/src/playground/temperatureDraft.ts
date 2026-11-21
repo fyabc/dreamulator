@@ -31,12 +31,39 @@ export function isTemperatureParams(value: unknown): value is PlanetParams {
     && params.rotationDays >= 0.01 && params.elevMinM < params.elevMaxM
 }
 
-export function temperatureTrialPath(origin: TemperatureOrigin, draft?: string, from?: 'map' | 'globe') {
+type TrialMapView = { kind: 'map' | 'globe'; search: URLSearchParams }
+
+const mapSearchKeys = ['window', 'layer', 'monthly', 'play', 'terrain', 'particles', 'sun', 'season', 'night', 'spin', 'zoomPreview']
+
+function trialMapSearch(source: URLSearchParams) {
+  const result = new URLSearchParams()
+  for (const key of mapSearchKeys) {
+    const value = source.get(key)
+    if (value !== null) result.set(key, value)
+  }
+  return result
+}
+
+export function temperatureTrialPath(origin: TemperatureOrigin, draft?: string, view?: TrialMapView) {
   const search = new URLSearchParams({ world: origin.world, planet: origin.planet })
   if (origin.branch) search.set('branch', origin.branch)
   if (draft) search.set('draft', draft)
-  if (from) search.set('from', from)
+  if (view) {
+    search.set('from', view.kind)
+    const mapSearch = trialMapSearch(view.search).toString()
+    if (mapSearch) search.set('mapView', mapSearch)
+  }
   return `/playground?${search}`
+}
+
+export function temperatureTrialReturnPath({ world, planet, branch }: TemperatureOrigin, trial: URLSearchParams) {
+  if (!world || !planet) return '/help'
+  const from = trial.get('from')
+  const view = from === 'map' || from === 'globe' ? from : null
+  const search = view ? trialMapSearch(new URLSearchParams(trial.get('mapView') ?? '')) : new URLSearchParams({ tab: 'climate', planet })
+  if (branch) search.set('branch', branch)
+  const path = `/worlds/${encodeURIComponent(world)}${view ? `/${view}/${encodeURIComponent(planet)}` : ''}`
+  return search.size ? `${path}?${search}` : path
 }
 
 const isIdentifier = (value: unknown): value is string => typeof value === 'string' && /^[\w.-]{1,100}$/.test(value)

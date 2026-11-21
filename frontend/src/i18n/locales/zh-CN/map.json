@@ -6,6 +6,7 @@
     "mapFallback": "地图"
   },
   "workbench": {
+    "climateTrial": "气候实验台",
     "views": "地图视图",
     "flat": "平面",
     "globe": "球面",

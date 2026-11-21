@@ -23,7 +23,8 @@ import nacreaSample from '../playground/nacrea-180x90.json'
 import nacreaHeightmap from '../playground/nacrea-180x90.png'
 import type { KernelResult, TemperatureResponse } from '../playground/temperature.worker'
 import { temperatureRequest } from '../playground/temperatureRequest'
-import { EARTH_PARAMS, GRID_W, GRID_H, MODEL_JANUARY_INDEX, isTemperatureParams, readTemperatureGrid, type PlanetParams } from '../playground/temperatureDraft'
+import { EARTH_PARAMS, GRID_W, GRID_H, MODEL_JANUARY_INDEX, isTemperatureParams, readTemperatureGrid,
+  temperatureTrialReturnPath, type PlanetParams } from '../playground/temperatureDraft'
 import { loadTemperatureElevation, temperatureInputCatalog, worldTemperatureParams } from '../playground/worldTemperature'
 
 const CANVAS_W = 900
@@ -431,9 +432,7 @@ function TemperatureLab({ search }: { search: URLSearchParams }) {
   const failedSample = error?.sample
   const sourceLabel = selectedSample === 'earth' ? t('params.presetEarth') : heightmapName
   const saved = savedSnapshot?.params === params && savedSnapshot.gray === gray
-  const backQuery = new URLSearchParams(mapView ? undefined : { tab: 'climate', planet })
-  if (branch) backQuery.set('branch', branch)
-  const backTo = contextual ? `/worlds/${encodeURIComponent(world)}${mapView ? `/${mapView}/${encodeURIComponent(planet)}` : ''}${backQuery.size ? `?${backQuery}` : ''}` : '/help'
+  const backTo = temperatureTrialReturnPath({ world, planet, branch }, search)
   const stale = resultParams != null && (Object.keys(params) as Array<keyof PlanetParams>)
     .some(key => params[key] !== resultParams[key])
   const phase = status === 'sample' ? t('action.loadingInput')
@@ -463,7 +462,7 @@ function TemperatureLab({ search }: { search: URLSearchParams }) {
         <aside className="space-y-4">
           <section className="rounded-xl border border-space-border bg-space-panel/60 p-4">
             <h2 className="font-semibold text-gray-100">{t('heightmap.title')}</h2>
-            <p className="mt-1 text-xs text-gray-400">{t(contextual ? 'trial.sourceHelp' : 'heightmap.start')}</p>
+            <p className="mt-1 text-xs text-gray-400">{t(contextual ? mapView ? 'trial.mapSourceHelp' : 'trial.sourceHelp' : 'heightmap.start')}</p>
             {!contextual && <div className="my-3 flex flex-wrap gap-2">
               {(['earth', 'nacrea'] as const).map(sample => (
                 <button

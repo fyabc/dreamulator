@@ -6,6 +6,7 @@
     "mapFallback": "Map"
   },
   "workbench": {
+    "climateTrial": "Climate experiment",
     "views": "Map views",
     "flat": "Map",
     "globe": "Globe",

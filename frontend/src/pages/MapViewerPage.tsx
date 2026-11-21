@@ -104,6 +104,8 @@ export default function MapViewerPage() {
       <MapWorkbenchToolbar title={currentPlanetName ?? selectedPlanet ?? t('title.mapFallback')} view="map"
         backTo={`/worlds/${worldName}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/globe/${selectedPlanet}${globeQS}` : undefined}
+        trialTo={selectedPlanet && meta && elevation ? temperatureTrialPath({ world: worldName, planet: selectedPlanet, branch: selectedBranch },
+          undefined, { kind: 'map', search: searchParams }) : undefined}
         layersOpen={leftPanelOpen} onToggleLayers={() => setLeftPanelOpen((open) => !open)}>
         {meta?.elevation_import && <TerrainSourceSelect value={terrainSource} onChange={setTerrainSource}
           width={meta.width} height={meta.height} cells={cvtMesh?.cells.length} />}
@@ -190,7 +192,7 @@ export default function MapViewerPage() {
         >
           {importMsg.text}
           {importMsg.temperatureOrigin && <Link
-            to={temperatureTrialPath(importMsg.temperatureOrigin, undefined, 'map')}
+            to={temperatureTrialPath(importMsg.temperatureOrigin, undefined, { kind: 'map', search: searchParams })}
             className="mx-2 inline-flex min-h-11 items-center font-medium text-neon-cyan underline underline-offset-4">
             {t('msg.tryTemperature')}
           </Link>}

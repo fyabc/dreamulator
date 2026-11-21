@@ -7,11 +7,12 @@ import MapHelpLink from './MapHelpLink'
 const layerPanelId = 'map-layer-panel'
 const layerButtonId = 'map-layer-button'
 
-export function MapWorkbenchToolbar({ title, view, backTo, switchTo, layersOpen, onToggleLayers, children }: {
+export function MapWorkbenchToolbar({ title, view, backTo, switchTo, trialTo, layersOpen, onToggleLayers, children }: {
   title: string
   view: 'map' | 'globe'
   backTo: string
   switchTo?: string
+  trialTo?: string
   layersOpen: boolean
   onToggleLayers: () => void
   children: ReactNode
@@ -43,6 +44,10 @@ export function MapWorkbenchToolbar({ title, view, backTo, switchTo, layersOpen,
         </nav>
       )}
       <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 md:col-start-3 md:gap-2">
+        {trialTo && <Link to={trialTo} className="atlas-tool-button text-sm"
+          aria-label={t('workbench.climateTrial')} title={t('workbench.climateTrial')}>
+          <AtlasIcon name="flask" className="size-4" /> <span className="hidden lg:inline">{t('workbench.climateTrial')}</span>
+        </Link>}
         <button id={layerButtonId} type="button" aria-expanded={layersOpen} aria-controls={layersOpen ? layerPanelId : undefined}
           className="atlas-tool-button text-sm md:hidden" onClick={onToggleLayers}>
           <AtlasIcon name="layers" className="size-4" /> {t('workbench.layers')}

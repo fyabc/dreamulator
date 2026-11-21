@@ -249,6 +249,8 @@ export default function GlobeViewerPage() {
       <MapWorkbenchToolbar title={currentPlanet?.name ?? selectedPlanet ?? t('title.globe')} view="globe"
         backTo={`/worlds/${worldName}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/map/${selectedPlanet}${mapQS}` : undefined}
+        trialTo={selectedPlanet && meta && elevation ? temperatureTrialPath({ world: worldName, planet: selectedPlanet, branch: selectedBranch },
+          undefined, { kind: 'globe', search: searchParams }) : undefined}
         layersOpen={leftPanelOpen} onToggleLayers={() => setLeftPanelOpen((open) => !open)}>
         {meta?.elevation_import && <TerrainSourceSelect value={terrainSource} onChange={setTerrainSource}
           width={meta.width} height={meta.height} cells={cvtMesh?.cells.length} />}
@@ -308,7 +310,7 @@ export default function GlobeViewerPage() {
         }`}>
           {importMsg.text}
           {importMsg.temperatureOrigin && <Link
-            to={temperatureTrialPath(importMsg.temperatureOrigin, undefined, 'globe')}
+            to={temperatureTrialPath(importMsg.temperatureOrigin, undefined, { kind: 'globe', search: searchParams })}
             className="mx-2 inline-flex min-h-11 items-center font-medium text-neon-cyan underline underline-offset-4">
             {t('msg.tryTemperature')}
           </Link>}

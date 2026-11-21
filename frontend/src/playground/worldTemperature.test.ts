@@ -40,7 +40,8 @@ describe('world temperature trial inputs', () => {
 
   it('keeps the branch, selected planet and original view in contextual links', () => {
     const location = { world: 'earth', planet: 'planet_earth', branch: 'ERE-if' }
-    expect(temperatureTrialPath(location, 'saved-id', 'map')).toBe('/playground?world=earth&planet=planet_earth&branch=ERE-if&draft=saved-id&from=map')
+    expect(temperatureTrialPath(location, 'saved-id', { kind: 'map', search: new URLSearchParams() }))
+      .toBe('/playground?world=earth&planet=planet_earth&branch=ERE-if&draft=saved-id&from=map')
     expect(temperatureTrialPath({ ...location, branch: null })).toBe('/playground?world=earth&planet=planet_earth')
   })
 })
