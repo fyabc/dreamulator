@@ -141,7 +141,9 @@
 | P3 | **nullschool 式粒子流可视化** ✅ 2026-10-23：风/洋流粒子平流拖尾并入 2D/3D 查看器；技术参考见 `pipelines/map-system.md` | — | ★★ |
 | P1 | **前端入口与用户旅程**：世界创建使用[统一入口](proposals/frontend-entry.md#统一创建入口)，平面和球面地图均可往返[气候实验台](pipelines/browser-playground.md)。 | 后续阶段见前端入口提案。 | ★★★★ |
 | P1 | **正式世界参数编辑**：在首次构建前及查看结果后使用同一个[世界参数入口](proposals/frontend-entry.md#正式世界参数编辑)，保存输入与重新构建分开。 | 在创作旅程打通后安排。 | ★★★★ |
-| P3 | **完整浏览器气候计算**：温度原型已实现，后端与资源产品化见[浏览器计算提案](proposals/browser-playground.md)，入口体验见[前端旅程](proposals/frontend-entry.md)。 | 按科学与资源验证结果。 | ★★ |
+| P1 | **试算接入完整 EBM**：先复用本机正式气候管线并显示阶段进度。见[气候接入顺序](proposals/browser-playground.md#完整气候接入与验证顺序)。 | 先验收本机版本，再验证静态站的同核运行。 | ★★★★ |
+| P2 | **EPS 与 EPS++**：先验证 WebGPU 对原版 ExoPlaSim 的复现，再单独加入耦合扩展。见[时间模式设计](proposals/frontend-entry.md#气候求解器与时间模式)。 | 在试算结果与查看器契约稳定后推进。 | ★★★ |
+| P2 | **快速气候的云量与辐射**：评估逐月云量能否独立验证，并检查辐射反馈。见[柱辐射场提案](proposals/column-radiation-field.md)。 | 单独开展，不阻塞 EBM 试算。 | ★★★ |
 | P3 | **草案七转正 + Hycean 调研**（创作线） | ①1–2 天 ②周级 | ★★ |
 | P2 | **earth 观测锚 1km 升级**（CHELSA/WorldClim 30″ 面积加权聚合；须在 LGM 分支之前） | 1–2 天 | ★★★ |
 | P2 | **地球历史气候分支**（`earth/branches/lgm`：ICE-6G_C + CHELSA-TraCE21k；模式重建非观测真值，provenance 声明） | ~1 周级 | ★★★ |

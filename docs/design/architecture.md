@@ -168,6 +168,8 @@ input 下的 **Markdown 文档**（`*.md` 与 `design-notes/`）同样属于人�
 > **静态导出同步原则**：新增 API 端点或数据字段时，必须同步更新 `scripts/release/export_static.py`、
 > `frontend/src/api/staticClient.ts`、`frontend/src/api/client.ts` 三处，否则静态部署后功能缺失。
 
+全球地图的求解器接入方案把正式与试算来源、求解器能力和图层时间口径分开。计划中的[试算计算后端](proposals/browser-playground.md#完整气候接入与验证顺序)复用正式 EBM 管线，并通过同一结果描述接入后续 GCM；只有提供瞬时场的求解器才有「当前」模式。当前浏览器温度预览的实现见[气候实验台](pipelines/browser-playground.md)。
+
 ### 地图子系统
 
 行星地图采用**栅格高度图 + Voronoi 语义网络**混合表示：CVT 球面网格承载语义数据
