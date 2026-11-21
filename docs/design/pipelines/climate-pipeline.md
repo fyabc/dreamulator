@@ -806,10 +806,10 @@ Hales 2009——临界值以下雨出趋于零、95% 降水在 0.8 w_c 以上）
 
 月度预算由[气候模拟器](../../../src/dreamulator/map/climate_simulator.py)组织，
 十二个月在每一遍求解中读取冻结的强迫，结果始终按月序归约。
-支持 `fork` 的宿主使用进程池，默认进程数取可用 CPU 数与十二中的较小值；
-`DREAMULATOR_CLIMATE_WORKERS` 可指定进程数，取 1 时强制串行。
-浏览器中的 Pyodide、WASI 和不支持 `fork` 的宿主采用串行路径，多进程模块只在并行分支导入。
-并行收益属于支持该能力的宿主，不能计入单线程浏览器目标的性能承诺。
+在支持 `fork` 的宿主上，命令行等主线程调用方可以使用进程池。默认进程数取可用 CPU 数与十二中的较小值，
+也可用 `DREAMULATOR_CLIMATE_WORKERS` 指定进程数，取 1 时强制串行。
+本机 API 在工作线程中执行构建，用串行路径避免在服务线程内启动基于 `fork` 的进程池。
+浏览器中的 Pyodide、WASI 和不支持 `fork` 的宿主也采用串行路径。串行与并行调用相同的月份求解器，并按同一月序归约。
 
 预算的网格边图、边几何、场数组和压缩稀疏列（CSC）装配结构在网格实例上缓存。
 [稀疏排序模块](../../../src/dreamulator/map/sparse_ordering.py)的 `nested_dissection_order`

@@ -7,6 +7,7 @@ Uses a small synthetic mesh (100 cells) for fast execution.
 import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
@@ -1123,6 +1124,9 @@ def test_monthly_solve_workers_respects_host_and_env(monkeypatch) -> None:
     monkeypatch.setenv("DREAMULATOR_CLIMATE_WORKERS", "1")
     assert cs._monthly_solve_workers() == 1
     monkeypatch.setenv("DREAMULATOR_CLIMATE_WORKERS", "3")
+    assert cs._monthly_solve_workers() == 3
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        assert executor.submit(cs._monthly_solve_workers).result() == 1
     assert cs._monthly_solve_workers() == 3
     monkeypatch.setenv("DREAMULATOR_CLIMATE_WORKERS", "nonsense")
     assert cs._monthly_solve_workers() >= 1  # 无效值忽略，不抛错

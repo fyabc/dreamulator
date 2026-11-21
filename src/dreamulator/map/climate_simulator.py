@@ -18,6 +18,7 @@ import logging
 import os
 import sys
 from collections import OrderedDict
+from threading import current_thread, main_thread
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -2437,10 +2438,8 @@ def _apply_cold_trap(
 #: Worker processes for the twelve monthly moisture-budget solves.  Unset (the
 #: default) picks ``min(12, usable cores)``; ``1`` forces the serial path, which
 #: every result must match bit-for-bit.  ``DREAMULATOR_CLIMATE_WORKERS``
-#: overrides it where the CPU budget is shared.  The parallel path speeds up the
-#: server and CLI diagnosis loop only: a single-threaded host (the Pyodide
-#: playground) always takes the serial path, so the per-solve cost — not the
-#: parallelism — is what a browser target has to improve.
+#: overrides it where the CPU budget is shared.  The pool is only available
+#: for main-thread callers on fork-capable hosts.
 _MONTHLY_SOLVE_WORKERS_ENV = "DREAMULATOR_CLIMATE_WORKERS"
 
 #: Set by ``_monthly_pass`` just before forking, so the worker entry point below
@@ -2450,14 +2449,17 @@ _MONTHLY_SOLVE_TASK: Callable[[int], tuple[np.ndarray, np.ndarray, np.ndarray | 
 
 
 def _can_fork() -> bool:
-    """Whether this interpreter can fork worker processes.
+    """Whether this caller may use the fork-based pool.
 
-    Pyodide (``sys.platform == "emscripten"``, the browser playground) and WASI
-    have no fork and no process pool, so the engine must stay usable there on
-    the serial path — which is also the path the bit-identity requirement is
-    stated against.
+    API builds run in worker threads, where forking can strand inherited
+    locks in the child. Pyodide and WASI have no fork at all. These callers
+    use the same month solver in serial order.
     """
-    return sys.platform not in ("emscripten", "wasi") and hasattr(os, "fork")
+    return (
+        sys.platform not in ("emscripten", "wasi")
+        and hasattr(os, "fork")
+        and current_thread() is main_thread()
+    )
 
 
 def _monthly_solve_workers() -> int:
