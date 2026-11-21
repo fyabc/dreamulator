@@ -547,8 +547,20 @@
     "loadingBase": "底图加载中…",
     "clickToProbe": "点击探测格点值",
     "pickPrompt": "区域地图",
-    "noPacks": "未找到区域地图",
-    "noMeta": "无法载入这张区域地图。请选择其他地图，或参阅帮助了解如何准备地图。",
+    "noPacks": "还没有保存的区域地图。可以打开全球地图并选择一个区域。",
+    "noMeta": "无法载入这张区域地图。请重试，或选择其他地图。",
+    "entry": {
+      "choose": "选择区域地图",
+      "chooseHint": "请从上方列表选择一张已保存的区域地图。",
+      "listFailed": "无法载入区域地图列表。",
+      "loadingList": "正在载入区域地图列表…",
+      "notFound": "这张区域地图已不可用。请从列表选择其他地图。",
+      "openWorlds": "浏览世界",
+      "retryList": "重新载入地图列表",
+      "tools": "区域工具",
+      "closeProbe": "关闭点位详情",
+      "tapToProbe": "点按地图查看点位信息"
+    },
     "base": "底图",
     "help": "区域地图帮助（在新标签页打开）",
     "refinement": {

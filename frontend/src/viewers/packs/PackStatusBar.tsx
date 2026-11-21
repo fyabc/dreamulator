@@ -17,8 +17,9 @@ export default function PackStatusBar({ hover, window }: PackStatusBarProps) {
 
   if (!hover) {
     return (
-      <div className="flex items-center gap-4 px-3 py-1.5 bg-space-panel/80 border-t border-space-border text-xs text-gray-500 font-mono">
-        <span>{t('packs.hoverPrompt')}</span>
+      <div className="border-t border-space-border bg-space-panel/80 px-3 py-1.5 text-xs text-gray-400">
+        <span className="[@media(pointer:coarse)]:hidden">{t('packs.hoverPrompt')}</span>
+        <span className="hidden [@media(pointer:coarse)]:inline">{t('packs.entry.tapToProbe')}</span>
       </div>
     )
   }
@@ -27,15 +28,14 @@ export default function PackStatusBar({ hover, window }: PackStatusBarProps) {
   const fmtOffset = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)} km`
 
   return (
-    <div className="flex items-center gap-3 px-3 py-1.5 bg-space-panel/80 border-t border-space-border text-xs text-gray-400 font-mono">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-space-border bg-space-panel/80 px-3 py-1.5 font-mono text-xs text-gray-400">
       <span className="text-neon-cyan">
         {hover.lon.toFixed(4)}°, {hover.lat.toFixed(4)}°
       </span>
-      <span className="text-gray-600">|</span>
       <span>
         ΔE {fmtOffset(km.x)} · ΔN {fmtOffset(km.y)}
       </span>
-      <span className="ml-auto text-gray-600">{t('packs.clickToProbe')}</span>
+      <span className="ml-auto hidden text-gray-400 lg:inline">{t('packs.clickToProbe')}</span>
     </div>
   )
 }

@@ -8,10 +8,12 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { api, packImageUrl, packTopoUrl } from '../api/client'
+import { api, ApiError, packImageUrl, packTopoUrl } from '../api/client'
 import { isStaticMode } from '../api/mode'
+import AtlasIcon from '../components/AtlasIcon'
 import MapHelpLink from '../components/map/MapHelpLink'
 import { REGION_WINDOW_PARAM, readRegionWindow } from '../viewers/map/regionWindow'
 import type { LonLat } from '../viewers/map/utils/mapCoords'
@@ -19,10 +21,11 @@ import PackMap from '../viewers/packs/PackMap'
 import PackStatusBar from '../viewers/packs/PackStatusBar'
 import ProbePanel from '../viewers/packs/ProbePanel'
 import RegionalExtractView from '../viewers/packs/RegionalExtractView'
+import RegionMapWorkspace from '../viewers/packs/RegionMapWorkspace'
 import PackElevationDownload from '../viewers/packs/PackElevationDownload'
 import RegionRefinementPanel from '../viewers/packs/RegionRefinementPanel'
 import TerrainCompute from '../viewers/packs/TerrainCompute'
-import type { PackMeta, PackSummary, ProbeResult, RiverData } from '../viewers/packs/types'
+import type { PackMeta, PackSummary, ProbeResult } from '../viewers/packs/types'
 import type { PackWindow } from '../viewers/packs/packCoords'
 
 interface BaseOption {
@@ -80,7 +83,11 @@ export default function PackViewerPage() {
     return <ExistingPackViewer key={search.get('pack')} globalReturn={globalReturn} extractUrl={`/packs?${params}`} />
   }
   if (rawWindow !== null) {
-    return <p role="alert" className="p-4 text-sm text-gray-400">{t('packs.export.invalidSelection')}</p>
+    return <div className="space-y-3 p-4">
+      <h1 className="font-semibold text-gray-200">{t('packs.pickPrompt')}</h1>
+      <p role="alert" className="text-sm text-gray-300">{t('packs.export.invalidSelection')}</p>
+      <Link to="/worlds" className="inline-flex min-h-11 items-center text-sm text-neon-cyan hover:underline">{t('packs.entry.openWorlds')}</Link>
+    </div>
   }
   return <ExistingPackViewer key={search.get('pack')} />
 }
@@ -92,11 +99,14 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
   const regionReturn = globalReturn ?? (typeof state?.regionReturn === 'string' ? state.regionReturn : null)
 
   const [searchParams, setSearchParams] = useSearchParams()
-  const [packs, setPacks] = useState<PackSummary[] | null>(null)
-  const [pack, setPack] = useState<string | null>(searchParams.get('pack'))
-  const [meta, setMeta] = useState<PackMeta | null>(null)
-  const [summary, setSummary] = useState<PackSummary | null>(null)
-  const [rivers, setRivers] = useState<RiverData | null>(null)
+  const pack = searchParams.get('pack') || null
+  const packs = useQuery({ queryKey: ['packs'], queryFn: api.listPacks, enabled: !staticMode, retry: false, staleTime: 0 })
+  const metaQuery = useQuery({ queryKey: ['packMeta', pack], queryFn: () => api.getPackMeta(pack!),
+    enabled: !staticMode && !!pack, retry: false, staleTime: 0 })
+  const rivers = useQuery({ queryKey: ['packRivers', pack], queryFn: () => api.getPackRivers(pack!),
+    enabled: !staticMode && !!pack && metaQuery.isSuccess, retry: false, staleTime: 0 })
+  const meta = metaQuery.data ?? null
+  const summary = packs.data?.find((item) => item.name === pack) ?? null
   const [baseId, setBaseId] = useState<string>('topo')
   const [showOriginal, setShowOriginal] = useState(false)
   const [graticuleOn, setGraticuleOn] = useState(true)
@@ -107,51 +117,12 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
   const [probeError, setProbeError] = useState<string | null>(null)
   const probeSeq = useRef(0)
 
-  useEffect(() => {
-    if (staticMode) return
-    api.listPacks().then(setPacks).catch(() => setPacks([]))
-  }, [staticMode])
-
-  // Deep link ?pack= — keep the URL in sync when the picker changes.
   const selectPack = (name: string | null) => {
-    setPack(name)
-    setMeta(null)
-    setSummary(null)
-    setRivers(null)
-    setPin(null)
-    setProbe(null)
-    setProbeError(null)
     const next = new URLSearchParams(searchParams)
     if (name) next.set('pack', name)
     else next.delete('pack')
     setSearchParams(next, { replace: true, state })
   }
-
-  useEffect(() => {
-    if (!packs || !pack) return
-    if (packs.some((p) => p.name === pack)) return
-    // Stale ?pack= — fall back to the newest pack.
-    selectPack(packs.length > 0 ? packs[0].name : null)
-  }, [packs, pack])
-
-  useEffect(() => {
-    if (!pack) return
-    let current = true
-    api
-      .getPackMeta(pack)
-      .then((next) => { if (current) setMeta(next) })
-      .catch(() => { if (current) setMeta(null) })
-    api
-      .getPackRivers(pack)
-      .then((next) => { if (current) setRivers(next) })
-      .catch(() => { if (current) setRivers(null) })
-    return () => { current = false }
-  }, [pack])
-
-  useEffect(() => {
-    if (!packs || !pack) return
-    setSummary(packs.find((p) => p.name === pack) ?? null)
-  }, [packs, pack])
 
   const win = useMemo(() => (meta ? windowOf(meta) : null), [meta])
   const canCompare = meta?.height_source === 'refined-out'
@@ -166,7 +137,7 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
     if (!availableBases.some((b) => b.id === baseId)) {
       setBaseId(availableBases[0]?.id ?? 'color')
     }
-  }, [availableBases])
+  }, [availableBases, baseId])
 
   const base = useMemo(() => {
     const opt = availableBases.find((b) => b.id === baseId)
@@ -183,6 +154,7 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
             <MapHelpLink section="packs" label={t('packs.help')} />
           </div>
           <p>{t('packs.staticModeHint')}</p>
+          <Link to="/worlds" className="inline-flex min-h-11 items-center text-neon-cyan hover:underline">{t('packs.entry.openWorlds')}</Link>
           <TerrainCompute />
         </div>
       </div>
@@ -191,6 +163,7 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
 
   const onProbe = (ll: LonLat) => {
     setPin(ll)
+    setProbe(null)
     setProbeError(null)
     if (!pack) return
     const seq = ++probeSeq.current
@@ -212,62 +185,71 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
 
   const checkboxCls =
     'flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 cursor-pointer select-none'
+  const missingPack = metaQuery.error instanceof ApiError && metaQuery.error.status === 404
+  const hasEntryError = pack ? metaQuery.isError : packs.isError
+  const entryMessage = pack
+    ? missingPack ? 'packs.entry.notFound' : metaQuery.isError ? 'packs.noMeta' : 'status.loading'
+    : packs.isPending ? 'packs.entry.loadingList' : packs.isError ? 'packs.entry.listFailed'
+      : packs.data?.length ? 'packs.entry.chooseHint' : 'packs.noPacks'
+  const openWorlds = (!pack || missingPack) && packs.isSuccess && !packs.data.length
+  const retry = pack && !missingPack && metaQuery.isError ? metaQuery.refetch
+    : !pack && packs.isError ? packs.refetch : null
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)] md:h-screen">
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 bg-space-panel/80 border-b border-space-border">
-        {regionReturn && (
-          <Link to={regionReturn} className="text-xs text-neon-cyan hover:underline" title={t('packs.hint.back')}>
-            {t('regionWindow.back')}
-          </Link>
-        )}
-        {extractUrl && <Link to={extractUrl} state={{ regionReturn }} className="text-xs text-neon-cyan hover:underline">
-          {t('packs.export.global')}
-        </Link>}
-        <label className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">{t('packs.pickPrompt')}</span>
+    <div className="flex min-h-[calc(100dvh-56px)] flex-col md:h-[100dvh]">
+      <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-space-border bg-space-panel px-3 py-2 sm:px-4">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4">
+          <h1 className="text-sm font-semibold text-gray-200">{t('packs.pickPrompt')}</h1>
+          {regionReturn && <Link to={regionReturn} title={t('packs.hint.back')}
+            className="inline-flex min-h-9 items-center text-xs text-neon-cyan hover:underline">{t('regionWindow.back')}</Link>}
+          {extractUrl && <Link to={extractUrl} state={{ regionReturn }}
+            className="inline-flex min-h-9 items-center text-xs text-neon-cyan hover:underline">{t('packs.export.global')}</Link>}
+        </div>
+        <MapHelpLink section="packs" label={t('packs.help')} />
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
           <select
             value={pack ?? ''}
+            aria-label={t('packs.entry.choose')}
             title={t('packs.hint.pick')}
-            onChange={(e) => selectPack(e.target.value || null)}
-            className="bg-space-surface border border-space-border rounded px-2 py-1 text-xs text-gray-200"
+            onChange={(event) => selectPack(event.target.value || null)}
+            disabled={!packs.data?.length}
+            className="min-h-11 w-full min-w-0 rounded border border-space-border bg-space-surface px-2 text-sm text-gray-200 disabled:text-gray-400 sm:w-auto sm:max-w-full md:min-h-8 md:text-xs"
           >
-            {packs === null && <option value="">…</option>}
-            {packs?.length === 0 && <option value="">{t('packs.noPacks')}</option>}
-            {packs?.map((p) => (
-              <option key={p.name} value={p.name}>
-                {p.world ?? p.name} · {p.center_lat}°, {p.center_lon}° · {Math.round(p.span_km)} km
+            <option value="">{t('packs.entry.choose')}</option>
+            {pack && !summary && <option value={pack}>{pack}</option>}
+            {packs.data?.map((item) => (
+              <option key={item.name} value={item.name}>
+                {item.world ?? item.name} · {item.center_lat}°, {item.center_lon}° · {Math.round(item.span_km)} km
               </option>
             ))}
           </select>
-        </label>
-
-        {summary && (
-          <span className="ml-auto text-xs text-gray-600 font-mono" title={t('packs.hint.source')}>
-            {summary.world}
-            {summary.branch ? ` · ${summary.branch}` : ''} · {summary.mtime}
-          </span>
-        )}
-        <div className={summary ? undefined : 'ml-auto'}>
-          <MapHelpLink section="packs" label={t('packs.help')} />
+          {summary && <p className="hidden break-words text-xs text-gray-400 sm:block" title={t('packs.hint.source')}>
+            {summary.branch ? `${summary.branch} · ` : ''}{summary.mtime}
+          </p>}
+          {pack && packs.isError && <button type="button" onClick={() => void packs.refetch()}
+            className="min-h-9 text-xs text-neon-cyan hover:underline">{t('packs.entry.retryList')}</button>}
         </div>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col bg-space-bg md:flex-row">
-        {win && (
-          <aside aria-label={t('label.layerSettings')}
-            className="max-h-[38dvh] shrink-0 space-y-3 overflow-auto border-b border-space-border bg-space-panel p-3 md:max-h-none md:w-56 md:border-b-0 md:border-r">
-            <h2 className="hidden text-xs font-semibold uppercase tracking-wide text-gray-500 md:block">
+      </header>
+      {win ? (
+        <RegionMapWorkspace toolsLabel={t('label.layerSettings')} status={<PackStatusBar hover={hover} window={win} />} tools={<>
+            <h2 className="text-sm font-semibold text-gray-200">
               {t('label.layerSettings')}
             </h2>
-            <label className="flex items-center gap-2 md:block md:space-y-1">
+            {canCompare && baseId === 'topo' && <label className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
+              <span>{t('packs.refinement.compare')}</span>
+              <select className="min-h-11 max-w-full rounded border border-space-border bg-space-surface p-1 text-xs text-gray-200 md:min-h-8"
+                value={showOriginal ? 'input' : 'result'} onChange={(event) => setShowOriginal(event.target.value === 'input')}>
+                <option value="input">{t('packs.refinement.original')}</option>
+                <option value="result">{t('packs.refinement.adopted')}</option>
+              </select>
+            </label>}
+            <label className="flex flex-wrap items-center gap-2 md:block md:space-y-1">
               <span className="text-xs text-gray-400">{t('packs.base')}</span>
               <select
                 value={baseId}
                 title={t('packs.hint.base')}
                 onChange={(e) => setBaseId(e.target.value)}
-                className="rounded border border-space-border bg-space-surface px-2 py-1 text-xs text-gray-200 md:w-full"
+                className="min-h-11 max-w-full rounded border border-space-border bg-space-surface px-2 text-xs text-gray-200 md:min-h-8 md:w-full"
               >
                 {availableBases.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -280,14 +262,9 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
               <input type="checkbox" checked={graticuleOn} onChange={(e) => setGraticuleOn(e.target.checked)} />
               {t('packs.graticule')}
             </label>
-            {canCompare && baseId === 'topo' && <label className="block text-xs text-gray-400">
-              <span className="mr-2">{t('packs.refinement.compare')}</span>
-              <select className="rounded border border-space-border bg-space-surface p-1 text-xs text-gray-200"
-                value={showOriginal ? 'input' : 'result'} onChange={(event) => setShowOriginal(event.target.value === 'input')}>
-                <option value="input">{t('packs.refinement.original')}</option>
-                <option value="result">{t('packs.refinement.adopted')}</option>
-              </select>
-            </label>}
+            {summary && <p className="break-words text-xs text-gray-400 sm:hidden" title={t('packs.hint.source')}>
+              {summary.branch ? `${summary.branch} · ` : ''}{summary.mtime}
+            </p>}
             {pack && meta?.height_source && <PackElevationDownload key={`${pack}:${original ? 'input' : meta.height_source}`}
               pack={pack} source={original ? 'input' : meta.height_source} input={meta.input} summary={summary} />}
             {meta?.height_source === null && <p className="text-xs text-gray-400">{t('packs.export.noNumeric')}</p>}
@@ -297,21 +274,23 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
                 params.set('pack', result)
                 return `/packs?${params}`
               }} />}</TerrainCompute>
-          </aside>
-        )}
-        <div className="relative isolate min-h-0 min-w-0 flex-1">
-          {win ? (
-            <>
+          </>}>
               <PackMap
                 window={win}
                 base={base}
-                rivers={original ? null : rivers}
+                rivers={original ? null : rivers.data ?? null}
                 graticuleOn={graticuleOn}
                 pin={pin}
                 onHover={setHover}
                 onProbe={onProbe}
               />
-              <div className="absolute top-3 right-3 z-[500] flex flex-col gap-2 items-end pointer-events-auto">
+              <div className={`absolute bottom-3 right-3 z-[500] max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] overflow-auto md:bottom-auto md:top-3 ${pin ? '' : 'hidden md:block'}`}>
+                {pin && <button type="button" aria-label={t('packs.entry.closeProbe')}
+                  className="mb-1 ml-auto flex size-11 items-center justify-center rounded border border-space-border bg-space-panel text-gray-200 md:size-8"
+                  onClick={() => {
+                    probeSeq.current += 1
+                    setPin(null)
+                  }}><AtlasIcon name="close" className="size-4" /></button>}
                 <ProbePanel
                   point={pin}
                   probe={probe}
@@ -321,17 +300,18 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
                   spanKm={summary?.span_km ?? null}
                 />
               </div>
-            </>
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-500">
-              {packs === null ? '…' : t('packs.noMeta')}
-            </div>
-          )}
+        </RegionMapWorkspace>
+      ) : (
+        <div className="max-w-lg space-y-2 px-3 py-5 text-sm text-gray-300 sm:px-4">
+          <p role={hasEntryError ? 'alert' : 'status'}>{t(entryMessage)}</p>
+          {retry && <button type="button" onClick={() => void retry()} className="min-h-11 text-neon-cyan hover:underline">
+            {t('packs.export.retry')}
+          </button>}
+          {openWorlds && <Link to="/worlds" className="inline-flex min-h-11 items-center text-neon-cyan hover:underline">
+            {t('packs.entry.openWorlds')}
+          </Link>}
         </div>
-      </div>
-
-      {/* Status bar */}
-      {win && <PackStatusBar hover={hover} window={win} />}
+      )}
     </div>
   )
 }

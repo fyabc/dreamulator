@@ -547,8 +547,20 @@
     "loadingBase": "Loading base map…",
     "clickToProbe": "Click to probe cell values",
     "pickPrompt": "Regional map",
-    "noPacks": "No regional maps found",
-    "noMeta": "This regional map could not be loaded. Choose another map, or see the help for how to prepare one.",
+    "noPacks": "There are no saved regional maps yet. Open a global map to select an area.",
+    "noMeta": "This regional map could not be loaded. Try again or choose another map.",
+    "entry": {
+      "choose": "Choose a regional map",
+      "chooseHint": "Choose a saved regional map from the list above.",
+      "listFailed": "The list of regional maps could not be loaded.",
+      "loadingList": "Loading regional maps…",
+      "notFound": "This regional map is no longer available. Choose another map from the list.",
+      "openWorlds": "Browse worlds",
+      "retryList": "Reload map list",
+      "tools": "Regional tools",
+      "closeProbe": "Close point details",
+      "tapToProbe": "Tap the map to inspect a point"
+    },
     "base": "Base",
     "help": "Regional map help (opens in a new tab)",
     "refinement": {

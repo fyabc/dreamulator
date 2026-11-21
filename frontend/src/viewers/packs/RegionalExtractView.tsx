@@ -15,6 +15,7 @@ import type { LonLat } from '../map/utils/mapCoords'
 import { lonLatToKm } from './packCoords'
 import PackMap from './PackMap'
 import PackStatusBar from './PackStatusBar'
+import RegionMapWorkspace from './RegionMapWorkspace'
 import { useRegionElevation, type ElevationInput } from './useRegionElevation'
 import { useElevationPreview } from './useElevationPreview'
 import type { ElevationFormat } from './elevationRaster'
@@ -80,15 +81,22 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
   }
 
   return (
-    <div className="flex h-[calc(100dvh-56px)] flex-col md:h-screen">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-space-border bg-space-panel px-4 py-2">
-        <Link className="text-xs text-neon-cyan hover:underline" to={globalReturn}>{t('regionWindow.back')}</Link>
-        <h1 className="text-sm font-semibold text-gray-200">{t('packs.pickPrompt')}</h1>
-        <span className="text-xs text-gray-400">{t('regionWindow.summary', { lat, lon, spanKm })}</span>
-        <div className="ml-auto"><MapHelpLink section="packs" label={t('packs.help')} /></div>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col bg-space-bg md:flex-row">
-        <aside className="max-h-[38dvh] shrink-0 space-y-3 overflow-auto border-b border-space-border bg-space-panel p-3 text-xs text-gray-400 md:max-h-none md:w-60 md:border-b-0 md:border-r">
+    <div className="flex min-h-[calc(100dvh-56px)] flex-col md:h-[100dvh]">
+      <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-space-border bg-space-panel px-3 py-2 sm:px-4">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4">
+          <h1 className="text-sm font-semibold text-gray-200">{t('packs.pickPrompt')}</h1>
+          <Link className="inline-flex min-h-9 items-center text-xs text-neon-cyan hover:underline" to={globalReturn}>{t('regionWindow.back')}</Link>
+          <p className="w-full text-xs text-gray-400 sm:w-auto">{t('regionWindow.summary', { lat, lon, spanKm })}</p>
+        </div>
+        <MapHelpLink section="packs" label={t('packs.help')} />
+      </header>
+      <RegionMapWorkspace toolsLabel={t('packs.entry.tools')}
+        status={base && <>
+          <PackStatusBar hover={hover} window={window} />
+          {pinHeight !== null && <p className="bg-space-panel px-3 pb-1.5 text-xs text-neon-cyan" role="status">
+            {t('packs.export.probe', { value: Math.round(pinHeight) })}
+          </p>}
+        </>} tools={<>
           <div className="space-y-1">
             <p className="font-medium text-gray-200">{t(showRefined ? 'packs.refinement.adopted' : 'packs.export.global')}</p>
             <p>{t(showRefined ? 'packs.compute.refinedHint' : 'packs.export.globalHint')}</p>
@@ -115,7 +123,7 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
               metres: Math.round(spanKm * 1000 / refined.width) })}</p>
             <p>{t('packs.compute.resultMethod', { method: t(`packs.compute.method.${result.recipe.method}`) })}</p>
             <label className="flex flex-wrap items-center gap-2">{t('packs.refinement.compare')}
-              <select className="rounded border border-space-border bg-space-surface p-1" value={showRefined ? 'result' : 'input'}
+              <select className="min-h-11 max-w-full rounded border border-space-border bg-space-surface p-1 md:min-h-8" value={showRefined ? 'result' : 'input'}
                 onChange={(event) => setShowRefined(event.target.value === 'result')}>
                 <option value="input">{t('packs.refinement.original')}</option>
                 <option value="result">{t('packs.refinement.adopted')}</option>
@@ -141,19 +149,15 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
                   })} />
             </div>
           </details>}
-          {pinHeight !== null && <p>{t('packs.export.probe', { value: Math.round(pinHeight) })}</p>}
-        </aside>
-        <div className="relative isolate min-h-0 min-w-0 flex-1">
-          {base ? <PackMap window={window} base={base} rivers={null} graticuleOn={false} pin={pin}
-            onHover={setHover} onProbe={setPin} /> : (
-            <div className="absolute inset-0 grid place-content-center gap-2 p-4 text-center text-sm text-gray-400">
-              <p role="status">{t(missing ? 'packs.export.missing' : height.failed ? 'packs.export.previewFailed' : 'status.loading')}</p>
-              {height.failed && <button type="button" className="text-neon-cyan hover:underline" onClick={height.retry}>{t('packs.export.retry')}</button>}
-            </div>
-          )}
-        </div>
-      </div>
-      {base && <PackStatusBar hover={hover} window={window} />}
+        </>}>
+        {base ? <PackMap window={window} base={base} rivers={null} graticuleOn={false} pin={pin}
+          onHover={setHover} onProbe={setPin} /> : (
+          <div className="absolute inset-0 grid place-content-center gap-2 p-4 text-center text-sm text-gray-400">
+            <p role={missing || height.failed ? 'alert' : 'status'}>{t(missing ? 'packs.export.missing' : height.failed ? 'packs.export.previewFailed' : 'status.loading')}</p>
+            {height.failed && <button type="button" className="min-h-11 text-neon-cyan hover:underline" onClick={height.retry}>{t('packs.export.retry')}</button>}
+          </div>
+        )}
+      </RegionMapWorkspace>
     </div>
   )
 }
