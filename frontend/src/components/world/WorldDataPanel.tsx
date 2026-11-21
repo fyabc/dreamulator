@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import AtlasIcon from '../AtlasIcon'
 import { isStaticMode } from '../../api/mode'
-import { temperatureTrialPath } from '../../playground/temperatureDraft'
+import { temperatureTrialMapPath } from '../../playground/temperatureDraft'
 import ImportProjectElevation from '../projects/ImportProjectElevation'
 import { projectButton } from '../projects/SaveProjectResult'
 import { elevationSource, projectBytes } from '../../projects/elevationProject'
@@ -121,7 +121,7 @@ export default function WorldDataPanel({ id, published, publishedAvailable, nati
         <h3 className="text-sm font-medium text-gray-200">{t('temperatureDrafts')}</h3>
         {drafts.length ? <ul className="divide-y divide-space-border border-y border-space-border text-sm">
           {drafts.map(draft => <li key={draft.id} className="flex flex-wrap items-center gap-x-3 px-3 py-1">
-            <Link to={temperatureTrialPath({ world: id, planet: draft.planet, branch: draft.branch }, draft.id)}
+            <Link to={temperatureTrialMapPath({ world: id, planet: draft.planet, branch: draft.branch }, draft.id)}
               className="flex min-h-11 min-w-0 flex-1 basis-48 flex-col justify-center break-words py-1.5 text-neon-cyan hover:underline">
               {draft.source}
               <span className="text-xs text-gray-400">{draft.branch || t('rootBranch')} · {new Date(draft.updatedAt).toLocaleString(i18n.language)}</span>

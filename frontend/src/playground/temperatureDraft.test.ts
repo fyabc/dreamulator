@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { temperatureTrialMapPath, temperatureTrialPath, temperatureTrialReturnPath } from './temperatureDraft'
+import { temperatureTrialMapPath, temperatureTrialReturnPath } from './temperatureDraft'
 
 const origin = { world: 'earth', planet: 'planet_earth', branch: 'ERE-if' }
 
@@ -10,9 +10,8 @@ describe('climate experiment navigation', () => {
   })
   it.each(['map', 'globe'] as const)('returns to the same %s view and selection', kind => {
     const view = new URLSearchParams({ window: '24.1,121.45,150', layer: 'temperature', monthly: '1', terrain: 'original' })
-    const trial = new URL(temperatureTrialPath(origin, undefined, { kind, search: view }), 'https://example.invalid')
-    expect(trial.searchParams.get('branch')).toBe('ERE-if')
-    const back = new URL(temperatureTrialReturnPath(origin, trial.searchParams), trial)
+    const legacy = new URLSearchParams({ from: kind, mapView: view.toString() })
+    const back = new URL(temperatureTrialReturnPath(origin, legacy), 'https://example.invalid')
     expect(back.pathname).toBe(`/worlds/earth/${kind}/planet_earth`)
     expect(Object.fromEntries(back.searchParams)).toEqual({ ...Object.fromEntries(view), branch: 'ERE-if' })
   })

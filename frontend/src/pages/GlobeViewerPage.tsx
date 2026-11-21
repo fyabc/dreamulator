@@ -44,7 +44,7 @@ import { readRegionBoundary, readRegionWindow, REGION_WINDOW_PARAM } from '../vi
 import { savedGlobeRegion } from '../viewers/map/utils/globeRegionDetail'
 import { isStaticMode } from '../api/mode'
 import { openProjectRaster } from '../projects/elevationProject'
-import { getProject, projectKey } from '../projects/projectStore'
+import { getProject, projectKey, worldDataPath } from '../projects/projectStore'
 
 // ---------------------------------------------------------------------------
 // Page
@@ -256,7 +256,8 @@ export default function GlobeViewerPage() {
       : 'atlas-workbench flex flex-col'}>
       {!cleanMode && (
       <MapWorkbenchToolbar title={currentPlanet?.name ?? selectedPlanet ?? t('title.globe')} view="globe"
-        backTo={`/worlds/${worldName}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
+        backTo={searchParams.has('draft') ? worldDataPath(worldName, selectedBranch) :
+          `/worlds/${worldName}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/map/${selectedPlanet}${mapQS}` : undefined}
         trialPanel={trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trial.open, onToggle: trial.open ? trial.closePanel : openTrial } : undefined}
         layersOpen={leftPanelOpen && !trial.open && !trialActive} onToggleLayers={trialActive || trial.open ? undefined : () => setLeftPanelOpen((open) => !open)}>
@@ -294,6 +295,7 @@ export default function GlobeViewerPage() {
             onChange={(e) => {
               const next = new URLSearchParams(searchParams)
               next.delete(REGION_WINDOW_PARAM)
+              next.delete('draft')
               const qs = next.toString()
               navigate(`/worlds/${worldName}/globe/${e.target.value}${qs ? `?${qs}` : ''}`)
             }}

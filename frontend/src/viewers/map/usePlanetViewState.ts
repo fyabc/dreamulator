@@ -157,6 +157,7 @@ export function usePlanetViewState(
       const next = new URLSearchParams(prev)
       if (branch) next.set('branch', branch)
       else next.delete('branch')
+      if (branch !== selectedBranch) next.delete('draft')
       return next
     }, { replace: true })
   }

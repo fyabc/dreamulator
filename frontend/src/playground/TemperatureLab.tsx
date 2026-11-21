@@ -118,7 +118,7 @@ interface MapLab {
   showing: boolean
 }
 
-export default function TemperatureLab({ search, map }: { search: URLSearchParams; map?: MapLab }) {
+export default function TemperatureLab({ search, map, recovery = false }: { search: URLSearchParams; map?: MapLab; recovery?: boolean }) {
   const world = search.get('world') || ''
   const planet = search.get('planet') || ''
   const branch = search.get('branch') || null
@@ -409,7 +409,7 @@ export default function TemperatureLab({ search, map }: { search: URLSearchParam
   const failedSample = error?.sample
   const sourceLabel = selectedSample === 'earth' ? t('params.presetEarth') : heightmapName
   const saved = savedSnapshot?.params === params && savedSnapshot.gray === gray
-  const backTo = temperatureTrialReturnPath({ world, planet, branch }, search)
+  const backTo = recovery ? worldDataPath(world, branch) : temperatureTrialReturnPath({ world, planet, branch }, search)
   const stale = resultParams != null && (Object.keys(params) as Array<keyof PlanetParams>)
     .some(key => params[key] !== resultParams[key])
   const phase = status === 'sample' ? t('action.loadingInput')
@@ -543,7 +543,7 @@ export default function TemperatureLab({ search, map }: { search: URLSearchParam
 
   if (map) return (
     <div className="space-y-2">
-      <p className="text-xs leading-relaxed text-gray-400">{t('trial.inlineSourceHelp')}</p>
+      <p className="text-xs leading-relaxed text-gray-400">{t(requestedDraft ? 'trial.draftSourceHelp' : 'trial.inlineSourceHelp')}</p>
       {result && <div className="flex flex-wrap items-center justify-between gap-2 border-b border-space-border pb-2">
         {monthSelect}
         {!map.showing && <button type="button" onClick={map.onShowPreview} className="atlas-tool-button text-xs">{t('trial.showPreview')}</button>}
@@ -562,12 +562,12 @@ export default function TemperatureLab({ search, map }: { search: URLSearchParam
               {t('badge')}
             </span>
           </div>
-          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-gray-400">{t(contextual ? 'trial.subtitle' : 'subtitle')}</p>
+          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-gray-400">{t(recovery ? 'trial.draftRecovery' : contextual ? 'trial.subtitle' : 'subtitle')}</p>
           {contextual && <p className="mt-2 break-words text-sm text-gray-200">
             {world} · {bodyName} · {branch || t('trial.root')}
           </p>}
         </div>
-        <Link to={backTo} className="text-sm text-gray-400 hover:text-neon-cyan">{t(contextual ? mapView ? 'trial.backMap' : 'trial.backClimate' : 'trial.backHelp')}</Link>
+        <Link to={backTo} className="text-sm text-gray-400 hover:text-neon-cyan">{t(recovery ? 'trial.openData' : contextual ? mapView ? 'trial.backMap' : 'trial.backClimate' : 'trial.backHelp')}</Link>
       </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-[310px,minmax(0,1fr)] xl:grid-cols-[340px,minmax(0,1fr)]">

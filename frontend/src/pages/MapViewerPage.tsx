@@ -106,7 +106,9 @@ export default function MapViewerPage() {
   const globeQS = globeSearch.size ? `?${globeSearch}` : ''
   const backSearch = new URLSearchParams()
   if (selectedBranch) backSearch.set('branch', selectedBranch)
-  if (trialFromClimate) {
+  if (searchParams.has('draft')) {
+    backSearch.set('tab', 'data')
+  } else if (trialFromClimate) {
     backSearch.set('tab', 'climate')
     if (selectedPlanet) backSearch.set('planet', selectedPlanet)
   }

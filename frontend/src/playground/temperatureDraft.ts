@@ -44,22 +44,22 @@ function trialMapSearch(source: URLSearchParams) {
   return result
 }
 
-export function temperatureTrialPath(origin: TemperatureOrigin, draft?: string, view?: TrialMapView) {
-  const search = new URLSearchParams({ world: origin.world, planet: origin.planet })
-  if (origin.branch) search.set('branch', origin.branch)
+export function temperatureTrialMapPath({ world, planet, branch }: TemperatureOrigin, draft?: string, view?: TrialMapView) {
+  const search = view ? trialMapSearch(view.search) : new URLSearchParams()
+  search.set('trial', 'climate')
+  if (branch) search.set('branch', branch)
   if (draft) search.set('draft', draft)
-  if (view) {
-    search.set('from', view.kind)
-    const mapSearch = trialMapSearch(view.search).toString()
-    if (mapSearch) search.set('mapView', mapSearch)
-  }
-  return `/playground?${search}`
+  return `/worlds/${encodeURIComponent(world)}/${view?.kind ?? 'map'}/${encodeURIComponent(planet)}?${search}`
 }
 
-export function temperatureTrialMapPath({ world, planet, branch }: TemperatureOrigin) {
-  const search = new URLSearchParams({ trial: 'climate' })
-  if (branch) search.set('branch', branch)
-  return `/worlds/${encodeURIComponent(world)}/map/${encodeURIComponent(planet)}?${search}`
+export function legacyTemperatureDraftDestination(search: URLSearchParams) {
+  const world = search.get('world')
+  const planet = search.get('planet')
+  const draft = search.get('draft')
+  const from = search.get('from')
+  if (!world || !planet || !draft) return null
+  const view = from === 'map' || from === 'globe' ? { kind: from, search: new URLSearchParams(search.get('mapView') ?? '') } as const : undefined
+  return temperatureTrialMapPath({ world, planet, branch: search.get('branch') || null }, draft, view)
 }
 
 export function temperatureTrialReturnPath({ world, planet, branch }: TemperatureOrigin, trial: URLSearchParams) {
