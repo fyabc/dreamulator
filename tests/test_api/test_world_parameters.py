@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
 import pytest
@@ -12,7 +13,9 @@ from fastapi.testclient import TestClient
 from dreamulator.api_routes import worlds as worlds_route
 from dreamulator.branch_manager import BranchManager
 from dreamulator.build_jobs import local_compute_slot
+from dreamulator.engine.physical_inputs import resolve_and_apply_physical_parameters
 from dreamulator.engine.pipeline import _is_dirty
+from dreamulator.map.pipeline_types import TerrainPipelineConfig
 from dreamulator.models.layers import Layer
 from dreamulator.resolver import LayerResolver
 from dreamulator.world_manager import WorldManager
@@ -114,3 +117,63 @@ def test_revision_validation_busy_and_reference_protection(workspace: tuple[Test
     assert client.get(ROOT).json()["read_only"] == "reference"
     assert client.put(ROOT, json=update).status_code == 409
     assert planet.read_bytes() == original
+
+
+def test_save_planet_updates_formal_forcing_without_rewriting_results(workspace):
+    client, world = workspace
+    planet_path = world / "layers/geological/input/planets.yaml"
+    existing = yaml.safe_load(planet_path.read_text(encoding="utf-8"))
+    summary = world / "layers/climate/derived/climate_summary.yaml"
+    summary.parent.mkdir(parents=True)
+    summary.write_text("planet_id: planet_terra\n", encoding="utf-8")
+    before = client.get(ROOT).json()["planet"]
+    assert before["id"] == "planet_terra"
+    assert not before["needs_rebuild"]
+    values = {"rotation_period_days": 1.75, "albedo": 0.0}
+    update = {"planet": values, "revision": before["revision"]}
+    for invalid in ({"rotation_period_days": 0}, {"albedo": 1.01}, {"albedo": True}):
+        assert client.put(ROOT, json={**update, "planet": values | invalid}).status_code == 422
+    with local_compute_slot:
+        assert client.put(ROOT, json=update).status_code == 409
+    result = client.put(ROOT, json=update)
+    assert result.status_code == 200, result.text
+    assert result.json()["planet"]["needs_rebuild"]
+    assert client.put(ROOT, json=update).status_code == 409
+    assert summary.read_text(encoding="utf-8") == "planet_id: planet_terra\n"
+    existing["planets"][0].update(values)
+    assert yaml.safe_load(planet_path.read_text(encoding="utf-8")) == existing
+    config = TerrainPipelineConfig()
+    resolve_and_apply_physical_parameters(grid_engine(LayerResolver(world), 42), config)
+    assert config.rotation_period_days == 1.75
+    assert config.albedo == 0.0
+    new_mtime = planet_path.stat().st_mtime_ns + 1_000_000
+    os.utime(summary, ns=(new_mtime, new_mtime))
+    assert not client.get(ROOT).json()["planet"]["needs_rebuild"]
+
+
+def test_planet_settings_follow_geological_branch_and_reference_protection(workspace):
+    client, world = workspace
+    planet_path = world / "layers/geological/input/planets.yaml"
+    original = planet_path.read_bytes()
+    branches = BranchManager(world)
+    branch = branches.create_branch("local-planet", Layer.GEOLOGICAL)
+    inherited = branches.create_branch("climate-only", Layer.CLIMATE)
+    url = f"{ROOT}?branch=local-planet"
+    update = {
+        "planet": {"rotation_period_days": 0.5, "albedo": 0.4},
+        "revision": client.get(url).json()["planet"]["revision"],
+    }
+    result = client.put(url, json=update)
+    assert result.status_code == 200, result.text
+    assert result.json()["planet"]["source"].startswith("branches/local-planet/")
+    assert (branch / "layers/geological/input/planets.yaml").exists()
+    assert not (inherited / "layers/geological/input/planets.yaml").exists()
+    inherited_url = f"{ROOT}?branch=climate-only"
+    assert client.get(inherited_url).json()["planet"]["read_only"] == "inherited"
+    assert client.put(inherited_url, json=update).status_code == 409
+    config_path = world / "world.yaml"
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config_path.write_text(yaml.safe_dump({**data, "reference_anchor": True}), encoding="utf-8")
+    assert client.get(ROOT).json()["planet"]["read_only"] == "reference"
+    assert client.put(ROOT, json=update).status_code == 409
+    assert planet_path.read_bytes() == original

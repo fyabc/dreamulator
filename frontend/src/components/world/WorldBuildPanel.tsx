@@ -97,7 +97,8 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
   const resultParams = new URLSearchParams(branch ? { branch } : {})
   const gridSize = grid.data?.num_cells?.toLocaleString(i18n.resolvedLanguage)
   const builtCells = grid.data?.built_cells
-  const needsRebuild = grid.data && !grid.data.reuses_mesh && builtCells != null && builtCells !== grid.data.num_cells
+  const needsRebuild = grid.data?.planet?.needs_rebuild ||
+    (grid.data && !grid.data.reuses_mesh && builtCells != null && builtCells !== grid.data.num_cells)
   const gridLabel = grid.isPending ? t('build.gridLoading') : gridSize != null
     ? t(grid.data?.reuses_mesh ? 'build.gridReused' : 'build.gridConfigured', { cells: gridSize })
     : t(grid.data?.reuses_mesh ? 'build.gridReusedUnknown' : 'build.gridUnknown')

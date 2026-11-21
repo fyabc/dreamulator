@@ -14,7 +14,7 @@ import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 import type { StarterFiles, StarterSettings, StarterTemplate } from '../projects/starterWorld'
 import type { WorldParameters, WorldParameterUpdate } from './worldParameters'
-import type { GridDefaults } from '../projects/worldParameters'
+import type { ParameterDefaults } from '../projects/worldParameters'
 
 interface DocumentMeta {
   filename: string
@@ -184,13 +184,13 @@ export const staticApi = {
     const { getProject } = await import('../projects/projectStore')
     const project = await getProject(id)
     if (project && !project.published && id !== 'earth') {
-      const defaults = await fetchStaticJson<GridDefaults>('/world-grid-defaults.json')
+      const defaults = await fetchStaticJson<ParameterDefaults>('/world-grid-defaults.json')
       if (project.creationSnapshot && !branch) {
-        const { readBrowserGrid } = await import('../projects/worldParameters')
-        return readBrowserGrid(project.creationSnapshot, defaults, String(project.updatedAt))
+        const { readBrowserParameters } = await import('../projects/worldParameters')
+        return readBrowserParameters(project.creationSnapshot, defaults, String(project.updatedAt))
       }
       return { ...defaults, num_cells: null, built_cells: null, source: null, revision: null,
-        reuses_mesh: false, read_only: 'unavailable' }
+        reuses_mesh: false, read_only: 'unavailable', planet: null }
     }
     const root = `/worlds/${encodeURIComponent(id)}`
     const scope = branch ? `${root}/branches/${encodeURIComponent(branch)}` : root
@@ -201,10 +201,10 @@ export const staticApi = {
     const project = await getProject(id)
     if (id === 'earth' || !project?.creationSnapshot || project.published || branch) throw new Error('Read-only world')
     if (settings.revision !== String(project.updatedAt)) throw new DOMException('World changed', 'InvalidStateError')
-    const [{ writeBrowserGrid }, defaults] = await Promise.all([
-      import('../projects/worldParameters'), fetchStaticJson<GridDefaults>('/world-grid-defaults.json'),
+    const [{ writeBrowserParameters }, defaults] = await Promise.all([
+      import('../projects/worldParameters'), fetchStaticJson<ParameterDefaults>('/world-grid-defaults.json'),
     ])
-    const archive = await writeBrowserGrid(project.creationSnapshot, settings, defaults)
+    const archive = await writeBrowserParameters(project.creationSnapshot, settings, defaults)
     await updateProject(id, current => {
       if (current.updatedAt !== project.updatedAt || current.published || !current.creationSnapshot) {
         throw new DOMException('World changed', 'InvalidStateError')

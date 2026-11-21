@@ -33,12 +33,14 @@ from dreamulator.engine.ephemeris import sky_ephemeris
 from dreamulator.guard.facts import load_entities
 from dreamulator.world_manager import STARTER_TEMPLATES, WorldManager
 from dreamulator.world_parameters import (
-    WorldGrid,
     WorldGridUpdate,
+    WorldParameters,
+    WorldPlanetUpdate,
     grid_engine,
     grid_inherited,
-    read_world_grid,
+    read_world_parameters,
     write_world_grid,
+    write_world_planet,
 )
 from dreamulator.world_snapshot import export_snapshot, restore_snapshot, snapshot_world_id
 
@@ -883,41 +885,43 @@ def get_build_grid(world_name: str, branch: str | None = None) -> BuildGrid:
         ) from error
 
 
-@router.get("/{world_name}/world-parameters", response_model=WorldGrid)
-def get_world_parameters(world_name: str, branch: str | None = None) -> WorldGrid:
+@router.get("/{world_name}/world-parameters", response_model=WorldParameters)
+def get_world_parameters(world_name: str, branch: str | None = None) -> WorldParameters:
     config, resolver, _ = _resolve_build_target(world_name, branch)
     try:
-        return read_world_grid(
+        return read_world_parameters(
             resolver,
             config.seed.seed,
             reference=branch is None and (config.reference_anchor or world_name == "earth"),
         )
     except (ValueError, yaml.YAMLError) as error:
-        raise HTTPException(
-            status_code=422, detail="Cannot read the world grid settings"
-        ) from error
+        raise HTTPException(status_code=422, detail="Cannot read the world settings") from error
 
 
-@router.put("/{world_name}/world-parameters", response_model=WorldGrid)
+@router.put("/{world_name}/world-parameters", response_model=WorldParameters)
 def save_world_parameters(
-    world_name: str, update: WorldGridUpdate, branch: str | None = None
-) -> WorldGrid:
+    world_name: str, update: WorldGridUpdate | WorldPlanetUpdate, branch: str | None = None
+) -> WorldParameters:
     if not local_compute_slot.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Another local compute job is already active")
     try:
         settings = get_world_parameters(world_name, branch)
-        if settings.read_only:
-            raise HTTPException(status_code=409, detail="The grid is read-only")
-        if settings.revision != update.revision:
-            raise HTTPException(status_code=409, detail="The grid changed since it was opened")
-        if settings.num_cells != update.num_cells:
-            _, resolver, _ = _resolve_build_target(world_name, branch)
+        planet = settings.planet
+        selected = planet if isinstance(update, WorldPlanetUpdate) else settings
+        if selected is None or selected.read_only:
+            raise HTTPException(status_code=409, detail="These settings are read-only")
+        if selected.revision != update.revision:
+            raise HTTPException(
+                status_code=409, detail="These settings changed since they were opened"
+            )
+        _, resolver, _ = _resolve_build_target(world_name, branch)
+        if isinstance(update, WorldPlanetUpdate) and planet is not None:
+            write_world_planet(resolver, planet, update.planet)
+        elif isinstance(update, WorldGridUpdate) and settings.num_cells != update.num_cells:
             write_world_grid(resolver, settings, update.num_cells)
         return get_world_parameters(world_name, branch)
     except (ValueError, RoundTripYAMLError) as error:
-        raise HTTPException(
-            status_code=422, detail="Cannot update the world grid settings"
-        ) from error
+        raise HTTPException(status_code=422, detail="Cannot update the world settings") from error
     finally:
         local_compute_slot.release()
 

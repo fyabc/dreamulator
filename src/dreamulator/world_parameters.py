@@ -1,4 +1,4 @@
-"""Resolve and update the formal build grid without modifying derived maps."""
+"""Resolve and update formal build inputs without modifying derived maps."""
 
 from __future__ import annotations
 
@@ -10,10 +10,11 @@ from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from ruamel.yaml import YAML
 
 from dreamulator.engine.geological import GeologicalEngine
+from dreamulator.engine.physical_inputs import load_planets
 from dreamulator.map.export import find_mesh_file
 from dreamulator.models.layers import Layer, get_layer_index
 
@@ -23,6 +24,23 @@ if TYPE_CHECKING:
 MIN_BUILD_CELLS = 100
 MAX_BUILD_CELLS = 200_000
 _FLAT_SECTIONS = ("planet", "terrain", "plates", "noise", "climate", "export")
+ReadOnlyReason = Literal["reference", "inherited", "fixed", "published", "unavailable"]
+
+
+class PlanetParameters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rotation_period_days: float = Field(gt=0, strict=True, allow_inf_nan=False)
+    albedo: float = Field(ge=0, le=1, strict=True)
+
+
+class WorldPlanet(PlanetParameters):
+    id: str
+    name: str
+    source: str
+    read_only: ReadOnlyReason | None
+    revision: str | None
+    needs_rebuild: bool
 
 
 class WorldGrid(BaseModel):
@@ -32,14 +50,27 @@ class WorldGrid(BaseModel):
     built_cells: int | None = Field(default=None, gt=0, strict=True)
     reuses_mesh: bool
     source: str | None = None
-    read_only: Literal["reference", "inherited", "fixed", "published", "unavailable"] | None = None
+    read_only: ReadOnlyReason | None = None
     revision: str | None = None
     min_cells: int = MIN_BUILD_CELLS
     max_cells: int = MAX_BUILD_CELLS
 
 
+class WorldParameters(WorldGrid):
+    planet: WorldPlanet | None = None
+
+
 class WorldGridUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     num_cells: int = Field(ge=MIN_BUILD_CELLS, le=MAX_BUILD_CELLS, strict=True)
+    revision: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class WorldPlanetUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    planet: PlanetParameters
     revision: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
@@ -95,11 +126,9 @@ def _authored_source(engine: GeologicalEngine) -> Path | None:
     return path
 
 
-def read_world_grid(
-    resolver: LayerResolver, seed: int, *, reference: bool = False, published: bool = False
+def _read_world_grid(
+    engine: GeologicalEngine, *, inherited: bool, reference: bool, published: bool
 ) -> WorldGrid:
-    engine = grid_engine(resolver, seed)
-    inherited = grid_inherited(resolver)
     cells, reuses_mesh = engine.preview_mesh_cells(inherited=inherited)
     built = _built_grid(engine)
     path = None if reuses_mesh else _authored_source(engine)
@@ -130,20 +159,82 @@ def read_world_grid(
     )
 
 
-def write_world_grid(resolver: LayerResolver, settings: WorldGrid, cells: int) -> None:
-    if settings.source is None or settings.read_only is not None:
-        raise ValueError("The grid is read-only")
+def _read_world_planet(
+    engine: GeologicalEngine, *, inherited: bool, reference: bool, published: bool
+) -> WorldPlanet | None:
+    path = engine.find_input("planets.yaml")
+    root = engine.world_dir
+    if path is None or not path.is_file() or not path.resolve().is_relative_to(root.resolve()):
+        return None
+    planets, _ = load_planets(path)
+    if not planets or planets[0].id != engine._detect_planet_id():
+        return None
+    planet = planets[0]
+    target = engine.maps_output_dir.parent
+    active_geology = engine.layer_input_dirs.get(Layer.GEOLOGICAL.value)
+    authored = path.parent == active_geology or path.parent == root / "layers/geological/input"
+    can_override = active_geology in (
+        root / "layers/geological/input",
+        target / "layers/geological/input",
+    )
+    reason: ReadOnlyReason | None = (
+        "published"
+        if published
+        else "reference"
+        if reference
+        else "inherited"
+        if inherited
+        else "unavailable"
+        if not (authored and can_override)
+        else None
+    )
+    source = path.relative_to(root).as_posix()
+    climate = target / "layers/climate/derived/climate_summary.yaml"
+    return WorldPlanet(
+        id=planet.id,
+        name=planet.name,
+        rotation_period_days=planet.rotation_period_days,
+        albedo=planet.albedo,
+        source=source,
+        read_only=reason,
+        revision=sha256(source.encode() + b"\0" + path.read_bytes()).hexdigest()
+        if reason is None
+        else None,
+        needs_rebuild=reason is None
+        and climate.is_file()
+        and path.stat().st_mtime_ns > climate.stat().st_mtime_ns,
+    )
+
+
+def read_world_parameters(
+    resolver: LayerResolver, seed: int, *, reference: bool = False, published: bool = False
+) -> WorldParameters:
+    engine = grid_engine(resolver, seed)
+    scope = {"inherited": grid_inherited(resolver), "reference": reference, "published": published}
+    grid = _read_world_grid(engine, **scope)
+    planet = _read_world_planet(engine, **scope)
+    return WorldParameters(**grid.model_dump(), planet=planet)
+
+
+def _input_editor(resolver: LayerResolver, relative: str) -> tuple[Path, Path, YAML]:
     root = resolver.world_dir
-    source = root / settings.source
+    source = root / relative
     target = root / "branches" / resolver.branch_name if resolver.branch_name else root
     path = target / "layers" / "geological" / "input" / source.name
     if not target.resolve().is_relative_to(root.resolve()) or not path.resolve().is_relative_to(
         target.resolve()
     ):
-        raise ValueError("The grid input must be inside the selected branch")
+        raise ValueError("The input must be inside the selected branch")
 
     editor = YAML()
     editor.preserve_quotes = True
+    return source, path, editor
+
+
+def write_world_grid(resolver: LayerResolver, settings: WorldGrid, cells: int) -> None:
+    if settings.source is None or settings.read_only is not None:
+        raise ValueError("The grid is read-only")
+    source, path, editor = _input_editor(resolver, settings.source)
     data = editor.load(source.read_text(encoding="utf-8"))
     if source.name == "terrain_config.yaml":
         if data is None:
@@ -165,6 +256,28 @@ def write_world_grid(resolver: LayerResolver, settings: WorldGrid, cells: int) -
             planet["terrain"] = {}
         planet["terrain"]["num_nodes"] = cells
 
+    _save_input(source, path, editor, data)
+
+
+def write_world_planet(
+    resolver: LayerResolver, settings: WorldPlanet, update: PlanetParameters
+) -> None:
+    if settings.read_only is not None:
+        raise ValueError("The planet is read-only")
+    source, path, editor = _input_editor(resolver, settings.source)
+    data = editor.load(source.read_text(encoding="utf-8"))
+    planet = data["planets"][0]
+    if planet["id"] != settings.id:
+        raise ValueError("The primary planet has changed")
+    changes = {
+        key: value for key, value in update.model_dump().items() if getattr(settings, key) != value
+    }
+    if changes:
+        planet.update(changes)
+        _save_input(source, path, editor, data)
+
+
+def _save_input(source: Path, path: Path, editor: YAML, data: object) -> None:
     contents = StringIO()
     editor.dump(data, contents)
     path.parent.mkdir(parents=True, exist_ok=True)

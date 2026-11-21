@@ -204,6 +204,19 @@
     "busy": "Local computation is in progress. Wait for it to finish before saving.",
     "error": "Could not save parameters. Try again.",
     "loadError": "Could not load world parameters. Refresh the page and try again.",
+    "planet": {
+      "title": "Primary world body: {{name}}",
+      "rotation_period_days": {
+        "label": "Sidereal rotation period (Earth days)",
+        "help": "Time for one turn relative to distant stars. One Earth day equals 24 hours."
+      },
+      "albedo": {
+        "label": "Bond albedo (0–1)",
+        "help": "Fraction of incoming radiation reflected back into space. For example, 0.3 means 30% is reflected."
+      },
+      "inherited": "This branch uses its upstream body settings and cannot change them independently.",
+      "unavailable": "This body's settings cannot be edited here."
+    },
     "readOnly": {
       "reference": "The Earth reference is read-only and is not built.",
       "published": "Published worlds are read-only. You can change worlds you create yourself.",

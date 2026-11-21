@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { EARTH_PARAMS, GRID_H, GRID_W } from '../playground/temperatureDraft'
 import { elevationPng } from '../viewers/packs/elevationRaster'
-import { readBrowserGrid, writeBrowserGrid } from './worldParameters'
+import { readBrowserParameters, writeBrowserParameters } from './worldParameters'
 import { exportHeightmapWorld, heightmapGrid, importHeightmapWorld, readHeightmapInput, savedTemperature,
   temperatureInputFingerprint, type HeightmapWorld } from './heightmapWorld'
 
@@ -23,14 +23,21 @@ async function fixture(real?: string): Promise<HeightmapWorld> {
 }
 
 describe('heightmap world snapshots', () => {
-  it('changes the formal mesh without changing the saved browser experiment or original image', async () => {
+  it('changes formal parameters without changing the saved browser experiment or original image', async () => {
     const world = await fixture()
     const archive = await exportHeightmapWorld(world)
-    const defaults = { num_cells: 100_000, min_cells: 100, max_cells: 200_000 }
-    expect((await readBrowserGrid(archive, defaults, 'first')).num_cells).toBe(256)
-    const updated = await writeBrowserGrid(archive, { num_cells: 320, revision: 'first' }, defaults)
+    const defaults = { num_cells: 100_000, min_cells: 100, max_cells: 200_000, planet: { rotation_period_days: 1, albedo: 0.3 } }
+    expect((await readBrowserParameters(archive, defaults, 'first')).num_cells).toBe(256)
+    const updated = await writeBrowserParameters(archive, { num_cells: 320, revision: 'first' }, defaults)
     const restored = await importHeightmapWorld(updated)
-    expect((await readBrowserGrid(updated, defaults, 'second')).num_cells).toBe(320)
+    expect((await readBrowserParameters(updated, defaults, 'second')).num_cells).toBe(320)
+    const planet = { rotation_period_days: 0.6, albedo: 0.52 }
+    const adjusted = await writeBrowserParameters(updated, { planet, revision: 'second' }, defaults)
+    expect(await readBrowserParameters(adjusted, defaults, 'third')).toMatchObject({ num_cells: 320, planet })
+    const reopened = await importHeightmapWorld(adjusted)
+    expect(reopened.params).toEqual(restored.params)
+    expect(reopened.temperature).toEqual(restored.temperature)
+    expect(await reopened.heightmap.original.arrayBuffer()).toEqual(await restored.heightmap.original.arrayBuffer())
     expect(restored.meshCells).toBe(320)
     expect(restored.temperature).toEqual(world.temperature)
     expect(restored.heightmap.sha256).toBe(world.heightmap.sha256)

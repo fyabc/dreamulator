@@ -887,7 +887,7 @@ export const api = {
     ? staticApi.getWorldParameters(name, branch)
     : fetchJson<WorldParameters>(worldParametersPath(name, branch), { cache: 'no-store' }),
 
-  saveWorldParameters: (name: string, branch: string | null, update: WorldParameterUpdate) => isStaticMode()
+  saveWorldParameters: (name: string, branch: string | null, update: WorldParameterUpdate): Promise<WorldParameters> => isStaticMode()
     ? staticApi.saveWorldParameters(name, branch, update)
     : fetchJson<WorldParameters>(worldParametersPath(name, branch), { method: 'PUT', body: JSON.stringify(update) }),
 
