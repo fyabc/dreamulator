@@ -16,6 +16,7 @@
     "import": "Import map"
   },
   "action": {
+    "skipToContent": "Skip to main content",
     "back": "← Back",
     "create": "Create",
     "delete": "Delete",
@@ -56,6 +57,15 @@
     "footerPeriod": "."
   },
   "home": {
+    "atlas": {
+      "headlineFirst": "Start with a map.",
+      "headlineSecond": "Build a world.",
+      "localIntro": "Turn elevation into a world with its own climate. Explore it on a globe or map, then choose a region to see in detail.",
+      "staticIntro": "From physical laws and star systems, Dreamulator builds worlds with terrain, climate, ecosystems, and civilizations.",
+      "imageDescription": "A globe of Earth drawn from real elevation data",
+      "pauseRotation": "Pause Earth rotation",
+      "playRotation": "Play Earth rotation"
+    },
     "menuWorldsDescStatic": "Browse exported world data",
     "menuWorldsDescLive": "Create, edit and delete worlds",
     "menuHelpDesc": "CLI reference, map workflow, usage guide",

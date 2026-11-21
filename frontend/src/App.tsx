@@ -3,10 +3,7 @@ import { HashRouter, BrowserRouter, Routes, Route, Navigate, useParams, useSearc
 import Layout from './components/Layout'
 import { isStaticMode } from './api/mode'
 
-// Code-split heavy pages: Three.js (~600 KB), Leaflet (~150 KB), and
-// react-markdown (~50 KB) are only loaded when the user navigates to the
-// relevant page.  This cuts the initial bundle for the home/world-list
-// pages by ~60%.
+// Keep viewer and documentation dependencies behind their routes.
 const HomePage = lazy(() => import('./pages/HomePage'))
 const WorldList = lazy(() => import('./pages/WorldList'))
 const WorldDetail = lazy(() => import('./pages/WorldDetail'))

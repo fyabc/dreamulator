@@ -35,15 +35,6 @@ export default defineConfig(({ mode }) => {
     // Support top-level await (required by Three.js WebGPU module)
     build: {
       target: ['chrome89', 'edge89', 'firefox89', 'safari15'],
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            three: ['three', '@react-three/fiber', '@react-three/drei'],
-            leaflet: ['leaflet', 'react-leaflet'],
-            markdown: ['react-markdown', 'remark-gfm'],
-          },
-        },
-      },
     },
     optimizeDeps: {
       esbuildOptions: {

@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
-import StarfieldBackground from '../components/StarfieldBackground'
 import { createProject, listProjects, projectsKey, restoreWorld, worldDataPath } from '../projects/projectStore'
 
 export default function WorldList() {
@@ -47,7 +46,6 @@ export default function WorldList() {
 
   return (
     <div className="relative min-h-screen">
-      <StarfieldBackground />
 
       <div className="relative z-10 px-6 py-8">
         <div className="flex justify-between items-center mb-8">

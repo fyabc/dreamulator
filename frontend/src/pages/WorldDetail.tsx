@@ -12,7 +12,6 @@ import CivMapPreview from '../components/civmap/CivMapPreview'
 import LayerDag from '../components/LayerDag'
 import LayerTabSection from '../components/world/LayerTabSection'
 import WorldBuildPanel from '../components/world/WorldBuildPanel'
-import StarfieldBackground from '../components/StarfieldBackground'
 import { getProject, projectKey, projectRegionPath } from '../projects/projectStore'
 
 const WorldDataPanel = lazy(() => import('../components/world/WorldDataPanel'))
@@ -210,7 +209,6 @@ export default function WorldDetail() {
 
   return (
     <div className="relative min-h-screen">
-      <StarfieldBackground />
 
       <div className="relative z-10 px-3 sm:px-6 py-4 sm:py-8">
         {!worldName && (

@@ -16,6 +16,7 @@
     "import": "导入地图"
   },
   "action": {
+    "skipToContent": "跳到主要内容",
     "back": "← 返回",
     "create": "创建",
     "delete": "删除",
@@ -56,6 +57,15 @@
     "footerPeriod": "。"
   },
   "home": {
+    "atlas": {
+      "headlineFirst": "从一张地图",
+      "headlineSecond": "造一个世界。",
+      "localIntro": "从高程出发，计算世界的气候。在球面和平面之间切换，选一处地形放近看。",
+      "staticIntro": "从物理定律和恒星系出发，逐层推演地形、气候、生态与文明，构建完整世界。",
+      "imageDescription": "根据真实高程绘制的地球",
+      "pauseRotation": "暂停地球旋转",
+      "playRotation": "播放地球旋转"
+    },
     "menuWorldsDescStatic": "浏览已导出的世界数据",
     "menuWorldsDescLive": "创建、编辑、删除世界",
     "menuHelpDesc": "CLI 参考、地图工作流、操作指南",

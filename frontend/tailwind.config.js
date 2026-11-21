@@ -8,13 +8,13 @@ export default {
     extend: {
       colors: {
         space: {
-          bg: '#0a0a1a',
-          panel: '#12122a',
-          border: '#2a2a5a',
-          surface: '#1a1a3a',
+          bg: '#10191d',
+          panel: '#162126',
+          border: '#33434a',
+          surface: '#202d32',
         },
         neon: {
-          cyan: '#00d4ff',
+          cyan: '#a8e6d4',
           purple: '#7b2fbe',
           blue: '#4466ff',
         },

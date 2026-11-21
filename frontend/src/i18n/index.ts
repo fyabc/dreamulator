@@ -74,6 +74,10 @@ function getInitialLanguage(): string {
   }
 }
 
+i18n.on('languageChanged', (language) => {
+  if (typeof document !== 'undefined') document.documentElement.lang = language
+})
+
 i18n.use(initReactI18next).init({
   resources: {
     'zh-CN': { common: commonZh, map: mapZh, worlds: worldsZh, civmap: civmapZh, help: helpZh, playground: playgroundZh, sky: skyZh, importer: importerZh },

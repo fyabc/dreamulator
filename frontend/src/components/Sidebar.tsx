@@ -1,5 +1,7 @@
+import { useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import AtlasIcon, { type AtlasIconName } from './AtlasIcon'
 import LanguageSwitcher from './LanguageSwitcher'
 import { useDevModeStore } from '../stores/devModeStore'
 import { useExperimentalStore } from '../stores/experimentalStore'
@@ -14,6 +16,12 @@ interface SidebarProps {
   onToggleCollapse: () => void
 }
 
+interface NavigationItem {
+  path: string
+  label: string
+  icon: AtlasIconName
+}
+
 export default function Sidebar({
   open,
   collapsed,
@@ -22,6 +30,10 @@ export default function Sidebar({
 }: SidebarProps) {
   const location = useLocation()
   const { t } = useTranslation()
+  const closeButton = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (open) closeButton.current?.focus()
+  }, [open])
   const devMode = useDevModeStore((s) => s.devMode)
   const setDevMode = useDevModeStore((s) => s.setDevMode)
   const experimental = useExperimentalStore((s) => s.experimental)
@@ -33,15 +45,15 @@ export default function Sidebar({
   const browserWorld = useQuery({ queryKey: projectKey(currentWorld ?? ''), queryFn: () => getProject(currentWorld!),
     enabled: isStaticMode() && !!currentWorld, retry: false })
 
-  const navItems = [
-    { path: '/', label: t('nav.home'), icon: '🏠' },
-    { path: '/worlds', label: t('nav.worlds'), icon: '🌍' },
-    ...(isStaticMode() ? [] : [{ path: '/import', label: t('nav.import'), icon: '⬆️' }]),
+  const navItems: NavigationItem[] = [
+    { path: '/', label: t('nav.home'), icon: 'home' },
+    { path: '/worlds', label: t('nav.worlds'), icon: 'globe' },
+    ...(isStaticMode() ? [] : [{ path: '/import', label: t('nav.import'), icon: 'import' as const }]),
     // Region pack QA page — local packs only, hidden in the static build.
-    ...(isStaticMode() ? [] : [{ path: '/packs', label: t('nav.packs'), icon: '🧭' }]),
+    ...(isStaticMode() ? [] : [{ path: '/packs', label: t('nav.packs'), icon: 'frame' as const }]),
     // Experimental browser Pyodide playground — opt-in via the experimental flag.
-    ...(experimental ? [{ path: '/playground', label: t('nav.playground'), icon: '🧪' }] : []),
-    { path: '/help', label: t('nav.help'), icon: '❓' },
+    ...(experimental ? [{ path: '/playground', label: t('nav.playground'), icon: 'flask' as const }] : []),
+    { path: '/help', label: t('nav.help'), icon: 'help' },
   ]
 
   // World-specific nav items (shown when viewing a world)
@@ -50,29 +62,30 @@ export default function Sidebar({
   const overviewSearch = new URLSearchParams()
   const branch = new URLSearchParams(search).get('branch')
   if (branch) overviewSearch.set('branch', branch)
-  const worldNavItems = currentWorld && browserWorld.data && !browserWorld.data.published
-    ? [{ path: worldDataPath(currentWorld), label: t('worlds:worldData.title'), icon: '🗂️' }]
+  const worldNavItems: NavigationItem[] = currentWorld && browserWorld.data && !browserWorld.data.published
+    ? [{ path: worldDataPath(currentWorld), label: t('worlds:worldData.title'), icon: 'folder' }]
     : currentWorld
     ? [
-        { path: `/worlds/${currentWorld}${branch ? `?${overviewSearch}` : ''}`, label: t('nav.overview'), icon: '📋' },
-        { path: `/worlds/${currentWorld}/globe${search}`, label: t('nav.map'), icon: '🗺️' },
-        { path: `/worlds/${currentWorld}/viewer3d${search}`, label: t('nav.viewer3d'), icon: '🔭' },
+        { path: `/worlds/${currentWorld}${branch ? `?${overviewSearch}` : ''}`, label: t('nav.overview'), icon: 'overview' },
+        { path: `/worlds/${currentWorld}/globe${search}`, label: t('nav.map'), icon: 'globe' },
+        { path: `/worlds/${currentWorld}/viewer3d${search}`, label: t('nav.viewer3d'), icon: 'orbit' },
         // API-only view (parameterized engine query) — hidden in static mode.
         ...(isStaticMode()
           ? []
-          : [{ path: `/worlds/${currentWorld}/sky${search}`, label: t('nav.sky'), icon: '✨' }]),
+          : [{ path: `/worlds/${currentWorld}/sky${search}`, label: t('nav.sky'), icon: 'stars' as const }]),
       ]
     : []
 
   return (
     <aside
+      id="site-sidebar"
       className={[
         'bg-space-panel flex flex-col flex-shrink-0',
         'border-r border-space-border',
         'transition-[width,transform] duration-200 ease-in-out',
         // Mobile: fixed overlay, slide in/out
         'fixed inset-y-0 left-0 z-40 w-60',
-        open ? 'translate-x-0' : '-translate-x-full',
+        open ? 'translate-x-0' : 'invisible -translate-x-full md:visible',
         // Desktop: sticky so the footer (collapse toggle + version) is always at
         // the viewport bottom regardless of page height.
         'md:sticky md:top-0 md:h-screen md:translate-x-0 md:z-auto',
@@ -80,27 +93,20 @@ export default function Sidebar({
       ].join(' ')}
     >
       {/* Logo + close button (mobile) */}
-      <div className="p-5 border-b border-space-border flex items-center justify-between min-h-[85px]">
-        <div className={collapsed ? 'md:hidden' : ''}>
-          <h1 className="text-2xl font-bold">
-            <span className="logo-dream">dream</span>
-            <span className="logo-ulator text-base">ulator</span>
-          </h1>
-          <p className="text-xs text-gray-500 mt-1 tracking-wider">{t('app.subtitle')}</p>
-        </div>
-        {/* Collapsed desktop: small icon */}
-        <div className={collapsed ? 'hidden md:block text-center w-full' : 'hidden'}>
-          <span className="text-lg font-bold logo-dream">D</span>
-        </div>
+      <div className={`flex min-h-16 items-center justify-between border-b border-space-border ${collapsed ? 'px-4 md:justify-center md:px-1' : 'px-4'}`}>
+        <Link to="/" onClick={onClose} aria-label="Dreamulator"
+          className="inline-flex min-h-11 items-center gap-2 text-lg font-semibold tracking-tight">
+          <AtlasIcon name="orbit" className="size-6 text-neon-cyan" />
+          <span className={collapsed ? 'md:hidden' : ''}>Dreamulator</span>
+        </Link>
         {/* Close button — mobile only */}
         <button
+          ref={closeButton}
           onClick={onClose}
-          className="md:hidden ml-2 p-1.5 rounded-lg text-gray-500 hover:text-gray-200 hover:bg-space-surface transition-colors"
+          className="md:hidden inline-flex size-11 items-center justify-center rounded text-gray-300 hover:bg-space-surface"
           aria-label={t('action.close')}
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <AtlasIcon name="close" />
         </button>
       </div>
 
@@ -117,16 +123,17 @@ export default function Sidebar({
               to={item.path}
               onClick={onClose}
               title={collapsed ? item.label : undefined}
+              aria-current={location.pathname === item.path ? 'page' : undefined}
               className={[
                 'flex items-center rounded-lg transition-all duration-200',
                 collapsed ? 'md:justify-center md:px-0 md:py-3' : '',
                 'px-4 py-2.5 gap-3',
                 isActive
-                  ? 'bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20 shadow-[0_0_12px_rgba(0,212,255,0.08)]'
+                  ? 'bg-space-surface text-neon-cyan border border-space-border'
                   : 'text-gray-400 hover:bg-space-surface hover:text-gray-200 border border-transparent',
               ].join(' ')}
             >
-              <span className="text-lg flex-shrink-0">{item.icon}</span>
+              <AtlasIcon name={item.icon} />
               <span className={['font-medium text-sm', collapsed ? 'md:hidden' : ''].join(' ')}>
                 {item.label}
               </span>
@@ -141,23 +148,26 @@ export default function Sidebar({
               <span className="text-xs text-gray-600 uppercase tracking-wide">{currentWorld}</span>
             </div>
             {worldNavItems.map((item) => {
-              const isActive = location.pathname === item.path
+              const path = item.path.split('?')[0]
+              const isActive = location.pathname === path || (item.icon === 'globe'
+                && /\/worlds\/[^/]+\/(?:globe|map)(?:\/|$)/.test(location.pathname))
               return (
                 <Link
                   key={item.path}
                   to={item.path}
                   onClick={onClose}
                   title={collapsed ? item.label : undefined}
+                  aria-current={isActive ? 'page' : undefined}
                   className={[
                     'flex items-center rounded-lg transition-all duration-200',
                     collapsed ? 'md:justify-center md:px-0 md:py-3' : '',
                     'px-4 py-2.5 gap-3',
                     isActive
-                      ? 'bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20 shadow-[0_0_12px_rgba(0,212,255,0.08)]'
+                      ? 'bg-space-surface text-neon-cyan border border-space-border'
                       : 'text-gray-400 hover:bg-space-surface hover:text-gray-200 border border-transparent',
                   ].join(' ')}
                 >
-                  <span className="text-lg flex-shrink-0">{item.icon}</span>
+                  <AtlasIcon name={item.icon} />
                   <span className={['font-medium text-sm', collapsed ? 'md:hidden' : ''].join(' ')}>
                     {item.label}
                   </span>
@@ -173,7 +183,7 @@ export default function Sidebar({
         {/* Desktop collapse toggle */}
         <button
           onClick={onToggleCollapse}
-          className="hidden md:flex items-center w-full px-2 py-2 rounded-lg text-gray-500 hover:text-gray-200 hover:bg-space-surface transition-colors justify-center"
+          className="hidden md:flex items-center w-full px-2 py-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-space-surface transition-colors justify-center"
           aria-label={collapsed ? t('action.expandSidebar') : t('action.collapseSidebar')}
         >
           <svg
@@ -190,7 +200,7 @@ export default function Sidebar({
           </span>
         </button>
         {/* Version — auto-injected from package.json at build time */}
-        <p className={['text-xs text-gray-600 mt-2 text-center', collapsed ? 'md:hidden' : ''].join(' ')}>
+        <p className={['text-xs text-gray-400 mt-2 text-center', collapsed ? 'md:hidden' : ''].join(' ')}>
           v{__APP_VERSION__}
         </p>
         {/* Language switcher */}
@@ -202,7 +212,7 @@ export default function Sidebar({
             layers to expose. */}
         {!isStaticMode() && (
           <div className={['mt-2', collapsed ? 'md:hidden' : ''].join(' ')}>
-            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+            <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
               <input
                 type="checkbox"
                 checked={devMode}
@@ -218,7 +228,7 @@ export default function Sidebar({
             in static mode along with the features it gates. */}
         {!isStaticMode() && (
           <div className={['mt-2', collapsed ? 'md:hidden' : ''].join(' ')}>
-            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+            <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
               <input
                 type="checkbox"
                 checked={experimental}
