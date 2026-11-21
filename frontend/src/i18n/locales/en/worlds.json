@@ -256,7 +256,8 @@
   "action": {
     "back": "← Back",
     "newWorld": "New World",
-    "openWorld": "Open",
+    "openWorldMap": "Map",
+    "worldOverview": "Overview",
     "deleteWorld": "Delete",
     "goCreate": "Create one →",
     "buildWorld": "Build",

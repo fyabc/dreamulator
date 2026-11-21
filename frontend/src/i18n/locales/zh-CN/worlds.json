@@ -256,7 +256,8 @@
   "action": {
     "back": "← 返回",
     "newWorld": "新建世界",
-    "openWorld": "打开",
+    "openWorldMap": "地图",
+    "worldOverview": "概览",
     "deleteWorld": "删除",
     "goCreate": "去创建一个 →",
     "buildWorld": "构建",

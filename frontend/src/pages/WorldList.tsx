@@ -5,6 +5,8 @@ import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
 import { listProjects, projectsKey, restoreWorld, worldDataPath } from '../projects/projectStore'
 
+const worldLinkClass = 'text-sm px-3 py-1.5 rounded transition-all bg-space-surface text-gray-300 border space-border hover:border-neon-cyan/30 hover:text-neon-cyan'
+
 export default function WorldList() {
   const { t } = useTranslation('worlds')
   const queryClient = useQueryClient()
@@ -58,12 +60,15 @@ export default function WorldList() {
                     {worldName}
                   </h3>
                 </Link>
-                <div className="flex gap-2 mt-4">
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <Link to={`/worlds/${encodeURIComponent(worldName)}/map`} className={worldLinkClass}>
+                    {t('action.openWorldMap')}
+                  </Link>
                   <Link
                     to={`/worlds/${worldName}`}
-                    className="text-sm px-3 py-1.5 rounded transition-all bg-space-surface text-gray-300 border space-border hover:border-neon-cyan/30 hover:text-neon-cyan"
+                    className={worldLinkClass}
                   >
-                    {t('action.openWorld')}
+                    {t('action.worldOverview')}
                   </Link>
                   {!staticMode && (
                     <button
