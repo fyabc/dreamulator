@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import re
@@ -17,11 +18,15 @@ from time import monotonic
 from typing import Literal
 from uuid import uuid4
 
+import yaml
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
+from dreamulator.branch_manager import BranchManager
+from dreamulator.build_jobs import local_compute_slot
 from dreamulator.climate_trial import (
+    CLIMATE_FORCING_FILENAME,
     TrialForcing,
     TrialInputs,
     TrialProgress,
@@ -29,7 +34,9 @@ from dreamulator.climate_trial import (
     TrialSource,
     TrialUnavailableError,
     resolve_trial_source,
+    trial_config_json,
 )
+from dreamulator.map.export import MESH_FILENAME
 from dreamulator.map.models import MapMetadata
 from dreamulator.utils.resources import available_memory_bytes
 from dreamulator.world_manager import WorldManager
@@ -77,6 +84,15 @@ class SavedTrial(BaseModel):
     elapsed_seconds: float
     inputs: TrialInputs
     surface: MapMetadata
+
+
+class TrialBranchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
+
+
+class TrialBranch(BaseModel):
+    name: str
 
 
 @dataclass
@@ -310,6 +326,80 @@ def save_trial(world_name: str, planet_id: str, job_id: str) -> SavedTrial:
         except (OSError, ValueError) as error:
             logger.exception("Could not save climate trial %s", job_id)
             raise HTTPException(500, "trial_save_failed") from error
+
+
+@router.post(f"{_route}/{{job_id}}/branch", status_code=201)
+def save_trial_branch(
+    world_name: str, planet_id: str, job_id: str, branch: TrialBranchRequest
+) -> TrialBranch:
+    if not local_compute_slot.acquire(blocking=False):
+        raise HTTPException(409, "trial_busy")
+    try:
+        with _lock:
+            run = _find(world_name, planet_id, job_id)
+            if run.snapshot().state != "succeeded":
+                raise HTTPException(409, "trial_not_finished")
+            request = TrialRequest.model_validate_json((run.output / "request.json").read_bytes())
+            world, source = _source(world_name, planet_id, request.branch)
+            if not source.primary:
+                raise HTTPException(409, "trial_primary_required")
+            if not (run.output / "surface.json").is_file():
+                raise HTTPException(409, "trial_surface_missing")
+            inputs = TrialInputs.model_validate_json((run.output / "inputs.json").read_bytes())
+            request.forcing.apply(source.config)
+            with source.mesh_path.open("rb") as stream:
+                mesh_hash = hashlib.file_digest(stream, "sha256").hexdigest()
+            config_hash = hashlib.sha256(
+                trial_config_json(source.config).encode("utf-8")
+            ).hexdigest()
+            if (mesh_hash, config_hash) != (inputs.mesh_sha256, inputs.config_sha256):
+                raise HTTPException(409, "trial_source_changed")
+            branches = BranchManager(world).branches_dir
+            if branches.is_symlink():
+                raise HTTPException(409, "trial_branch_failed")
+            target = branches / branch.name
+            if target.exists() or target.is_symlink():
+                raise HTTPException(409, "trial_branch_exists")
+            surface = MapMetadata.model_validate_json((run.output / "surface.json").read_bytes())
+            branches.mkdir(exist_ok=True)
+            with TemporaryDirectory(prefix=".trial-", dir=branches) as temporary:
+                staged = BranchManager(Path(temporary)).create_branch(
+                    branch.name, "climate", parent=request.branch
+                )
+                climate = staged / "layers" / "climate"
+                (climate / "input" / CLIMATE_FORCING_FILENAME).write_text(
+                    yaml.safe_dump(inputs.forcing.model_dump(exclude_none=True)), encoding="utf-8"
+                )
+                shutil.copyfile(
+                    run.output / "climate_summary.yaml",
+                    climate / "derived" / "climate_summary.yaml",
+                )
+                maps = staged / "maps" / planet_id
+                maps.mkdir(parents=True)
+                (maps / "map.yaml").write_text(
+                    yaml.safe_dump(surface.model_dump(mode="json")), encoding="utf-8"
+                )
+                plates = source.mesh_path.with_name("plates.json")
+                if plates.is_file():
+                    shutil.copyfile(plates, maps / plates.name)
+                for filename in (
+                    MESH_FILENAME,
+                    "elevation.png",
+                    "temperature.png",
+                    "precipitation.png",
+                    "koppen.json",
+                    "climate_metadata.json",
+                    "climate_monthly.npz",
+                    *(filename for filename, _ in _assets.values()),
+                ):
+                    shutil.copyfile(run.output / filename, maps / filename)
+                staged.rename(target)
+        return TrialBranch(name=branch.name)
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        logger.exception("Could not branch climate trial %s", job_id)
+        raise HTTPException(500, "trial_branch_failed") from error
+    finally:
+        local_compute_slot.release()
 
 
 @router.get(_saved_route)

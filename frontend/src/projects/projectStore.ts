@@ -1,5 +1,6 @@
 import { assertProjectCapacity, projectBytes, type LocalProject } from './elevationProject'
 import type { TemperatureDraft } from '../playground/temperatureDraft'
+import type { SavedBrowserEbm } from '../api/climateTrials'
 
 const storeName = 'projects'
 export const projectsKey = ['browser-projects'] as const
@@ -87,6 +88,18 @@ export function saveTemperatureDraft(worldId: string, draft: TemperatureDraft) {
   }), publishedWorld(worldId))
 }
 
+export function saveBrowserClimateResult(worldId: string, trial: SavedBrowserEbm) {
+  return updateProject(worldId, project => ({ ...project,
+    climateTrials: [trial, ...(project.climateTrials ?? [])],
+  }), publishedWorld(worldId))
+}
+
+export function deleteBrowserClimateResult(worldId: string, id: string) {
+  return updateProject(worldId, project => ({ ...project,
+    climateTrials: project.climateTrials?.filter(trial => trial.metadata.id !== id),
+  }))
+}
+
 export async function restoreWorld(world: LocalProject) {
   if (!world.published) {
     try { return await addProject(world) }
@@ -100,7 +113,10 @@ export async function restoreWorld(world: LocalProject) {
     const imported = world.layers.some((layer) => existing.has(layer.id)) ? copyLayers(world) : world.layers
     const drafts = new Set(current.temperatureDrafts?.map(draft => draft.id))
     const incoming = world.temperatureDrafts?.map(draft => drafts.has(draft.id) ? { ...draft, id: crypto.randomUUID() } : draft)
+    const trials = new Set(current.climateTrials?.map(trial => trial.metadata.id))
+    const newTrials = world.climateTrials?.filter(trial => !trials.has(trial.metadata.id))
     return { ...current, layers: [...current.layers, ...imported],
+      ...(newTrials?.length && { climateTrials: [...newTrials, ...(current.climateTrials ?? [])] }),
       ...(incoming?.length && { temperatureDrafts: [...incoming, ...(current.temperatureDrafts ?? [])] }) }
   }, publishedWorld(world.id))
   return world.id

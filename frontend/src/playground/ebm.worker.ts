@@ -1,5 +1,5 @@
 import { decode } from '@msgpack/msgpack'
-import type { ClimateTrialForcing, ClimateTrialJob } from '../api/climateTrials'
+import type { ClimateTrialForcing, ClimateTrialJob, SavedClimateTrial } from '../api/climateTrials'
 
 export interface BrowserEbmRequest {
   runtime: string
@@ -14,7 +14,8 @@ type Progress = Pick<ClimateTrialJob, 'stage' | 'cells' | 'months_done' | 'month
 
 export type BrowserEbmReply = { progress: Partial<Progress> & Pick<Progress, 'stage'> }
   | { error: string; detail: string }
-  | { products: { geometry: unknown; fields: unknown; monthly: ArrayBuffer; yearly: ArrayBuffer } }
+  | { products: { geometry: unknown; fields: unknown; monthly: ArrayBuffer; yearly: ArrayBuffer;
+      geometryBytes: ArrayBuffer; fieldBytes: ArrayBuffer; inputs: SavedClimateTrial['inputs'] } }
 
 const send = self.postMessage.bind(self) as (message: BrowserEbmReply, transfer?: Transferable[]) => void
 
@@ -71,17 +72,21 @@ compute_trial(
 
     error = 'browser_products'
     send({ progress: { stage: 'loading' } })
-    const split = async (name: string) => {
-      const compressed = new Uint8Array(py.FS.readFile(`/result/${name}`))
+    const read = (name: string) => new Uint8Array(py.FS.readFile(`/result/${name}`)).buffer
+    const split = async (compressed: ArrayBuffer) => {
       const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))
       return decode(await new Response(stream).arrayBuffer())
     }
     const buffers: Transferable[] = []
-    const geometry = aligned(await split('mesh_geometry.msgpack.gz'), buffers)
-    const fields = aligned(await split('mesh_fields.msgpack.gz'), buffers)
-    const monthly = new Uint8Array(py.FS.readFile('/result/climate_monthly.msgpack')).buffer
-    const yearly = new Uint8Array(py.FS.readFile('/result/climate_yearly.msgpack')).buffer
-    send({ products: { geometry, fields, monthly, yearly } }, [...buffers, monthly, yearly])
+    const geometryBytes = read('mesh_geometry.msgpack.gz')
+    const fieldBytes = read('mesh_fields.msgpack.gz')
+    const geometry = aligned(await split(geometryBytes), buffers)
+    const fields = aligned(await split(fieldBytes), buffers)
+    const monthly = read('climate_monthly.msgpack')
+    const yearly = read('climate_yearly.msgpack')
+    const inputs = JSON.parse(py.FS.readFile('/result/inputs.json', { encoding: 'utf8' })) as SavedClimateTrial['inputs']
+    send({ products: { geometry, fields, monthly, yearly, geometryBytes, fieldBytes, inputs } },
+      [...buffers, monthly, yearly, geometryBytes, fieldBytes])
   } catch (cause) {
     send({ error, detail: cause instanceof Error ? cause.message : String(cause) })
   }

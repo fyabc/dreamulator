@@ -48,6 +48,8 @@
       "saving": "Saving trial result…",
       "help": "Save to World data on this server. The full world backup includes the trial. Official layers are not changed.",
       "confirmed": "Saved to World data on this server.",
+      "browserHelp": "Keep this result in this browser’s World data. You can reopen or back it up without changing the published world.",
+      "browserConfirmed": "Saved to World data in this browser.",
       "loading": "Reading trial data…",
       "loadFailed": "Could not read the saved climate trial. The result may have been removed.",
       "saveFailed": "Could not save the trial result. Try again, or rerun if the result has expired.",
@@ -60,6 +62,17 @@
       "delete": "Delete",
       "deleteNamed": "Delete the trial “{{name}}”?",
       "deleteFailed": "Could not delete the climate trial."
+    },
+    "fork": {
+      "name": "New branch name",
+      "help": "Use letters, numbers, hyphens or underscores. The branch inherits the terrain and uses this climate for regional refinement.",
+      "save": "Save as climate branch",
+      "saving": "Creating climate branch…",
+      "failed": "Could not create the climate branch. Check the source map or rerun the trial.",
+      "trial_source_changed": "The source grid or build parameters changed. Rerun the trial with the current inputs.",
+      "trial_branch_exists": "That branch name is already in use. Choose another name.",
+      "trial_primary_required": "Climate branches currently support the world's primary planet only.",
+      "trial_busy": "A local build is running. Try again after it finishes."
     },
     "stage": {
       "queued": "Start local computation",

@@ -79,6 +79,9 @@ def test_unfinished_trial_cannot_be_saved(trial_world, tmp_path) -> None:
         "sample", "planet_gaia", output, monotonic()
     )
     assert client.post(f"{ENDPOINT}/{output.name}/save").json() == {"detail": "trial_not_finished"}
+    assert client.post(f"{ENDPOINT}/{output.name}/branch", json={"name": "tilted"}).json() == {
+        "detail": "trial_not_finished"
+    }
     assert not (world / "experiments").exists()
 
 
@@ -96,6 +99,8 @@ def test_branch_trial_matches_formal_ebm_and_saves_independently(
     export_elevation_png(np.zeros((64, 128)), source_raster)
     metadata_path = mesh_path.parent / "map.yaml"
     metadata_path.write_text("planet_id: planet_gaia\nwidth: 128\nheight: 64\n", encoding="utf-8")
+    plates_path = mesh_path.with_name("plates.json")
+    plates_path.write_text('{"plates": []}\n', encoding="utf-8")
     branch_maps = world / "branches/pinned/maps/planet_gaia"
     branch_maps.mkdir(parents=True)
     (branch_maps / "climate_monthly.msgpack").write_bytes(b"ignored inherited result")
@@ -188,12 +193,66 @@ def test_branch_trial_matches_formal_ebm_and_saves_independently(
     assert source_raster.read_bytes() == b"surface replaced after the run"
     source_raster.write_bytes(before[source_raster])
 
+    rerun = client.post(ENDPOINT, json={"branch": "pinned", "forcing": {"axial_tilt_deg": 63.44}})
+    rerun_id = rerun.json()["id"]
+    rerun_monthly = client.get(f"{ENDPOINT}/{rerun_id}/products/monthly").content
+    assert rerun_monthly != trial_monthly.content
+    fork_url = f"{ENDPOINT}/{rerun_id}/branch"
+    assert client.post(fork_url, json={"name": "../escape"}).status_code == 422
+    mesh_path.write_bytes(before[mesh_path] + b"changed")
+    assert client.post(fork_url, json={"name": "tilted"}).json() == {
+        "detail": "trial_source_changed"
+    }
+    mesh_path.write_bytes(before[mesh_path])
+    assert client.post(fork_url, json={"name": "tilted"}).status_code == 201
+    assert client.post(fork_url, json={"name": "tilted"}).json() == {
+        "detail": "trial_branch_exists"
+    }
+    fork_dir = world / "branches/tilted"
+    fork_layer = fork_dir / "layers/climate"
+    fork_map = fork_dir / "maps/planet_gaia"
+    assert (
+        yaml.safe_load((fork_dir / "branch.yaml").read_text(encoding="utf-8"))["parent"] == "pinned"
+    )
+    assert (fork_map / "elevation.png").read_bytes() == before[source_raster]
+    assert (fork_map / "plates.json").read_bytes() == before[plates_path]
+    assert (fork_map / "climate_monthly.msgpack").read_bytes() == rerun_monthly
+    assert (
+        client.get(f"{ENDPOINT}/inputs", params={"branch": "tilted"}).json()["axial_tilt_deg"]
+        == 63.44
+    )
+    layers = LayerResolver(world, "tilted").resolve_all_layers()
+    rebuilt = ClimateEngine(
+        world,
+        5,
+        layer_input_dirs={
+            layer.value: source.input_dir for layer, source in layers.items() if source.input_dir
+        },
+        layer_derived_dirs={
+            layer.value: source.derived_dir
+            for layer, source in layers.items()
+            if source.derived_dir
+        },
+        maps_output_dir=fork_dir / "maps",
+        layer_output_dir=fork_layer / "derived",
+    ).run()
+    assert rebuilt.success, rebuilt.warnings
+    assert (fork_map / "climate_monthly.msgpack").read_bytes() == rerun_monthly
+    assert {path: path.read_bytes() for path in before} == before
+
     archive = tmp_path / "sample.tar.gz"
     export_snapshot(world, archive)
     restored = restore_snapshot(archive, tmp_path / "restored")
     monkeypatch.setattr(climate_trials, "_manager", WorldManager(restored.parent))
     climate_trials._runs.clear()
     assert client.get(f"{ENDPOINT}/{job_id}").status_code == 404
+    assert (
+        client.get(f"{ENDPOINT}/inputs", params={"branch": "tilted"}).json()["axial_tilt_deg"]
+        == 63.44
+    )
+    assert (
+        restored / fork_map.relative_to(world) / "climate_monthly.msgpack"
+    ).read_bytes() == rerun_monthly
     assert client.get(f"{SAVED}/{job_id}").json() == result
     for asset, expected in products.items():
         assert client.get(f"{SAVED}/{job_id}/products/{asset}").content == expected

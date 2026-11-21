@@ -1,6 +1,8 @@
 import { assertProjectCapacity, importProject, maxProjectBytes, readElevationLayers, record,
   type ElevationSource, type LocalProject, type ProjectLayer } from './elevationProject'
 import { maxTemperatureDrafts, restoreTemperatureDraft } from '../playground/temperatureDraft'
+import { browserClimateAssets, maxBrowserClimateTrials } from '../api/climateTrials'
+import { restoreBrowserEbm } from '../playground/savedBrowserEbm'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
@@ -9,7 +11,7 @@ const maxMetadata = 8 * 1024
 const worldId = /^[a-zA-Z0-9_-]{1,100}$/
 const layerId = /^[a-f0-9-]{36}$/
 const archivePath = /^[a-zA-Z0-9_./-]{1,100}$/
-const maxFiles = 2 + 128 * 3 + maxTemperatureDrafts * 2
+const maxFiles = 2 + 128 * 3 + maxTemperatureDrafts * 2 + maxBrowserClimateTrials * (browserClimateAssets.length + 1)
 const maxArchive = maxProjectBytes + maxFiles * (maxMetadata + 2 * blockSize) + 2 * blockSize
 
 function tarHeader(path: string, bytes: number) {
@@ -112,12 +114,19 @@ export function exportWorldData(world: LocalProject) {
   }
   json('world-data.json', { type: 'dreamulator-world-data', version: 1, id: world.id, name: world.name,
     published: world.published === true, layers: world.layers.map((layer) => layer.id),
+    ...(world.climateTrials?.length && { climate_trials: world.climateTrials.map(trial => trial.metadata.id) }),
     ...(world.temperatureDrafts?.length && { temperature_drafts: world.temperatureDrafts.map(draft => draft.id) }) })
   for (const draft of world.temperatureDrafts ?? []) {
     const { id, grid, ...metadata } = draft
     if (!layerId.test(id)) throw new Error('Invalid temperature draft ID')
     json(`experiments/temperature/${id}.json`, metadata)
     files.set(`experiments/temperature/${id}.f32`, grid)
+  }
+  for (const { metadata, assets } of world.climateTrials ?? []) {
+    if (!layerId.test(metadata.id)) throw new Error('Invalid climate trial ID')
+    const dir = `experiments/climate/${metadata.id}`
+    json(`${dir}/result.json`, metadata)
+    for (const key of browserClimateAssets) files.set(`${dir}/${key}`, assets[key])
   }
   if (!world.published) {
     const timestamp = new Date(world.updatedAt).toISOString()
@@ -189,9 +198,21 @@ export async function importWorldData(file: Blob): Promise<LocalProject> {
     const path = `experiments/temperature/${id}`
     return restoreTemperatureDraft(await json(`${path}.json`), id, take(`${path}.f32`))
   }))
+  const trialIds = manifest.climate_trials ?? []
+  if (!Array.isArray(trialIds) || trialIds.length > maxBrowserClimateTrials || new Set(trialIds).size !== trialIds.length) {
+    throw new Error('Invalid climate trial manifest')
+  }
+  const climateTrials = await Promise.all(trialIds.map(async (id: unknown) => {
+    if (typeof id !== 'string' || !layerId.test(id)) throw new Error('Invalid climate trial ID')
+    const dir = `experiments/climate/${id}`
+    const assets = { geometry: take(`${dir}/geometry`), fields: take(`${dir}/fields`),
+      monthly: take(`${dir}/monthly`), yearly: take(`${dir}/yearly`), elevation: take(`${dir}/elevation`) }
+    return restoreBrowserEbm(id, await json(`${dir}/result.json`), assets)
+  }))
   if (files.size) throw new Error('Unexpected world archive entries')
   const world: LocalProject = { id: manifest.id, name: manifest.name, updatedAt: Date.now(), layers,
-    ...(manifest.published && { published: true }), ...(temperatureDrafts.length && { temperatureDrafts }) }
+    ...(manifest.published && { published: true }), ...(temperatureDrafts.length && { temperatureDrafts }),
+    ...(climateTrials.length && { climateTrials }) }
   assertProjectCapacity(world)
   return world
 }

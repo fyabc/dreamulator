@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
 import { savedClimateKey, savedClimateMapPath } from '../../api/climateTrials'
+import { projectsKey } from '../../projects/projectStore'
 import AtlasIcon from '../AtlasIcon'
 
 export default function SavedClimateTrials({ world }: { world: string }) {
@@ -11,7 +12,7 @@ export default function SavedClimateTrials({ world }: { world: string }) {
   const queryKey = savedClimateKey(world)
   const query = useQuery({ queryKey, queryFn: () => api.listSavedClimateTrials(world), retry: false })
   const erase = useMutation({ mutationFn: (id: string) => api.deleteSavedClimateTrial(world, id),
-    onSuccess: () => client.invalidateQueries({ queryKey }) })
+    onSuccess: () => Promise.all([client.invalidateQueries({ queryKey }), client.invalidateQueries({ queryKey: projectsKey })]) })
   const date = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium', timeStyle: 'short' })
   const number = new Intl.NumberFormat(i18n.language)
 

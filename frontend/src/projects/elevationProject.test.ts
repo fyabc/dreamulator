@@ -3,6 +3,7 @@ import { exportProject, importProject, makeElevationResult, makeElevationSource,
 import { removeProjectLayer } from './projectStore'
 import { exportWorldData, importWorldData } from './worldDataArchive'
 import { EARTH_PARAMS, GRID_H, GRID_W, readTemperatureGrid } from '../playground/temperatureDraft'
+import type { SavedBrowserEbm } from '../api/climateTrials'
 
 function exampleProject() {
   const raster = { width: 2, height: 2, values: Float32Array.of(-4.25, 1.125, 5, 7.75) }
@@ -51,6 +52,28 @@ describe('portable elevation projects', () => {
 })
 
 describe('world data archives', () => {
+  it('includes all saved EBM assets and preserves the source branch and experiment inputs', async () => {
+    const trial: SavedBrowserEbm = {
+      metadata: { id: crypto.randomUUID(), format: 1, solver: 'ebm', planet: 'planet_earth',
+        branch: 'tilt-test', saved_at: '2026-01-01T00:00:00Z', cells: 320, elapsed_seconds: 5,
+        inputs: { solver_version: '1.2.0', mesh_sha256: 'a'.repeat(64), config_sha256: 'b'.repeat(64), radius_km: 6371,
+          forcing: { axial_tilt_deg: 63.44, albedo: 0.3, rotation_period_days: 1, greenhouse_warming_k: 33 } },
+        surface: { planet_id: 'planet_earth', projection: 'equirectangular', width: 4096, height: 2048,
+          elevation_min_m: -10000, elevation_max_m: 8000, sea_level_m: 0, voronoi_num_cells: 320, voronoi_seed: 5 } },
+      assets: { elevation: new Blob(['surface']), geometry: new Blob(['geometry']), fields: new Blob(['fields']),
+        monthly: new Blob(['monthly']), yearly: new Blob(['yearly']) },
+    }
+    const world = { ...exampleProject(), id: 'earth', published: true as const, layers: [], climateTrials: [trial] }
+    const restored = await importWorldData(exportWorldData(world))
+    expect(restored).toMatchObject({ id: world.id, published: true })
+    const [saved] = restored.climateTrials ?? []
+    expect(saved.metadata).toEqual(trial.metadata)
+    expect(await Promise.all(Object.values(saved.assets).map(asset => asset.text()))).toEqual([
+      'geometry', 'fields', 'monthly', 'yearly', 'surface',
+    ])
+    await expect(importWorldData(exportWorldData({ ...world, climateTrials: [trial, trial] }))).rejects.toThrow('Invalid climate trial manifest')
+  })
+
   it('restores a temperature-only archive with its source branch, parameters, and exact normalized samples', async () => {
     const values = new Float32Array(GRID_W * GRID_H).fill(0.75)
     const draft = { id: crypto.randomUUID(), planet: 'planet_earth', branch: 'ERE-if',

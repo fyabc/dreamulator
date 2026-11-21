@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import yaml
 
+from dreamulator.climate_trial import CLIMATE_FORCING_FILENAME, TrialForcing
 from dreamulator.engine.base import BaseEngine, EngineResult
 from dreamulator.engine.physical_inputs import (
     load_planets,
@@ -57,6 +58,7 @@ class ClimateEngine(BaseEngine):
         "terrain_config.yaml",  # → geological input (climate tuning knobs; defaults ok)
         "elevation_imports.yaml",  # authored elevation contract, including the sea datum
         "gcm_fields.msgpack.gz",  # → climate input of a climate_source: gcm branch
+        CLIMATE_FORCING_FILENAME,
     ]
     output_files = [
         "climate_summary.yaml",
@@ -213,7 +215,7 @@ class ClimateEngine(BaseEngine):
         export_climate_layers(mesh, export_dir, config, climate_provenance=gcm_provenance)
 
         # ---- 7. Write summary YAML ----
-        summary = _build_climate_summary(mesh, planet, config)
+        summary = climate_summary(mesh, planet, config)
         summary["climate_source"] = climate_source.value
         if gcm_provenance is not None:
             summary["gcm_provenance"] = gcm_provenance
@@ -329,6 +331,14 @@ class ClimateEngine(BaseEngine):
         path = self.find_input("terrain_config.yaml")
         config = TerrainPipelineConfig.from_yaml(path) if path else TerrainPipelineConfig()
         warnings = resolve_and_apply_physical_parameters(self, config, planet=planet)
+        forcing = self.find_input(CLIMATE_FORCING_FILENAME)
+        if forcing is not None:
+            try:
+                TrialForcing.model_validate(
+                    yaml.safe_load(forcing.read_text(encoding="utf-8"))
+                ).apply(config)
+            except (OSError, ValueError, yaml.YAMLError) as error:
+                raise ValueError(f"Invalid climate forcing in {forcing.name}") from error
         source = load_elevation_sources(self.find_input(SOURCE_MANIFEST)).get(planet.id)
         if source is not None:
             mapping = source.provenance.mapping
@@ -597,7 +607,7 @@ def _load_cvt_mesh_from_geological(
     return None, None, ["No loadable mesh file found"]
 
 
-def _build_climate_summary(
+def climate_summary(
     mesh: CVTMesh,
     planet: Planet,
     config: TerrainPipelineConfig,

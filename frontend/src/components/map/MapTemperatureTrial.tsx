@@ -20,9 +20,9 @@ export function MapTemperatureTrial({ open, onClose, search, onPreview, onResult
 }) {
   const { t } = useTranslation('playground')
   const [previewMode, setPreviewMode] = useState(false)
-  const browser = isStaticMode() && !search.has('draft')
+  const saved = !search.has('draft') && search.has('climateResult')
+  const browser = isStaticMode() && !search.has('draft') && !saved
   const preview = search.has('draft') || (browser && previewMode)
-  const saved = !browser && !preview && search.has('climateResult')
   const closeButton = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (open) closeButton.current?.focus({ preventScroll: true })

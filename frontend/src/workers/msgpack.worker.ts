@@ -16,8 +16,8 @@ const postTransfer = self.postMessage.bind(self) as (
   transfer?: Transferable[],
 ) => void
 
-self.onmessage = async (e: MessageEvent<{ reqId: number; url: string; gunzip?: boolean }>) => {
-  const { reqId, url, gunzip } = e.data
+self.onmessage = async (e: MessageEvent<{ reqId: number; url: string; gunzip?: boolean; maxDecodedBytes?: number }>) => {
+  const { reqId, url, gunzip, maxDecodedBytes } = e.data
   const timing = { fetchMs: 0, gunzipMs: 0, decodeMs: 0 }
   try {
     const t0 = self.performance.now()
@@ -34,12 +34,25 @@ self.onmessage = async (e: MessageEvent<{ reqId: number; url: string; gunzip?: b
     const head = new Uint8Array(buffer, 0, Math.min(2, buffer.byteLength))
     if (gunzip && head[0] === 0x1f && head[1] === 0x8b) {
       const t1 = self.performance.now()
-      const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'))
+      let stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'))
+      if (maxDecodedBytes !== undefined) {
+        let bytes = 0
+        stream = stream.pipeThrough(new TransformStream<Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>>({
+          transform(chunk, controller) {
+            bytes += chunk.byteLength
+            if (bytes > maxDecodedBytes) throw new Error('Decoded mesh is too large')
+            controller.enqueue(chunk)
+          },
+        }))
+      }
       buffer = await new Response(stream).arrayBuffer()
       timing.gunzipMs = self.performance.now() - t1
     }
+    if (maxDecodedBytes !== undefined && buffer.byteLength > maxDecodedBytes) throw new Error('Decoded mesh is too large')
     const t2 = self.performance.now()
-    let data: unknown = decode(new Uint8Array(buffer))
+    let data: unknown = decode(new Uint8Array(buffer), maxDecodedBytes === undefined ? undefined : {
+      maxArrayLength: 20_000, maxMapLength: 256, maxBinLength: maxDecodedBytes, maxStrLength: 1_024,
+    })
     timing.decodeMs = self.performance.now() - t2
     // Mesh-shaped payloads: pack the geometry arrays into transferable typed
     // arrays before crossing the thread boundary. Structured clone of 400k

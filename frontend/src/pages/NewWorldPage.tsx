@@ -9,7 +9,7 @@ import CreationRaster from '../components/map/CreationRaster'
 import type { TemperatureResponse } from '../playground/temperature.worker'
 import { EARTH_PARAMS, type PlanetParams } from '../playground/temperatureDraft'
 import { temperatureRequest } from '../playground/temperatureRequest'
-import { exportHeightmapWorld, heightmapGrid, isHeightmapParams, readHeightmapInput,
+import { defaultHeightmapCells, exportHeightmapWorld, heightmapGrid, isHeightmapParams, readHeightmapInput,
   savedTemperature, temperatureInputFingerprint, type HeightmapInput, type SavedTemperature } from '../projects/heightmapWorld'
 import { isCreationWorldId } from '../projects/creationSnapshot'
 import { isStarterSeed, starterTemplates, type StarterTemplate } from '../projects/starterWorld'
@@ -57,7 +57,7 @@ export default function NewWorldPage() {
     if (starter) return api.saveStarterWorld({ id, title, template, seed })
     if (!input) throw new Error('No heightmap selected')
     const archive = await exportHeightmapWorld({ id, title, created: new Date().toISOString(),
-      seed: randomSeed(), meshCells: 2048, params, heightmap: input, temperature })
+      seed: randomSeed(), meshCells: defaultHeightmapCells, params, heightmap: input, temperature })
     return api.saveHeightmapWorld(id, title, archive)
   }, onSuccess: async ({ id: savedId }) => {
     await Promise.all([query.invalidateQueries({ queryKey: projectsKey }), query.invalidateQueries({ queryKey: ['worlds'] })])

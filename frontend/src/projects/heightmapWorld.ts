@@ -6,6 +6,7 @@ import { isCreationWorldId, jsonBlob as json, readCreationSnapshot, sha256, writ
   type CreationSnapshot } from './creationSnapshot'
 
 export const heightmapCreationPath = 'browser-creation.json'
+export const defaultHeightmapCells = 18_432
 const experimentDir = 'layers/climate/derived/browser-temperature'
 const geologicalInput = 'layers/geological/input'
 export const heightmapPlanet = 'planet_terra'

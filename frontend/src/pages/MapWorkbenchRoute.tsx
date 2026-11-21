@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query'
 import { Outlet, useMatch, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
-import { isStaticMode } from '../api/mode'
 import type { ClimateTrialResult } from '../api/climateTrials'
 import { MapTemperatureTrial, trialButtonId } from '../components/map/MapTemperatureTrial'
 import { initialLayerState } from '../components/map/layerStateInit'
@@ -20,7 +19,7 @@ export default function MapWorkbenchRoute() {
   if (view === 'map' && planetId && search.get('creation') === '1') return <Outlet />
   const branch = search.get('branch') || null
   const draft = search.get('draft')
-  const saved = isStaticMode() ? null : search.get('climateResult')
+  const saved = search.get('climateResult')
   const clean = search.get('clean') === '1'
   if (worldName && planetId && draft) {
     return <DraftWorkbench key={JSON.stringify([worldName, planetId, branch, draft])}

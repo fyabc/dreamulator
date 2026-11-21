@@ -876,16 +876,21 @@ export const api = {
     ? staticApi.getClimateTrialProducts(id)
     : getClimateProducts(`${climateTrialsPath(world, planet)}/${encodeURIComponent(id)}/products`),
 
-  saveClimateTrial: (world: string, planet: string, id: string) => isStaticMode()
-    ? staticApi.saveClimateTrial()
+  saveClimateTrial: (world: string, planet: string, id: string, branch: string | null) => isStaticMode()
+    ? staticApi.saveClimateTrial(world, planet, id, branch)
     : fetchJson<SavedClimateTrial>(`${climateTrialsPath(world, planet)}/${encodeURIComponent(id)}/save`, { method: 'POST' }),
 
+  saveClimateTrialBranch: (world: string, planet: string, id: string, name: string) => isStaticMode()
+    ? staticApi.saveClimateTrialBranch()
+    : fetchJson<{ name: string }>(`${climateTrialsPath(world, planet)}/${encodeURIComponent(id)}/branch`,
+      { method: 'POST', body: JSON.stringify({ name }) }),
+
   listSavedClimateTrials: (world: string) => isStaticMode()
-    ? staticApi.listSavedClimateTrials()
+    ? staticApi.listSavedClimateTrials(world)
     : fetchJson<SavedClimateTrial[]>(savedClimatePath(world), { cache: 'no-store' }),
 
   getSavedClimateTrial: async (world: string, planet: string, branch: string | null, id: string): Promise<ClimateTrialResult> => {
-    if (isStaticMode()) return staticApi.getSavedClimateTrial()
+    if (isStaticMode()) return staticApi.getSavedClimateTrial(world, planet, branch, id)
     const path = savedClimatePath(world, id)
     const metadata = await fetchJson<SavedClimateTrial>(path, { cache: 'no-store' })
     if (metadata.planet !== planet || metadata.branch !== branch) throw new Error('Saved climate trial source does not match')
@@ -895,7 +900,7 @@ export const api = {
   },
 
   deleteSavedClimateTrial: (world: string, id: string) => isStaticMode()
-    ? staticApi.deleteSavedClimateTrial()
+    ? staticApi.deleteSavedClimateTrial(world, id)
     : fetchJson<void>(savedClimatePath(world, id), { method: 'DELETE' }),
   ...readApi,
 

@@ -1,4 +1,5 @@
-import type { ClimateTrialForcing, ClimateTrialJob, ClimateTrialProducts } from '../api/climateTrials'
+import type { ClimateTrialForcing, ClimateTrialJob, ClimateTrialProducts, SavedBrowserEbm } from '../api/climateTrials'
+import type { MapMetadata } from '../viewers/map/types'
 import { composeSplitMesh, isSplitFields, isSplitGeometry } from '../api/meshColumns'
 import { decodeMonthlyClimate } from '../api/monthlyClimate'
 import { decodeYearlyClimate } from '../api/yearlyClimate'
@@ -9,12 +10,15 @@ interface BrowserJob {
   startedAt: number
   stageAt: number
   products?: ClimateTrialProducts
+  archive?: Omit<SavedBrowserEbm['assets'], 'elevation'>
+  inputs?: SavedBrowserEbm['metadata']['inputs']
+  scope: { world: string; planet: string; branch: string | null }
 }
 
 let nextId = 0
 const jobs = new Map<string, BrowserJob>()
 
-export function startBrowserEbm(request: BrowserEbmRequest, signal: AbortSignal): ClimateTrialJob {
+export function startBrowserEbm(request: BrowserEbmRequest, signal: AbortSignal, scope: BrowserJob['scope']): ClimateTrialJob {
   if (signal.aborted) throw new DOMException('Cancelled', 'AbortError')
   if (Array.from(jobs.values()).some(({ job }) => job.state === 'running')) throw new Error('trial_busy')
   const worker = new Worker(new URL('./ebm.worker.ts', import.meta.url), { type: 'module' })
@@ -24,7 +28,7 @@ export function startBrowserEbm(request: BrowserEbmRequest, signal: AbortSignal)
     months_total: null, moisture_pass: null, elapsed_seconds: 0, stage_seconds: 0, error: null,
   }
   const startedAt = performance.now()
-  const entry: BrowserJob = { job, startedAt, stageAt: startedAt }
+  const entry: BrowserJob = { job, startedAt, stageAt: startedAt, scope }
   jobs.set(id, entry)
   signal.addEventListener('abort', () => {
     worker.terminate()
@@ -52,7 +56,7 @@ export function startBrowserEbm(request: BrowserEbmRequest, signal: AbortSignal)
       Object.assign(job, progress, { cells: cells ?? job.cells })
     } else {
       try {
-        const { geometry, fields, monthly, yearly } = data.products
+        const { geometry, fields, monthly, yearly, geometryBytes, fieldBytes, inputs } = data.products
         const mesh = isSplitGeometry(geometry) && isSplitFields(fields) ? composeSplitMesh(geometry, fields) : null
         const months = decodeMonthlyClimate(monthly)
         const years = decodeYearlyClimate(yearly)
@@ -60,6 +64,9 @@ export function startBrowserEbm(request: BrowserEbmRequest, signal: AbortSignal)
           throw new Error('Invalid climate trial grid')
         }
         entry.products = { mesh, monthly: months, yearly: years }
+        entry.archive = { geometry: new Blob([geometryBytes]), fields: new Blob([fieldBytes]),
+          monthly: new Blob([monthly]), yearly: new Blob([yearly]) }
+        entry.inputs = inputs
         finish()
       } catch (cause) {
         finish('browser_products', cause instanceof Error ? cause.message : String(cause))
@@ -82,6 +89,22 @@ export function getBrowserEbmProducts(id: string): ClimateTrialProducts {
   const products = jobs.get(id)?.products
   if (!products) throw new Error('browser_expired')
   return products
+}
+
+export async function saveBrowserEbm(id: string, scope: BrowserJob['scope'], loadSurface: () => Promise<[MapMetadata, Blob]>) {
+  const entry = jobs.get(id)
+  if (!entry?.archive || !entry.inputs || entry.scope.world !== scope.world ||
+      entry.scope.planet !== scope.planet || entry.scope.branch !== scope.branch || !entry.job.cells) throw new Error('browser_expired')
+  const [surface, elevation] = await loadSurface().catch(() => { throw new Error('trial_surface_missing') })
+  const { saveBrowserClimateResult } = await import('../projects/projectStore')
+  const result: SavedBrowserEbm = {
+    metadata: { id: crypto.randomUUID(), format: 1, solver: 'ebm', planet: scope.planet,
+      branch: scope.branch, saved_at: new Date().toISOString(), cells: entry.job.cells,
+      elapsed_seconds: entry.job.elapsed_seconds, inputs: entry.inputs, surface },
+    assets: { ...entry.archive, elevation },
+  }
+  await saveBrowserClimateResult(scope.world, result)
+  return result.metadata
 }
 
 export type BrowserEbmSource = Pick<BrowserEbmRequest, 'config' | 'cells'> & { mesh: string; forcing: ClimateTrialForcing }

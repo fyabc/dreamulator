@@ -103,7 +103,7 @@
     "openPublished": "Open published world overview",
     "browserData": "Data in this browser",
     "backup": "Back up or restore",
-    "publishedBackupHelp": "The archive contains only this world's browser-saved elevation sources, refinement results, and climate drafts. It does not include the world's original maps or settings.",
+    "publishedBackupHelp": "The archive contains this world's browser-saved elevation sources, refinement results, climate drafts, and saved climate trials. It does not include the published world's maps or settings.",
     "localHelp": "The archive contains this browser world's name, elevation sources, and results. Import it from the worlds list to continue on another device.",
     "restoreFromWorlds": "Go to Worlds to import a backup",
     "fullSnapshotHelp": "To back up layers built by the local app and its saved regions, download a world backup from the local world build panel. This site only imports browser data archives.",

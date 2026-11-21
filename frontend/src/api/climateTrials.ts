@@ -48,6 +48,13 @@ export interface SavedClimateTrial {
   surface: MapMetadata
 }
 
+export const browserClimateAssets = ['geometry', 'fields', 'monthly', 'yearly', 'elevation'] as const
+export const maxBrowserClimateTrials = 8
+export type SavedBrowserEbm = {
+  metadata: SavedClimateTrial
+  assets: Record<typeof browserClimateAssets[number], Blob>
+}
+
 export type ClimateTrialResult = ClimateTrialProducts & {
   forcing: ClimateTrialForcing
   saved?: { metadata: SavedClimateTrial; elevation: Blob }

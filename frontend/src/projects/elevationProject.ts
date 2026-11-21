@@ -4,6 +4,7 @@ import type { PackWindow } from '../viewers/packs/packCoords'
 import { supportsTerrainSpan } from '../viewers/packs/terrainTiles'
 import { terrainRecipe } from '../viewers/packs/terrainRecommendation'
 import { maxTemperatureDrafts, type TemperatureDraft } from '../playground/temperatureDraft'
+import { browserClimateAssets, maxBrowserClimateTrials, type SavedBrowserEbm } from '../api/climateTrials'
 
 export const maxProjectBytes = 256 * 2 ** 20
 export const maxSourceBytes = 32 * 2 ** 20
@@ -24,7 +25,7 @@ export type ElevationResult = LayerBase & {
   settings: Omit<BrowserTerrainResult, 'raster'>
 }
 export type ProjectLayer = ElevationSource | ElevationResult
-export type LocalProject = { id: string; name: string; updatedAt: number; layers: ProjectLayer[]; published?: true; temperatureDrafts?: TemperatureDraft[]; creationSnapshot?: Blob; creationKind?: 'starter' }
+export type LocalProject = { id: string; name: string; updatedAt: number; layers: ProjectLayer[]; published?: true; temperatureDrafts?: TemperatureDraft[]; climateTrials?: SavedBrowserEbm[]; creationSnapshot?: Blob; creationKind?: 'starter' }
 
 export function elevationSource(layers: ProjectLayer[], layer: ProjectLayer): ElevationSource | undefined {
   return layer.kind === 'elevation-source' ? layer :
@@ -34,6 +35,7 @@ export function elevationSource(layers: ProjectLayer[], layer: ProjectLayer): El
 export function projectBytes(project: LocalProject) {
   return project.layers.reduce((size, layer) => size + layer.data.size + (layer.kind === 'elevation-source' ? layer.original?.data.size ?? 0 : 0), 0)
     + (project.temperatureDrafts?.reduce((size, draft) => size + draft.grid.size, 0) ?? 0) + (project.creationSnapshot?.size ?? 0)
+    + (project.climateTrials?.reduce((size, trial) => size + browserClimateAssets.reduce((total, key) => total + trial.assets[key].size, 0), 0) ?? 0)
 }
 
 function encodeRaster(raster: ElevationRaster) {
@@ -60,6 +62,7 @@ export function makeElevationResult(name: string, sourceId: string, { raster, ..
 
 export function assertProjectCapacity(project: LocalProject) {
   if (project.layers.length > maxLayers || (project.temperatureDrafts?.length ?? 0) > maxTemperatureDrafts ||
+      (project.climateTrials?.length ?? 0) > maxBrowserClimateTrials ||
       projectBytes(project) > maxProjectBytes) throw new Error('Project capacity exceeded')
 }
 

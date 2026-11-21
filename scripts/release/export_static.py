@@ -705,7 +705,7 @@ def main() -> None:
         branches_dir = world_dir / "branches"
         if branches_dir.exists():
             for branch_dir in sorted(branches_dir.iterdir()):
-                if not branch_dir.is_dir():
+                if not (branch_dir / "branch.yaml").is_file():
                     continue
                 branch_name = branch_dir.name
                 if branch_name in local_only:

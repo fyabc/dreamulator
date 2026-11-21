@@ -285,14 +285,38 @@ export const staticApi = {
     const { startBrowserEbm } = await import('../playground/browserEbm')
     return startBrowserEbm({ config: source.config, cells: source.cells, mesh: source.mesh, forcing,
       runtime: new URL(`${import.meta.env.BASE_URL}${__PLAYGROUND_RUNTIME_PATH__}`, document.baseURI).href,
-      solver: new URL(`${DATA_BASE}/climate_solver.zip`, document.baseURI).href }, signal)
+      solver: new URL(`${DATA_BASE}/climate_solver.zip`, document.baseURI).href }, signal, { world, planet, branch })
   },
   getClimateTrial: async (id: string) => (await import('../playground/browserEbm')).getBrowserEbm(id),
   getClimateTrialProducts: async (id: string) => (await import('../playground/browserEbm')).getBrowserEbmProducts(id),
-  saveClimateTrial: async (): Promise<never> => notAvailable('saveClimateTrial'),
-  listSavedClimateTrials: async (): Promise<[]> => [],
-  getSavedClimateTrial: async (): Promise<never> => notAvailable('getSavedClimateTrial'),
-  deleteSavedClimateTrial: async (): Promise<never> => notAvailable('deleteSavedClimateTrial'),
+  saveClimateTrial: async (world: string, planet: string, id: string, branch: string | null) => {
+    const { saveBrowserEbm } = await import('../playground/browserEbm')
+    return saveBrowserEbm(id, { world, planet, branch }, async () => {
+      const [meta, elevation] = await Promise.all([staticApi.getMapMeta(world, planet, branch), staticApi.getElevationBlob(world, planet, branch)])
+      const { planet_id, projection, width, height, elevation_min_m, elevation_max_m, sea_level_m,
+        voronoi_seed, voronoi_num_cells, elevation_import } = meta
+      return [{ planet_id, projection, width, height, elevation_min_m, elevation_max_m, sea_level_m,
+        voronoi_seed, voronoi_num_cells, elevation_import }, elevation]
+    })
+  },
+  saveClimateTrialBranch: async (): Promise<never> => notAvailable('saveClimateTrialBranch'),
+  listSavedClimateTrials: async (world: string) => {
+    const { getProject } = await import('../projects/projectStore')
+    return (await getProject(world))?.climateTrials?.map(trial => trial.metadata) ?? []
+  },
+  getSavedClimateTrial: async (world: string, planet: string, branch: string | null, id: string) => {
+    const [{ getProject }, { loadSavedBrowserEbm }] = await Promise.all([
+      import('../projects/projectStore'), import('../playground/savedBrowserEbm'),
+    ])
+    const saved = (await getProject(world))?.climateTrials?.find(({ metadata }) =>
+      metadata.id === id && metadata.planet === planet && metadata.branch === branch)
+    if (!saved) throw new Error('browser_expired')
+    return loadSavedBrowserEbm(saved)
+  },
+  deleteSavedClimateTrial: async (world: string, id: string) => {
+    const { deleteBrowserClimateResult } = await import('../projects/projectStore')
+    return deleteBrowserClimateResult(world, id)
+  },
   getPackElevation: async (): Promise<Blob> => notAvailable('getPackElevation'),
   getRegionDevice: async () => notAvailable('getRegionDevice'),
   planRegionRefinement: async (_source: RegionRefinementSource) => notAvailable('planRegionRefinement'),

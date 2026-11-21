@@ -66,11 +66,11 @@ function getMsgpackWorker(): Worker {
 }
 
 /** Fetch *url* and decode its MessagePack payload off the main thread. */
-export function decodeMsgpackUrl(url: string, gunzip = false): Promise<unknown> {
+export function decodeMsgpackUrl(url: string, gunzip = false, maxDecodedBytes?: number): Promise<unknown> {
   const worker = getMsgpackWorker()
   const reqId = _nextReqId++
   return new Promise((resolve, reject) => {
     _pending.set(reqId, { resolve, reject })
-    worker.postMessage({ reqId, url, gunzip })
+    worker.postMessage({ reqId, url, gunzip, maxDecodedBytes })
   })
 }

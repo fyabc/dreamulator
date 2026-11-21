@@ -19,9 +19,11 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from dreamulator.map.pipeline_types import TerrainPipelineConfig
+    from dreamulator.models.planet import Planet
 
 
 BROWSER_TRIAL_MAX_CELLS = 20_000
+CLIMATE_FORCING_FILENAME = "climate_forcing.yaml"
 
 
 class TrialUnavailableError(ValueError):
@@ -45,6 +47,10 @@ class TrialForcing(BaseModel):
         return cls.model_validate(
             {name: getattr(config, cls.config_field(name)) for name in cls.model_fields}
         )
+
+    def apply(self, config: TerrainPipelineConfig) -> None:
+        for name, value in self.model_dump(exclude_none=True).items():
+            setattr(config, self.config_field(name), value)
 
 
 class TrialRequest(BaseModel):
@@ -75,6 +81,8 @@ class TrialInputs(BaseModel):
 class TrialSource:
     config: TerrainPipelineConfig
     mesh_path: Path
+    planet: Planet | None = None
+    primary: bool = False
 
 
 def resolve_trial_source(world_dir: Path, planet_id: str, branch: str | None) -> TrialSource:
@@ -112,7 +120,17 @@ def resolve_trial_source(world_dir: Path, planet_id: str, branch: str | None) ->
     if mesh_path is None:
         raise TrialUnavailableError("build_mesh")
     config, _ = engine.resolve_config(planet)
-    return TrialSource(config, mesh_path)
+    return TrialSource(config, mesh_path, planet, planet is planets[0])
+
+
+def trial_config_json(config: TerrainPipelineConfig) -> str:
+    settings = {
+        field.name: value
+        for field in fields(config)
+        if (value := getattr(config, field.name)) is None
+        or isinstance(value, (str, float, int, bool))
+    }
+    return json.dumps(settings, sort_keys=True, separators=(",", ":"))
 
 
 def compute_trial(
@@ -169,16 +187,8 @@ def compute_trial(
     for cell in mesh.cells:
         for name, field in defaults:
             setattr(cell, name, field.get_default(call_default_factory=True))
-    for name, value in forcing.model_dump(exclude_none=True).items():
-        setattr(source.config, forcing.config_field(name), value)
-
-    settings = {
-        field.name: value
-        for field in fields(source.config)
-        if (value := getattr(source.config, field.name)) is None
-        or isinstance(value, (str, float, int, bool))
-    }
-    config_json = json.dumps(settings, sort_keys=True, separators=(",", ":"))
+    forcing.apply(source.config)
+    config_json = trial_config_json(source.config)
     trial_inputs = TrialInputs(
         solver_version=__version__,
         mesh_sha256=mesh_sha256,
@@ -193,6 +203,16 @@ def compute_trial(
     phase("export")
     save_cvt_mesh(output / MESH_FILENAME, mesh)
     export_climate_layers(mesh, output, source.config, diagnostic_pngs=diagnostic_pngs)
+    if source.primary and source.planet is not None:
+        import yaml
+
+        from dreamulator.engine.climate import climate_summary
+
+        summary = climate_summary(mesh, source.planet, source.config)
+        summary["climate_source"] = "engine"
+        (output / "climate_summary.yaml").write_text(
+            yaml.safe_dump(summary, allow_unicode=True), encoding="utf-8"
+        )
     if not (output / "climate_monthly.msgpack").is_file():
         raise TrialUnavailableError("missing_result")
 

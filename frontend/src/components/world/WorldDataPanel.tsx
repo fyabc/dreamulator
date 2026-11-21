@@ -53,7 +53,7 @@ export default function WorldDataPanel({ id, published, publishedAvailable, nati
 
   const hasLayers = world.layers.length > 0
   const drafts = world.temperatureDrafts ?? []
-  const hasLocalData = hasLayers || drafts.length > 0
+  const hasLocalData = hasLayers || drafts.length > 0 || (world.climateTrials?.length ?? 0) > 0
   const overviewSearch = new URLSearchParams(search)
   for (const param of ['doc', 'layer', 'tab']) overviewSearch.delete(param)
   const formatNumber = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 })
@@ -62,7 +62,7 @@ export default function WorldDataPanel({ id, published, publishedAvailable, nati
   const starter = world.creationKind === 'starter' || nativeStarterWithoutMap
 
   return <div className="space-y-5">
-    {!staticMode && publishedAvailable && <SavedClimateTrials world={id} />}
+    {((!staticMode && publishedAvailable) || (staticMode && (publishedAvailable || world.climateTrials?.length))) && <SavedClimateTrials world={id} />}
     {(world.creationSnapshot || nativeCreation) && <section className="space-y-2 border-b border-space-border pb-4">
       <h2 className="text-lg font-semibold">{creationText(starter ? 'starter.savedHeading' : 'savedHeading')}</h2>
       <p className="max-w-prose text-sm text-gray-400">{creationText(starter ? 'starter.savedBrowserHelp' : 'savedHelp')}</p>
