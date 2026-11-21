@@ -5,11 +5,15 @@ from __future__ import annotations
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
 import yaml
 
 from dreamulator import __version__
+from dreamulator.io.loader import load_world
+
+STARTER_TEMPLATES = ("minimal", "earthlike")
 
 if TYPE_CHECKING:
     from dreamulator.models.world import WorldConfig
@@ -60,6 +64,7 @@ class WorldManager:
         *,
         seed: int | None = None,
         template: str = "minimal",
+        title: str | None = None,
     ) -> Path:
         """Create a new world directory from a template.
 
@@ -67,6 +72,7 @@ class WorldManager:
             name: World name (used as directory name).
             seed: RNG seed. Random if not provided.
             template: Template name to use (e.g. 'minimal', 'earthlike').
+            title: Optional display name for a world created in the workbench.
 
         Returns:
             Path to the created world directory.
@@ -83,18 +89,30 @@ class WorldManager:
         if not template_dir.exists():
             raise FileNotFoundError(f"Template '{template}' not found at {template_dir}")
 
-        # Copy template
-        shutil.copytree(template_dir, world_dir)
-
-        # Generate seed if needed (must be plain int, not numpy int)
         if seed is None:
             import time
 
             seed = int(time.time_ns() % (2**31))
 
-        # Update world.yaml with actual values
+        with TemporaryDirectory(prefix=".create-", dir=self.worlds_dir) as temporary:
+            staged = Path(temporary) / "world"
+            shutil.copytree(template_dir, staged)
+            self._configure_template(staged / "world.yaml", name, seed, title)
+            load_world(staged)
+            world_dir.mkdir()
+            try:
+                for path in staged.iterdir():
+                    if path.name != "world.yaml":
+                        path.rename(world_dir / path.name)
+                (staged / "world.yaml").rename(world_dir / "world.yaml")
+            except BaseException:
+                shutil.rmtree(world_dir)
+                raise
+        return world_dir
+
+    @staticmethod
+    def _configure_template(world_yaml: Path, name: str, seed: int, title: str | None) -> None:
         now = datetime.now(UTC).isoformat()
-        world_yaml = world_dir / "world.yaml"
         data: dict[str, Any] = {}
         if world_yaml.exists():
             with world_yaml.open("r", encoding="utf-8") as f:
@@ -105,12 +123,13 @@ class WorldManager:
         data["metadata"]["dreamulator_version"] = __version__
         data["metadata"]["created"] = now
         data["metadata"]["modified"] = now
+        if title is not None:
+            data["metadata"]["description"] = title
+            data["metadata"]["tags"] = [*data["metadata"].get("tags", []), "browser-starter"]
         data["seed"] = {"seed": seed}
 
         with world_yaml.open("w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
-
-        return world_dir
 
     def list_worlds(self) -> list[str]:
         """List all world names.
@@ -144,8 +163,6 @@ class WorldManager:
         Returns:
             Validated WorldConfig instance.
         """
-        from dreamulator.io.loader import load_world
-
         return load_world(self.world_dir(name))
 
     def delete_world(self, name: str) -> None:

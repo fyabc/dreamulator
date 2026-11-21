@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
 import { isStaticMode } from '../api/mode'
 import AtlasIcon from '../components/AtlasIcon'
 import CreationRaster from '../components/map/CreationRaster'
 import type { TemperatureResponse } from '../playground/temperature.worker'
 import { EARTH_PARAMS, type PlanetParams } from '../playground/temperatureDraft'
 import { temperatureRequest } from '../playground/temperatureRequest'
-import { exportHeightmapWorld, heightmapGrid, isHeightmapParams, isHeightmapWorldId, readHeightmapInput,
+import { exportHeightmapWorld, heightmapGrid, isHeightmapParams, readHeightmapInput,
   savedTemperature, temperatureInputFingerprint, type HeightmapInput, type SavedTemperature } from '../projects/heightmapWorld'
+import { isCreationWorldId } from '../projects/creationSnapshot'
+import { isStarterSeed, starterTemplates, type StarterTemplate } from '../projects/starterWorld'
 import { projectsKey, worldDataPath } from '../projects/projectStore'
 
 const field = 'w-full min-h-11 rounded border border-space-border bg-space-bg px-3 text-gray-100 focus-visible:outline focus-visible:outline-neon-cyan'
 const action = 'inline-flex min-h-11 items-center justify-center gap-2 rounded border border-space-border px-4 py-2 text-gray-100 hover:border-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan disabled:opacity-50'
+const saveAction = `${action} border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan`
+const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0] >>> 1
 const importFields = ['elevMinM', 'elevMaxM', 'seaLevelM'] as const
 const climateFields = [
   ['albedo', 'albedo', 0.001], ['greenhouseK', 'greenhouse', 0.5], ['tiltDeg', 'tilt', 0.1],
@@ -24,11 +28,16 @@ const climateFields = [
 
 export default function NewWorldPage() {
   const { t } = useTranslation('worlds')
-  const [selected, setSelected] = useState(false)
+  const [search] = useSearchParams()
+  const start = search.get('start')
+  const selected = start === 'heightmap'
+  const starter = start === 'template'
   const [name, setName] = useState('')
   const [fallbackId] = useState(() => `world-${crypto.randomUUID().slice(0, 8)}`)
   const [idOverride, setIdOverride] = useState<string>()
   const id = idOverride ?? (name.toLowerCase().trim().replace(/[^a-z0-9_-]+/g, '-').replace(/^[-_]+|-+$/g, '').slice(0, 48) || fallbackId)
+  const [template, setTemplate] = useState<StarterTemplate>('minimal')
+  const [seed, setSeed] = useState(randomSeed)
   const [params, setParams] = useState<PlanetParams>(EARTH_PARAMS)
   const [input, setInput] = useState<HeightmapInput>()
   const [temperature, setTemperature] = useState<SavedTemperature>()
@@ -44,10 +53,11 @@ export default function NewWorldPage() {
     invalidateTemperature()
   } })
   const save = useMutation({ mutationFn: async () => {
-    if (!input) throw new Error('No heightmap selected')
     const title = name.trim()
+    if (starter) return api.saveStarterWorld({ id, title, template, seed })
+    if (!input) throw new Error('No heightmap selected')
     const archive = await exportHeightmapWorld({ id, title, created: new Date().toISOString(),
-      seed: crypto.getRandomValues(new Uint32Array(1))[0] >>> 1, meshCells: 2048, params, heightmap: input, temperature })
+      seed: randomSeed(), meshCells: 2048, params, heightmap: input, temperature })
     return api.saveHeightmapWorld(id, title, archive)
   }, onSuccess: async ({ id: savedId }) => {
     await Promise.all([query.invalidateQueries({ queryKey: projectsKey }), query.invalidateQueries({ queryKey: ['worlds'] })])
@@ -57,7 +67,9 @@ export default function NewWorldPage() {
 
   const busy = select.isPending || save.isPending || running !== null
   const paramsValid = isHeightmapParams(params)
-  const canSave = !!(input && name.trim() && paramsValid && isHeightmapWorldId(id)) && !busy
+  const canSave = !!(name.trim() && isCreationWorldId(id) && (starter ? isStarterSeed(seed) : input && paramsValid)) && !busy
+  const conflict = (save.error instanceof ApiError && save.error.status === 409) ||
+    (save.error instanceof DOMException && save.error.name === 'ConstraintError')
 
   function invalidateTemperature() {
     if (temperature) setStale(true)
@@ -104,24 +116,75 @@ export default function NewWorldPage() {
     } catch (error) { fail(String(error)) }
   }
 
+  const identityFields = <>
+    <label className="flex max-w-sm flex-col gap-1 text-sm text-gray-200">{t('label.worldName')}
+      <input className={field} type="text" required value={name} maxLength={120} onChange={event => setName(event.currentTarget.value)} />
+    </label>
+    <details className="max-w-sm text-sm text-gray-400">
+      <summary className="min-h-10 cursor-pointer content-center">{t('creation.id')}</summary>
+      <input className={field} aria-label={t('creation.id')} value={id} maxLength={48} onChange={event => setIdOverride(event.currentTarget.value)} />
+      <p className="mt-1">{t('creation.idHelp')}</p>
+    </details>
+    {!isCreationWorldId(id) && <p role="alert" className="text-sm text-red-300">{t('creation.idError')}</p>}
+  </>
+
+  const saveFooter = <>
+    <p className="max-w-prose text-sm text-gray-400">
+      {t(isStaticMode() ? starter ? 'creation.starter.browserSave' : 'creation.browserSave' : 'creation.localSave')}
+    </p>
+    <button type="submit" disabled={!canSave} className={saveAction}>
+      {t(save.isPending ? 'worldData.saving' : !starter && temperature ? 'creation.saveWithResult' : 'creation.save')}
+    </button>
+    {save.isError && <p role="alert" className="break-words text-sm text-red-300">
+      {conflict ? t('creation.idConflict') : `${t(starter ? 'creation.starter.saveError' : 'creation.saveError')} ${save.error.message}`}
+    </p>}
+  </>
+
   return <section aria-labelledby="new-world-heading" className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-8">
     <header className="space-y-2">
-      <Link to="/worlds" className="inline-flex min-h-10 items-center gap-2 text-sm text-gray-300 hover:text-neon-cyan">
-        <AtlasIcon name="back" />{t('title.list')}
-      </Link>
+      {!busy && <Link to={selected || starter ? '/new-world' : '/worlds'} onClick={() => save.reset()}
+        className="inline-flex min-h-10 items-center gap-2 text-sm text-gray-300 hover:text-neon-cyan">
+        <AtlasIcon name="back" />{t(selected || starter ? 'creation.changeStart' : 'title.list')}
+      </Link>}
       <h1 id="new-world-heading" className="text-3xl font-semibold text-gray-100">{t('action.newWorld')}</h1>
-      <p className="max-w-2xl text-gray-400">{t(selected ? 'creation.steps' : 'creation.choose')}</p>
+      <p className="max-w-2xl text-gray-400">{t(starter ? 'creation.starter.steps' : selected ? 'creation.steps' : 'creation.choose')}</p>
     </header>
-    {!selected ? <div className="max-w-2xl divide-y divide-space-border border-y border-space-border">
-      <button type="button" onClick={() => setSelected(true)} className="flex min-h-24 w-full items-center justify-between gap-4 py-3 text-start hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan">
+    {!selected && !starter ? <div className="max-w-2xl divide-y divide-space-border border-y border-space-border">
+      <button type="button" onClick={() => navigate('?start=heightmap')} className="flex min-h-24 w-full items-center justify-between gap-4 py-3 text-start hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan">
         <span><span className="block text-lg font-medium">{t('creation.hasHeightmap')}</span>
           <span className="mt-1 block text-sm text-gray-400">{t('creation.hasHeightmapHelp')}</span></span><AtlasIcon name="arrow" />
       </button>
-      <Link to="/worlds?create=1" className="flex min-h-24 items-center justify-between gap-4 py-3 hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan">
+      <Link to="?start=template" className="flex min-h-24 items-center justify-between gap-4 py-3 hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan">
         <span><span className="block text-lg font-medium">{t('creation.fromScratch')}</span>
           <span className="mt-1 block text-sm text-gray-400">{t('creation.fromScratchHelp')}</span></span><AtlasIcon name="arrow" />
       </Link>
-    </div> : <form noValidate onSubmit={event => { event.preventDefault(); if (canSave) save.mutate() }} className="space-y-6">
+    </div> : starter ? <form key="starter" noValidate onSubmit={event => { event.preventDefault(); if (canSave) save.mutate() }} className="max-w-2xl space-y-5">
+      <fieldset disabled={busy} className="min-w-0 space-y-3">
+        <legend className="text-lg font-semibold">{t('creation.starter.chooseTemplate')}</legend>
+        <div className="divide-y divide-space-border border-y border-space-border">
+          {starterTemplates.map(option => <label key={option}
+            className="flex min-h-16 cursor-pointer items-start gap-3 px-2 py-3 has-[:checked]:bg-space-panel">
+            <input type="radio" name="template" className="mt-1 accent-neon-cyan" value={option} checked={template === option}
+              onChange={() => setTemplate(option)} />
+            <span><span className="block font-medium text-gray-100">{t(`creation.starter.${option}`)}</span>
+              <span className="block text-sm text-gray-400">{t(`creation.starter.${option}Help`)}</span></span>
+          </label>)}
+        </div>
+      </fieldset>
+      <fieldset disabled={busy} className="min-w-0 space-y-3">
+        <legend className="mb-3 text-lg font-semibold">{t('creation.starter.settings')}</legend>
+        {identityFields}
+        <div className="max-w-sm space-y-1 text-sm">
+          <label className="flex flex-col gap-1 text-gray-200">{t('creation.starter.seed')}
+            <input className={field} type="number" min={0} max={2147483647} step={1} required aria-describedby="starter-seed-help"
+              value={Number.isFinite(seed) ? seed : ''} onChange={event => setSeed(event.currentTarget.valueAsNumber)} />
+          </label>
+          <p id="starter-seed-help" className="text-gray-400">{t('creation.starter.seedHelp')}</p>
+        </div>
+        {!isStarterSeed(seed) && <p role="alert" className="text-sm text-red-300">{t('creation.starter.seedError')}</p>}
+        {saveFooter}
+      </fieldset>
+    </form> : <form key="heightmap" noValidate onSubmit={event => { event.preventDefault(); if (canSave) save.mutate() }} className="space-y-6">
       <fieldset disabled={busy} className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,22rem)_1fr]">
         <div className="min-w-0 space-y-4">
           <h2 className="text-lg font-semibold">{t('creation.hasHeightmap')}</h2>
@@ -166,21 +229,9 @@ export default function NewWorldPage() {
         </>}
       </section>
       <fieldset disabled={busy} className="min-w-0 space-y-4 border-t border-space-border pt-5">
-        <label className="flex max-w-sm flex-col gap-1 text-sm text-gray-200">{t('label.worldName')}
-          <input className={field} type="text" value={name} maxLength={120} onChange={event => setName(event.currentTarget.value)} />
-        </label>
-        <details className="max-w-sm text-sm text-gray-400">
-          <summary className="min-h-10 cursor-pointer content-center">{t('creation.id')}</summary>
-          <input className={field} aria-label={t('creation.id')} value={id} maxLength={48} onChange={event => setIdOverride(event.currentTarget.value)} />
-          <p className="mt-1">{t('creation.idHelp')}</p>
-        </details>
+        {identityFields}
         {!paramsValid && <p role="alert" className="text-sm text-red-300">{t('playground:error.params')}</p>}
-        {!isHeightmapWorldId(id) && <p role="alert" className="text-sm text-red-300">{t('creation.idError')}</p>}
-        <button type="submit" disabled={!canSave} className={`${action} border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan`}>
-          {t(save.isPending ? 'worldData.saving' : temperature ? 'creation.saveWithResult' : 'creation.save')}
-        </button>
-        <p className="text-sm text-gray-400">{t(isStaticMode() ? 'creation.browserSave' : 'creation.localSave')}</p>
-        {save.isError && <p role="alert" className="break-words text-sm text-red-300">{t('creation.saveError')} {save.error.message}</p>}
+        {saveFooter}
       </fieldset>
     </form>}
   </section>

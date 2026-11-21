@@ -17,6 +17,7 @@ import type { CVTMesh, CVTVertex, CVTRegion, VoronoiCell } from '../viewers/map/
 import type { PackHeightSource, PackMeta, PackSummary, ProbeResult, RegionDevice, RegionRefinementJob,
   RegionRefinementPlan, RegionRefinementSource, RiverData } from '../viewers/packs/types'
 import type { SkyBackground, SkyCulture, SkyEphemerisResult } from '../viewers/sky/types'
+import type { StarterSettings } from '../projects/starterWorld'
 
 const base = import.meta.env.BASE_URL
 export const API_BASE = `${base.startsWith('/') ? base.replace(/\/$/, '') : ''}/api`
@@ -346,10 +347,10 @@ async function fetchForm<T>(
 
 /** Write operations that are only available in API mode. */
 const liveOnlyApi = {
-  createWorld: (name: string, template: string = 'minimal', seed?: number) =>
+  createWorld: (name: string, template: string = 'minimal', seed?: number, title?: string) =>
     fetchJson<any>('/worlds', {
       method: 'POST',
-      body: JSON.stringify({ name, template, seed }),
+      body: JSON.stringify({ name, template, seed, title }),
     }),
 
   deleteWorld: (name: string) =>
@@ -830,6 +831,16 @@ export async function fetchSkyFast(
 
 export const api = {
   ...readApi,
+
+  async saveStarterWorld(settings: StarterSettings) {
+    if (isStaticMode()) return staticApi.saveStarterWorld(settings)
+    await liveOnlyApi.createWorld(settings.id, settings.template, settings.seed, settings.title)
+    return { id: settings.id }
+  },
+
+  restoreBrowserCreation: (archive: Blob) => isStaticMode()
+    ? staticApi.restoreCreationWorld(archive)
+    : Promise.reject(new Error('Restore this world with the snapshot restore command')),
 
   saveHeightmapWorld: (id: string, title: string, archive: Blob) => isStaticMode()
     ? staticApi.saveHeightmapWorld(id, title, archive)

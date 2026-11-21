@@ -61,10 +61,6 @@ export async function addProject(project: LocalProject) {
   return project.id
 }
 
-export function createProject(name: string) {
-  return addProject({ id: crypto.randomUUID(), name: name.trim().slice(0, 200), updatedAt: Date.now(), layers: [] })
-}
-
 export function updateProject(id: string, update: (project: LocalProject) => LocalProject, initial?: LocalProject) {
   return transact<void>('readwrite', (store, _done, fail) => {
     const request = store.get(id)

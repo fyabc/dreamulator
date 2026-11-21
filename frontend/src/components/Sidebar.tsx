@@ -92,7 +92,8 @@ export default function Sidebar({
   if (branch) overviewSearch.set('branch', branch)
   const worldNavItems: NavigationItem[] = currentWorld && browserWorld.data && !browserWorld.data.published
     ? [{ path: worldDataPath(currentWorld), label: t('worlds:worldData.title'), icon: 'folder' },
-      ...(browserWorld.data.creationSnapshot ? [{ path: heightmapMapPath(currentWorld), label: t('nav.map'), icon: 'globe' as const }] : [])]
+      ...(browserWorld.data.creationSnapshot && browserWorld.data.creationKind !== 'starter'
+        ? [{ path: heightmapMapPath(currentWorld), label: t('nav.map'), icon: 'globe' as const }] : [])]
     : currentWorld
     ? [
         { path: `/worlds/${currentWorld}${branch ? `?${overviewSearch}` : ''}`, label: t('nav.overview'), icon: 'overview' },

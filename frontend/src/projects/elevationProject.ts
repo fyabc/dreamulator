@@ -24,7 +24,7 @@ export type ElevationResult = LayerBase & {
   settings: Omit<BrowserTerrainResult, 'raster'>
 }
 export type ProjectLayer = ElevationSource | ElevationResult
-export type LocalProject = { id: string; name: string; updatedAt: number; layers: ProjectLayer[]; published?: true; temperatureDrafts?: TemperatureDraft[]; creationSnapshot?: Blob }
+export type LocalProject = { id: string; name: string; updatedAt: number; layers: ProjectLayer[]; published?: true; temperatureDrafts?: TemperatureDraft[]; creationSnapshot?: Blob; creationKind?: 'starter' }
 
 export function elevationSource(layers: ProjectLayer[], layer: ProjectLayer): ElevationSource | undefined {
   return layer.kind === 'elevation-source' ? layer :

@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
@@ -34,12 +34,14 @@ export default function ImportPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const staticMode = isStaticMode()
+  const [search] = useSearchParams()
+  const initialWorld = search.get('world') ?? ''
 
-  const [targetKind, setTargetKind] = useState<'new' | 'existing'>('new')
+  const [targetKind, setTargetKind] = useState<'new' | 'existing'>(initialWorld ? 'existing' : 'new')
   const [worldName, setWorldName] = useState('')
   const [nameTouched, setNameTouched] = useState(false)
   const [template, setTemplate] = useState<(typeof TEMPLATES)[number]>('earthlike')
-  const [existingWorld, setExistingWorld] = useState('')
+  const [existingWorld, setExistingWorld] = useState(initialWorld)
   const [existingPlanet, setExistingPlanet] = useState('')
   const [existingBranch, setExistingBranch] = useState('')
 

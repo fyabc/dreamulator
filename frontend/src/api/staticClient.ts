@@ -12,6 +12,7 @@ import type { RegionRefinementSource } from '../viewers/packs/types'
 import type { MapResultMetadata } from './resultContract'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
+import type { StarterFiles, StarterSettings, StarterTemplate } from '../projects/starterWorld'
 
 interface DocumentMeta {
   filename: string
@@ -169,16 +170,38 @@ export interface StaticNarrateUsage {
   total_tokens: number
 }
 
+async function saveCreationWorld(id: string, title: string, archive: Blob, creationKind?: 'starter') {
+  const { addProject } = await import('../projects/projectStore')
+  const published = await staticApi.listWorlds()
+  if (published.some(world => world.toLowerCase() === id)) throw new DOMException('This world ID is already in use', 'ConstraintError')
+  return { id: await addProject({ id, name: title, updatedAt: Date.now(), layers: [], creationSnapshot: archive, creationKind }) }
+}
+
 export const staticApi = {
-  async saveHeightmapWorld(id: string, title: string, archive: Blob) {
-    const { addProject } = await import('../projects/projectStore')
-    const published = await staticApi.listWorlds()
-    if (published.some(world => world.toLowerCase() === id)) throw new Error('This world ID is already in use')
-    return { id: await addProject({ id, name: title, updatedAt: Date.now(), layers: [], creationSnapshot: archive }) }
+  saveHeightmapWorld: saveCreationWorld,
+  async saveStarterWorld(settings: StarterSettings) {
+    const [{ exportStarterWorld }, templates] = await Promise.all([import('../projects/starterWorld'),
+      fetchStaticJson<Record<StarterTemplate, StarterFiles>>('/starter-templates.json')])
+    const archive = await exportStarterWorld(settings, templates[settings.template], new Date().toISOString())
+    return saveCreationWorld(settings.id, settings.title, archive, 'starter')
+  },
+  async restoreCreationWorld(archive: Blob) {
+    const [{ readCreationSnapshot }, { heightmapCreationPath, readHeightmapSnapshot }] = await Promise.all([
+      import('../projects/creationSnapshot'), import('../projects/heightmapWorld'),
+    ])
+    const snapshot = await readCreationSnapshot(archive)
+    if (snapshot.files.has(heightmapCreationPath)) {
+      const { id, title } = await readHeightmapSnapshot(snapshot)
+      return saveCreationWorld(id, title, archive)
+    }
+    const { readStarterSnapshot } = await import('../projects/starterWorld')
+    const { id, title } = await readStarterSnapshot(snapshot)
+    return saveCreationWorld(id, title, archive, 'starter')
   },
   async getHeightmapWorld(id: string) {
     const { getProject } = await import('../projects/projectStore')
-    const archive = (await getProject(id))?.creationSnapshot
+    const project = await getProject(id)
+    const archive = project?.creationKind !== 'starter' ? project?.creationSnapshot : undefined
     return archive ? (await import('../projects/heightmapWorld')).importHeightmapWorld(archive) : null
   },
   // World operations (read-only)

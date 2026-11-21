@@ -155,6 +155,11 @@ export default function WorldDetail() {
     queryFn: () => api.getWorld(worldName!),
     enabled: !!worldName && !localWorld && legacyLayer === null && (!staticMode || !browserWorld.isPending),
   })
+  const nativeStarter = !staticMode && world?.metadata?.tags?.includes('browser-starter')
+  const starterMaps = useQuery({ queryKey: ['mapPlanets', worldName, selectedBranch],
+    queryFn: () => api.listMapPlanets(worldName!, selectedBranch),
+    enabled: !!nativeStarter && activeTab === 'data',
+  })
 
   const { data: stellarSystem } = useQuery({
     queryKey: ['astronomy', worldName, selectedBranch],
@@ -237,7 +242,7 @@ export default function WorldDetail() {
                 {t('action.back')}
               </Link>
               <h1 className="min-w-0 break-words text-2xl font-bold text-neon-cyan neon-glow-subtle sm:text-3xl">
-                {localWorld?.name ?? worldName}
+                {localWorld?.name ?? (nativeStarter ? world.metadata.description : worldName)}
               </h1>
               {staticMode && (
                 <span className="rounded border border-space-border bg-space-surface px-2 py-0.5 text-xs text-gray-300">
@@ -282,7 +287,8 @@ export default function WorldDetail() {
 
             {(activeTab === 'data' || offlineData) && <Suspense fallback={<p>{t('worldData.loading')}</p>}>
               <WorldDataPanel key={worldName} id={worldName} published={!localWorld} publishedAvailable={!!world}
-                nativeCreation={!staticMode && world?.metadata?.tags?.includes('browser-heightmap') && !selectedBranch} />
+                nativeCreation={!staticMode && world?.metadata?.tags?.includes('browser-heightmap') && !selectedBranch}
+                nativeStarterWithoutMap={!!nativeStarter && starterMaps.data?.length === 0} />
             </Suspense>}
 
             {activeTab === 'overview' && world && (
@@ -324,7 +330,7 @@ export default function WorldDetail() {
                     <div>
                       <dt className="text-gray-500 text-sm">{t('detail.seed')}</dt>
                       <dd className="font-medium mt-0.5 font-mono">
-                        {world.seed?.seed || 'N/A'}
+                        {world.seed?.seed ?? 'N/A'}
                       </dd>
                     </div>
                     <div>

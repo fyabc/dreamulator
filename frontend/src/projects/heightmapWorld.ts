@@ -2,15 +2,14 @@ import { GRID_H, GRID_W, MODEL_JANUARY_INDEX, EARTH_PARAMS, isTemperatureParams,
 import type { KernelResult } from '../playground/temperature.worker'
 import { readElevationPng, type ElevationRaster } from '../viewers/packs/elevationRaster'
 import { maxSourceBytes } from './elevationProject'
-import { readTar, writeTar } from './worldDataArchive'
+import { isCreationWorldId, jsonBlob as json, readCreationSnapshot, sha256, writeCreationSnapshot,
+  type CreationSnapshot } from './creationSnapshot'
 
-const manifestPath = 'dreamulator-snapshot.json'
-const creationPath = 'browser-creation.json'
+export const heightmapCreationPath = 'browser-creation.json'
 const experimentDir = 'layers/climate/derived/browser-temperature'
 const geologicalInput = 'layers/geological/input'
 export const heightmapPlanet = 'planet_terra'
 const star = 'star_primary'
-const maxSnapshotBytes = maxSourceBytes + 6 * 2 ** 20
 
 export type HeightmapInput = {
   original: Blob
@@ -35,14 +34,6 @@ export type HeightmapWorld = {
   temperature?: SavedTemperature
 }
 export const heightmapMapPath = (id: string) => `/worlds/${encodeURIComponent(id)}/map/${heightmapPlanet}?creation=1`
-
-const json = (value: unknown) => new Blob([JSON.stringify(value)], { type: 'application/json' })
-const sha256 = async (blob: Blob) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',
-  await blob.arrayBuffer())), value => value.toString(16).padStart(2, '0')).join('')
-
-export function isHeightmapWorldId(id: string) {
-  return /^[a-z0-9][a-z0-9_-]{0,47}$/.test(id) && !/^(earth|con|prn|aux|nul|com[1-9]|lpt[1-9])$/.test(id)
-}
 
 export async function readHeightmapInput(blob: Blob, name: string): Promise<HeightmapInput> {
   if (!blob.size || blob.size > maxSourceBytes) throw new Error('Unsupported heightmap file size')
@@ -108,7 +99,7 @@ function readTemperature(value: unknown): SavedTemperature {
 }
 
 function validateCreation({ id, title, created, seed, meshCells, params }: HeightmapWorld) {
-  if (typeof id !== 'string' || !isHeightmapWorldId(id) || typeof title !== 'string' || !title.trim() || title.length > 120 ||
+  if (typeof id !== 'string' || !isCreationWorldId(id) || typeof title !== 'string' || !title.trim() || title.length > 120 ||
     typeof created !== 'string' || !Number.isFinite(Date.parse(created)) ||
     !Number.isSafeInteger(seed) || seed < 0 || seed > 0x7fffffff ||
     !Number.isSafeInteger(meshCells) || meshCells < 100 || meshCells > 200_000 || !isHeightmapParams(params)) {
@@ -151,7 +142,7 @@ async function worldFiles(world: HeightmapWorld) {
   put(`maps/${heightmapPlanet}/map.yaml`, { planet_id: heightmapPlanet, projection: 'equirectangular',
     width: dimensions[0], height: dimensions[1], elevation_min_m: params.elevMinM, elevation_max_m: params.elevMaxM,
     sea_level_m: params.seaLevelM })
-  put(creationPath, { version: 1, id, title, created, seed, meshCells, filename: heightmap.filename,
+  put(heightmapCreationPath, { version: 1, id, title, created, seed, meshCells, filename: heightmap.filename,
     sha256: heightmap.sha256, params, temperature: Boolean(temperature) })
   if (temperature) {
     put(`${experimentDir}/metadata.json`, { model: 'browser-temperature', version: temperature.version,
@@ -163,58 +154,21 @@ async function worldFiles(world: HeightmapWorld) {
 }
 
 export async function exportHeightmapWorld(world: HeightmapWorld): Promise<Blob> {
-  const files = new Map<string, Blob>()
-  const checksums: Record<string, string> = {}
-  for (const [path, file] of await worldFiles(world)) {
-    files.set(`${world.id}/${path}`, file)
-    checksums[path] = await sha256(file)
-  }
-  files.set(manifestPath, json({ format: 1, world: world.id, dreamulatorVersion: __APP_VERSION__, sha256: checksums }))
-  const stream = writeTar(files).stream().pipeThrough(new CompressionStream('gzip'))
-  return new Response(stream, { headers: { 'Content-Type': 'application/gzip' } }).blob()
-}
-
-async function decompressSnapshot(blob: Blob) {
-  if (!blob.size || blob.size > maxSnapshotBytes) throw new Error('Unsupported world snapshot size')
-  const stream = blob.stream().pipeThrough(new DecompressionStream('gzip')).getReader()
-  const chunks: Uint8Array<ArrayBuffer>[] = []
-  let size = 0
-  try {
-    for (;;) {
-      const { value, done } = await stream.read()
-      if (done) break
-      size += value.length
-      if (size > maxSnapshotBytes) throw new Error('Unsupported world snapshot size')
-      chunks.push(value)
-    }
-  } finally { await stream.cancel() }
-  return new Blob(chunks)
+  return writeCreationSnapshot(world.id, await worldFiles(world))
 }
 
 export async function importHeightmapWorld(blob: Blob): Promise<HeightmapWorld> {
-  const files = await readTar(await decompressSnapshot(blob), true)
-  const parse = async (path: string) => {
-    const file = files.get(path)
-    if (!file) throw new Error('Incomplete heightmap world snapshot')
-    return JSON.parse(await file.text())
-  }
-  const manifest = await parse(manifestPath)
-  const { world: id, sha256: checksums } = manifest ?? {}
-  if (manifest?.format !== 1 || typeof id !== 'string' || !isHeightmapWorldId(id) || !checksums ||
-    typeof checksums !== 'object' || Array.isArray(checksums) || Object.keys(checksums).length !== files.size - 1) {
-    throw new Error('Invalid heightmap world snapshot')
-  }
-  for (const [path, hash] of Object.entries(checksums)) {
-    const file = files.get(`${id}/${path}`)
-    if (!file || await sha256(file) !== hash) throw new Error('Snapshot checksum mismatch')
-  }
-  const data = await parse(`${id}/${creationPath}`)
+  return readHeightmapSnapshot(await readCreationSnapshot(blob))
+}
+
+export async function readHeightmapSnapshot({ id, files, parse }: CreationSnapshot): Promise<HeightmapWorld> {
+  const data = await parse(heightmapCreationPath)
   return readHeightmapWorldParts(id, data,
     async () => {
-      const original = files.get(`${id}/${geologicalInput}/elevation_sources/${data.sha256}.bin`)
+      const original = files.get(`${geologicalInput}/elevation_sources/${data?.sha256}.bin`)
       if (!original) throw new Error('Original heightmap is missing')
       return original
-    }, () => parse(`${id}/${experimentDir}/temperature.json`))
+    }, () => parse(`${experimentDir}/temperature.json`))
 }
 
 export async function readHeightmapWorldParts(id: string, value: unknown, readOriginal: () => Promise<Blob>, readResult: () => Promise<unknown>) {

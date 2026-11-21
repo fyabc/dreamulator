@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from pathlib import Path
+from re import fullmatch
 from shutil import rmtree
 from tempfile import TemporaryDirectory, mkdtemp
 from typing import TYPE_CHECKING, Any
@@ -29,7 +30,7 @@ from dreamulator.build_jobs import (
 )
 from dreamulator.engine.ephemeris import sky_ephemeris
 from dreamulator.guard.facts import load_entities
-from dreamulator.world_manager import WorldManager
+from dreamulator.world_manager import STARTER_TEMPLATES, WorldManager
 from dreamulator.world_snapshot import export_snapshot, restore_snapshot, snapshot_world_id
 
 if TYPE_CHECKING:
@@ -61,6 +62,7 @@ class WorldCreateRequest(BaseModel):
     name: str = Field(description="World name (used as directory name)")
     seed: int | None = Field(default=None, description="RNG seed (random if omitted)")
     template: str = Field(default="minimal", description="Template to use")
+    title: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 class WorldListResponse(BaseModel):
@@ -96,13 +98,26 @@ def list_worlds() -> WorldListResponse:
 def create_world(req: WorldCreateRequest) -> WorldInfoResponse:
     """Create a new world from a template."""
     try:
-        _manager.create_world(req.name, seed=req.seed, template=req.template)
+        snapshot_world_id(req.name)
+        snapshot_world_id(req.template)
+        title = req.title.strip() if req.title is not None else None
+        if title is not None and (
+            not title
+            or not fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}", req.name)
+            or req.name == "earth"
+            or req.template not in STARTER_TEMPLATES
+            or (req.seed is not None and not 0 <= req.seed <= 0x7FFFFFFF)
+        ):
+            raise ValueError("Invalid starter world settings")
+        _manager.create_world(req.name, seed=req.seed, template=req.template, title=title)
         config = _manager.load_world(req.name)
         return WorldInfoResponse(data=config.model_dump(mode="json"))
     except FileExistsError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
 
 @router.get("/{world_name}", response_model=WorldInfoResponse)

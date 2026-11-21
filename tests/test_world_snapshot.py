@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
+from dreamulator import world_manager
 from dreamulator.api_routes import worlds as worlds_route
 from dreamulator.build_jobs import local_compute_slot
 from dreamulator.cli import app
@@ -49,6 +50,53 @@ def _contents(world: Path) -> dict[str, bytes]:
         for path in world.rglob("*")
         if path.is_file() and not path.name.startswith(".")
     }
+
+
+@pytest.mark.parametrize(
+    ("template", "planet"), [("minimal", "planet_terra"), ("earthlike", "planet_gaia")]
+)
+def test_starter_creation_saves_template_without_building(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, template: str, planet: str
+) -> None:
+    manager = WorldManager(tmp_path / "worlds")
+    monkeypatch.setattr(worlds_route, "_manager", manager)
+    api = FastAPI()
+    api.include_router(worlds_route.router)
+    client = TestClient(api)
+    settings = {"name": "first-world", "title": "我的世界", "template": template, "seed": 0}
+    response = client.post("/api/worlds", json=settings)
+    assert response.status_code == 201, response.text
+    created = response.json()["data"]
+    assert created["metadata"]["description"] == "我的世界"
+    assert created["planet_ids"] == [planet]
+    assert created["seed"]["seed"] == 0
+    world = manager.world_dir("first-world")
+    original = _contents(world)
+    assert all(path == "world.yaml" or "/input/" in path for path in original)
+    assert planet.encode() in original["layers/geological/input/planets.yaml"]
+    assert client.post("/api/worlds", json={**settings, "seed": 8}).status_code == 409
+    assert _contents(world) == original
+    assert client.post("/api/worlds", json={**settings, "name": "../outside"}).status_code == 422
+    assert client.post("/api/worlds", json={**settings, "name": "earth"}).status_code == 422
+    invalid_seed = client.post("/api/worlds", json={**settings, "name": "bad-seed", "seed": -1})
+    assert invalid_seed.status_code == 422
+    assert manager.list_worlds() == ["first-world"]
+
+
+def test_invalid_starter_template_does_not_leave_a_world(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    templates = tmp_path / "templates"
+    template = templates / "minimal"
+    template.mkdir(parents=True)
+    (template / "world.yaml").write_text("layers: broken\n", encoding="utf-8")
+    monkeypatch.setattr(world_manager, "_templates_dir", lambda: templates)
+    manager = WorldManager(tmp_path / "worlds")
+
+    with pytest.raises(ValueError, match="layers"):
+        manager.create_world("starter", seed=0, title="Starter")
+
+    assert not list(manager.worlds_dir.iterdir())
 
 
 def test_cli_round_trip(world: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

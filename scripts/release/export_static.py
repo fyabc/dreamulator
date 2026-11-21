@@ -52,6 +52,7 @@ from dreamulator.civmap.manager import CivMapManager  # noqa: E402
 from dreamulator.map.manager import MapManager  # noqa: E402
 from dreamulator.map.models import map_metadata_result, sanitize_nonfinite  # noqa: E402
 from dreamulator.resolver import LayerResolver  # noqa: E402
+from dreamulator.world_manager import STARTER_TEMPLATES, _templates_dir  # noqa: E402
 
 
 def find_project_root() -> Path:
@@ -511,6 +512,21 @@ def export_world(world_dir: Path, skip_branches: set[str] | None = None) -> dict
     return result
 
 
+def _export_starter_templates(output_dir: Path) -> None:
+    templates = {}
+    for name in STARTER_TEMPLATES:
+        source = _templates_dir() / name
+        root = yaml.safe_load((source / "world.yaml").read_text(encoding="utf-8"))
+        inputs = {
+            path.relative_to(source).as_posix(): path.read_text(encoding="utf-8")
+            for path in sorted(source.glob("layers/*/input/*.yaml"))
+        }
+        templates[name] = {"root": root, "inputs": inputs}
+    (output_dir / "starter-templates.json").write_text(
+        json.dumps(templates, ensure_ascii=False), encoding="utf-8"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Export world data as static JSON")
     parser.add_argument(
@@ -540,6 +556,7 @@ def main() -> None:
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
+    _export_starter_templates(output_dir)
 
     # Discover worlds
     all_worlds = sorted(
