@@ -143,17 +143,19 @@ function interpolate({ values, width, height }: ElevationRaster, col: number, ro
 }
 
 export function sampleGlobalElevation(source: ElevationRaster, window: PackWindow, size: number, pixelCentres = false): ElevationRaster {
-  const values = new Float32Array(size * size)
-  for (let row = 0; row < size; row++) {
-    for (let col = 0; col < size; col++) {
-      const { lon, lat } = pxToLonLat(col, row, size, size, window)
+  const width = Math.max(1, Math.round(size * window.extentKmX / Math.max(window.extentKmX, window.extentKmY)))
+  const height = Math.max(1, Math.round(size * window.extentKmY / Math.max(window.extentKmX, window.extentKmY)))
+  const values = new Float32Array(width * height)
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      const { lon, lat } = pxToLonLat(col, row, width, height, window)
       const x = (lon + 180) / 360 * source.width
       const y = (90 - lat) / 180
-      values[row * size + col] = interpolate(source, pixelCentres ? x - 0.5 : x,
+      values[row * width + col] = interpolate(source, pixelCentres ? x - 0.5 : x,
         pixelCentres ? y * source.height - 0.5 : y * (source.height - 1), true)
     }
   }
-  return { width: size, height: size, values }
+  return { width, height, values }
 }
 
 export function resizeElevation(source: ElevationRaster, width: number, height: number): ElevationRaster {

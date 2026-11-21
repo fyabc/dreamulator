@@ -104,7 +104,7 @@ export function guideForRoute(progress: TutorialProgress, pathname: string, sear
     case 'climate': return { active: tutorialMap, to: officialMap, anchors: ['trialBranch', 'trialWait', 'trialRun', 'lab'], chapter: 2 }
     case 'region': return { active: tutorialMap, to: officialMap, anchors: ['regionOpen', 'regionForm', 'region'], chapter: 3 }
     case 'refine': return { active: route.region && !route.query.has('pack'), to: `/packs${progress.region ?? ''}`,
-      anchors: ['regionResult', 'refining', 'refineRun', 'refine'], chapter: 3 }
+      anchors: ['regionResult', 'refining', 'refineRun', 'refine', 'regionTools'], chapter: 3 }
     case 'backup': return { active: route.detail, to: world, anchors: ['snapshot'], chapter: 4 }
     case 'browserMap': return { active: route.detail && route.query.get('tab') === 'data', to: data, anchors: ['browserMap'], chapter: 2 }
     case 'browserView': return { active: route.creation, to: `${map}?creation=1`, anchors: ['browserView'], chapter: 2 }

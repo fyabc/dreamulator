@@ -454,6 +454,7 @@ def refine_region_pack(
     from scipy.ndimage import label
 
     from dreamulator.map.importer import _resample_by_class
+    from dreamulator.map.region_conditions import TD_CONDITION_FILES, TD_CONDITION_VERSION
     from dreamulator.map.region_inputs import file_sha256, read_refinement_inputs
     from dreamulator.map.river_routing import two_ring_receivers
 
@@ -494,6 +495,7 @@ def refine_region_pack(
     contract = _cache_contract(pack_dir, meta, mode, native_km, preserve_km, coast_warp, depth_cap)
     previous = pack_dir / "refined-out"
     td_revision: str | None = None
+    previous_conditions: dict[str, str] = {}
     donor: np.ndarray | None = None
     if mode != RefinementMode.HYDROLOGY:
         if reuse_height:
@@ -501,6 +503,9 @@ def refine_region_pack(
             if not old_meta_path.exists():
                 raise FileNotFoundError("--reuse-height needs a previous region build")
             old_meta = json.loads(old_meta_path.read_text(encoding="utf-8"))
+            record = old_meta.get("td_conditions") or {}
+            if record.get("version") == TD_CONDITION_VERSION:
+                previous_conditions = record.get("sha256") or {}
             if old_meta.get("cache_contract") != contract:
                 raise ValueError("cached mode, input or scale changed; run without --reuse-height")
             cached = previous / "height.donor.npy"
@@ -547,6 +552,24 @@ def refine_region_pack(
     np.save(out / "height.source.npy", source)
     if donor is not None:
         np.save(out / "height.donor.npy", donor)
+    condition_hashes: dict[str, str] = {}
+    condition_dir = out / "td-conditions"
+    if donor is not None and not reuse_height:
+        from tifffile import imread
+
+        condition_dir.mkdir()
+        for field, stem in TD_CONDITION_FILES.items():
+            values = imread(tmp / "cond" / f"{stem}.tif")
+            path = condition_dir / f"{field}.npy"
+            np.save(path, values, allow_pickle=False)
+            condition_hashes[field] = file_sha256(path)
+    elif previous_conditions:
+        condition_dir.mkdir()
+        for field in TD_CONDITION_FILES:
+            path = previous / "td-conditions" / f"{field}.npy"
+            if path.is_file() and file_sha256(path) == previous_conditions.get(field):
+                shutil.copyfile(path, condition_dir / path.name)
+                condition_hashes[field] = previous_conditions[field]
     if mode == RefinementMode.BLEND:
         assert donor is not None and preserve_km is not None
         delta = detail_difference(source, donor, km_pp, preserve_km)
@@ -717,6 +740,9 @@ def refine_region_pack(
         "mode": mode.value,
         "cache_contract": contract,
         "td_revision": td_revision,
+        "td_conditions": {"version": TD_CONDITION_VERSION, "sha256": condition_hashes}
+        if condition_hashes
+        else None,
         "adopted_height": "height.meters.npy",
         "routing_height": "height.pre-equilibrium.npy",
         "geographic_land": "land.png",

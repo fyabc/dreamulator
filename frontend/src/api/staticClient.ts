@@ -318,6 +318,7 @@ export const staticApi = {
     return deleteBrowserClimateResult(world, id)
   },
   getPackElevation: async (): Promise<Blob> => notAvailable('getPackElevation'),
+  getPackCondition: async (): Promise<Blob> => notAvailable('getPackCondition'),
   getRegionDevice: async () => notAvailable('getRegionDevice'),
   planRegionRefinement: async (_source: RegionRefinementSource) => notAvailable('planRegionRefinement'),
   startRegionRefinement: async (_source: RegionRefinementSource) => notAvailable('startRegionRefinement'),

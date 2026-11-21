@@ -484,6 +484,7 @@
     "layerHelp": "{{label}}图层说明",
     "hideLayer": "隐藏 {{label}}",
     "showLayer": "显示 {{label}}",
+    "opacity": "{{label}}透明度",
     "particles": "粒子流",
     "particlesHint": "风场/洋流由箭头切换为粒子拖尾；月度模式下风随月份变化"
   },
@@ -584,10 +585,67 @@
       "openWorlds": "浏览世界",
       "retryList": "重新载入地图列表",
       "tools": "区域工具",
+      "closeTools": "关闭区域工具",
       "closeProbe": "关闭点位详情",
       "tapToProbe": "点按地图查看点位信息"
     },
+    "results": {
+      "label": "区域数据来源",
+      "original": "原始高程（全球截取）",
+      "saved": "已保存的区域地图",
+      "redraw": "TD 重绘",
+      "blend": "TD 混合细化",
+      "hydrology": "仅计算水文",
+      "withGrid": "{{method}} · 含 TD 条件网格",
+      "withoutGrid": "{{method}} · 无条件网格记录"
+    },
+    "frame": {
+      "fit": "全图",
+      "fill": "铺满",
+      "fitHint": "缩放至完整选区",
+      "fillHint": "等比缩放以铺满视口",
+      "context": "查看选区与周边",
+      "contextHint": "重新居中，显示整个选区和周边地形",
+      "contextReference": "虚线为选区边界，框外为全球原始地形",
+      "currentReference": "虚线为选区边界，框外为当前全球底图",
+      "zoomIn": "放大",
+      "zoomOut": "缩小"
+    },
     "base": "底图",
+    "conditions": {
+      "title": "TD 细化条件",
+      "hydrology": "水文",
+      "reference": "地图参照",
+      "rasterSource": "数据来源",
+      "map": "地图高程",
+      "source": "区域源数据",
+      "grid": "TD 条件网格",
+      "terrain": "高程",
+      "temperature": "海平面年均气温",
+      "surfaceTemperature": "地表年均气温",
+      "temperatureStd": "月均气温标准差",
+      "precipitation": "年降水",
+      "precipitationCv": "月降水变异系数",
+      "runoff": "年径流深度",
+      "elevationOnly": "浏览器细化仅使用高程约束，不使用气候图层。",
+      "missingGrid": "这份成果未保存 TD 条件网格。这里只显示可核验的区域源数据。",
+      "unavailable": "无法读取或核验此栅格。",
+      "hint": {
+        "terrain": "查看原始或细化高程。若运行有记录，也可查看 TD 实际使用的粗网格。",
+        "temperature": "区域源数据记录地表气温，TD 条件网格使用折算至海平面的年均气温。",
+        "temperatureStd": "一年中各月平均气温的标准差。",
+        "precipitation": "十二个月的降水量之和。",
+        "precipitationCv": "月降水量标准差除以月均降水量，以百分比表示。",
+        "runoff": "水文计算用的年径流深度，不是 TD 推理条件。"
+      }
+    },
+    "layers": {
+      "overlays": "叠加",
+      "rivers": "河流",
+      "regionalRivers": "河网由区域高程计算，仅显示在选区内。",
+      "refinedRiversOnly": "这份河网来自细化成果，不叠加到原始高程。",
+      "heightChange": "高程变化"
+    },
     "help": "区域地图帮助（在新标签页打开）",
     "refinement": {
       "title": "生成细化地形",
@@ -802,35 +860,27 @@
       "back": "返回打开这张区域地图的全球视图，并恢复已保存的选区。"
     },
     "baseOptions": {
-      "topo": "地形（测绘体）",
+      "carto": "地形（测绘体）",
       "preview": "卫星预览",
-      "albedo": "反照率",
-      "color": "分层设色",
-      "koppen": "柯本气候",
-      "biome": "群系"
+      "albedo": "反照率"
     },
     "graticule": "经纬网",
-    "probePrompt": "点击地图任意点，探测高程 / 群系 / 水体 / 河流情相",
-    "probeTitle": "格点探测",
+    "probePrompt": "点击选区内的点，查看高程和可用的专题数据。",
+    "probeTitle": "点位详情",
+    "rasterProbePrompt": "点击地图查看该点的坐标与高程。",
     "probing": "探测中…",
     "field": {
       "height": "高程",
       "biome": "群系",
       "koppen": "柯本",
-      "cell": "格点",
+      "cell": "栅格行列",
+      "latitude": "纬度",
+      "longitude": "经度",
       "riverFlow": "河流累积"
-    },
-    "chip": {
-      "river": "河",
-      "lake": "湖",
-      "sea": "海"
     },
     "regime": {
       "perennial": "常流",
       "nonPerennial": "非常流"
-    },
-    "copied": "已复制",
-    "copyCliTitle": "复制为 export CLI 参数",
-    "copyPlainTitle": "复制纯坐标"
+    }
   }
 }

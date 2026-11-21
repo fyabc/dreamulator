@@ -12,6 +12,8 @@ import {
   kmToLonLat,
   lonLatToKm,
   pxToLonLat,
+  regionFrameZooms,
+  regionContextWindow,
   wrapLon,
   type PackWindow,
 } from './packCoords'
@@ -23,6 +25,31 @@ const NACREA: PackWindow = {
   extentKmX: 554.67,
   extentKmY: 567.11,
 }
+
+describe('regional framing', () => {
+  it.each([[950, 600], [390, 760]])('keeps the raster proportional in a %i × %i viewport', (width, height) => {
+    const { fit, fill } = regionFrameZooms(NACREA, width, height)
+    const coverage = (zoom: number) => [2 ** zoom * NACREA.extentKmX / width, 2 ** zoom * NACREA.extentKmY / height]
+    expect(Math.max(...coverage(fit))).toBeCloseTo(1)
+    expect(Math.min(...coverage(fill))).toBeCloseTo(1)
+    expect(fill).toBeGreaterThan(fit)
+  })
+})
+
+describe('regional context frame', () => {
+  it('uses the same projected coordinates for the region and its surroundings', () => {
+    const region = { ...NACREA, centerLon: 179, projection: 'azimuthal_equidistant' as const }
+    const context = regionContextWindow(region)!
+    expect(context.extentKmX).toBe(region.extentKmX * 3)
+    expect(context.extentKmY).toBe(region.extentKmY * 3)
+    expect(pxToLonLat(5, 25, 40, 40, region)).toEqual(pxToLonLat(45, 65, 120, 120, context))
+  })
+
+  it('omits context when a legacy window would cross a pole or a projected window would reach its antipode', () => {
+    expect(regionContextWindow({ ...NACREA, centerLat: 89 })).toBeNull()
+    expect(regionContextWindow({ ...NACREA, extentKmX: 30000, projection: 'azimuthal_equidistant' })).toBeNull()
+  })
+})
 
 describe('degPerKm', () => {
   it('matches 180/(π·R) for the Earth radius', () => {

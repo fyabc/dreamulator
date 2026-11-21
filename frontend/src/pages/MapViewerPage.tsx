@@ -19,6 +19,7 @@ import MapViewer from '../components/map/MapViewer'
 import MapLayerPanel from '../components/map/MapLayerPanel'
 import { activeMainLayerId } from '../components/map/layerStateInit'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
+import { inspectorDesktopPane, MapInspectorPane } from '../components/map/MapInspectorFields'
 import MapLegend from '../components/map/MapLegend'
 import ClimateLegend from '../components/map/ClimateLegend'
 import MapStatusBar from '../components/map/MapStatusBar'
@@ -429,20 +430,8 @@ export default function MapViewerPage() {
 
           {/* Right panel: cell inspector + minimap */}
           {!cleanMode && (
-          <div ref={element => { if (element) element.inert = trialOpen }}
-            className="w-52 shrink-0 bg-space-panel/50 border-l border-space-border flex flex-col min-h-0">
-            {/* Scrollable inspector area */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-3">
-              {inspection}
-              {selectedCells.size > 1 && (
-                <p className="text-[10px] text-gray-600 mt-2 text-center">
-                  {t('msg.escClearSelection')}
-                </p>
-              )}
-            </div>
-
-            {/* Minimap — pinned at bottom */}
-            {elevation && (
+          <MapInspectorPane panelRef={element => { if (element) element.inert = trialOpen }}
+            className={`flex ${inspectorDesktopPane}`} footer={elevation && (
               <div className="shrink-0 border-t border-space-border p-3">
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                   {t('label.minimap')}
@@ -458,8 +447,14 @@ export default function MapViewerPage() {
                   containerHeight={viewState.containerHeight}
                 />
               </div>
+            )}>
+            {inspection}
+            {selectedCells.size > 1 && (
+              <p className="text-[10px] text-gray-600 mt-2 text-center">
+                {t('msg.escClearSelection')}
+              </p>
             )}
-          </div>
+          </MapInspectorPane>
           )}
         </div>
 

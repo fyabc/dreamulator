@@ -34,15 +34,17 @@ export interface PackInputMeta {
   grid: { w: number; h: number }
   extent_km: { x: number; y: number }
   km_per_px?: { x: number; y: number }
+  source?: { canvas?: string }
   climate?: {
-    biome?: { legend?: Record<string, string> }
-    koppen?: { legend?: Record<string, string> }
+    biome?: { legend?: Record<string, string>; missing?: number }
+    koppen?: { legend?: Record<string, string>; missing?: number }
   }
   [key: string]: unknown
 }
 
 export interface PackRefinedMeta {
   regime?: { encoding?: string }
+  td_revision?: string | null
   [key: string]: unknown
 }
 
@@ -50,6 +52,7 @@ export interface PackMeta {
   input: PackInputMeta
   refined: PackRefinedMeta | null
   height_source?: PackHeightSource | null
+  condition_layers?: { source: string[]; grid: string[] }
 }
 
 export type PackHeightSource = 'input' | 'refined-out' | 'gaea-out'

@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react'
 import { generateAdaptiveTerrainScale } from '../map/utils/colorScales'
 import type { ElevationRaster } from './elevationRaster'
 
-export function useElevationPreview(raster: ElevationRaster | null, min: number, max: number, sea: number) {
+export function useElevationPreview(raster: ElevationRaster | null, min: number, max: number, sea: number, retainPreview = false) {
   const [base, setBase] = useState<{ url: string } | null>(null)
+  useEffect(() => () => { if (base) URL.revokeObjectURL(base.url) }, [base])
   useEffect(() => {
-    setBase(null)
-    if (!raster) return
+    if (!raster) { if (!retainPreview) setBase(null); return }
     const canvas = document.createElement('canvas')
     canvas.width = raster.width
     canvas.height = raster.height
@@ -24,13 +24,11 @@ export function useElevationPreview(raster: ElevationRaster | null, min: number,
     })
     context.putImageData(image, 0, 0)
     let active = true
-    let url: string | undefined
     canvas.toBlob((blob) => {
       if (!active || !blob) return
-      url = URL.createObjectURL(blob)
-      setBase({ url })
+      setBase({ url: URL.createObjectURL(blob) })
     })
-    return () => { active = false; if (url) URL.revokeObjectURL(url) }
-  }, [raster, min, max, sea])
+    return () => { active = false }
+  }, [raster, min, max, sea, retainPreview])
   return base
 }

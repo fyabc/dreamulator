@@ -18,17 +18,22 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import AtlasIcon from '../../components/AtlasIcon'
 import type { LonLat } from '../map/utils/mapCoords'
-import { graticule, kmToLonLat, lonLatToKm, type PackWindow } from './packCoords'
+import { kmToLonLat, lonLatToKm, regionFrameZooms, type PackWindow } from './packCoords'
+import { projectedRegionGraticule } from './regionGraticule'
 import type { RiverData } from './types'
+import type { RegionContext } from './useRegionContext'
 
 interface PackMapProps {
   window: PackWindow
   /** Base image URL, or null while loading. */
-  base: { url: string; opacity?: number } | null
+  base: { url: string; opacity?: number; pixelated?: boolean } | null
+  context?: RegionContext | null
+  loading?: boolean
   rivers: RiverData | null
-  graticuleOn: boolean
-  zoomSnap?: number
+  riverOpacity?: number
+  graticuleOpacity: number
   pin: LonLat | null
   onHover: (ll: LonLat | null) => void
   onProbe: (ll: LonLat) => void
@@ -55,7 +60,7 @@ function boundsOf(w: PackWindow): L.LatLngBounds {
 
 function degreeLabel(value: number, isLat: boolean): string {
   const hemi = isLat ? (value >= 0 ? 'N' : 'S') : value >= 0 ? 'E' : 'W'
-  return `${Math.abs(value)}°${hemi}`
+  return `${Number(Math.abs(value).toFixed(2))}°${hemi}`
 }
 
 const LABEL_STYLE =
@@ -74,9 +79,11 @@ function labelIcon(text: string, anchor: [number, number]): L.DivIcon {
 export default function PackMap({
   window,
   base,
+  context,
+  loading,
   rivers,
-  graticuleOn,
-  zoomSnap = 1,
+  riverOpacity = 1,
+  graticuleOpacity,
   pin,
   onHover,
   onProbe,
@@ -89,6 +96,8 @@ export default function PackMap({
   const riversRef = useRef<L.LayerGroup | null>(null)
   const graticuleRef = useRef<L.LayerGroup | null>(null)
   const pinRef = useRef<L.CircleMarker | null>(null)
+  const framingRef = useRef<{ window: PackWindow; mode: 'default' | 'fit' | 'custom' } | null>(null)
+  const changeFrame = useRef<((showFullArea: boolean) => void) | null>(null)
   const hoverRef = useRef(onHover)
   const probeRef = useRef(onProbe)
   hoverRef.current = onHover
@@ -96,6 +105,7 @@ export default function PackMap({
   // Base raster load state (the topo composite is ~10 MB and the first render
   // of a pack can take tens of seconds server-side) — a debug-grade badge.
   const [baseLoading, setBaseLoading] = useState(false)
+  const [fullArea, setFullArea] = useState(false)
 
   // Init once (survives StrictMode double-mount via the cleanup).
   useEffect(() => {
@@ -103,10 +113,18 @@ export default function PackMap({
     mapRef.current = L.map(containerRef.current, {
       crs: L.CRS.Simple,
       attributionControl: false,
-      zoomControl: true,
+      zoomControl: false,
       maxZoom: 6,
+      maxBoundsViscosity: 1,
+      zoomSnap: 0,
+      zoomDelta: 0.5,
       preferCanvas: true,
     })
+    mapRef.current.createPane('region-context').style.zIndex = '200'
+    mapRef.current.createPane('region-boundary').style.zIndex = '410'
+    const grid = mapRef.current.createPane('region-graticule')
+    grid.style.zIndex = '405'
+    grid.style.pointerEvents = 'none'
     return () => {
       mapRef.current?.remove()
       mapRef.current = null
@@ -118,13 +136,23 @@ export default function PackMap({
     }
   }, [])
 
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const control = L.control.zoom({ zoomInTitle: t('packs.frame.zoomIn'), zoomOutTitle: t('packs.frame.zoomOut') }).addTo(map)
+    return () => { control.remove() }
+  }, [t])
+
   // Pointer events — rebound whenever the window (pack) changes so the
   // km → degrees conversion always uses the current geometry.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const move = (e: L.LeafletMouseEvent) => hoverRef.current(kmToLonLat(e.latlng.lng, e.latlng.lat, window))
-    const click = (e: L.LeafletMouseEvent) => probeRef.current(kmToLonLat(e.latlng.lng, e.latlng.lat, window))
+    const bounds = boundsOf(window)
+    const move = (e: L.LeafletMouseEvent) => hoverRef.current(bounds.contains(e.latlng) ? kmToLonLat(e.latlng.lng, e.latlng.lat, window) : null)
+    const click = (e: L.LeafletMouseEvent) => {
+      if (bounds.contains(e.latlng)) probeRef.current(kmToLonLat(e.latlng.lng, e.latlng.lat, window))
+    }
     const leave = () => hoverRef.current(null)
     map.on('mousemove', move)
     map.on('click', click)
@@ -136,15 +164,58 @@ export default function PackMap({
     }
   }, [window])
 
-  // Window (pack) change: refit the view and clamp panning.
+  const contextWindow = context?.window
+  const frameAction = contextWindow ? 'context' : fullArea ? 'fill' : 'fit'
   useEffect(() => {
     const map = mapRef.current
-    if (!map) return
+    const container = containerRef.current
+    if (!map || !container) return
     const bounds = boundsOf(window)
-    map.options.zoomSnap = zoomSnap
-    map.setMaxBounds(bounds.pad(0.5))
-    map.fitBounds(bounds)
-  }, [window, zoomSnap])
+    if (framingRef.current?.window !== window) framingRef.current = { window, mode: 'default' }
+    const framing = framingRef.current
+    let applyingFrame = false
+    const applyFrame = () => {
+      const { clientWidth, clientHeight } = container
+      if (!clientWidth || !clientHeight) return
+      const zooms = regionFrameZooms(window, clientWidth, clientHeight)
+      const contextZoom = contextWindow ? zooms.fit - 0.5 : zooms.fill
+      applyingFrame = true
+      map.invalidateSize({ animate: false })
+      map.setMaxZoom(Math.max(6, Math.ceil(zooms.fill) + 2))
+      map.setMinZoom(contextWindow ? Math.min(contextZoom, regionFrameZooms(contextWindow, clientWidth, clientHeight).fill) : zooms.fit)
+      if (framing.mode !== 'custom') map.setView(bounds.getCenter(), framing.mode === 'fit' ? zooms.fit : contextZoom, { animate: false })
+      applyingFrame = false
+    }
+    const useCustomFrame = () => { if (!applyingFrame) framing.mode = 'custom' }
+    map.setMaxBounds(contextWindow ? boundsOf(contextWindow) : bounds)
+    applyFrame()
+    changeFrame.current = (showFullArea) => {
+      framing.mode = showFullArea ? 'fit' : 'default'
+      applyFrame()
+      setFullArea(showFullArea)
+    }
+    setFullArea(framing.mode === 'fit')
+    map.on('dragstart zoomstart', useCustomFrame)
+    const resize = new ResizeObserver(applyFrame)
+    resize.observe(container)
+    return () => {
+      map.off('dragstart zoomstart', useCustomFrame)
+      resize.disconnect()
+      changeFrame.current = null
+    }
+  }, [window, contextWindow])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !context) return
+    const bounds = boundsOf(window)
+    const group = L.layerGroup([
+      L.imageOverlay(context.url, boundsOf(context.window), { pane: 'region-context', interactive: false, zIndex: 0 }),
+      L.rectangle(bounds, { pane: 'region-boundary', color: '#071521', weight: 3, fill: false, interactive: false }),
+      L.rectangle(bounds, { pane: 'region-boundary', color: '#e2f5ff', weight: 1.5, dashArray: '6 5', fill: false, interactive: false }),
+    ]).addTo(map)
+    return () => { group.remove() }
+  }, [context, window])
 
   // Base layer.
   useEffect(() => {
@@ -158,7 +229,9 @@ export default function PackMap({
       setBaseLoading(true)
       const overlay = L.imageOverlay(base.url, boundsOf(window), {
         opacity: base.opacity ?? 1,
+        className: base.pixelated ? 'atlas-region-field' : undefined,
       })
+      overlay.setZIndex(-1)
       overlay.on('load', () => setBaseLoading(false))
       overlay.on('error', () => setBaseLoading(false))
       baseRef.current = overlay
@@ -196,7 +269,7 @@ export default function PackMap({
         L.polyline(lines, {
           weight: Number(weight),
           color: RIVER_INK,
-          opacity: 0.92,
+          opacity: 0.92 * riverOpacity,
           dashArray: regime === '1' ? RIVER_DASH : undefined,
           renderer: rendererRef.current ?? undefined,
           interactive: false,
@@ -205,9 +278,8 @@ export default function PackMap({
     }
     riversRef.current = group
     group.addTo(map)
-  }, [rivers, window])
+  }, [rivers, riverOpacity, window])
 
-  // Graticule (same step ladder and ink as the printed carto sheets).
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -215,52 +287,24 @@ export default function PackMap({
       map.removeLayer(graticuleRef.current)
       graticuleRef.current = null
     }
-    if (!graticuleOn) return
-    const g = graticule(window)
     const group = L.layerGroup()
-    const x0 = -window.extentKmX / 2
-    const x1 = window.extentKmX / 2
-    const y0 = -window.extentKmY / 2
-    const y1 = window.extentKmY / 2
-    for (const lat of g.lats) {
-      const y = lonLatToKm({ lon: window.centerLon, lat }, window).y
-      group.addLayer(
-        L.polyline(
-          [
-            [y, x0],
-            [y, x1],
-          ],
-          { color: GRATICULE_INK, weight: 0.8, dashArray: '6 4', interactive: false },
-        ),
-      )
-      group.addLayer(
-        L.marker([y, x1], {
-          interactive: false,
-          icon: labelIcon(degreeLabel(lat, true), [-2, 7]),
-        }),
-      )
-    }
-    for (const lon of g.lons) {
-      const x = lonLatToKm({ lon, lat: window.centerLat }, window).x
-      group.addLayer(
-        L.polyline(
-          [
-            [y0, x],
-            [y1, x],
-          ],
-          { color: GRATICULE_INK, weight: 0.8, dashArray: '6 4', interactive: false },
-        ),
-      )
-      group.addLayer(
-        L.marker([y0, x], {
-          interactive: false,
-          icon: labelIcon(degreeLabel(lon, false), [17, 16]),
-        }),
-      )
+    for (const { paths, coordinate, latitude } of projectedRegionGraticule(contextWindow ?? window)) {
+      const lines = paths.map(path => path.map(([x, y]) => L.latLng(y, x)))
+      group.addLayer(L.polyline(lines, { pane: 'region-graticule', color: GRATICULE_INK, weight: 1,
+        interactive: false }))
+      const lastLine = lines[lines.length - 1]
+      const anchor = latitude ? lastLine[lastLine.length - 1] : lines[0][0]
+      if (anchor) group.addLayer(L.marker(anchor, { pane: 'region-graticule', interactive: false,
+        icon: labelIcon(degreeLabel(coordinate, latitude), latitude ? [28, 7] : [17, 16]) }))
     }
     graticuleRef.current = group
     group.addTo(map)
-  }, [graticuleOn, window])
+  }, [contextWindow, window])
+
+  useEffect(() => {
+    const pane = mapRef.current?.getPane('region-graticule')
+    if (pane) pane.style.opacity = String(graticuleOpacity)
+  }, [graticuleOpacity])
 
   // Click pin.
   useEffect(() => {
@@ -286,8 +330,17 @@ export default function PackMap({
 
   return (
     <>
-      <div ref={containerRef} className="absolute inset-0 cursor-crosshair !bg-space-bg" />
-      {baseLoading && (
+      <div ref={containerRef} className="atlas-region-map absolute inset-0 cursor-crosshair !bg-space-bg" />
+      {base && <button type="button" onClick={() => changeFrame.current?.(frameAction === 'fit')}
+        className="atlas-tool-button absolute right-3 top-3 z-[500] min-h-11 text-xs lg:min-h-8"
+        title={t(`packs.frame.${frameAction}Hint`)}>
+        <AtlasIcon name="frame" className="size-4" /> {t(`packs.frame.${frameAction}`)}
+      </button>}
+      {context && <div className="pointer-events-none absolute bottom-3 left-3 z-[500] flex max-w-[92%] items-center gap-2 rounded border border-space-border bg-space-bg/90 px-2 py-1 text-[11px] text-gray-200">
+        <span aria-hidden="true" className="w-4 border-t-2 border-dashed border-gray-100" />
+        {t(context.currentReference ? 'packs.frame.currentReference' : 'packs.frame.contextReference')}
+      </div>}
+      {(baseLoading || loading) && (
         <div className="absolute top-3 left-14 z-[500] pointer-events-none">
           <span className="inline-block animate-pulse bg-space-panel/90 border border-space-border rounded px-2 py-1 text-xs text-neon-cyan font-mono">
             {t('packs.loadingBase')}

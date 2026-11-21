@@ -30,6 +30,7 @@ describe('workflow tutorial', () => {
     expect(observeTutorialRoute(region, '/packs', regionSearch.replace(branch, 'other'))).toBe(region)
     const refine = observeTutorialRoute(region, '/packs', regionSearch)
     expect(refine).toMatchObject({ step: 'refine', region: regionSearch })
+    expect(guideForRoute(refine, '/packs', regionSearch).anchors.slice(-1)).toEqual(['regionTools'])
     expect(guideForRoute(refine, '/help', '')).toMatchObject({ active: false, to: `/packs${regionSearch}` })
     expect(markMilestone(refine, { type: 'regionResult', world, planet, branch: null })).toBe(refine)
     const backup = markMilestone(refine, { type: 'regionResult', world, planet, branch })

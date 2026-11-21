@@ -39,6 +39,7 @@
     "region": "You’re on the new branch. Open Select region and pick a place to inspect in greater detail.",
     "regionForm": "Set a centre and side length, then move to the selection. On the Earth sample, try 24.1° N, 121.45° E and 150 km.",
     "regionOpen": "Open the regional map. Refinement will use the source elevations and this branch’s monthly climate.",
+    "regionTools": "Open Regional tools to find the terrain refinement tools.",
     "refine": "Expand Generate refined terrain and check the input and output scales.",
     "refineRun": "Choose redraw or blend, check the scale, then start refinement. The first run may need to prepare the model.",
     "refining": "The terrain tools show progress and let you cancel. On success, the result is saved as a region pack.",

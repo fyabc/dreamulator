@@ -734,6 +734,10 @@ const readApi = {
     ? staticApi.getPackElevation()
     : fetchBlob(`/packs/${encodeURIComponent(pack)}/elevation.npy?source=${encodeURIComponent(source)}`),
 
+  getPackCondition: (pack: string, source: 'source' | 'grid', field: string) => isStaticMode()
+    ? staticApi.getPackCondition()
+    : fetchBlob(`/packs/${encodeURIComponent(pack)}/condition.npy?${new URLSearchParams({ source, field })}`),
+
   getPackRivers: (pack: string) =>
     fetchJson<RiverData>(`/packs/${encodeURIComponent(pack)}/rivers.json`),
 

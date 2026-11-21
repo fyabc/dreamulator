@@ -1,19 +1,14 @@
 /**
- * PackViewerPage (0a-2 前端子地图页) — hi-res regional pack viewer for the
- * worldbuilding QA loop: browse terrain video-chain packs, hover for exact
- * lon/lat, click to probe cell values (height/biome/köppen/water/river).
- *
- * A URL with a global selection opens the browser's regional extract view.
- * Existing regional packs remain available through the local API.
+ * A global selection opens the browser's regional extract view. Local packs
+ * also expose the recorded conditioning and hydrology used in refinement.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { api, ApiError, packImageUrl, packTopoUrl } from '../api/client'
+import { api, ApiError, packTopoUrl } from '../api/client'
 import { isStaticMode } from '../api/mode'
-import AtlasIcon from '../components/AtlasIcon'
 import MapHelpLink from '../components/map/MapHelpLink'
 import { REGION_WINDOW_PARAM, readRegionWindow } from '../viewers/map/regionWindow'
 import type { LonLat } from '../viewers/map/utils/mapCoords'
@@ -21,31 +16,22 @@ import PackMap from '../viewers/packs/PackMap'
 import PackStatusBar from '../viewers/packs/PackStatusBar'
 import ProbePanel from '../viewers/packs/ProbePanel'
 import RegionalExtractView from '../viewers/packs/RegionalExtractView'
+import RegionResultSelector from '../viewers/packs/RegionResultSelector'
 import RegionMapWorkspace from '../viewers/packs/RegionMapWorkspace'
+import RegionLayerPanel from '../viewers/packs/RegionLayerPanel'
 import SavedRegionView from '../viewers/packs/SavedRegionView'
 import PackElevationDownload from '../viewers/packs/PackElevationDownload'
 import RegionRefinementPanel from '../viewers/packs/RegionRefinementPanel'
 import TerrainCompute from '../viewers/packs/TerrainCompute'
-import type { PackMeta, PackSummary, ProbeResult } from '../viewers/packs/types'
+import type { PackInputMeta, PackMeta, ProbeResult } from '../viewers/packs/types'
 import type { PackWindow } from '../viewers/packs/packCoords'
-
-interface BaseOption {
-  id: string
-  path: string
-  /** Required legs key, or null when every pack has it. */
-  needs: keyof PackSummary['legs'] | null
-  /** Server-rendered composite endpoint instead of a pack file. */
-  endpoint?: 'topo'
-}
-
-const BASE_OPTIONS: BaseOption[] = [
-  { id: 'topo', path: '', needs: null, endpoint: 'topo' },
-  { id: 'preview', path: 'color/preview.png', needs: 'color' },
-  { id: 'albedo', path: 'color/albedo.png', needs: 'color' },
-  { id: 'color', path: 'input/color.png', needs: null },
-  { id: 'koppen', path: 'input/koppen.png', needs: null },
-  { id: 'biome', path: 'input/biome.png', needs: null },
-]
+import { regionFields, regionPackBaseLayers, regionRasterSource, regionRasterSources,
+  type RegionPackBaseLayer, type RegionRasterSource } from '../viewers/packs/regionPackLayers'
+import { readElevationNpy } from '../viewers/packs/elevationRaster'
+import { useElevationPreview } from '../viewers/packs/useElevationPreview'
+import { useRegionContext } from '../viewers/packs/useRegionContext'
+import { useRegionFieldPreview } from '../viewers/packs/useRegionFieldPreview'
+import { useRegionElevation, type ElevationInput } from '../viewers/packs/useRegionElevation'
 
 function windowOf(meta: PackMeta): PackWindow {
   const i = meta.input
@@ -57,6 +43,15 @@ function windowOf(meta: PackMeta): PackWindow {
     extentKmY: i.extent_km.y,
     projection: i.projection === 'azimuthal_equidistant' ? i.projection : undefined,
   }
+}
+
+function packPalette(input: PackInputMeta | undefined) {
+  const range = input?.elevation_m_global ?? input?.height_png_range_m
+  const sea = input?.sea_level_m
+  if (!Array.isArray(range) || !range.every(value => typeof value === 'number' && Number.isFinite(value)) ||
+    range.length !== 2 || typeof sea !== 'number' || !Number.isFinite(sea)) return null
+  const [min, max] = range as [number, number]
+  return { min: !input?.elevation_m_global && min > sea ? sea - 1000 : min, max, sea }
 }
 
 export default function PackViewerPage() {
@@ -80,13 +75,13 @@ export default function PackViewerPage() {
     const view = search.get('view') === 'globe' ? 'globe' : 'map'
     const globalReturn = typeof state?.regionReturn === 'string' ? state.regionReturn
       : `/worlds/${encodeURIComponent(world)}/${view}/${encodeURIComponent(planet)}?${globalParams}`
+    const sourceControl = !isStaticMode() && <RegionResultSelector world={world} planet={planet} branch={branch}
+      radiusKm={radiusKm} selection={selection} globalReturn={globalReturn} />
     if (!search.has('pack') || isStaticMode()) {
       return <RegionalExtractView key={search.toString()} world={world} planet={planet} branch={branch}
-        radiusKm={radiusKm} selection={selection} globalReturn={globalReturn} regionParams={search} />
+        radiusKm={radiusKm} selection={selection} globalReturn={globalReturn} regionParams={search} sourceControl={sourceControl} />
     }
-    const params = new URLSearchParams(search)
-    params.delete('pack')
-    return <ExistingPackViewer key={search.get('pack')} globalReturn={globalReturn} extractUrl={`/packs?${params}`} />
+    return <ExistingPackViewer key={search.get('pack')} globalReturn={globalReturn} sourceControl={sourceControl} />
   }
   if (rawWindow !== null) {
     return <div className="space-y-3 p-4">
@@ -98,7 +93,7 @@ export default function PackViewerPage() {
   return <ExistingPackViewer key={search.get('pack')} />
 }
 
-function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: string; extractUrl?: string }) {
+function ExistingPackViewer({ globalReturn, sourceControl }: { globalReturn?: string; sourceControl?: ReactNode }) {
   const { t } = useTranslation('map')
   const staticMode = isStaticMode()
   const { state } = useLocation()
@@ -113,9 +108,11 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
     enabled: !staticMode && !!pack && metaQuery.isSuccess, retry: false, staleTime: 0 })
   const meta = metaQuery.data ?? null
   const summary = packs.data?.find((item) => item.name === pack) ?? null
-  const [baseId, setBaseId] = useState<string>('topo')
+  const [requestedBase, setRequestedBase] = useState<RegionPackBaseLayer>('terrain')
+  const [requestedSources, setRequestedSources] = useState<Partial<Record<RegionPackBaseLayer, RegionRasterSource>>>({})
   const [showOriginal, setShowOriginal] = useState(false)
-  const [graticuleOn, setGraticuleOn] = useState(true)
+  const [graticule, setGraticule] = useState(1)
+  const [riverOpacity, setRiverOpacity] = useState(1)
   const [hover, setHover] = useState<LonLat | null>(null)
   const [pin, setPin] = useState<LonLat | null>(null)
   const [probe, setProbe] = useState<ProbeResult | null>(null)
@@ -131,25 +128,37 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
   }
 
   const win = useMemo(() => (meta ? windowOf(meta) : null), [meta])
-  const canCompare = meta?.height_source === 'refined-out'
-  const original = canCompare && showOriginal && baseId === 'topo'
+  const availableBase = useMemo(() => new Set(regionPackBaseLayers.filter(id => regionRasterSources(meta, id).length)), [meta])
+  const baseId = availableBase.has(requestedBase) ? requestedBase : regionPackBaseLayers.find(id => availableBase.has(id)) ?? 'terrain'
+  const choices = regionRasterSources(meta, baseId)
+  const temperatureSources = regionRasterSources(meta, 'temperature')
+  const representation = regionRasterSource(choices, requestedSources[baseId])
+  const canCompare = meta?.height_source === 'refined-out' && representation === 'map'
+  const original = canCompare && showOriginal
 
-  const availableBases = useMemo<BaseOption[]>(() => {
-    if (!summary) return BASE_OPTIONS.filter((b) => b.needs === null)
-    return BASE_OPTIONS.filter((b) => b.needs === null || summary.legs[b.needs])
-  }, [summary])
-
-  useEffect(() => {
-    if (!availableBases.some((b) => b.id === baseId)) {
-      setBaseId(availableBases[0]?.id ?? 'color')
-    }
-  }, [availableBases, baseId])
+  const heightSource = original ? 'input' : meta?.height_source
+  const palette = useMemo(() => packPalette(meta?.input), [meta])
+  const worldLocation = summary?.world && summary.planet ? { world: summary.world, planet: summary.planet, branch: summary.branch } : null
+  const context = useRegionContext(worldLocation, win, palette)
+  const fieldSource = representation === 'source' || representation === 'grid' ? representation : undefined
+  const field = regionFields[baseId].field
+  const condition = useQuery({ queryKey: ['packCondition', pack, fieldSource, field], enabled: Boolean(pack && fieldSource),
+    retry: false, queryFn: async () => readElevationNpy(await (await api.getPackCondition(pack!, fieldSource!, field)).arrayBuffer()) })
+  const conditionPreview = useRegionFieldPreview(condition.data, baseId)
+  const numeric = useQuery({ queryKey: ['packElevation', pack, heightSource],
+    enabled: Boolean(pack && heightSource && palette && representation === 'map'), retry: false,
+    queryFn: () => api.getPackElevation(pack!, heightSource!) })
+  const numericInput = useMemo<ElevationInput | null>(() => numeric.data ? { kind: 'pack', blob: numeric.data, previewSide: 2048 } : null,
+    [numeric.data])
+  const terrainHeight = useRegionElevation(numericInput)
+  const terrain = useElevationPreview(terrainHeight.ready?.kind === 'preview' ? terrainHeight.ready.raster : null,
+    palette?.min ?? 0, palette?.max ?? 0, palette?.sea ?? 0, true)
 
   const base = useMemo(() => {
-    const opt = availableBases.find((b) => b.id === baseId)
-    if (!opt || !pack) return null
-    return { url: opt.endpoint === 'topo' ? packTopoUrl(pack, original) : packImageUrl(pack, opt.path) }
-  }, [availableBases, baseId, pack, original])
+    if (!pack || !representation) return null
+    if (representation !== 'map') return conditionPreview
+    return !palette || numeric.isError || terrainHeight.failed ? { url: packTopoUrl(pack, original) } : terrain
+  }, [representation, pack, original, palette, numeric.isError, terrainHeight.failed, terrain, conditionPreview])
 
   if (staticMode) {
     return (
@@ -189,8 +198,6 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
       })
   }
 
-  const checkboxCls =
-    'flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 cursor-pointer select-none'
   const missingPack = metaQuery.error instanceof ApiError && metaQuery.error.status === 404
   const hasEntryError = pack ? metaQuery.isError : packs.isError
   const entryMessage = pack
@@ -201,25 +208,14 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
   const retry = pack && !missingPack && metaQuery.isError ? metaQuery.refetch
     : !pack && packs.isError ? packs.refetch : null
 
-  return (
-    <div className="flex min-h-[calc(100dvh-56px)] flex-col md:h-[100dvh]">
-      <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-space-border bg-space-panel px-3 py-2 sm:px-4">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4">
-          <h1 className="text-sm font-semibold text-gray-200">{t('packs.pickPrompt')}</h1>
-          {regionReturn && <Link to={regionReturn} title={t('packs.hint.back')}
-            className="inline-flex min-h-9 items-center text-xs text-neon-cyan hover:underline">{t('regionWindow.back')}</Link>}
-          {extractUrl && <Link to={extractUrl} state={{ regionReturn }}
-            className="inline-flex min-h-9 items-center text-xs text-neon-cyan hover:underline">{t('packs.export.global')}</Link>}
-        </div>
-        <MapHelpLink section="packs" label={t('packs.help')} />
-        <div className="flex w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+  const packChooser = <>
           <select
             value={pack ?? ''}
             aria-label={t('packs.entry.choose')}
             title={t('packs.hint.pick')}
             onChange={(event) => selectPack(event.target.value || null)}
             disabled={!packs.data?.length}
-            className="min-h-11 w-full min-w-0 rounded border border-space-border bg-space-surface px-2 text-sm text-gray-200 disabled:text-gray-400 sm:w-auto sm:max-w-full md:min-h-8 md:text-xs"
+            className="min-h-11 w-full min-w-0 rounded border border-space-border bg-space-surface px-2 text-sm text-gray-200 disabled:text-gray-400 lg:min-h-8 lg:text-xs"
           >
             <option value="">{t('packs.entry.choose')}</option>
             {pack && !summary && <option value={pack}>{pack}</option>}
@@ -229,46 +225,30 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
               </option>
             ))}
           </select>
-          {summary && <p className="hidden break-words text-xs text-gray-400 sm:block" title={t('packs.hint.source')}>
-            {summary.branch ? `${summary.branch} · ` : ''}{summary.mtime}
-          </p>}
           {pack && packs.isError && <button type="button" onClick={() => void packs.refetch()}
             className="min-h-9 text-xs text-neon-cyan hover:underline">{t('packs.entry.retryList')}</button>}
-        </div>
-      </header>
-      {win ? (
-        <RegionMapWorkspace toolsLabel={t('label.layerSettings')} status={<PackStatusBar hover={hover} window={win} />} tools={<>
-            <h2 className="text-sm font-semibold text-gray-200">
-              {t('label.layerSettings')}
-            </h2>
-            {canCompare && baseId === 'topo' && <label className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
-              <span>{t('packs.refinement.compare')}</span>
-              <select className="min-h-11 max-w-full rounded border border-space-border bg-space-surface p-1 text-xs text-gray-200 md:min-h-8"
-                value={showOriginal ? 'input' : 'result'} onChange={(event) => setShowOriginal(event.target.value === 'input')}>
-                <option value="input">{t('packs.refinement.original')}</option>
-                <option value="result">{t('packs.refinement.adopted')}</option>
-              </select>
-            </label>}
-            <label className="flex flex-wrap items-center gap-2 md:block md:space-y-1">
-              <span className="text-xs text-gray-400">{t('packs.base')}</span>
-              <select
-                value={baseId}
-                title={t('packs.hint.base')}
-                onChange={(e) => setBaseId(e.target.value)}
-                className="min-h-11 max-w-full rounded border border-space-border bg-space-surface px-2 text-xs text-gray-200 md:min-h-8 md:w-full"
-              >
-                {availableBases.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {t(`packs.baseOptions.${b.id}`)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={checkboxCls} title={t('packs.hint.graticule')}>
-              <input type="checkbox" checked={graticuleOn} onChange={(e) => setGraticuleOn(e.target.checked)} />
-              {t('packs.graticule')}
-            </label>
-            {summary && <p className="break-words text-xs text-gray-400 sm:hidden" title={t('packs.hint.source')}>
+  </>
+
+  return (
+    <RegionMapWorkspace backTo={regionReturn ?? '/worlds'} backLabel={t(regionReturn ? 'regionWindow.back' : 'packs.entry.openWorlds')}
+      subtitle={win ? t('regionWindow.summary', { lat: win.centerLat, lon: win.centerLon, spanKm: summary?.span_km ?? win.extentKmX }) : undefined}
+      sourceControl={sourceControl}
+      tools={win && !sourceControl ? packChooser : undefined}
+      status={win && <PackStatusBar hover={hover} window={win} />}
+      inspector={win && <ProbePanel point={pin} probe={probe} loading={fieldSource ? condition.isFetching : probeLoading}
+        error={fieldSource ? condition.isError ? t('packs.conditions.unavailable') : null : probeError}
+        condition={fieldSource ? { layer: baseId, source: fieldSource, window: win, raster: condition.data } : undefined} />}
+      onClearPoint={pin ? () => { probeSeq.current += 1; setPin(null) } : undefined}
+      layers={win && <RegionLayerPanel availableBase={availableBase}
+        value={baseId} onSelect={setRequestedBase} compare={canCompare ? { original: showOriginal, onChange: setShowOriginal } : undefined}
+        surfaceTemperatureOnly={temperatureSources.length === 1 && temperatureSources[0] === 'source'}
+        notice={meta?.refined?.td_revision && !meta?.condition_layers?.grid.length ? 'missingGrid' : undefined}
+        raster={representation ? { source: representation, choices, size: condition.data && `${condition.data.width} × ${condition.data.height}`,
+          onChange: source => setRequestedSources(previous => ({ ...previous, [baseId]: source })) } : undefined}
+        graticule={{ opacity: graticule, onChange: setGraticule }}
+        rivers={rivers.data?.segs.length ? { opacity: riverOpacity, disabled: original, onChange: setRiverOpacity } : undefined} />}
+      regionTools={win && <>
+            {summary && <p className="break-words text-xs text-gray-400" title={t('packs.hint.source')}>
               {summary.branch ? `${summary.branch} · ` : ''}{summary.mtime}
             </p>}
             {pack && meta?.height_source && <PackElevationDownload key={`${pack}:${original ? 'input' : meta.height_source}`}
@@ -280,35 +260,14 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
                 params.set('pack', result)
                 return `/packs?${params}`
               }} />}</TerrainCompute>
-          </>}>
-              <PackMap
-                window={win}
-                base={base}
-                rivers={original ? null : rivers.data ?? null}
-                graticuleOn={graticuleOn}
-                pin={pin}
-                onHover={setHover}
-                onProbe={onProbe}
-              />
-              <div className={`absolute bottom-3 right-3 z-[500] max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] overflow-auto md:bottom-auto md:top-3 ${pin ? '' : 'hidden md:block'}`}>
-                {pin && <button type="button" aria-label={t('packs.entry.closeProbe')}
-                  className="mb-1 ml-auto flex size-11 items-center justify-center rounded border border-space-border bg-space-panel text-gray-200 md:size-8"
-                  onClick={() => {
-                    probeSeq.current += 1
-                    setPin(null)
-                  }}><AtlasIcon name="close" className="size-4" /></button>}
-                <ProbePanel
-                  point={pin}
-                  probe={probe}
-                  loading={probeLoading}
-                  error={probeError}
-                  meta={meta}
-                  spanKm={summary?.span_km ?? null}
-                />
-              </div>
-        </RegionMapWorkspace>
-      ) : (
+      </>}>
+      {win ? <><PackMap window={win} base={base} loading={!base && (fieldSource ? !condition.isError : Boolean(heightSource))} context={context}
+        rivers={original || !riverOpacity ? null : rivers.data ?? null} riverOpacity={riverOpacity}
+        graticuleOpacity={graticule} pin={pin} onHover={setHover} onProbe={onProbe} />
+        {fieldSource && condition.isError && <p role="alert" className="absolute left-3 top-3 z-[500] rounded border border-space-border bg-space-bg px-2 py-1 text-xs text-red-300">
+          {t('packs.conditions.unavailable')}</p>}</> : (
         <div className="max-w-lg space-y-2 px-3 py-5 text-sm text-gray-300 sm:px-4">
+          {!sourceControl && packChooser}
           <p role={hasEntryError ? 'alert' : 'status'}>{t(entryMessage)}</p>
           {retry && <button type="button" onClick={() => void retry()} className="min-h-11 text-neon-cyan hover:underline">
             {t('packs.export.retry')}
@@ -318,6 +277,6 @@ function ExistingPackViewer({ globalReturn, extractUrl }: { globalReturn?: strin
           </Link>}
         </div>
       )}
-    </div>
+    </RegionMapWorkspace>
   )
 }

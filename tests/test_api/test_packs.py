@@ -21,6 +21,8 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from dreamulator.api_routes import packs as packs_module
+from dreamulator.map.region_conditions import TD_CONDITION_VERSION
+from dreamulator.map.region_inputs import REFINEMENT_INPUT_VERSION, file_sha256
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -151,6 +153,7 @@ def test_meta_returns_both_documents(client: TestClient) -> None:
     assert data["input"]["span_km"] == EXTENT
     assert data["refined"]["river_threshold"] == 1
     assert data["height_source"] == "refined-out"
+    assert data["condition_layers"] == {"source": [], "grid": []}
     assert client.get("/api/packs/no-such-pack/meta").status_code == 404
 
 
@@ -166,6 +169,62 @@ def test_numeric_elevation_returns_exact_source(client: TestClient) -> None:
     assert np.load(io.BytesIO(original.content), allow_pickle=False).shape == (GRID, GRID)
     assert client.get(url, params={"source": "gaea-out"}).status_code == 404
     assert client.get(url, params={"source": "../input"}).status_code == 422
+
+
+def test_conditioning_only_serves_recorded_source_and_grid(
+    client: TestClient, tmp_path: Path
+) -> None:
+    pack_dir = tmp_path / PACK
+    field = "temperature_mean_c"
+    recorded_paths = {
+        "source": pack_dir / "input/refinement" / f"{field}.npy",
+        "grid": pack_dir / "refined-out/td-conditions" / f"{field}.npy",
+    }
+    for kind, path in recorded_paths.items():
+        path.parent.mkdir()
+        np.save(path, np.full((2, 2), 12.0 if kind == "source" else 19.0, dtype=np.float32))
+    source_path, grid_path = recorded_paths.values()
+    input_path = pack_dir / "input/meta.json"
+    input_meta = json.loads(input_path.read_text(encoding="utf-8"))
+    input_meta["refinement_inputs"] = {
+        "version": REFINEMENT_INPUT_VERSION,
+        "fields": {field: {"sha256": file_sha256(source_path)}},
+    }
+    input_path.write_text(json.dumps(input_meta), encoding="utf-8")
+    refined_path = pack_dir / "refined-out/meta.json"
+    refined = json.loads(refined_path.read_text(encoding="utf-8"))
+    refined.update(
+        td_revision="model-version",
+        cache_contract={
+            "input_meta_sha256": file_sha256(input_path),
+            "inputs": {str(source_path.relative_to(pack_dir)): file_sha256(source_path)},
+        },
+    )
+    refined_path.write_text(json.dumps(refined), encoding="utf-8")
+    meta_url = f"/api/packs/{PACK}/meta"
+    url = f"/api/packs/{PACK}/condition.npy"
+    assert client.get(meta_url).json()["data"]["condition_layers"] == {
+        "source": [field],
+        "grid": [],
+    }
+    assert client.get(url, params={"source": "grid", "field": field}).status_code == 404
+    refined["td_conditions"] = {
+        "version": TD_CONDITION_VERSION,
+        "sha256": {field: file_sha256(grid_path)},
+    }
+    refined_path.write_text(json.dumps(refined), encoding="utf-8")
+    assert client.get(meta_url).json()["data"]["condition_layers"]["grid"] == [field]
+    for kind, path in recorded_paths.items():
+        result = client.get(url, params={"source": kind, "field": field})
+        assert result.status_code == 200
+        assert result.content == path.read_bytes()
+    assert (
+        client.get(url, params={"source": "grid", "field": "../height.meters"}).status_code == 404
+    )
+    source_path.write_bytes(b"corrupted")
+    assert client.get(url, params={"source": "source", "field": field}).status_code == 404
+    grid_path.write_bytes(b"corrupted")
+    assert client.get(url, params={"source": "grid", "field": field}).status_code == 404
 
 
 def test_image_serves_with_etag_and_304(client: TestClient) -> None:

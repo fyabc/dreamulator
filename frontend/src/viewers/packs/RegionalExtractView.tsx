@@ -1,21 +1,21 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
 import { isStaticMode } from '../../api/mode'
-import MapHelpLink from '../../components/map/MapHelpLink'
 import RegionElevationDownload from '../../components/map/RegionElevationDownload'
 import SaveProjectResult from '../../components/projects/SaveProjectResult'
 import { importedRasterSpacingKm } from '../map/elevationSource'
 import RegionRefinementPanel from './RegionRefinementPanel'
 import TerrainCompute, { type BrowserTerrainResult } from './TerrainCompute'
-import { availableRegionPacks, matchingRegionPacks, regionPackWindow, type RegionWindow } from '../map/regionWindow'
+import { regionPackWindow, type RegionWindow } from '../map/regionWindow'
 import type { LonLat } from '../map/utils/mapCoords'
-import { lonLatToKm } from './packCoords'
 import PackMap from './PackMap'
 import PackStatusBar from './PackStatusBar'
+import RasterPointInspector from './RasterPointInspector'
 import RegionMapWorkspace from './RegionMapWorkspace'
+import RegionLayerPanel from './RegionLayerPanel'
+import { regionContextWindow } from './packCoords'
 import { useRegionElevation, type ElevationInput } from './useRegionElevation'
 import { useElevationPreview } from './useElevationPreview'
 import type { ElevationFormat } from './elevationRaster'
@@ -28,44 +28,40 @@ interface Props {
   selection: RegionWindow
   globalReturn: string
   regionParams: URLSearchParams
+  sourceControl?: ReactNode
 }
 
-export default function RegionalExtractView({ world, planet, branch, radiusKm, selection, globalReturn, regionParams }: Props) {
+export default function RegionalExtractView({ world, planet, branch, radiusKm, selection, globalReturn, regionParams, sourceControl }: Props) {
   const { t } = useTranslation('map')
   const { lat, lon, spanKm } = selection
   const window = useMemo(() => regionPackWindow({ lat, lon, spanKm }, radiusKm), [lat, lon, spanKm, radiusKm])
+  const contextWindow = useMemo(() => regionContextWindow(window), [window])
   const meta = useQuery({ queryKey: ['mapMeta', world, planet, branch], queryFn: () => api.getMapMeta(world, planet, branch), retry: false })
   const elevation = useQuery({ queryKey: ['elevationBlob', world, planet, branch], queryFn: () => api.getElevationBlob(world, planet, branch), retry: false })
-  const packs = useQuery({ queryKey: ['packs'], queryFn: api.listPacks, enabled: !isStaticMode(), retry: false })
-  const matches = matchingRegionPacks(availableRegionPacks(packs.data ?? [], { world, planet, branch }, radiusKm), selection, radiusKm)
   const min = meta.data?.elevation_min_m ?? 0
   const max = meta.data?.elevation_max_m ?? 0
   const sea = meta.data?.sea_level_m ?? 0
   const pixelCentres = Boolean(meta.data?.elevation_import)
   const decoded = useMemo<ElevationInput | null>(() => meta.data && elevation.data
-    ? { kind: 'global', blob: elevation.data, min, max, window, pixelCentres } : null,
-    [meta.data, elevation.data, min, max, window, pixelCentres])
+    ? { kind: 'global', blob: elevation.data, min, max, window, pixelCentres, context: contextWindow } : null,
+    [meta.data, elevation.data, min, max, window, pixelCentres, contextWindow])
   const height = useRegionElevation(decoded)
   const preview = height.ready?.kind === 'preview' ? height.ready : null
   const [result, setResult] = useState<BrowserTerrainResult | null>(null)
   const refined = result?.raster
   const [showRefined, setShowRefined] = useState(false)
+  const [graticule, setGraticule] = useState(0)
   const displayed = (showRefined ? refined : null) ?? preview?.raster ?? null
   const base = useElevationPreview(displayed, min, max, sea)
+  const surround = useElevationPreview(height.context, min, max, sea)
+  const context = useMemo(() => contextWindow && surround ? { window: contextWindow, url: surround.url } : null,
+    [contextWindow, surround])
   const stepKm = Math.PI * radiusKm / Math.max(1, (preview?.sourceHeight ?? 1) - (pixelCentres ? 0 : 1))
   const nativeEstimateKm = meta.data && preview
     ? importedRasterSpacingKm(meta.data, preview.sourceWidth, preview.sourceHeight, radiusKm) : null
   const defaultSize = Math.max(1, Math.min(2048, Math.floor(spanKm / stepKm)))
   const [hover, setHover] = useState<LonLat | null>(null)
   const [pin, setPin] = useState<LonLat | null>(null)
-  const pinHeight = pin && displayed ? (() => {
-    const { x, y } = lonLatToKm(pin, window)
-    const { width, height, values } = displayed
-    if (Math.abs(x) > spanKm / 2 || Math.abs(y) > spanKm / 2) return null
-    const col = Math.min(width - 1, Math.floor((x / spanKm + 0.5) * width))
-    const row = Math.min(height - 1, Math.floor((0.5 - y / spanKm) * height))
-    return values[row * width + col]
-  })() : null
   const missing = meta.isError || elevation.isError || (elevation.isSuccess && !elevation.data)
   const downloadRefined = (format: ElevationFormat) => {
     if (!result) return
@@ -81,32 +77,20 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
   }
 
   return (
-    <div className="flex min-h-[calc(100dvh-56px)] flex-col md:h-[100dvh]">
-      <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-space-border bg-space-panel px-3 py-2 sm:px-4">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4">
-          <h1 className="text-sm font-semibold text-gray-200">{t('packs.pickPrompt')}</h1>
-          <Link className="inline-flex min-h-9 items-center text-xs text-neon-cyan hover:underline" to={globalReturn}>{t('regionWindow.back')}</Link>
-          <p className="w-full text-xs text-gray-400 sm:w-auto">{t('regionWindow.summary', { lat, lon, spanKm })}</p>
-        </div>
-        <MapHelpLink section="packs" label={t('packs.help')} />
-      </header>
-      <RegionMapWorkspace toolsLabel={t('packs.entry.tools')}
-        status={base && <>
-          <PackStatusBar hover={hover} window={window} />
-          {pinHeight !== null && <p className="bg-space-panel px-3 pb-1.5 text-xs text-neon-cyan" role="status">
-            {t('packs.export.probe', { value: Math.round(pinHeight) })}
-          </p>}
-        </>} tools={<>
+      <RegionMapWorkspace backTo={globalReturn} backLabel={t('regionWindow.back')}
+        subtitle={t('regionWindow.summary', { lat, lon, spanKm })}
+        sourceControl={sourceControl}
+        status={<PackStatusBar hover={hover} window={window} />}
+        inspector={<RasterPointInspector point={pin} window={window} original={preview?.raster} refined={refined} />}
+        onClearPoint={pin ? () => setPin(null) : undefined}
+        layers={<RegionLayerPanel notice="elevationOnly" compare={refined ? { original: !showRefined, onChange: original => setShowRefined(!original) } : undefined}
+          graticule={{ opacity: graticule, onChange: setGraticule }} />}
+        regionTools={<>
           <div className="space-y-1">
             <p className="font-medium text-gray-200">{t(showRefined ? 'packs.refinement.adopted' : 'packs.export.global')}</p>
+            <p className="lg:hidden">{t('regionWindow.summary', { lat, lon, spanKm })}</p>
             <p>{t(showRefined ? 'packs.compute.refinedHint' : 'packs.export.globalHint')}</p>
           </div>
-          {matches.map(({ name }) => {
-            const params = new URLSearchParams(regionParams)
-            params.set('pack', name)
-            return <Link key={name} className="block break-all text-neon-cyan hover:underline" to={`/packs?${params}`}
-              state={{ regionReturn: globalReturn }}>{t('regionWindow.openPack', { name })}</Link>
-          })}
           <TerrainCompute browser={{ raster: preview?.raster ?? null, spanKm, seaLevel: sea,
             nativeEstimateKm,
             sourceRowSpacingKm: preview && preview.sourceHeight > 1 ? stepKm : null, onResult: (result) => {
@@ -122,13 +106,6 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
             <p role="status">{t('packs.compute.resultSize', { width: refined.width, height: refined.height,
               metres: Math.round(spanKm * 1000 / refined.width) })}</p>
             <p>{t('packs.compute.resultMethod', { method: t(`packs.compute.method.${result.recipe.method}`) })}</p>
-            <label className="flex flex-wrap items-center gap-2">{t('packs.refinement.compare')}
-              <select className="min-h-11 max-w-full rounded border border-space-border bg-space-surface p-1 md:min-h-8" value={showRefined ? 'result' : 'input'}
-                onChange={(event) => setShowRefined(event.target.value === 'result')}>
-                <option value="input">{t('packs.refinement.original')}</option>
-                <option value="result">{t('packs.refinement.adopted')}</option>
-              </select>
-            </label>
             <RegionElevationDownload fixedSize defaultSize={null} sourceStepKm={spanKm / refined.width} extentKm={spanKm}
               downloadLabel={t('packs.compute.download')} exporting={height.exporting} failed={height.failed}
               onDownload={(_, format) => downloadRefined(format)} />
@@ -150,7 +127,7 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
             </div>
           </details>}
         </>}>
-        {base ? <PackMap window={window} base={base} rivers={null} graticuleOn={false} pin={pin}
+        {preview ? <PackMap window={window} base={base} loading={!base} context={context} rivers={null} graticuleOpacity={graticule} pin={pin}
           onHover={setHover} onProbe={setPin} /> : (
           <div className="absolute inset-0 grid place-content-center gap-2 p-4 text-center text-sm text-gray-400">
             <p role={missing || height.failed ? 'alert' : 'status'}>{t(missing ? 'packs.export.missing' : height.failed ? 'packs.export.previewFailed' : 'status.loading')}</p>
@@ -158,6 +135,5 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
           </div>
         )}
       </RegionMapWorkspace>
-    </div>
   )
 }

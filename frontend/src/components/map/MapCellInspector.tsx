@@ -27,7 +27,8 @@ import { sampleTemperature, summarizeTemperature, type TemperaturePreview } from
 import { trialTerrainCell, type InspectedCell } from '../../viewers/map/trialInspection'
 import { displayKoppenClass } from '../../viewers/map/koppenDownscale'
 import { isOceanCell } from '../../viewers/map/scalarLayers'
-import AtlasIcon, { type AtlasIconName } from '../AtlasIcon'
+import AtlasIcon from '../AtlasIcon'
+import { CoordinateFields, FieldGroup, MapInspectorBody } from './MapInspectorFields'
 
 interface MapCellInspectorProps {
   trial?: TemperaturePreview | null
@@ -344,16 +345,6 @@ function PlanetSummary({
 // Mode B — Cell details
 // ---------------------------------------------------------------------------
 
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-         className={`transition-transform duration-150 ${open ? 'rotate-90' : ''}`}>
-      <polyline points="9 6 15 12 9 18" />
-    </svg>
-  )
-}
-
 /** Expand-all icon (shown in "default" mode — click to expand every group). */
 function ExpandIcon() {
   return (
@@ -377,36 +368,6 @@ function CollapseIcon() {
       <path d="M3 16h3a2 2 0 0 1 2 2v3" />
       <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
     </svg>
-  )
-}
-
-/** Collapsible field group (accordion). */
-function FieldGroup({
-  icon,
-  label,
-  defaultOpen = false,
-  children,
-}: {
-  icon: AtlasIconName
-  label: string
-  defaultOpen?: boolean
-  children: ReactNode
-}) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-1.5 py-0.5 text-xs text-gray-300 hover:text-white select-none"
-      >
-        <Chevron open={open} />
-        <AtlasIcon name={icon} className="size-3.5 text-gray-400" />
-        <span className="font-medium">{label}</span>
-      </button>
-      {open && <dl className="mt-1 ml-4 space-y-1 text-xs">{children}</dl>}
-    </div>
   )
 }
 
@@ -618,14 +579,7 @@ function CellDetails({
 
       <div className="space-y-1">
         <FieldGroup icon="compass" label={t('inspector.position')} defaultOpen>
-          <div className="flex justify-between">
-            <dt className="text-gray-500">{t('inspector.longitude')}</dt>
-            <dd className="font-mono">{cell.lon.toFixed(2)}°</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-gray-500">{t('inspector.latitude')}</dt>
-            <dd className="font-mono">{cell.lat.toFixed(2)}°</dd>
-          </div>
+          <CoordinateFields point={cell} />
           <div className="flex justify-between">
             <dt className="text-gray-500">{t('inspector.elevation')}</dt>
             <dd className={`font-mono ${elevM >= 0 ? 'text-green-400' : 'text-blue-400'}`}>
@@ -1472,7 +1426,6 @@ export default function MapCellInspector({
   isEarth = true,
 }: MapCellInspectorProps) {
   const { t } = useTranslation('map')
-  const [view, setView] = useState<'cell' | 'stats'>('cell')
   const window = typeof trial?.period === 'number' ? trial.label : undefined
 
   // cell id → mesh-cell index: the monthly arrays are row-major in mesh-cell
@@ -1485,34 +1438,9 @@ export default function MapCellInspector({
   const cursorColdMonths = trial && cursor && !cell ? trialColdMonths(trial, cursor) : null
 
   return (
-    <div className="space-y-2">
-      {/* View toggle: cell details / world stats */}
-      <div className="flex rounded-md bg-gray-800/60 p-0.5">
-        <button
-          type="button"
-          onClick={() => setView('cell')}
-          aria-pressed={view === 'cell'}
-          className={`flex-1 text-xs py-1 rounded transition-colors ${
-            view === 'cell' ? 'bg-neon-cyan/20 text-neon-cyan' : 'text-gray-500 hover:text-gray-300'
-          }`}
-        >
-          {t('inspector.cellTab')}
-        </button>
-        <button
-          type="button"
-          onClick={() => setView('stats')}
-          aria-pressed={view === 'stats'}
-          className={`flex-1 text-xs py-1 rounded transition-colors ${
-            view === 'stats' ? 'bg-neon-cyan/20 text-neon-cyan' : 'text-gray-500 hover:text-gray-300'
-          }`}
-        >
-          {t('inspector.statsTab')}
-        </button>
-      </div>
-
-      {view === 'stats' ? (
-        <WorldStats cvtMesh={cvtMesh} planetName={planetName} yearlyData={trialMode ? null : yearlyData} trialMode={trialMode} trial={trial} seaLevelM={seaLevelM} />
-      ) : !cell && selectedCells && selectedCells.length > 1 ? (
+    <MapInspectorBody
+      stats={<WorldStats cvtMesh={cvtMesh} planetName={planetName} yearlyData={trialMode ? null : yearlyData} trialMode={trialMode} trial={trial} seaLevelM={seaLevelM} />}
+      details={!cell && selectedCells && selectedCells.length > 1 ? (
         <MultiCellStats cells={trialMode ? selectedCells.map(trialTerrainCell) : selectedCells} trial={trial} seaLevelM={seaLevelM} />
       ) : cell ? (
         <CellDetails
@@ -1535,7 +1463,7 @@ export default function MapCellInspector({
       ) : (
         <p className="text-xs text-gray-600 italic p-2">{t('inspector.hoverHint')}</p>
       )}
-    </div>
+    />
   )
 }
 

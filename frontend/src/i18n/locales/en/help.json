@@ -392,19 +392,19 @@
       "entries": [
         {
           "title": "Open a regional map",
-          "content": "Open **View region** from a saved global selection to see an extract of the global heightmap. On the local site, matching existing regional maps appear as separate links. You can also browse all local regional maps from the sidebar. Those local files are not published to the static site."
+          "content": "Open **View region** from a global selection to see the original terrain cropped from the global heightmap. On the local site, use **Regional data source** at the top of the map to open saved results for the same region. Switching does not rerun refinement or change the global map. You can browse all local regional maps from the sidebar. Those files are not published to the static site."
         },
         {
           "title": "Browse and change the display",
-          "content": "Drag to pan and scroll or pinch to zoom. The **Layer Settings** panel contains **Base** and **Graticule**. The terrain base uses the global map's terrain palette, with deeper ocean shown in darker blue. Depending on the available files, you can also show a satellite preview, albedo (how much light the surface reflects), Köppen climate classes or biomes. **Graticule** toggles the latitude and longitude lines. Changing the display does not modify the map data."
+          "content": "A dashed line marks the region. The surroundings show available world terrain for reference, and the graticule crosses the boundary. Choose **Frame region and surroundings** to recenter, or use **Fit region** and **Fill view** without world context. The left **Layers** panel shows elevation, TD climate conditions, and separate hydrology. Switch between **Regional source** and **TD input grid** when both are available. Grid resampling is not downscaling. Open **Regional tools** on the right for devices, refinement, saving, and export. On narrow screens, open either drawer from the toolbar."
         },
         {
           "title": "Inspect a location",
-          "content": "Hover over the map to see coordinates. Click a location to check its elevation in metres. Existing regional maps can also show available climate, biome or water data. River accumulation is a relative measure of the upstream cells, not a discharge in cubic metres per second. When river data are present, dashed lines indicate channels that do not flow year-round."
+          "content": "Hover over the map to see coordinates. Click inside the region to read the selected raster. The regional source records annual mean surface temperature; the TD grid uses temperature adjusted to sea level. Historical results are not filled with current world data. Browser refinement uses only elevation. River accumulation measures relative upstream contributions, not discharge in cubic metres per second."
         },
         {
           "title": "Download elevation",
-          "content": "Open **Export elevation**, check the source and choose the size and format. The default 16-bit grayscale PNG maps the region’s elevation range from black to white. Choose 32-bit floating-point TIFF if you need pixel values in metres. Both formats record the source and bounds in their image description. Output size changes only the downloaded raster: denser output is interpolation, not refinement. The global extract can be downloaded entirely in the browser on either site. Downloads from existing regional maps use the local site and default to their native size."
+          "content": "Open **Regional tools** and choose the elevation source, size, and format. The default 16-bit grayscale PNG maps the region’s elevation range from black to white. Choose 32-bit floating-point TIFF if you need pixel values in metres. Both formats record the source and bounds in their image description. A larger output simply interpolates the source; it does not refine the terrain. Global extracts can be downloaded on either site. Downloads from existing regional maps default to their native size."
         },
         {
           "title": "Generate and compare terrain locally",

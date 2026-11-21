@@ -10,12 +10,14 @@ export function useRegionElevation(input: ElevationInput | null) {
   const workerRef = useRef<Worker | null>(null)
   const filename = useRef<string | null>(null)
   const [ready, setReady] = useState<Ready | null>(null)
+  const [context, setContext] = useState<ElevationRaster | null>(null)
   const [failed, setFailed] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     setReady(null)
+    setContext(null)
     setFailed(false)
     setExporting(false)
     if (!input) return
@@ -30,6 +32,10 @@ export function useRegionElevation(input: ElevationInput | null) {
           downloadBlob(data.blob, filename.current)
           setExporting(false)
         } else if (data.kind === 'preview' || data.kind === 'ready') setReady(data)
+        else if (data.kind === 'context') {
+          setContext(data.raster)
+          if (input.kind === 'context') worker.terminate()
+        }
       }
       worker.postMessage(input)
       return () => { worker.terminate(); workerRef.current = null }
@@ -39,7 +45,7 @@ export function useRegionElevation(input: ElevationInput | null) {
   }, [input, attempt])
 
   return {
-    ready, failed, exporting,
+    ready, context, failed, exporting,
     retry: () => setAttempt((previous) => previous + 1),
     download: (name: string, size: number | null, format: ElevationFormat, metadata: Record<string, unknown>, raster?: ElevationRaster) => {
       if (!workerRef.current || !ready || exporting) return

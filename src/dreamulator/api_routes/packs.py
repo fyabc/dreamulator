@@ -37,6 +37,9 @@ from typing import TYPE_CHECKING, Any, Literal
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
+from dreamulator.map.region_conditions import recorded_region_fields
+from dreamulator.map.region_inputs import file_sha256
+
 from .maps import _file_response
 
 if TYPE_CHECKING:
@@ -278,6 +281,8 @@ def pack_meta(pack: str) -> dict[str, Any]:
         json.loads(refined_file.read_text(encoding="utf-8")) if refined_file.is_file() else None
     )
     terrain_dir = _best_gaea_dir(pack_dir)
+    input_meta = _input_meta(pack_dir)
+    fields = recorded_region_fields(pack_dir, input_meta, refined)
     height_source = (
         terrain_dir.name
         if terrain_dir is not None and (terrain_dir / "height.meters.npy").is_file()
@@ -286,11 +291,31 @@ def pack_meta(pack: str) -> dict[str, Any]:
     return {
         "ok": True,
         "data": {
-            "input": _input_meta(pack_dir),
+            "input": input_meta,
             "refined": refined,
             "height_source": height_source,
+            "condition_layers": {kind: list(entries) for kind, entries in fields.items()},
         },
     }
+
+
+@router.get("/{pack}/condition.npy")
+def pack_condition(
+    pack: str, source: Literal["source", "grid"], field: str, request: Request
+) -> Response:
+    """Serve a single verified regional field, never a live-world reconstruction."""
+    pack_dir = _pack_dir(pack)
+    refined_path = pack_dir / "refined-out/meta.json"
+    refined = (
+        json.loads(refined_path.read_text(encoding="utf-8")) if refined_path.is_file() else None
+    )
+    entry = recorded_region_fields(pack_dir, _input_meta(pack_dir), refined)[source].get(field)
+    if entry is not None:
+        path, digest = entry
+        path = path.resolve()
+        if path.is_relative_to(pack_dir) and path.is_file() and file_sha256(path) == digest:
+            return _file_response(request, path, "application/octet-stream")
+    raise HTTPException(status_code=404, detail="No verified conditioning field for this source")
 
 
 @router.get("/{pack}/elevation.npy")

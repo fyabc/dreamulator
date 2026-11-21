@@ -16,8 +16,9 @@
  * downstream (renderer, URL-free state, static mode) is unaffected.
  */
 
-import { useCallback, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import MapLayerRadio from './MapLayerRadio'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import type { ColorMode } from '../../viewers/map/types'
 import { marineKoppenBands } from '../../viewers/map/koppenDownscale'
@@ -28,15 +29,15 @@ import { climateWindowLabel } from './climateTime'
 
 type LayerOpacities = Record<ColorMode, number>
 
-interface LayerState {
-  layers: LayerOpacities
-  inspectedLayer?: ColorMode | null
+interface LayerState<Id extends string = ColorMode> {
+  layers: Record<Id, number>
+  inspectedLayer?: Id | null
 }
 
-interface MapLayerPanelProps {
-  state: LayerState
-  onChange: (state: LayerState) => void
-  available?: ReadonlySet<ColorMode>
+interface MapLayerPanelProps<Id extends string = ColorMode> {
+  state: LayerState<Id>
+  onChange: (state: LayerState<Id>) => void
+  available?: ReadonlySet<Id>
   temperaturePeriodLabel?: string
   /** Monthly-climate mode (driven by TimeControl). When on, monthly-capable
    *  layers show a month badge, and monthly-only layers (pressure) are live. */
@@ -57,17 +58,19 @@ interface MapLayerPanelProps {
 }
 
 /** A group with its member layers, split by interaction style. */
-interface LayerGroup {
+export type PanelLayer<Id extends string> = Omit<LayerHelpEntry, 'id' | 'detail'> & { id: Id }
+
+interface LayerGroup<Id extends string> {
   id: string
   label: string
   /** base + thematic members (radio rows). */
-  radioMembers: LayerHelpEntry[]
+  radioMembers: PanelLayer<Id>[]
   /** fill + feature members (eye toggle + slider rows). */
-  toggleMembers: LayerHelpEntry[]
+  toggleMembers: PanelLayer<Id>[]
 }
 
 /** True when the layer kind participates in a single-slot (radio) UI. */
-function isRadioKind(l: LayerHelpEntry): boolean {
+function isRadioKind(l: Pick<LayerHelpEntry, 'kind'>): boolean {
   return l.kind === 'base' || l.kind === 'thematic'
 }
 
@@ -136,7 +139,16 @@ function HelpIcon() {
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-export default function MapLayerPanel({ state, onChange, available, temperaturePeriodLabel, monthlyMode = false, monthlyData = null, monthIndex = null, onMonthlyModeChange, detail, isEarth, particleMode = false, onParticleModeChange }: MapLayerPanelProps) {
+export default function MapLayerPanel(props: MapLayerPanelProps) {
+  return <MapLayerTree {...props} catalog={LAYER_HELP} marineLegend />
+}
+
+export function MapLayerTree<Id extends string>({ state, onChange, available, temperaturePeriodLabel, monthlyMode = false,
+  monthlyData = null, monthIndex = null, onMonthlyModeChange, detail, isEarth, particleMode = false, onParticleModeChange,
+  catalog, layerControls, groupCatalog = LAYER_GROUPS, expandGroups = false, marineLegend = false }: MapLayerPanelProps<Id> & {
+  catalog: readonly PanelLayer<Id>[]; groupCatalog?: readonly { id: string; label: string }[]
+  layerControls?: (id: Id) => ReactNode; expandGroups?: boolean; marineLegend?: boolean
+}) {
   const { t } = useTranslation('map')
   const panelId = useId()
   const [section, setSection] = useState<'main' | 'overlays'>('main')
@@ -155,19 +167,19 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
   }
 
   /** Small month badge for monthly-capable layers (dimmed with the row). */
-  const monthBadge = (l: LayerHelpEntry, dimmed: boolean) => {
+  const monthBadge = (l: PanelLayer<Id>, dimmed: boolean) => {
     const label = l.id === 'temperature' && temperaturePeriodLabel
-      ? temperaturePeriodLabel : l.monthlyCapable && monthlyValues[l.id]?.length ? monthName : null
+      ? temperaturePeriodLabel : l.monthlyCapable && monthlyValues[l.id as ColorMode]?.length ? monthName : null
     if (!label) return null
     return <span className={`shrink-0 text-[9px] ${dimmed ? 'text-amber-300/40' : 'text-amber-300/70'}`}>·{label}</span>
   }
 
   const devMode = useDevModeStore((s) => s.devMode)
   const experimental = useExperimentalStore((s) => s.experimental)
-  const groups = useMemo<LayerGroup[]>(
+  const groups = useMemo<LayerGroup<Id>[]>(
     () =>
-      LAYER_GROUPS.map((g) => {
-        const members = LAYER_HELP.filter(
+      groupCatalog.map((g) => {
+        const members = catalog.filter(
           (l) =>
             l.group === g.id &&
             (!l.devOnly || devMode) &&
@@ -180,11 +192,11 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
           toggleMembers: members.filter((l) => !isRadioKind(l)),
         }
       }).filter((g) => g.radioMembers.length > 0 || g.toggleMembers.length > 0),
-    [devMode, experimental, isEarth],
+    [catalog, groupCatalog, devMode, experimental, isEarth],
   )
 
   const opacityOf = useCallback(
-    (l: LayerHelpEntry) => available && !available.has(l.id) ? 0 : state.layers[l.id] ?? l.defaultOpacity,
+    (l: PanelLayer<Id>) => available && !available.has(l.id) ? 0 : state.layers[l.id] ?? l.defaultOpacity,
     [state.layers, available],
   )
 
@@ -194,22 +206,24 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
    * fill/feature layers are unconstrained.
    */
   const applyPatch = useCallback(
-    (patch: Partial<LayerOpacities>) => {
-      const next: LayerOpacities = { ...state.layers, ...patch }
-      for (const [id, v] of Object.entries(patch)) {
+    (patch: Partial<Record<Id, number>>) => {
+      const next: Record<Id, number> = { ...state.layers, ...patch }
+      const ids = Object.keys(patch) as Id[]
+      for (const id of ids) {
+        const v = patch[id]
         if (!v || v <= 0) continue
-        const entry = LAYER_HELP.find((l) => l.id === id)
+        const entry = catalog.find((l) => l.id === id)
         if (!entry || !isRadioKind(entry)) continue
-        for (const other of LAYER_HELP) {
+        for (const other of catalog) {
           if (other.kind === entry.kind && other.id !== id) {
             next[other.id] = 0
           }
         }
       }
-      const selected = (Object.keys(patch) as ColorMode[]).filter(layer => (patch[layer] ?? 0) > 0)
+      const selected = ids.filter(layer => (patch[layer] ?? 0) > 0)
       onChange({ layers: next, inspectedLayer: selected[selected.length - 1] ?? state.inspectedLayer })
     },
-    [state.layers, state.inspectedLayer, onChange],
+    [catalog, state.layers, state.inspectedLayer, onChange],
   )
 
   /** Groups with nothing visible start collapsed; the rest start open. */
@@ -218,34 +232,34 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
     for (const g of groups) {
       const members = [...g.radioMembers, ...g.toggleMembers]
       const anyVisible = members.some((l) => (state.layers[l.id] ?? l.defaultOpacity) > 0)
-      init[g.id] = !anyVisible
+      init[g.id] = !expandGroups && !anyVisible
     }
     return init
   })
 
   /** Select a base/thematic layer into its slot. */
   const selectSlotLayer = useCallback(
-    (l: LayerHelpEntry) => {
+    (l: PanelLayer<Id>) => {
       // Monthly-only layers (pressure anomaly) have no annual counterpart —
       // selecting one while in annual mode auto-enables monthly mode.
       if (l.monthlyOnly && !monthlyMode) onMonthlyModeChange?.(true)
       const op = l.defaultOpacity > 0 ? l.defaultOpacity : l.kind === 'base' ? 1 : 0.85
-      applyPatch({ [l.id]: op })
+      applyPatch({ [l.id]: op } as Partial<Record<Id, number>>)
     },
     [applyPatch, monthlyMode, onMonthlyModeChange],
   )
 
   const setLayerOpacity = useCallback(
-    (id: ColorMode, v: number) => {
+    (id: Id, v: number) => {
       if (v > 0) lastNonZero.current[id] = v
-      applyPatch({ [id]: v })
+      applyPatch({ [id]: v } as Partial<Record<Id, number>>)
     },
     [applyPatch],
   )
 
   /** Eye toggle (fill/feature): 0 ↔ last non-zero opacity. */
   const toggleLayer = useCallback(
-    (l: LayerHelpEntry) => {
+    (l: PanelLayer<Id>) => {
       const cur = state.layers[l.id] ?? l.defaultOpacity
       const next = cur > 0 ? 0 : (lastNonZero.current[l.id] ?? (l.defaultOpacity > 0 ? l.defaultOpacity : 0.8))
       setLayerOpacity(l.id, next)
@@ -256,10 +270,10 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
   /** Group tri-state (fill/feature members only): all-visible → hide all;
    *  else → show all. Ctrl/Cmd+click resets members to defaults. */
   const toggleGroup = useCallback(
-    (g: LayerGroup, e: React.MouseEvent) => {
+    (g: LayerGroup<Id>, e: React.MouseEvent) => {
     const members = g.toggleMembers.filter(layer => !available || available.has(layer.id))
     const allVisible = members.every(layer => opacityOf(layer) > 0)
-      const patch: Partial<LayerOpacities> = {}
+      const patch: Partial<Record<Id, number>> = {}
     for (const l of members) {
         if (e.ctrlKey || e.metaKey) {
           patch[l.id] = l.defaultOpacity
@@ -279,7 +293,7 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
   }, [])
 
   /** One-line summary for radio-only group headers (active member or 无). */
-  const radioSummary = (g: LayerGroup): string => {
+  const radioSummary = (g: LayerGroup<Id>): string => {
     const active = g.radioMembers.find((l) => opacityOf(l) > 0)
     return active ? t(active.label) : t('panel.none')
   }
@@ -307,7 +321,7 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
           {t(detail.pending ? 'panel.downscaling' : 'panel.downscaledReadout')}
         </p>}
       </div>}
-      {section === 'main' && state.layers.koppen > 0 && (!available || available.has('koppen')) && (
+      {section === 'main' && marineLegend && state.layers['koppen' as Id] > 0 && (!available || available.has('koppen' as Id)) && (
         <div role="group" aria-label={t('koppen.marineLegend')} title={t('koppen.marineHint')}
           className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-gray-300">
           {Object.entries(marineKoppenBands).map(([code, color]) => (
@@ -329,7 +343,7 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
             type="button"
             role="switch"
             aria-checked={particleMode}
-            disabled={available != null && !available.has('winds') && !available.has('currents')}
+            disabled={available != null && !available.has('winds' as Id) && !available.has('currents' as Id)}
             onClick={() => onParticleModeChange(!particleMode)}
             className={`relative shrink-0 w-8 h-4 rounded-full transition-colors ${
               particleMode ? 'bg-neon-cyan/60' : 'bg-gray-600'
@@ -380,7 +394,7 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
               >
                 {t(g.label)}
               </button>
-              {g.radioMembers.length > 0 && g.radioMembers.every((l) => l.kind === 'thematic') && (
+              {groupCatalog === LAYER_GROUPS && g.radioMembers.length > 0 && g.radioMembers.every((l) => l.kind === 'thematic') && (
                 <a
                   href={`/help#map-${g.id}`}
                   target="_blank"
@@ -413,22 +427,11 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
                   // still selectable, and selecting one auto-enables monthly.
                   const dimmed = l.monthlyOnly && !monthlyMode
                   return (
-                    <label key={l.id} className={`flex items-center gap-1.5 ${missing ? 'opacity-50' : 'cursor-pointer'}`}
-                      title={missing ? t('panel.layerUnavailable') : t(l.desc)}>
-                      <input
-                        type="radio"
-                        name={`${panelId}-${l.kind}`}
-                        checked={active}
-                        disabled={missing}
-                        onChange={() => selectSlotLayer(l)}
-                        onClick={() => { if (active) onChange({ ...state, inspectedLayer: l.id }) }}
-                        className="h-3 w-3 accent-neon-cyan cursor-pointer"
-                      />
-                      <span className={`text-[11px] ${active ? 'text-gray-200' : 'text-gray-500'} ${dimmed ? 'opacity-50' : ''}`}>
-                        {t(l.label)}
-                      </span>
+                    <div key={l.id}><MapLayerRadio name={`${panelId}-${l.kind}`} checked={active} disabled={missing}
+                      title={missing ? t('panel.layerUnavailable') : t(l.desc)} label={t(l.label)} dimmed={dimmed}
+                      onChange={() => selectSlotLayer(l)} onClick={() => { if (active) onChange({ ...state, inspectedLayer: l.id }) }}>
                       {monthBadge(l, dimmed || !active)}
-                    </label>
+                    </MapLayerRadio>{active && layerControls?.(l.id)}</div>
                   )
                 })}
 
@@ -447,7 +450,9 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
                         type="button"
                         disabled={missing}
                         onClick={() => toggleLayer(l)}
-                        title={visible ? t('panel.hideLayer', { label: t(l.label) }) : t('panel.showLayer', { label: t(l.label) })}
+                        title={missing ? t('panel.layerUnavailable') : t(l.desc)}
+                        aria-label={visible ? t('panel.hideLayer', { label: t(l.label) }) : t('panel.showLayer', { label: t(l.label) })}
+                        aria-pressed={visible}
                         className={`shrink-0 p-0.5 rounded transition-colors ${
                           visible
                             ? 'text-neon-cyan hover:text-white hover:bg-neon-cyan/20'
@@ -469,6 +474,7 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
                         onChange={(e) => setLayerOpacity(l.id, parseInt(e.target.value) / 100)}
                         className="flex-1 min-w-0 h-1 accent-neon-cyan cursor-pointer"
                         title={t(l.desc)}
+                        aria-label={t('panel.opacity', { label: t(l.label) })}
                       />
                       <span
                         className={`shrink-0 w-8 text-right text-[10px] font-mono tabular-nums ${

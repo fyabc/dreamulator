@@ -29,6 +29,20 @@ export interface PackWindow {
   projection?: 'azimuthal_equidistant'
 }
 
+export function regionContextWindow(window: PackWindow): PackWindow | null {
+  const extentKmX = window.extentKmX * 3
+  const extentKmY = window.extentKmY * 3
+  if (Math.hypot(extentKmX, extentKmY) / 2 >= Math.PI * window.radiusKm) return null
+  if (!window.projection && Math.abs(window.centerLat) + extentKmY / (2 * window.radiusKm) * 180 / Math.PI >= 90) return null
+  return { ...window, extentKmX, extentKmY }
+}
+
+export function regionFrameZooms(window: PackWindow, viewportWidth: number, viewportHeight: number) {
+  const scaleX = viewportWidth / window.extentKmX
+  const scaleY = viewportHeight / window.extentKmY
+  return { fit: Math.log2(Math.min(scaleX, scaleY)), fill: Math.log2(Math.max(scaleX, scaleY)) }
+}
+
 /** Graticule step candidates in degrees — same ladder as the carto sheets. */
 const GRATICULE_STEPS_DEG = [1, 2, 5, 10, 15, 30]
 
