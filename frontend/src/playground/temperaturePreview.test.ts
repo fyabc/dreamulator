@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { GRID_H, GRID_W } from './temperatureDraft'
-import { sampleTemperature, summarizeTemperature, temperatureColor, temperaturePreviewPixels } from './temperaturePreview'
+import { EARTH_PARAMS, GRID_H, GRID_W } from './temperatureDraft'
+import { sampleTemperature, summarizeTemperature, temperaturePreviewPixels } from './temperaturePreview'
+import { temperatureColor } from '../viewers/map/utils/colorScales'
 
 describe('temperature trial texture', () => {
-  it('keeps the same scale as the climate lab and clips extremes', () => {
-    expect(temperatureColor(-130)).toEqual([49, 54, 149])
-    expect(temperatureColor(0)).toEqual([255, 255, 191])
-    expect(temperatureColor(10)).toEqual([254, 215, 144])
-    expect(temperatureColor(100)).toEqual([165, 0, 38])
+  it('uses the official temperature scale and clips extremes', () => {
+    expect(temperatureColor(-130)).toEqual([33, 102, 172])
+    expect(temperatureColor(0)).toEqual([255, 255, 255])
+    expect(temperatureColor(100)).toEqual([103, 0, 31])
   })
 
   it('uploads southern rows first and keeps longitude in west-to-east order', () => {
@@ -16,11 +16,14 @@ describe('temperature trial texture', () => {
     field[GRID_W - 1] = -20
     field[(GRID_H - 1) * GRID_W] = 20
     field[field.length - 1] = 40
-    const pixels = temperaturePreviewPixels(field)
+    const elevation = new Float32Array(field.length).fill(1)
+    elevation[1] = 0
+    const pixels = temperaturePreviewPixels(field, { elevation, params: EARTH_PARAMS })
     const pixel = (index: number) => Array.from(pixels.slice(index * 4, index * 4 + 4))
     expect(pixel(0)).toEqual([...temperatureColor(20), 255])
     expect(pixel(GRID_W - 1)).toEqual([...temperatureColor(40), 255])
     expect(pixel((GRID_H - 1) * GRID_W)).toEqual([...temperatureColor(-40), 255])
+    expect(pixel((GRID_H - 1) * GRID_W + 1)).toEqual([0, 0, 0, 0])
     expect(pixel(field.length - 1)).toEqual([...temperatureColor(-20), 255])
   })
 })

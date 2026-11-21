@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 import { HELP_SECTIONS, type HelpSection } from '../components/map/helpContent'
 import { isStaticMode } from '../api/mode'
+import { temperatureSampleOrigins, temperatureTrialMapPath } from '../playground/temperatureDraft'
 
 const startId = 'start'
 
@@ -93,9 +94,18 @@ function GettingStarted() {
         ))}
       </ol>
       <p className="mt-5 text-sm leading-relaxed text-gray-300">{t(`start.${mode}.backup`)}</p>
-      <Link to="/playground" className="mt-3 inline-flex min-h-11 items-center text-sm text-neon-cyan hover:underline">
-        {t('start.temperatureSamples')}
-      </Link>
+      <div className="mt-4 border-t border-space-border pt-3">
+        <p className="text-sm text-gray-300">{t('start.temperatureSamples')}</p>
+        <ul className="flex flex-wrap gap-x-5">
+          {Object.entries(temperatureSampleOrigins).map(([sample, origin]) => (
+            <li key={sample}>
+              <Link to={temperatureTrialMapPath(origin)} className="inline-flex min-h-11 items-center rounded text-sm font-semibold text-neon-cyan underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-neon-cyan">
+                {t(`start.temperatureSample.${sample}`)}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
     </header>
   )
 }

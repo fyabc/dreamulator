@@ -3,7 +3,7 @@
  * globe page.
  *
  * Both pages view the same planet data (meta / elevation / CVT mesh / monthly
- * climate) with the same URL-driven posture (?branch, ?layer, ?clean, ?play,
+ * climate) with the same URL-driven posture (?branch, ?layer, ?clean, ?month,
  * ?sun=&season=&night=), the same layer/time/sun panels, and the same
  * cell-selection semantics.  Before this hook existed each page carried a
  * ~500-line parallel copy of that wiring — every new layer or climate feature
@@ -15,7 +15,7 @@
  * so React StrictMode double-mounting is safe.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -24,8 +24,7 @@ import type { ImportElevationResult } from '../../components/map/ImportElevation
 import type { ImportedState } from '../../api/elevationImport'
 import type { TemperatureOrigin } from '../../playground/temperatureDraft'
 import { saveLastWorld } from '../../utils/lastWorld'
-import { LAYER_HELP } from '../../components/map/helpContent'
-import { initialLayerState, activeMainLayerId } from '../../components/map/layerStateInit'
+import { initialLayerState, activeMainLayerId, inspectionLayerId } from '../../components/map/layerStateInit'
 import type { LayerState } from '../../components/map/MapLayerPanel'
 import { decodePngToFloat32 } from './utils/imageCodec'
 import { readElevationPng } from '../packs/elevationRaster'
@@ -33,7 +32,8 @@ import { meshTextureDimensions, terrainSourceFor, type TerrainSource } from './e
 import { solarDeclinationDeg } from '../utils/solar'
 import useCellIdMap from './useCellIdMap'
 import { useMonthlyClimate, type MonthlyField } from './useMonthlyClimate'
-import { useSeasonTimelapse } from './useSeasonTimelapse'
+import { useKoppenDownscale } from './useKoppenDownscale'
+import { isMonthlyLayer, monthFromSearch } from '../../components/map/climateTime'
 import { useYearlyClimate } from './useYearlyClimate'
 import { useUccLayer } from './useUccLayer'
 import type { ColorMode, CVTMesh, MapMetadata, VoronoiCell } from './types'
@@ -49,15 +49,6 @@ export interface PlanetViewState {
   cleanMode: boolean
   setCleanMode: (v: boolean) => void
 
-  // --- Seasonal cycle playback (?play=1) ---
-  timelapsePlaying: boolean
-  setTimelapsePlaying: (v: boolean) => void
-  monthMs: number
-  setMonthMs: (v: number) => void
-  sunSweep: boolean
-  setSunSweep: (v: boolean) => void
-  sweeping: boolean
-
   // --- Layer state (?layer= deep link + slot semantics) ---
   layerState: LayerState
   setLayerState: React.Dispatch<React.SetStateAction<LayerState>>
@@ -67,8 +58,11 @@ export interface PlanetViewState {
   // --- Monthly climate mode (Phase 4 / tech debt 24) ---
   monthlyMode: boolean
   handleMonthlyModeChange: (mode: boolean) => void
+  selectMonth: (index: number) => void
   monthlyField: MonthlyField | null
-  monthlyActive: boolean
+  displayingMonthly: boolean
+  downscale: boolean
+  setDownscale: (enabled: boolean) => void
 
   // --- Particle-flow display for wind / ocean-current layers (?particles=1) ---
   particleMode: boolean
@@ -112,6 +106,7 @@ export interface PlanetViewState {
 
   // --- Monthly/UCC climate products ---
   monthlyThematic: ReturnType<typeof useMonthlyClimate>['texture']
+  koppenDownscale: ReturnType<typeof useKoppenDownscale>
   monthlyData: ReturnType<typeof useMonthlyClimate>['data']
   monthlyLoading: boolean
   monthlyMonth: number
@@ -174,11 +169,6 @@ export function usePlanetViewState(
     }, { replace: true })
   }
 
-  // --- Seasonal cycle playback (?play=1) ---
-  const [timelapsePlaying, setTimelapsePlaying] = useState(() => searchParams.get('play') === '1')
-  const [monthMs, setMonthMs] = useState(2000)
-  const [sunSweep, setSunSweep] = useState(false)
-
   // --- Layers (?layer= deep link, slot semantics identical to panel clicks) ---
   const [layerState, setLayerState] = useState<LayerState>(() =>
     initialLayerState(searchParams.get('layer'), worldName === 'earth'))
@@ -192,49 +182,25 @@ export function usePlanetViewState(
     }, { replace: true })
   }, [activeMainLayer, setSearchParams])
 
-  // --- Monthly climate mode (Phase 4): the active temperature/precipitation/
-  // pressure layer shows monthly data driven by the season slider, and the wind
-  // arrows switch to the monthly wind field (tech debt 24). ---
-  // `?monthly=1` is the shareable monthly-mode deep link (the same ~20 MB
-  // monthly fetch as ?play=1); ?play=1 additionally starts the cycle.
   const [monthlyMode, setMonthlyMode] = useState(
     () => searchParams.get('monthly') === '1' || searchParams.get('play') === '1',
   )
-  const monthlyField: MonthlyField | null = monthlyMode
-    ? layerState.layers.temperature > 0
-      ? 'temperature'
-      : layerState.layers.precipitation > 0
-        ? 'precipitation'
-        : layerState.layers.pressure > 0
-          ? 'pressure'
-          : layerState.layers.pressureError > 0
-            ? 'pressureError'
-            : layerState.layers.slp > 0
-              ? 'slp'
-              : null
-    : null
-  const monthlyActive = monthlyMode && (
-    layerState.layers.temperature > 0 ||
-    layerState.layers.precipitation > 0 ||
-    layerState.layers.pressure > 0 ||
-    layerState.layers.pressureError > 0 ||
-    layerState.layers.slp > 0 ||
-    layerState.layers.winds > 0
-  )
-  const handleMonthlyModeChange = (mode: boolean) => setMonthlyMode(mode)
-
-  // Keep the monthly flag in the URL so a monthly wind/particle view is
-  // shareable and survives the 2D↔3D switch.
-  useEffect(() => {
-    setSearchParams((prev) => {
-      const has = prev.get('monthly') === '1'
-      if (has === monthlyMode) return prev
-      const next = new URLSearchParams(prev)
-      if (monthlyMode) next.set('monthly', '1')
-      else next.delete('monthly')
+  const [monthlyMonth, setMonthlyMonth] = useState(() => monthFromSearch(searchParams))
+  const monthlyField: MonthlyField | null = isMonthlyLayer(activeMainLayer) && activeMainLayer !== 'winds' ? activeMainLayer : null
+  const handleMonthlyModeChange = setMonthlyMode
+  const selectMonth = useCallback((index: number) => {
+    setMonthlyMonth(index)
+    setMonthlyMode(true)
+  }, [])
+  const downscale = searchParams.get('detail') === 'downscaled'
+  const setDownscale = useCallback((enabled: boolean) => {
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous)
+      if (enabled) next.set('detail', 'downscaled')
+      else next.delete('detail')
       return next
     }, { replace: true })
-  }, [monthlyMode, setSearchParams])
+  }, [setSearchParams])
 
   // --- Particle-flow display (wind / current layers) ---
   // URL-backed so the 2D↔3D switch and shared links keep the display style.
@@ -248,32 +214,7 @@ export function usePlanetViewState(
     }, { replace: true })
   }, [setSearchParams])
 
-  // --- Inspector auto-expand: track the most recently activated layer
-  // (opacity 0 → >0) so eye-toggled overlays auto-expand their group too.
-  // The default base (terrain) is always active, so a naive "prefer thematic"
-  // would always pick terrain and never surface an overlay's group. ---
-  const prevLayersRef = useRef(layerState.layers)
-  const [lastActivated, setLastActivated] = useState<ColorMode | null>(null)
-  useEffect(() => {
-    const prev = prevLayersRef.current
-    for (const [id, v] of Object.entries(layerState.layers)) {
-      if (v > 0 && (prev[id as ColorMode] ?? 0) <= 0) {
-        setLastActivated(id as ColorMode)
-      }
-    }
-    prevLayersRef.current = layerState.layers
-  }, [layerState])
-
-  // Active layer for the inspector's auto-expand: the most recently activated
-  // wins while still visible; otherwise the mutually-exclusive thematic layer,
-  // then a toggle overlay.
-  const activeColorMode = useMemo<ColorMode | null>(() => {
-    if (lastActivated && (layerState.layers[lastActivated] ?? 0) > 0) return lastActivated
-    const active = LAYER_HELP.filter((l) => (layerState.layers[l.id] ?? 0) > 0)
-    const thematic = active.find((l) => l.kind === 'thematic' || l.kind === 'base')
-    const overlay = active.find((l) => l.kind === 'fill' || l.kind === 'feature')
-    return (thematic ?? overlay)?.id ?? null
-  }, [layerState, lastActivated])
+  const activeColorMode = inspectionLayerId(layerState)
 
   // --- Cursor + cell selection state ---
   const [cursor, setCursor] = useState<PlanetViewState['cursor']>(null)
@@ -439,12 +380,20 @@ export function usePlanetViewState(
   const [dayNightEnabled, setDayNightEnabled] = useState(() => searchParams.get('night') === '1')
 
   // --- Monthly/UCC climate products ---
-  const { texture: monthlyThematic, data: monthlyData, loading: monthlyLoading, month: monthlyMonth } = useMonthlyClimate({
-    worldName, planetId: selectedPlanet, branch: selectedBranch, seasonDeg,
-    field: monthlyField, active: monthlyActive, playing: timelapsePlaying && !trialActive,
+  const seaLevelM = meta?.sea_level_m ?? 0
+  const native = useMemo(() => importedElevation && elevation && meta && elevation.length === elevationDims.w * elevationDims.h ? {
+    elevation, width: elevationDims.w, height: elevationDims.h, minM: meta.elevation_min_m, maxM: meta.elevation_max_m, seaLevelM,
+  } : null, [importedElevation, elevation, meta, elevationDims, seaLevelM])
+  const koppenActive = !trialActive && activeMainLayer === 'koppen'
+  const { texture: monthlyThematic, data: monthlyData, loading: monthlyLoading, displayingMonthly } = useMonthlyClimate({
+    worldName, planetId: selectedPlanet, branch: selectedBranch, month: monthlyMonth,
+    field: trialActive ? null : monthlyField, active: !trialActive && (koppenActive || monthlyMode || isMonthlyLayer(activeColorMode)),
+    monthlyMode, downscale, native, seaLevelM,
     cvtMesh: cvtMesh ?? null, cellIdMap,
     ...meshTextureSize, flipHorizontal: false,
   })
+  const koppenDownscale = useKoppenDownscale(koppenActive, downscale, monthlyData, cvtMesh ?? null, cellIdMap,
+    meshTextureSize.width, meshTextureSize.height, seaLevelM, native)
   const yearlyProduct = useYearlyClimate(worldName, selectedPlanet, selectedBranch)
   const yearlyData = yearlyProduct && cvtMesh && yearlyProduct.numCells === cvtMesh.cells.length ? yearlyProduct : null
   const uccTexture = useUccLayer(
@@ -452,13 +401,7 @@ export function usePlanetViewState(
     meshTextureSize.width, meshTextureSize.height, false,
   )
 
-  const sweeping = timelapsePlaying && monthlyMode && sunSweep && !trialActive
-
-  // Lighting URL sync, gated during a sun sweep (continuous rAF → one
-  // history.replace on stop, not one per frame).  Keeping the params in the
-  // URL means lighting is shareable and carries across 2D↔3D navigation.
   useEffect(() => {
-    if (sweeping) return
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
       if (sunLongitudeDeg !== 0) next.set('sun', String(sunLongitudeDeg))
@@ -467,61 +410,14 @@ export function usePlanetViewState(
       else next.delete('season')
       if (dayNightEnabled) next.set('night', '1')
       else next.delete('night')
+      if (monthlyMode) next.set('monthly', '1')
+      else next.delete('monthly')
+      if (monthlyMode || monthlyMonth !== 0) next.set('month', String(monthlyMonth))
+      else next.delete('month')
+      next.delete('play')
       return next
     }, { replace: true })
-  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, setSearchParams, sweeping])
-
-  // Sun sweep: continuously rotate the subsolar longitude so the day/night
-  // terminator sweeps across the planet — one full revolution per model year
-  // (12 × monthMs), phase-locked with the month stepper.
-  useEffect(() => {
-    if (!sweeping) return
-    let raf = 0
-    let last = performance.now()
-    const loop = (now: number) => {
-      const dt = (now - last) / 1000
-      last = now
-      const yearSec = (monthMs * 12) / 1000
-      setSunLongitudeDeg((v) => (v + (360 / yearSec) * dt) % 360)
-      raf = requestAnimationFrame(loop)
-    }
-    raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
-  }, [sweeping, monthMs])
-
-  // ?play=1 deep link: explicitly opt into monthly mode (a ~20 MB fetch the
-  // user implicitly consents to by sharing/opening the link) and make sure a
-  // monthly layer is visible — otherwise there is nothing to animate.
-  useEffect(() => {
-    if (searchParams.get('play') !== '1') return
-    setMonthlyMode(true)
-    setLayerState((prev) => {
-      const L = prev.layers
-      if (L.temperature > 0 || L.precipitation > 0 || L.pressure > 0 ||
-          L.pressureError > 0 || L.slp > 0 || L.winds > 0) return prev
-      return { layers: { ...L, temperature: 0.85 } }
-    })
-  }, [])
-
-  // Month stepper: one discrete step per beat (same semantics as the slider,
-  // so ?season= write-back stays at 12 hits per cycle).
-  useSeasonTimelapse({
-    playing: timelapsePlaying && monthlyMode && !trialActive,
-    monthMs,
-    seasonDeg,
-    onSeasonChange: setSeasonDeg,
-  })
-
-  // Persist the play state (?play=1) so a deep link reopens in playing
-  // posture; speed/sweep stay ephemeral UI state.
-  useEffect(() => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (timelapsePlaying) next.set('play', '1')
-      else next.delete('play')
-      return next
-    }, { replace: true })
-  }, [timelapsePlaying, setSearchParams])
+  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, monthlyMode, monthlyMonth, setSearchParams])
 
   // Esc → exit clean mode first, otherwise clear all selections
   useEffect(() => {
@@ -641,9 +537,8 @@ export function usePlanetViewState(
   return {
     selectedBranch, setSelectedBranch,
     cleanMode, setCleanMode,
-    timelapsePlaying, setTimelapsePlaying, monthMs, setMonthMs, sunSweep, setSunSweep, sweeping,
     layerState, setLayerState, activeMainLayer, activeColorMode,
-    monthlyMode, handleMonthlyModeChange, monthlyField, monthlyActive,
+    monthlyMode, handleMonthlyModeChange, monthlyField, selectMonth, displayingMonthly, downscale, setDownscale,
     particleMode, setParticleMode,
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination,
@@ -653,7 +548,7 @@ export function usePlanetViewState(
     worldPlanetsError, platesError,
     elevation, elevationDims, terrainSource, setTerrainSource, meshTextureSize,
     cvtMesh: cvtMesh ?? null, voronoiCells, cellIdMap,
-    monthlyThematic, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
+    monthlyThematic, koppenDownscale, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, hoveredCell, handleCellHover, lastCell, selectedCells,
     selectCell, clearSelection,
     selectedCellData, hoveredCellData, inspectorCell, selectedCellObjects,

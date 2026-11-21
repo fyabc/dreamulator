@@ -41,7 +41,7 @@ function DraftWorkbench({ world, planet, branch, draft, clean }: TemperatureOrig
   if ((!maps.isPending && !mapped) || meta.isError || elevation.isError) {
     const input = new URLSearchParams({ world, planet, draft })
     if (branch) input.set('branch', branch)
-    return <TemperatureLab search={input} recovery />
+    return <TemperatureLab search={input} />
   }
   if (!meta.data || !elevation.data) {
     return <p role="status" className="p-6 text-sm text-gray-300">{t('action.loadingInput')}</p>
@@ -58,6 +58,7 @@ function TemperatureTrialSession({ world, planet, branch, draft, clean, initiall
   initiallyOpen: boolean
 }) {
   const [open, setOpen] = useState(initiallyOpen)
+  const [search] = useSearchParams()
   const [visited, setVisited] = useState(initiallyOpen)
   const [revision, setRevision] = useState(0)
   const [modeSelection, setModeSelection] = useState<{ scope: string | null; mode: MapMode } | null>(null)
@@ -72,7 +73,7 @@ function TemperatureTrialSession({ world, planet, branch, draft, clean, initiall
     if (draft) params.set('draft', draft)
     return params
   }, [world, planet, branch, draft])
-  const trial = useTemperatureTrialPreview(scope, mode)
+  const trial = useTemperatureTrialPreview(scope, mode, search.get('detail') === 'downscaled')
   const showTrial = useCallback(() => {
     setLayerState(trialLayerState('temperature'))
     setModeSelection({ scope, mode: 'trial' })
@@ -114,7 +115,5 @@ function TemperatureTrialSession({ world, planet, branch, draft, clean, initiall
 }
 
 function trialLayerState(layer: 'temperature' | null) {
-  const state = initialLayerState(layer, false)
-  state.layers.coastlines = 0
-  return state
+  return initialLayerState(layer, false)
 }

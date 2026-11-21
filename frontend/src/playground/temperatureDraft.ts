@@ -11,6 +11,11 @@ export const EARTH_PARAMS = {
 
 export type PlanetParams = typeof EARTH_PARAMS
 export type TemperatureOrigin = { world: string; planet: string; branch: string | null }
+export const temperatureSamplesHelpPath = '/help#start'
+export const temperatureSampleOrigins = {
+  earth: { world: 'earth', planet: 'planet_earth', branch: null },
+  nacrea: { world: 'nacrea', planet: 'satellite_nacrea', branch: null },
+} satisfies Record<string, TemperatureOrigin>
 export type TemperatureDraft = Omit<TemperatureOrigin, 'world'> & {
   id: string
   source: string
@@ -52,24 +57,14 @@ export function temperatureTrialMapPath({ world, planet, branch }: TemperatureOr
   return `/worlds/${encodeURIComponent(world)}/${view?.kind ?? 'map'}/${encodeURIComponent(planet)}?${search}`
 }
 
-export function legacyTemperatureDraftDestination(search: URLSearchParams) {
+export function legacyTemperatureTrialDestination(search: URLSearchParams) {
   const world = search.get('world')
   const planet = search.get('planet')
   const draft = search.get('draft')
   const from = search.get('from')
-  if (!world || !planet || !draft) return null
+  if (!world || !planet) return null
   const view = from === 'map' || from === 'globe' ? { kind: from, search: new URLSearchParams(search.get('mapView') ?? '') } as const : undefined
-  return temperatureTrialMapPath({ world, planet, branch: search.get('branch') || null }, draft, view)
-}
-
-export function temperatureTrialReturnPath({ world, planet, branch }: TemperatureOrigin, trial: URLSearchParams) {
-  if (!world || !planet) return '/help'
-  const from = trial.get('from')
-  const view = from === 'map' || from === 'globe' ? from : null
-  const search = view ? trialMapSearch(new URLSearchParams(trial.get('mapView') ?? '')) : new URLSearchParams({ tab: 'climate', planet })
-  if (branch) search.set('branch', branch)
-  const path = `/worlds/${encodeURIComponent(world)}${view ? `/${view}/${encodeURIComponent(planet)}` : ''}`
-  return search.size ? `${path}?${search}` : path
+  return temperatureTrialMapPath({ world, planet, branch: search.get('branch') || null }, draft || undefined, view)
 }
 
 const isIdentifier = (value: unknown): value is string => typeof value === 'string' && /^[\w.-]{1,100}$/.test(value)

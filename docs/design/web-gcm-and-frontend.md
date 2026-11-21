@@ -327,6 +327,22 @@ koppenpasta 一律用 30 天的月。Nacrea 的年长 99.7 天，于是它的「
 
 原版与分支都由浏览器读取用户选择的地形文件，不把它上传到 GitHub Pages。当前地形保存在浏览器页面的内存中，刷新后不会自动恢复。要跨会话继续，用户可下载 `.ckpt` 检查点；文件包含地形、运行配置、续算状态与气候统计，分支还保存地图朝向。重新选择该文件即可恢复，不需要再选择原图。可对照[浏览器读图](https://github.com/Astervolans/web-exoplasim-qol/blob/41ec7abaa44b7161e66e2b01d78d333a92e5ab78/src/ui/gcm/terrain/useTerrainImport.ts)与[保存和加载流程](https://github.com/Astervolans/web-exoplasim-qol/blob/41ec7abaa44b7161e66e2b01d78d333a92e5ab78/src/ui/gcm/useGcmRun.ts)。这与 Dreamulator 的服务端工作区不同，后者由后端保存输入并执行完整构建。
 
+### 地图悬停与月份图表
+
+在 [web-exoplasim-qol `9d311d5` 的地图导航](https://github.com/Astervolans/web-exoplasim-qol/blob/9d311d538c1e0ea4aa6f6eb3f13f45a38479b922/src/ui/gcm/map-navigation/index.ts)中，光标移动只把最新的屏幕位置换算成经纬度并报告给读数组件。拖图时暂停悬停读数。地图的 [Canvas 绘制](https://github.com/Astervolans/web-exoplasim-qol/blob/9d311d538c1e0ea4aa6f6eb3f13f45a38479b922/src/ui/gcm/GcmMap.tsx)由视口、图层和叠加项驱动，光标移动不会触发底图重绘。
+
+[视图组件](https://github.com/Astervolans/web-exoplasim-qol/blob/9d311d538c1e0ea4aa6f6eb3f13f45a38479b922/src/ui/gcm/GcmView.tsx)缓存各月当前变量的图层。悬停位置变化时，[采样模块](https://github.com/Astervolans/web-exoplasim-qol/blob/9d311d538c1e0ea4aa6f6eb3f13f45a38479b922/src/ui/gcm/field-sample/index.ts)直接索引浏览器内的降尺度数组，或在求解网格上做双线性采样。当前值和各月的同地点值用相同的格式与温标读取，只有[悬停读数与柱形图](https://github.com/Astervolans/web-exoplasim-qol/blob/9d311d538c1e0ea4aa6f6eb3f13f45a38479b922/src/ui/gcm/GcmHoverReadout.tsx)随位置变化，不发网络请求也不重跑模型。
+
+Dreamulator 可以将这一做法用于右侧检查栏。正式模式定位球面网格单元后，从该单元对应的连续月份数组读取数值；试算则按经纬度定位规则网格。连续移动可按屏幕帧合并，在同一单元内移动时不重算柱形图。单击锁定地点后，图表和字段可继续用于比较，而不随光标离开改变。
+
+### 降尺度显示
+
+[Web‑ExoPlaSim QoL 的降尺度模块](https://github.com/Astervolans/web-exoplasim-qol/blob/9d311d538c1e0ea4aa6f6eb3f13f45a38479b922/src/model/climate/gcm/downscale/index.ts)将原始地形按输出格点重采样，并预计算模式网格四邻点的双线性权重。温度额外根据模式高程与细地形的差值修正。它从局部 3 × 3 模式网格回归温度递减率，在邻域高差不足 100 m 时采用 6.5 K/km，并将递减率限制在 0 至 9.8 K/km。该视图对降水等其他连续场只做插值，不重新计算大气。
+
+Dreamulator 的正式模拟使用不规则球面网格，不直接移植对方的高斯网格索引或回归。当前展示采用[地图系统的连续场插值和画布高程修正](pipelines/map-system.md)，保留原始模式网格供对照。
+
+[Web‑ExoPlaSim QoL 的分类模块](https://github.com/Astervolans/web-exoplasim-qol/blob/9d311d538c1e0ea4aa6f6eb3f13f45a38479b922/src/model/climate/gcm/classification/index.ts)先降尺度逐月气温和降水，再逐像素重判柯本类别。它还为海洋细分类降尺度表面温度与海冰。Dreamulator 采用相同的处理顺序，但沿用自身的分类阈值、温度订正和统一海洋类别。
+
 ## 参考资料
 
 - 仓库与许可：`github.com/ryoung48/web-exoplasim`（GPL-2.0）

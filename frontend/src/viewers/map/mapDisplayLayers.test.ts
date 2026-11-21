@@ -23,6 +23,7 @@ describe('map data availability', () => {
   it('only enables trial temperature after a result exists', () => {
     expect(availableTrialLayers(false)).not.toContain('temperature')
     expect(availableTrialLayers(true)).toContain('temperature')
+    expect(availableTrialLayers(true)).toContain('coastlines')
     expect(availableTrialLayers(true)).not.toContain('precipitation')
     expect(availableTrialLayers(true)).not.toContain('biomes')
   })

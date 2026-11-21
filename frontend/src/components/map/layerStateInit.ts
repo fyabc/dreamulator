@@ -61,10 +61,15 @@ export function initialLayerState(layerParam: string | null, isEarth: boolean): 
  * layers, so the URL stays a shareable deep link as the view changes.
  * Null when both radio slots are off (thematic "none" + base "none").
  */
-export function activeMainLayerId(state: LayerState): string | null {
+export function activeMainLayerId(state: LayerState): ColorMode | null {
   const layers = state.layers
   const thematic = LAYER_HELP.find((l) => l.kind === 'thematic' && (layers[l.id] ?? 0) > 0)
   if (thematic) return thematic.id
   const base = LAYER_HELP.find((l) => l.kind === 'base' && (layers[l.id] ?? 0) > 0)
   return base?.id ?? null
+}
+
+export function inspectionLayerId(state: LayerState): ColorMode | null {
+  const layer = state.inspectedLayer
+  return layer && state.layers[layer] > 0 ? layer : activeMainLayerId(state)
 }

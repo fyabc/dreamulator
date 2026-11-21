@@ -17,6 +17,8 @@ import * as THREE from 'three'
 import { WebGLRenderer } from 'three'
 import useCellIdMap from '../../viewers/map/useCellIdMap'
 import useGPUTerrain from '../../viewers/map/useGPUTerrain'
+import type { TrialTerrain } from '../../playground/temperaturePreview'
+import { GRID_H, GRID_W } from '../../playground/temperatureDraft'
 import useRafCoalesced from '../../viewers/map/useRafCoalesced'
 import MapSvgOverlay from './MapSvgOverlay'
 import FlowParticles from './FlowParticles'
@@ -71,6 +73,7 @@ interface MapViewerProps {
   /** Enable the day/night overlay. */
   dayNight?: boolean
   trialTemperature?: THREE.DataTexture | null
+  trialTerrain?: TrialTerrain | null
   /** Monthly temperature/precipitation/pressure textures (Phase 4 / debt 24),
    *  baked by the caller.  Pressure is monthly-only (no annual counterpart). */
   monthlyTemperature?: THREE.DataTexture | null
@@ -78,6 +81,7 @@ interface MapViewerProps {
   monthlyPressure?: THREE.DataTexture | null
   monthlyPressureError?: THREE.DataTexture | null
   monthlySlp?: THREE.DataTexture | null
+  koppenTexture?: THREE.DataTexture | null
   /** UCC classification thematic texture (UCC-01 step 4a), baked by the caller
    *  from `bakeUccLayer`; null when the yearly file lacks the fields. */
   uccTexture?: THREE.DataTexture | null
@@ -135,11 +139,13 @@ export default function MapViewer({
   solarDeclinationDeg = 0,
   dayNight = false,
   trialTemperature = null,
+  trialTerrain = null,
   monthlyTemperature = null,
   monthlyPrecipitation = null,
   monthlyPressure = null,
   monthlyPressureError = null,
   monthlySlp = null,
+  koppenTexture = null,
   uccTexture = null,
   monthlyWindEast = null,
   monthlyWindNorth = null,
@@ -247,16 +253,21 @@ export default function MapViewer({
   const renderLayers = useRafCoalesced(layers)
 
   const { material: gpuMaterial, renderComposite: gpuRenderComposite } = useGPUTerrain({
-    trialTemperature,
     elevation, width: mapW, height: mapH, seaLevel,
     terrainSource, meshWidth: meshSize.width, meshHeight: meshSize.height,
     elevMinM: elevMin, elevMaxM: elevMax,
     layers: renderLayers, cvtMesh, cellIdMap,
     monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError,
-    monthlySlp,
+    monthlySlp, koppenTexture,
     uccTexture,
     flipHorizontal: false,  // PlaneGeometry, not SphereGeometry
     sunLonRad, sunDecRad, dayNight: dayNightNum,
+    ...(trialTerrain && {
+      elevation: trialTerrain.elevation, width: GRID_W, height: GRID_H,
+      terrainSource: 'raster', meshWidth: GRID_W, meshHeight: GRID_H,
+      seaLevel: trialTerrain.params.seaLevelM, elevMinM: trialTerrain.params.elevMinM, elevMaxM: trialTerrain.params.elevMaxM,
+      cvtMesh: null, cellIdMap: null, monthlyTemperature: trialTemperature,
+    }),
   })
 
   // Ref so the (stable) rAF render loop always sees the current callback.

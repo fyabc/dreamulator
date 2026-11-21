@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { LayerState } from '../../components/map/MapLayerPanel'
+import { inspectionLayerId } from '../../components/map/layerStateInit'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import type { ColorMode, CVTMesh, VoronoiCell } from './types'
 import type { MapTemperatureTrialSession } from './useTemperatureTrialPreview'
@@ -17,7 +18,7 @@ const annualFields = {
 } satisfies Partial<Record<ColorMode, keyof VoronoiCell>>
 
 export function availableTrialLayers(hasTemperature: boolean): ReadonlySet<ColorMode> {
-  return new Set<ColorMode>(hasTemperature ? ['terrain', 'landsea', 'temperature'] : ['terrain', 'landsea'])
+  return new Set<ColorMode>(hasTemperature ? ['terrain', 'landsea', 'coastlines', 'temperature'] : ['terrain', 'landsea', 'coastlines'])
 }
 
 export function availableWorldLayers(mesh: CVTMesh | null, monthly: MonthlyClimateData | null, hasUcc: boolean) {
@@ -47,6 +48,7 @@ export function useMapDisplayLayers(trial: MapTemperatureTrialSession, official:
     state: trialMode ? trial.layerState : official,
     onChange: trialMode ? trial.setLayerState : setOfficial,
     available,
+    trialInspectionLayer: inspectionLayerId(trial.layerState),
     texture: trial.layerState.layers.temperature > 0 ? trial.texture : null,
   }
 }

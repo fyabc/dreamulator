@@ -6,7 +6,7 @@ import type { CVTMesh } from '../../viewers/map/types'
 import { climateWindowLabel } from './climateTime'
 import {
   PRECIP_SCALE, PRECIP_TOTAL_LIMIT_MM, PRECIP_WINDOW_LIMIT_MM,
-  TEMPERATURE_LIMIT_C, TEMPERATURE_SCALE,
+  TEMPERATURE_LIMIT_C, TEMPERATURE_SCALE, scaleGradient,
 } from '../../viewers/map/utils/colorScales'
 
 interface ClimateLegendProps {
@@ -34,8 +34,7 @@ export default function ClimateLegend({
   const min = temp ? -TEMPERATURE_LIMIT_C : 0
   const max = temp ? TEMPERATURE_LIMIT_C : monthly ? PRECIP_WINDOW_LIMIT_MM : PRECIP_TOTAL_LIMIT_MM
   const scale = temp ? TEMPERATURE_SCALE : PRECIP_SCALE
-  const gradient = `linear-gradient(to right, ${scale.map(({ color, value }) =>
-    `rgb(${color.join(',')}) ${value * 100}%`).join(', ')})`
+  const gradient = scaleGradient(scale)
   const windowName = climateWindowLabel(t, monthlyData, monthIndex)
   const basis = monthly
     ? monthlyData.binDays != null ? t('time.windowWithDuration', { window: windowName, days: monthlyData.binDays }) : windowName

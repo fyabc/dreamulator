@@ -16,7 +16,7 @@
  * downstream (renderer, URL-free state, static mode) is unaffected.
  */
 
-import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import type { ColorMode } from '../../viewers/map/types'
@@ -29,6 +29,7 @@ type LayerOpacities = Record<ColorMode, number>
 
 interface LayerState {
   layers: LayerOpacities
+  inspectedLayer?: ColorMode | null
 }
 
 interface MapLayerPanelProps {
@@ -36,7 +37,6 @@ interface MapLayerPanelProps {
   onChange: (state: LayerState) => void
   available?: ReadonlySet<ColorMode>
   temperaturePeriodLabel?: string
-  worldTime?: ReactNode
   /** Monthly-climate mode (driven by TimeControl). When on, monthly-capable
    *  layers show a month badge, and monthly-only layers (pressure) are live. */
   monthlyMode?: boolean
@@ -45,6 +45,7 @@ interface MapLayerPanelProps {
   /** Called when a monthly-only layer is selected in annual mode, to
    *  auto-enable monthly mode. */
   onMonthlyModeChange?: (mode: boolean) => void
+  detail?: { downscaled: boolean; available: boolean; pending?: boolean; onChange: (downscaled: boolean) => void }
   /** True for the Earth reference world — gates the earth-only diagnostic
    *  layers (ΔT/ΔP vs observed zonal climatology) which are meaningless on
    *  fictional worlds. */
@@ -134,9 +135,10 @@ function HelpIcon() {
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-export default function MapLayerPanel({ state, onChange, available, temperaturePeriodLabel, worldTime, monthlyMode = false, monthlyData = null, monthIndex = null, onMonthlyModeChange, isEarth, particleMode = false, onParticleModeChange }: MapLayerPanelProps) {
+export default function MapLayerPanel({ state, onChange, available, temperaturePeriodLabel, monthlyMode = false, monthlyData = null, monthIndex = null, onMonthlyModeChange, detail, isEarth, particleMode = false, onParticleModeChange }: MapLayerPanelProps) {
   const { t } = useTranslation('map')
   const panelId = useId()
+  const [section, setSection] = useState<'main' | 'overlays'>('main')
   /** Remember the last explicit non-zero opacity so toggles can restore it. */
   const lastNonZero = useRef<Record<string, number>>({})
 
@@ -203,9 +205,10 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
           }
         }
       }
-      onChange({ layers: next })
+      const selected = (Object.keys(patch) as ColorMode[]).filter(layer => (patch[layer] ?? 0) > 0)
+      onChange({ layers: next, inspectedLayer: selected[selected.length - 1] ?? state.inspectedLayer })
     },
-    [state.layers, onChange],
+    [state.layers, state.inspectedLayer, onChange],
   )
 
   /** Groups with nothing visible start collapsed; the rest start open. */
@@ -281,11 +284,31 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
   }
 
   return (
-    <div className="space-y-4">
-      {worldTime}
+    <div className="space-y-3">
+      <div className="flex overflow-hidden rounded-md border border-space-border" role="group" aria-label={t('panel.layerType')}>
+        {(['main', 'overlays'] as const).map(type => <button key={type} type="button"
+          aria-pressed={section === type} onClick={() => setSection(type)}
+          className={`flex-1 px-2 py-1.5 text-[11px] first:border-r first:border-space-border focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-neon-cyan ${section === type ? 'bg-neon-cyan/15 text-gray-100' : 'text-gray-400 hover:text-gray-100'}`}>
+          {t(type === 'main' ? 'panel.mainLayers' : 'panel.overlayLayers')}
+        </button>)}
+      </div>
+      {section === 'main' && detail && <div className="space-y-1.5">
+        <div role="group" aria-label={t('panel.detailTitle')} title={t('panel.detailHint')}
+          className="flex rounded-md border border-space-border">
+          {[false, true].map(downscaled => <button key={String(downscaled)} type="button"
+            aria-pressed={detail.downscaled === downscaled} disabled={downscaled && !detail.available}
+            onClick={() => detail.onChange(downscaled)}
+            className={`flex-1 px-2 py-1.5 text-[11px] first:rounded-l-md first:border-r first:border-space-border last:rounded-r-md focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-neon-cyan disabled:opacity-45 ${detail.downscaled === downscaled ? 'bg-neon-cyan/15 text-gray-100' : 'text-gray-400 hover:text-gray-100'}`}>
+            {t(downscaled ? 'panel.downscaled' : 'panel.modelGrid')}
+          </button>)}
+        </div>
+        {detail.downscaled && detail.available && <p role="status" className="text-[10px] text-gray-400">
+          {t(detail.pending ? 'panel.downscaling' : 'panel.downscaledReadout')}
+        </p>}
+      </div>}
       {/* Wind/current display style.  The layer opacities still control the
           strength; this switch only swaps arrows for advected particles. */}
-      {onParticleModeChange && (
+      {section === 'overlays' && onParticleModeChange && (
         <div className="flex items-center justify-between gap-2 pb-2 border-b border-space-border">
           <div className="min-w-0 cursor-help" title={t('panel.particlesHint')}>
             <span className="text-xs text-gray-300">{t('panel.particles')}</span>
@@ -308,7 +331,8 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
           </button>
         </div>
       )}
-      {groups.map((g) => {
+      {groups.map(group => section === 'main' ? { ...group, toggleMembers: [] } : { ...group, radioMembers: [] }).map((g) => {
+        if (!g.radioMembers.length && !g.toggleMembers.length) return null
         const hasToggles = g.toggleMembers.length > 0
         const toggleCount = g.toggleMembers.filter(layer => !available || available.has(layer.id)).length
         const visCount = g.toggleMembers.filter(layer => opacityOf(layer) > 0).length
@@ -320,6 +344,7 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
               <button
                 type="button"
                 onClick={() => toggleCollapse(g.id)}
+                aria-expanded={open}
                 className="p-0.5 text-gray-500 hover:text-gray-300"
                 title={open ? t('panel.collapse') : t('panel.expand')}
               >
@@ -384,6 +409,7 @@ export default function MapLayerPanel({ state, onChange, available, temperatureP
                         checked={active}
                         disabled={missing}
                         onChange={() => selectSlotLayer(l)}
+                        onClick={() => { if (active) onChange({ ...state, inspectedLayer: l.id }) }}
                         className="h-3 w-3 accent-neon-cyan cursor-pointer"
                       />
                       <span className={`text-[11px] ${active ? 'text-gray-200' : 'text-gray-500'} ${dimmed ? 'opacity-50' : ''}`}>

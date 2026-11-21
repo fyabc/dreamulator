@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EARTH_PARAMS, isTemperatureParams, legacyTemperatureDraftDestination, temperatureTrialMapPath } from './temperatureDraft'
+import { EARTH_PARAMS, isTemperatureParams } from './temperatureDraft'
 import { temperatureInputCatalog, worldTemperatureParams } from './worldTemperature'
 
 describe('world temperature trial inputs', () => {
@@ -38,19 +38,4 @@ describe('world temperature trial inputs', () => {
     } })
   })
 
-  it('opens saved drafts on the map of their source body and branch', () => {
-    const location = { world: 'earth', planet: 'planet_earth', branch: 'ERE-if' }
-    expect(temperatureTrialMapPath(location, 'saved-id'))
-      .toBe('/worlds/earth/map/planet_earth?trial=climate&branch=ERE-if&draft=saved-id')
-    expect(temperatureTrialMapPath({ ...location, branch: null })).toBe('/worlds/earth/map/planet_earth?trial=climate')
-  })
-
-  it('migrates legacy draft links with their original view and drops non-view parameters', () => {
-    const search = new URLSearchParams({ world: 'earth', planet: 'planet_earth', branch: 'ERE-if', draft: 'saved-id',
-      from: 'globe', mapView: 'layer=temperature&monthly=1&creation=1&branch=wrong' })
-    expect(legacyTemperatureDraftDestination(search))
-      .toBe('/worlds/earth/globe/planet_earth?layer=temperature&monthly=1&trial=climate&branch=ERE-if&draft=saved-id')
-    search.delete('draft')
-    expect(legacyTemperatureDraftDestination(search)).toBeNull()
-  })
 })

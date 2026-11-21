@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
 import { isStaticMode } from '../../api/mode'
-import { temperatureTrialMapPath } from '../../playground/temperatureDraft'
+import { temperatureSamplesHelpPath, temperatureTrialMapPath } from '../../playground/temperatureDraft'
 import { projectButton } from '../projects/SaveProjectResult'
 
 export default function TemperatureTrialEntry({ world, branch, preferred }: {
@@ -35,7 +35,7 @@ export default function TemperatureTrialEntry({ world, branch, preferred }: {
       : <div className="text-sm">
         <p className="text-gray-400">{t(maps.isError ? 'error' : 'noElevation')}</p>
         {maps.isError ? <button type="button" className="min-h-11 text-neon-cyan hover:underline" onClick={() => void maps.refetch()}>{t('retry')}</button>
-          : <Link to={isStaticMode() ? '/playground' : '/import'} className="inline-flex min-h-11 items-center text-neon-cyan hover:underline">{t(isStaticMode() ? 'samples' : 'import')}</Link>}
+          : <Link to={isStaticMode() ? temperatureSamplesHelpPath : '/import'} className="inline-flex min-h-11 items-center text-neon-cyan hover:underline">{t(isStaticMode() ? 'samples' : 'import')}</Link>}
       </div>}
   </section>
 }

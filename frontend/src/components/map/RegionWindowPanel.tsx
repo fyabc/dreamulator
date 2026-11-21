@@ -55,51 +55,32 @@ export default function RegionWindowPanel({
   }
 
   return (
-    <section className="relative z-20 shrink-0 border-b border-space-border bg-space-panel px-2 py-1 text-xs md:px-4 md:py-2">
-      <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
-        {modeControl && <label className="inline-flex shrink-0 items-center gap-1.5 text-gray-400">
-          {t('workbench.mode')}
-          <select value={modeControl.mode}
-            onChange={event => modeControl.onChange(event.target.value === 'trial' ? 'trial' : 'official')}
-            className="min-h-9 rounded border border-space-border bg-space-bg px-2 text-xs text-gray-100 focus-visible:outline focus-visible:outline-neon-cyan">
-            <option value="official">{t('workbench.official')}</option>
-            <option value="trial">{t('workbench.trial')}</option>
-          </select>
-        </label>}
-        <button ref={expandButton} type="button" className={buttonClass} aria-expanded={expanded} aria-controls={expanded ? formId : undefined}
-          title={t('regionWindow.hint.toggle')}
+    <>
+      {modeControl && <label className="inline-flex shrink-0 items-center gap-1 text-xs text-gray-400 lg:gap-1.5">
+        <span className="max-[375px]:sr-only">{t('workbench.mode')}</span>
+        <select value={modeControl.mode}
+          onChange={event => modeControl.onChange(event.target.value === 'trial' ? 'trial' : 'official')}
+          className="min-h-10 rounded border border-space-border bg-space-bg px-1 text-xs text-gray-100 focus-visible:outline focus-visible:outline-neon-cyan lg:min-h-9 lg:px-2">
+          <option value="official">{t('workbench.official')}</option>
+          <option value="trial">{t('workbench.trial')}</option>
+        </select>
+      </label>}
+      <div className="shrink-0 text-xs lg:relative" onKeyDown={(event) => {
+        if (!expanded || event.key !== 'Escape') return
+        event.preventDefault()
+        setExpanded(false)
+        expandButton.current?.focus()
+      }}>
+        <button ref={expandButton} type="button" className={`${buttonClass} min-h-10 lg:min-h-9 ${window ? '!border-neon-cyan/50 !text-neon-cyan' : ''}`}
+          aria-expanded={expanded} aria-controls={expanded ? formId : undefined}
+          title={window ? t('regionWindow.summary', { ...window }) : t('regionWindow.hint.toggle')}
           onClick={() => setExpanded((open) => !open)}>{t('regionWindow.title')}</button>
-        {window && <span className="text-gray-300" title={t('regionWindow.summary', { ...window })}>
-          <span className="font-mono tabular-nums md:hidden" aria-hidden="true">{window.spanKm} km</span>
-          <span className="sr-only md:not-sr-only">{t('regionWindow.summary', { ...window })}</span>
-        </span>}
-        {window && <Link className={`${buttonClass} font-semibold !text-neon-cyan`} to={`/packs?${regionParams}`} title={t('regionWindow.hint.open')}
-          state={{ regionReturn: `${location.pathname}${location.search}` }}>{t('regionWindow.open')}</Link>}
-        {window && onRegionScale && <div className="hidden flex-wrap items-center gap-2 md:flex">
-          <button type="button" className={buttonClass} onClick={() => onRegionScale('region')}>
-            {t('regionWindow.zoomToRegion')}
-          </button>
-          <button type="button" className={buttonClass} onClick={() => onRegionScale('globe')}>
-            {t('regionWindow.zoomToGlobe')}
-          </button>
-          {scaleAltitudeKm !== undefined && <span className="text-gray-400">
-            {t('regionWindow.scaleAltitude', { km: scaleAltitudeKm.toFixed(1) })}
-          </span>}
-          {scaleDetail && <span role="status" className="text-gray-400">{t(`regionWindow.scaleDetail.${scaleDetail}`)}</span>}
-        </div>}
-        <div className="ml-auto">
-          <MapHelpLink section="region-selection" label={t('regionWindow.help')} />
-        </div>
-      </div>
-      {expanded && (
-        <div id={formId} className="absolute inset-x-0 top-full max-h-[55dvh] space-y-2 overflow-y-auto border-b border-space-border bg-space-panel p-3 shadow-lg md:static md:mt-2 md:max-h-[40dvh] md:border-0 md:p-0 md:shadow-none"
-          onKeyDown={(event) => {
-            if (event.key !== 'Escape') return
-            event.preventDefault()
-            setExpanded(false)
-            expandButton.current?.focus()
-          }}>
-          {window && onRegionScale && <div className="flex flex-wrap items-center gap-2 md:hidden">
+        {expanded && <div id={formId} className="absolute inset-x-0 top-full z-10 max-h-[55dvh] space-y-2 overflow-y-auto overscroll-contain border border-space-border bg-space-panel p-3 shadow-lg lg:left-auto lg:mt-2 lg:w-[28rem] lg:rounded-lg">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium text-gray-200">{window ? t('regionWindow.summary', { ...window }) : t('regionWindow.title')}</span>
+            <MapHelpLink section="region-selection" label={t('regionWindow.help')} />
+          </div>
+          {window && onRegionScale && <div className="flex flex-wrap items-center gap-2">
             <button type="button" className={buttonClass} onClick={() => { onRegionScale('region'); setExpanded(false); expandButton.current?.focus() }}>
               {t('regionWindow.zoomToRegion')}
             </button>
@@ -111,13 +92,15 @@ export default function RegionWindowPanel({
           </div>}
           <RegionWindowForm key={rawWindow ?? ''} initial={window} radiusKm={radiusKm}
             selectedPoint={selectedPoint} onMove={move} />
-          {rawWindow && <button type="button" className={buttonClass} title={t('regionWindow.hint.clear')}
-            onClick={() => writeWindow(null)}>
-            {t('regionWindow.clear')}
-          </button>}
-        </div>
-      )}
-    </section>
+          {rawWindow && <div className="flex flex-wrap items-center gap-2 border-t border-space-border pt-2">
+            {window && <Link className={`${buttonClass} font-semibold !text-neon-cyan`} to={`/packs?${regionParams}`} title={t('regionWindow.hint.open')}
+              state={{ regionReturn: `${location.pathname}${location.search}` }}>{t('regionWindow.open')}</Link>}
+            <button type="button" className={buttonClass} title={t('regionWindow.hint.clear')}
+              onClick={() => writeWindow(null)}>{t('regionWindow.clear')}</button>
+          </div>}
+        </div>}
+      </div>
+    </>
   )
 }
 

@@ -1,13 +1,5 @@
 /**
- * SunControl — diurnal lighting controls for the globe / map.
- *
- * Controls only the daily (diurnal) sun longitude — where the sun is overhead
- * in longitude (0° = noon on the prime meridian). The seasonal / monthly
- * dimension (which drives both solar declination and monthly climate data) has
- * moved to TimeControl, so the two time axes are cleanly separated:
- *
- *   - SunControl  → daily rotation (sun longitude) + day/night toggle
- *   - TimeControl → annual season / monthly data month
+ * SunControl — lighting controls for the globe and map, independent of the data month.
  *
  * On the 3D globe lighting is always on. On the 2D map the day/night overlay is
  * optional — pass `enabled` / `onEnabledChange` to render an on/off toggle;
@@ -20,6 +12,10 @@ import { useTranslation } from 'react-i18next'
 interface SunControlProps {
   sunLongitudeDeg: number
   onLongitudeChange: (deg: number) => void
+  seasonDeg: number
+  onSeasonChange: (deg: number) => void
+  solarDeclination: number
+  axialTiltDeg: number
   /** When provided (2D map), renders an on/off toggle for the overlay. */
   enabled?: boolean
   onEnabledChange?: (enabled: boolean) => void
@@ -58,6 +54,10 @@ function SunIcon() {
 export default function SunControl({
   sunLongitudeDeg,
   onLongitudeChange,
+  seasonDeg,
+  onSeasonChange,
+  solarDeclination,
+  axialTiltDeg,
   enabled = true,
   onEnabledChange,
 }: SunControlProps) {
@@ -70,6 +70,9 @@ export default function SunControl({
 
   const hasToggle = onEnabledChange != null
   const active = hasToggle ? enabled : true
+  const absoluteDeclination = Math.abs(solarDeclination)
+  const declination = absoluteDeclination < 0.05 ? `0° (${t('sun.equator')})`
+    : `${absoluteDeclination.toFixed(1)}°${solarDeclination > 0 ? 'N' : 'S'}`
 
   return (
     <div className="space-y-3">
@@ -106,7 +109,7 @@ export default function SunControl({
         )}
       </div>
 
-      <div className={active ? '' : 'opacity-40'}>
+      <div className={`space-y-3 ${active ? '' : 'opacity-40'}`}>
         {/* Time of day (sun longitude) */}
         <div className="space-y-1">
           <div className="flex items-center justify-between">
@@ -122,6 +125,7 @@ export default function SunControl({
             value={sunLongitudeDeg}
             onChange={handleLongitude}
             disabled={!active}
+            aria-label={t('sun.timeOfDay')}
             className="w-full h-1 accent-amber-400 cursor-pointer disabled:cursor-not-allowed"
             title={t('sun.longitudeTitle')}
           />
@@ -133,6 +137,19 @@ export default function SunControl({
             <span>360°</span>
           </div>
         </div>
+        <label className="block space-y-1">
+          <span className="flex flex-wrap items-baseline justify-between gap-x-2 text-[10px] text-gray-400">
+            <span>{t('sun.seasonLabel')}</span>
+            <span className="font-mono tabular-nums text-amber-300/80">{t('sun.declination', { declination })}</span>
+          </span>
+          <input type="range" min={0} max={360} value={seasonDeg} onChange={event => onSeasonChange(Number(event.target.value))}
+            disabled={!active || axialTiltDeg === 0} aria-label={t('sun.seasonLabel')}
+            className="w-full h-1 accent-amber-400 cursor-pointer disabled:cursor-not-allowed" />
+          <span aria-hidden="true" className="flex justify-between text-[9px] text-gray-500">
+            <span>{t('sun.springEquinox')}</span><span>{t('sun.summerSolstice')}</span>
+            <span>{t('sun.autumnEquinox')}</span><span>{t('sun.winterSolstice')}</span><span>{t('sun.springEquinox')}</span>
+          </span>
+        </label>
       </div>
     </div>
   )

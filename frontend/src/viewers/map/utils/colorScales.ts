@@ -64,6 +64,30 @@ export const TEMPERATURE_SCALE: ColorStop[] = palettesJson.continuous.temperatur
 /** Annual precipitation sequential scale (ColorBrewer YlGnBu, log-normalised). */
 export const PRECIP_SCALE: ColorStop[] = palettesJson.continuous.precip as ColorStop[]
 export const TEMPERATURE_LIMIT_C = 40
+
+export function sequentialColor(value: number, scale: ColorStop[]): [number, number, number] {
+  const clamped = Math.max(0, Math.min(1, value))
+  for (let index = scale.length - 1; index >= 0; index--) {
+    const start = scale[index]
+    if (!(clamped >= start.value)) continue
+    const end = scale[index + 1]
+    if (!end) return start.color
+    const fraction = (clamped - start.value) / (end.value - start.value)
+    const channel = (index: 0 | 1 | 2) =>
+      Math.round(start.color[index] + (end.color[index] - start.color[index]) * fraction)
+    return [channel(0), channel(1), channel(2)]
+  }
+  return scale[0].color
+}
+
+export function temperatureColor(value: number) {
+  return sequentialColor((value / TEMPERATURE_LIMIT_C + 1) / 2, TEMPERATURE_SCALE)
+}
+
+export function scaleGradient(scale: ColorStop[]) {
+  return `linear-gradient(to right, ${scale.map(({ color, value }) =>
+    `rgb(${color.join(',')}) ${value * 100}%`).join(', ')})`
+}
 export const PRECIP_TOTAL_LIMIT_MM = 30_000
 export const PRECIP_WINDOW_LIMIT_MM = 2_500
 

@@ -23,11 +23,12 @@ import ClimateLegend from '../components/map/ClimateLegend'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapMinimap from '../components/map/MapMinimap'
 import SunControl from '../components/map/SunControl'
+import { canDownscale } from '../viewers/map/climateDownscale'
 import { MapTimeControl } from '../components/map/TimeControl'
 import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
 import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
-import { MapTemperatureLegend, trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
+import { trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
 import { readRegionBoundary, readRegionWindow, REGION_WINDOW_PARAM } from '../viewers/map/regionWindow'
 import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
 import { useMapTemperatureTrial } from '../viewers/map/useTemperatureTrialPreview'
@@ -48,17 +49,15 @@ export default function MapViewerPage() {
   const {
     selectedBranch, setSelectedBranch,
     cleanMode, setCleanMode,
-    timelapsePlaying, setTimelapsePlaying, monthMs, setMonthMs,
-    sunSweep, setSunSweep,
     layerState, setLayerState, activeMainLayer,
-    monthlyMode, handleMonthlyModeChange, monthlyField,
+    monthlyMode, handleMonthlyModeChange, monthlyField, selectMonth, displayingMonthly, downscale, setDownscale,
     particleMode, setParticleMode,
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
     selectedPlanet, mapPlanets, meta, bodyByName, currentPlanetName, planetRadiusM,
     worldPlanetsError, platesError,
     elevation, cvtMesh, voronoiCells, awaitingBuild, terrainSource, setTerrainSource,
-    monthlyThematic, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
+    monthlyThematic, koppenDownscale, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, hoveredCell, handleCellHover, selectedCells,
     selectCell, clearSelection,
     hoveredCellData, inspectorCell, selectedCellData, selectedCellObjects,
@@ -80,7 +79,6 @@ export default function MapViewerPage() {
   const trialFromClimate = searchParams.get('trial') === 'climate'
   const trialReady = Boolean(worldName && selectedPlanet && meta && elevation)
   const trialOpen = trial.open
-  const trialLegend = !cleanMode && display.texture && trial.preview && <MapTemperatureLegend preview={trial.preview} />
   const openTrial = () => {
     setLeftPanelOpen(false)
     trial.openPanel()
@@ -114,19 +112,26 @@ export default function MapViewerPage() {
     backSearch.set('tab', 'climate')
     if (selectedPlanet) backSearch.set('planet', selectedPlanet)
   }
-  const inspection = <MapCellInspector trialMode={trialActive} trial={trial.preview} cursor={cursor}
+  const inspection = <div className="space-y-3">
+    <div className="border-b border-space-border pb-3">
+      <MapTimeControl mesh={cvtMesh} trialMode={trialActive} preview={trial.preview}
+        layer={trialActive ? display.trialInspectionLayer : vs.activeColorMode}
+        monthlyData={monthlyData} loading={monthlyLoading} monthlyMode={monthlyMode}
+        onMonthlyModeChange={handleMonthlyModeChange} monthIndex={monthlyMonth} onSelectMonth={selectMonth} />
+    </div>
+    <MapCellInspector trialMode={trialActive} trial={trial.preview} cursor={cursor}
     cell={inspectorCell} cvtMesh={cvtMesh} planetName={currentPlanetName} selectedCells={selectedCellObjects}
     activeColorMode={trialActive ? display.texture ? 'temperature' : 'terrain' : vs.activeColorMode} monthlyMode={monthlyMode} monthIndex={monthlyMonth}
     monthlyData={monthlyData} yearlyData={yearlyData} isEarth={worldName === 'earth'} />
+  </div>
   const layers = <MapLayerPanel state={display.state} onChange={display.onChange} available={display.available} isEarth={worldName === 'earth'}
     monthlyMode={trialActive ? typeof trial.preview?.period === 'number' : monthlyMode} monthlyData={trialActive ? null : monthlyData}
     temperaturePeriodLabel={typeof trial.preview?.period === 'number' ? trial.preview.label : undefined}
     monthIndex={monthlyMonth} onMonthlyModeChange={handleMonthlyModeChange}
-    particleMode={particleMode} onParticleModeChange={setParticleMode}
-    worldTime={<MapTimeControl trialMode={trialActive} preview={trial.preview} monthlyMode={monthlyMode} monthlyData={monthlyData} onMonthlyModeChange={handleMonthlyModeChange}
-      seasonDeg={seasonDeg} onSeasonChange={setSeasonDeg} axialTiltDeg={axialTiltDeg}
-      playing={timelapsePlaying} onPlayingChange={setTimelapsePlaying} monthMs={monthMs} onMonthMsChange={setMonthMs}
-      sunSweep={sunSweep} onSunSweepChange={setSunSweep} />} />
+    detail={{ downscaled: downscale && (trialActive || activeMainLayer !== 'koppen' || koppenDownscale.available),
+      onChange: setDownscale, pending: koppenDownscale.pending, available: trialActive
+      ? display.state.layers.temperature > 0 && Boolean(trial.preview) : koppenDownscale.available || (Boolean(cvtMesh) && canDownscale(activeMainLayer)) }}
+    particleMode={particleMode} onParticleModeChange={setParticleMode} />
 
   if (!worldName) {
     return <div className="text-center py-12 text-gray-400">{t('status.noWorld')}</div>
@@ -140,6 +145,13 @@ export default function MapViewerPage() {
       <MapWorkbenchToolbar title={currentPlanetName ?? selectedPlanet ?? t('title.mapFallback')} view="map"
         backTo={`/worlds/${worldName}${backSearch.size ? `?${backSearch}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/globe/${selectedPlanet}${globeQS}` : undefined}
+        regionControls={selectedPlanet && (elevation || cvtMesh) ? (
+          <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
+            branch={selectedBranch} radiusKm={planetRadiusM / 1000}
+            modeControl={trialReady ? { mode: trial.mode, onChange: trial.selectMode } : undefined}
+            onMoveToRegion={() => setRegionMoveRevision((revision) => revision + 1)}
+            selectedPoint={selectedCells.size === 1 ? selectedCellData : null} />
+        ) : undefined}
         trialPanel={trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trialOpen, onToggle: trialOpen ? trial.closePanel : openTrial } : undefined}
         layersOpen={leftPanelOpen && !trialOpen} onToggleLayers={() => {
           if (trialOpen) trial.closePanel()
@@ -188,16 +200,9 @@ export default function MapViewerPage() {
       {awaitingBuild && !cleanMode && (
         <AwaitingBuildBanner world={worldName} branch={selectedBranch} />
       )}
-      {!cleanMode && selectedPlanet && (elevation || cvtMesh) && (
-        <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
-          branch={selectedBranch} radiusKm={planetRadiusM / 1000}
-          modeControl={trialReady ? { mode: trial.mode, onChange: trial.selectMode } : undefined}
-          onMoveToRegion={() => setRegionMoveRevision((revision) => revision + 1)}
-          selectedPoint={selectedCells.size === 1 ? selectedCellData : null} />
-      )}
       {!cleanMode && !trialActive && cvtMesh && (
         <ClimateLegend layer={activeMainLayer} mesh={cvtMesh} monthlyMode={monthlyMode}
-          monthlyData={monthlyThematic ? monthlyData : null} monthlyLoading={monthlyLoading}
+          monthlyData={displayingMonthly ? monthlyData : null} monthlyLoading={monthlyMode && monthlyLoading}
           monthIndex={monthlyMonth} yearlyData={yearlyData} />
       )}
       {/* Error banner */}
@@ -241,6 +246,7 @@ export default function MapViewerPage() {
                     cvtMesh={cvtMesh}
                     layers={display.state.layers}
                     trialTemperature={display.texture}
+                    trialTerrain={trial.preview?.terrain}
 
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
@@ -258,6 +264,7 @@ export default function MapViewerPage() {
                     monthlyPressure={monthlyField === 'pressure' ? monthlyThematic : null}
                     monthlyPressureError={monthlyField === 'pressureError' ? monthlyThematic : null}
                     monthlySlp={monthlyField === 'slp' ? monthlyThematic : null}
+                    koppenTexture={koppenDownscale.texture}
                     uccTexture={uccTexture}
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
@@ -268,7 +275,6 @@ export default function MapViewerPage() {
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
-                  {trialLegend}
                 </div>
                 {!cleanMode && (
                   <MobileCellCard
@@ -309,6 +315,7 @@ export default function MapViewerPage() {
                 <SunControl
                   sunLongitudeDeg={sunLongitudeDeg}
                   onLongitudeChange={setSunLongitudeDeg}
+                  seasonDeg={seasonDeg} onSeasonChange={setSeasonDeg} solarDeclination={solarDeclination} axialTiltDeg={axialTiltDeg}
                   enabled={dayNightEnabled}
                   onEnabledChange={setDayNightEnabled}
                 />
@@ -332,6 +339,7 @@ export default function MapViewerPage() {
               <SunControl
                 sunLongitudeDeg={sunLongitudeDeg}
                 onLongitudeChange={setSunLongitudeDeg}
+                seasonDeg={seasonDeg} onSeasonChange={setSeasonDeg} solarDeclination={solarDeclination} axialTiltDeg={axialTiltDeg}
                 enabled={dayNightEnabled}
                 onEnabledChange={setDayNightEnabled}
               />
@@ -352,6 +360,7 @@ export default function MapViewerPage() {
                     cvtMesh={cvtMesh}
                     layers={display.state.layers}
                     trialTemperature={display.texture}
+                    trialTerrain={trial.preview?.terrain}
 
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
@@ -370,6 +379,7 @@ export default function MapViewerPage() {
                     monthlyPressureError={monthlyField === 'pressureError' ? monthlyThematic : null}
                     monthlySlp={monthlyField === 'slp' ? monthlyThematic : null}
                     uccTexture={uccTexture}
+                    koppenTexture={koppenDownscale.texture}
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
                     month={monthlyMonth}
@@ -379,7 +389,6 @@ export default function MapViewerPage() {
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
-                  {trialLegend}
 
                   {/* Recording control — float in the map view's bottom-right
                       corner.  Fully hidden in clean mode (zero UI while

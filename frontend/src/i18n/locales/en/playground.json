@@ -1,17 +1,8 @@
 {
-  "title": "Browser climate lab",
   "badge": "Experimental",
-  "subtitle": "Run a climate experiment with a sample or your own elevation map. The current model estimates annual and monthly temperatures.",
-  "back": "← Back to worlds",
   "trial": {
     "title": "World climate lab",
-    "subtitle": "Start with this world's elevation and settings. The current model estimates annual and monthly temperatures without changing the world's climate layers.",
     "root": "Main world",
-    "backMap": "Back to map",
-    "backClimate": "Back to climate",
-    "backHelp": "Back to help",
-    "sourceHelp": "The lab resamples this world's global elevation for a faster run. You can substitute another global heightmap.",
-    "mapSourceHelp": "The lab uses the whole planet's elevation, not just the area selected on the map. You can substitute another global heightmap.",
     "inlineSourceHelp": "Uses global elevation from this branch, regardless of the map selection.",
     "draftSourceHelp": "Uses the global elevation stored in this draft, even if the world's elevation has changed.",
     "draftRecovery": "The source map is unavailable. You can still rerun the saved draft with its own elevation and settings here.",
@@ -21,9 +12,7 @@
     "cellSample": "Sample at the center of world cell #{{id}}.",
     "cursorSample": "Sample at the cursor position.",
     "collapse": "Collapse",
-    "previewLabel": "Temperature trial · {{period}}",
-    "stalePreview": "Previous settings",
-    "defaults": "Some settings are missing from the world data and use Earth sample defaults. Check the inputs before running.",
+    "defaults": "Some settings are missing from the world data and use Earth defaults. Check the inputs before running.",
     "saving": "Saving climate draft…",
     "saved": "Saved in this browser",
     "save": "Save climate draft",
@@ -35,7 +24,6 @@
   "params": {
     "title": "Climate settings",
     "advanced": "Advanced settings",
-    "presetEarth": "Earth",
     "luminosity": "Stellar luminosity (L☉)",
     "distance": "Orbital semi-major axis (AU)",
     "albedo": "Bond albedo",
@@ -48,19 +36,10 @@
     "elevMax": "Elevation at gray 255 (m)",
     "variableLapse": "Temperature-dependent moist lapse rate"
   },
-  "heightmap": {
-    "title": "Choose an elevation source",
-    "start": "A sample loads both the elevation map and its climate settings.",
-    "drop": "Choose or drop your own elevation map",
-    "hint": "PNG, JPEG, and WebP are supported. The image is resampled to 180 × 90. Grayscale values map to the elevation range in advanced settings.",
-    "sampleEarth": "Earth sample",
-    "sampleNacrea": "Nacrea sample"
-  },
   "action": {
     "run": "Run climate",
     "recompute": "Run again",
     "retryRun": "Retry run",
-    "retrySample": "Retry loading sample",
     "loadingInput": "Reading the elevation map…",
     "loadingEngine": "Loading and starting the browser runtime…",
     "computing": "Running climate experiment…"
@@ -86,8 +65,6 @@
   "error": {
     "world": "Could not load this world's global elevation. Check that the chosen planet and branch have an elevation map.",
     "draft": "Could not open this climate draft. It may have been deleted or saved in another browser.",
-    "sample": "The elevation sample could not load. Retry or choose your own elevation map.",
-    "file": "This elevation map could not be read. Choose a valid PNG, JPEG, or WebP file.",
     "runtime": "The browser runtime could not start. Retry, or open the technical details if it still fails.",
     "compute": "The climate experiment did not finish. Check your settings and retry.",
     "params": "Enter valid values and make sure the minimum elevation is below the maximum.",

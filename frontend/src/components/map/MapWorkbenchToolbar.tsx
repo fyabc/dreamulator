@@ -7,11 +7,12 @@ import MapHelpLink from './MapHelpLink'
 const layerPanelId = 'map-layer-panel'
 const layerButtonId = 'map-layer-button'
 
-export function MapWorkbenchToolbar({ title, view, backTo, switchTo, trialPanel, layersOpen, onToggleLayers, children }: {
+export function MapWorkbenchToolbar({ title, view, backTo, switchTo, regionControls, trialPanel, layersOpen, onToggleLayers, children }: {
   title: string
   view: 'map' | 'globe'
   backTo: string
   switchTo?: string
+  regionControls?: ReactNode
   trialPanel?: { id: string; buttonId: string; open: boolean; onToggle: () => void }
   layersOpen: boolean
   onToggleLayers?: () => void
@@ -22,7 +23,7 @@ export function MapWorkbenchToolbar({ title, view, backTo, switchTo, trialPanel,
   const toolsButton = useRef<HTMLElement>(null)
 
   return (
-    <header className="relative z-30 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 border-b border-space-border bg-space-panel px-2 py-1.5 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-3 lg:px-4 lg:py-2">
+    <header className="relative z-30 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 border-b border-space-border bg-space-panel px-2 py-1.5 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:gap-3 lg:px-4 lg:py-2 2xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
       <div className="flex min-w-0 items-center gap-2">
         <Link to={backTo} className="inline-flex size-11 shrink-0 items-center justify-center rounded text-gray-300 hover:bg-space-surface"
           aria-label={t('action.back')} title={t('action.back')}><AtlasIcon name="back" /></Link>
@@ -31,17 +32,21 @@ export function MapWorkbenchToolbar({ title, view, backTo, switchTo, trialPanel,
           <p className="hidden truncate text-xs text-gray-400 lg:block">{t(view === 'map' ? 'title.viewer' : 'title.globe')}</p>
         </div>
       </div>
-      {switchTo && (
-        <nav aria-label={t('workbench.views')} className="col-start-1 row-start-2 inline-flex w-fit items-center gap-0.5 rounded border border-space-border bg-space-bg p-0.5 lg:col-start-2 lg:row-start-1">
-          {(['map', 'globe'] as const).map((item) => {
-            const label = t(item === 'map' ? 'workbench.flat' : 'workbench.globe')
-            const dimension = item === 'map' ? '2D' : '3D'
-            const contents = <>{label} <span className="font-mono text-[10px]">{dimension}</span></>
-            return view === item
-              ? <span key={item} aria-current="page" className="inline-flex min-h-10 items-center gap-1 rounded bg-space-surface px-2.5 text-sm font-semibold text-neon-cyan lg:min-h-9">{contents}</span>
-              : <Link key={item} to={switchTo} className="inline-flex min-h-10 items-center gap-1 rounded px-2.5 text-sm text-gray-300 hover:bg-space-surface lg:min-h-9">{contents}</Link>
-          })}
-        </nav>
+      {(switchTo || regionControls) && (
+        <div className="col-span-2 col-start-1 row-start-2 flex items-center gap-1.5 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:gap-2">
+          {switchTo && <nav aria-label={t('workbench.views')} className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded border border-space-border bg-space-bg p-0.5">
+            {(['map', 'globe'] as const).map((item) => {
+              const label = t(item === 'map' ? 'workbench.flat' : 'workbench.globe')
+              const dimension = item === 'map' ? '2D' : '3D'
+              const contents = <>{label} <span className="max-[375px]:sr-only font-mono text-[10px]">{dimension}</span></>
+              const classes = 'inline-flex min-h-10 items-center gap-1 rounded px-2 text-xs lg:min-h-9 lg:px-2.5 lg:text-sm'
+              return view === item
+                ? <span key={item} aria-current="page" className={`${classes} bg-space-surface font-semibold text-neon-cyan`}>{contents}</span>
+                : <Link key={item} to={switchTo} className={`${classes} text-gray-300 hover:bg-space-surface`}>{contents}</Link>
+            })}
+          </nav>}
+          {regionControls}
+        </div>
       )}
       <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 lg:col-start-3 lg:gap-2">
         {trialPanel && <button id={trialPanel.buttonId} type="button" onClick={trialPanel.onToggle}

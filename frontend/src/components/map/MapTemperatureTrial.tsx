@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { TEMPERATURE_GRADIENT, type TemperaturePreview } from '../../playground/temperaturePreview'
+import type { TemperaturePreview } from '../../playground/temperaturePreview'
 
 const TemperatureLab = lazy(() => import('../../playground/TemperatureLab'))
 export const trialPanelId = 'map-climate-trial'
@@ -38,17 +38,5 @@ export function MapTemperatureTrial({ open, onClose, search, onPreview, onShow }
         </Suspense>
       </div>
     </section>
-  )
-}
-
-export function MapTemperatureLegend({ preview }: { preview: TemperaturePreview }) {
-  const { t } = useTranslation('playground')
-  return (
-    <div className="absolute left-2 top-2 z-20 max-w-[calc(100%_-_1rem)] rounded border border-space-border bg-space-panel px-2.5 py-1.5 shadow-md">
-      <p role="status" className="mb-1 text-xs font-medium text-amber-200">{t('trial.previewLabel', { period: preview.label })}{preview.stale ? ` · ${t('trial.stalePreview')}` : ''}</p>
-      <div className="flex items-center gap-2 text-[10px] text-gray-300">
-        <span>−40 °C</span><div className="h-1.5 flex-1 rounded" style={{ background: TEMPERATURE_GRADIENT }} /><span>+40 °C</span>
-      </div>
-    </div>
   )
 }

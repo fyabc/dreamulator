@@ -25,6 +25,7 @@ import { climateWindowLabel } from './climateTime'
 import { GRID_H, GRID_W } from '../../playground/temperatureDraft'
 import { sampleTemperature, summarizeTemperature, type TemperaturePreview } from '../../playground/temperaturePreview'
 import { trialTerrainCell, type InspectedCell } from '../../viewers/map/trialInspection'
+import AtlasIcon, { type AtlasIconName } from '../AtlasIcon'
 
 interface MapCellInspectorProps {
   trial?: TemperaturePreview | null
@@ -382,7 +383,7 @@ function FieldGroup({
   defaultOpen = false,
   children,
 }: {
-  icon: string
+  icon: AtlasIconName
   label: string
   defaultOpen?: boolean
   children: ReactNode
@@ -393,10 +394,11 @@ function FieldGroup({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
         className="flex w-full items-center gap-1.5 py-0.5 text-xs text-gray-300 hover:text-white select-none"
       >
         <Chevron open={open} />
-        <span className="text-[13px] leading-none">{icon}</span>
+        <AtlasIcon name={icon} className="size-3.5 text-gray-400" />
         <span className="font-medium">{label}</span>
       </button>
       {open && <dl className="mt-1 ml-4 space-y-1 text-xs">{children}</dl>}
@@ -606,7 +608,7 @@ function CellDetails({
       </div>
 
       <div className="space-y-1">
-        <FieldGroup icon="🧭" label={t('inspector.position')} defaultOpen>
+        <FieldGroup icon="compass" label={t('inspector.position')} defaultOpen>
           <div className="flex justify-between">
             <dt className="text-gray-500">{t('inspector.longitude')}</dt>
             <dd className="font-mono">{cell.lon.toFixed(2)}°</dd>
@@ -634,7 +636,7 @@ function CellDetails({
 
         {hasGeology && (
           <FieldGroup
-            icon="🪨"
+            icon="geology"
             label={t('inspector.geology')}
             key={`geology-${displayMode}-${highlightGroup}`}
             defaultOpen={displayMode === 'full' || highlightGroup === 'geology'}
@@ -741,7 +743,7 @@ function CellDetails({
 
         {hasClimate && (
           <FieldGroup
-            icon="🌦️"
+            icon="climate"
             label={hasMonthly || temperature?.window ? `${t('inspector.climate')} · ${temperature?.window ?? monthName}` : t('inspector.climate')}
             key={`climate-${displayMode}-${highlightGroup}`}
             defaultOpen={displayMode === 'full' || highlightGroup === 'climate'}
@@ -833,7 +835,7 @@ function CellDetails({
         {experimental ? (
           hasYearly ? (
           <FieldGroup
-            icon="📊"
+            icon="chart"
             label={t('inspector.yearlyClimate')}
             key={`yearly-${displayMode}-${highlightGroup}`}
             defaultOpen={displayMode === 'full' || highlightGroup === 'climate'}
@@ -961,7 +963,7 @@ function CellDetails({
 
         {devMode && isEarth && (
           <FieldGroup
-            icon="🧪"
+            icon="flask"
             label={t('inspector.dev')}
             key={`dev-${displayMode}-${highlightGroup}`}
             defaultOpen={displayMode === 'full' || highlightGroup === 'dev'}
@@ -1025,7 +1027,7 @@ function CellDetails({
 
         {hasEcology && (
           <FieldGroup
-            icon="🌿"
+            icon="leaf"
             label={t('inspector.ecology')}
             key={`ecology-${displayMode}-${highlightGroup}`}
             defaultOpen={displayMode === 'full' || highlightGroup === 'ecology'}
@@ -1067,7 +1069,7 @@ function CellDetails({
 
         {hasCivilization && (
           <FieldGroup
-            icon="🏛️"
+            icon="temple"
             label={t('inspector.civilization')}
             key={`civilization-${displayMode}-${highlightGroup}`}
             defaultOpen={displayMode === 'full' || highlightGroup === 'civilization'}
@@ -1355,7 +1357,10 @@ function WorldStats({ cvtMesh, planetName, yearlyData, trialMode, trial }: {
       {cvtMesh && <PlanetSummary cvtMesh={cvtMesh} planetName={planetName} terrainOnly={trialMode} />}
 
       <section>
-        <h4 className="text-xs font-semibold text-gray-400 mb-1.5">🌦️ {t('inspector.climate')}{typeof trial?.period === 'number' ? ` · ${trial.label}` : ''}</h4>
+        <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-400">
+          <AtlasIcon name="climate" className="size-3.5" />
+          {t('inspector.climate')}{typeof trial?.period === 'number' ? ` · ${trial.label}` : ''}
+        </h4>
         <dl className="space-y-1 text-xs">
           <div className="flex justify-between">
             <dt className="text-gray-500">{t('inspector.globalTemp')}</dt>
@@ -1387,7 +1392,9 @@ function WorldStats({ cvtMesh, planetName, yearlyData, trialMode, trial }: {
       </section>
 
       <section>
-        <h4 className="text-xs font-semibold text-gray-400 mb-1.5">🌿 {t('inspector.ecology')}</h4>
+        <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-400">
+          <AtlasIcon name="leaf" className="size-3.5" />{t('inspector.ecology')}
+        </h4>
         <dl className="space-y-1 text-xs">
           <div className="flex justify-between">
             <dt className="text-gray-500">{t('inspector.avgNpp')}</dt>
@@ -1493,7 +1500,7 @@ export default function MapCellInspector({
           temperature={trial ? { value: sampleTemperature(trial.field, cell), window } : undefined}
         />
       ) : trial && cursor ? (
-        <FieldGroup icon="🌦️" label={window ? `${t('inspector.climate')} · ${window}` : t('inspector.climate')} defaultOpen>
+        <FieldGroup icon="climate" label={window ? `${t('inspector.climate')} · ${window}` : t('inspector.climate')} defaultOpen>
           <TemperatureRow value={sampleTemperature(trial.field, cursor)} monthly={Boolean(window)} hint={t('playground:trial.cursorSample')} />
         </FieldGroup>
       ) : (

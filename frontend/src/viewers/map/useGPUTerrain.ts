@@ -150,6 +150,7 @@ interface UseGPUTerrainOptions {
   monthlyPressureError?: THREE.DataTexture | null
   /** Monthly absolute SLP texture (obs root only); annual slp is the fallback. */
   monthlySlp?: THREE.DataTexture | null
+  koppenTexture?: THREE.DataTexture | null
   /** UCC classification thematic texture (UCC-01 step 4a), baked by the caller
    *  from `bakeUccLayer`.  Null while the yearly file is missing or predates
    *  the classification fields — the layer then degrades to transparent. */
@@ -158,7 +159,6 @@ interface UseGPUTerrainOptions {
    *  UV u=0 maps to lon=+180°, mirroring the equirectangular convention).
    *  Set false for PlaneGeometry (2D map, u=0 = left = lon=-180°). */
   flipHorizontal?: boolean
-  trialTemperature?: THREE.DataTexture | null
   /** Subsolar longitude in radians — drives the day/night overlay. */
   sunLonRad?: number
   /** Solar declination in radians — drives the day/night overlay. */
@@ -208,8 +208,8 @@ export default function useGPUTerrain({
   monthlyPressure = null,
   monthlyPressureError = null,
   monthlySlp = null,
+  koppenTexture = null,
   uccTexture = null,
-  trialTemperature = null,
   flipHorizontal = false,
   sunLonRad = 0,
   sunDecRad = 0,
@@ -225,12 +225,17 @@ export default function useGPUTerrain({
   }, [elevation, width, height, seaLevel, elevMinM, elevMaxM,
       waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight])
 
+  const overrideWidth = Math.max(monthlyTemperature?.image.width ?? 0, monthlyPrecipitation?.image.width ?? 0,
+    monthlyPressure?.image.width ?? 0, monthlyPressureError?.image.width ?? 0, monthlySlp?.image.width ?? 0, koppenTexture?.image.width ?? 0)
+  const overrideHeight = Math.max(monthlyTemperature?.image.height ?? 0, monthlyPrecipitation?.image.height ?? 0,
+    monthlyPressure?.image.height ?? 0, monthlyPressureError?.image.height ?? 0, monthlySlp?.image.height ?? 0, koppenTexture?.image.height ?? 0)
+
   // --- Composite target + materials (one per bake/size) ---
   const composite = useMemo<CompositeState | null>(() => {
     if (!baked) return null
 
     const { width: textureWidth, height: textureHeight } = baked.terrainThematic.image
-    const target = new THREE.WebGLRenderTarget(textureWidth, textureHeight, {
+    const target = new THREE.WebGLRenderTarget(Math.max(textureWidth, overrideWidth), Math.max(textureHeight, overrideHeight), {
       depthBuffer: false,
       stencilBuffer: false,
     })
@@ -285,7 +290,7 @@ export default function useGPUTerrain({
 
     return { target, compMat, displayMat, scene, camera, quad }
     // Sun intentionally excluded from deps: updated via the effect below.
-  }, [baked])
+  }, [baked, overrideWidth, overrideHeight])
 
   // --- Layer-derived state (recomputed on every opacity/base change) ---
   // needsFboForGlobe: substantive overlays that require the FBO composite.
@@ -327,7 +332,7 @@ export default function useGPUTerrain({
     const thematicLayers: [number | undefined, THREE.DataTexture][] = [
       [layers.terrain, baked.terrainThematic],
       [layers.landsea, baked.landseaThematic],
-      [layers.koppen, baked.koppen],
+      [layers.koppen, koppenTexture ?? baked.koppen],
       [layers.ucc, uccTexture ?? emptyTexture()],
       [layers.biomes, baked.biomes],
       [layers.npp, baked.npp],
@@ -359,23 +364,23 @@ export default function useGPUTerrain({
     u.u_featureOp.value = layers.boundaries ?? 0
     u.u_coastlinesOp.value = coastOpacity
     const d = composite.displayMat.uniforms
-    d.u_useComposite.value = overlayActive && !trialTemperature ? 1 : 0
-    d.u_directBase.value = trialTemperature ?? (coastOpacity > 0 ? baked.terrainWithCoastlines : baked.terrainThematic)
+    d.u_useComposite.value = overlayActive ? 1 : 0
+    d.u_directBase.value = coastOpacity > 0 ? baked.terrainWithCoastlines : baked.terrainThematic
     // Minification: NearestFilter when cell layers are visible (crisp cell edges
     // when zoomed out), LinearFilter for smooth terrain-only view.
     // Magnification: always LinearFilter — smooth interpolation when zoomed in,
     // eliminating the "pixel block" look at high zoom levels.
     composite.target.texture.minFilter = overlayActive ? THREE.NearestFilter : THREE.LinearFilter
     composite.target.texture.magFilter = THREE.LinearFilter
-  }, [composite, baked, layers, overlayActive, coastOpacity, monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError, monthlySlp, uccTexture, trialTemperature])
+  }, [composite, baked, layers, overlayActive, coastOpacity, monthlyTemperature, monthlyPrecipitation, monthlyPressure, monthlyPressureError, monthlySlp, koppenTexture, uccTexture])
 
   // --- Sun uniforms on the display material (smooth slider, no re-composite) ---
   useEffect(() => {
     if (!composite) return
     composite.displayMat.uniforms.u_sunLonRad.value = sunLonRad
     composite.displayMat.uniforms.u_sunDecRad.value = sunDecRad
-    composite.displayMat.uniforms.u_dayNight.value = trialTemperature ? 0 : dayNight
-  }, [composite, sunLonRad, sunDecRad, dayNight, trialTemperature])
+    composite.displayMat.uniforms.u_dayNight.value = dayNight
+  }, [composite, sunLonRad, sunDecRad, dayNight])
 
   // --- Composite pass — consumers call it once per frame, before the main render. ---
   // Re-composites only while overlay layers are active (one fullscreen quad,
@@ -385,7 +390,7 @@ export default function useGPUTerrain({
   // by one would leave the other's framebuffer stale.
   const renderComposite = useCallback(
     (renderer: THREE.WebGLRenderer) => {
-      if (!composite || !overlayActive || trialTemperature) return
+      if (!composite || !overlayActive) return
       // The composite pass is just layer blending, not a final render.  Disable
       // tone mapping so the composite blends the raw layer colours unchanged;
       // colour space is handled symmetrically by the sRGB target + sRGB sources.
@@ -399,7 +404,7 @@ export default function useGPUTerrain({
       renderer.toneMapping = prevTM
       renderer.toneMappingExposure = prevExp
     },
-    [composite, overlayActive, trialTemperature],
+    [composite, overlayActive],
   )
 
   /** The texture consumers (3D globe) should sample: the FBO

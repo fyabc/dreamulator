@@ -1,13 +1,5 @@
 /**
- * TemperatureLab — shared browser temperature experiment controls.
- *
- * Gate D of the Pyodide spike: load the engine's pure temperature functions in
- * the browser, take a heightmap (bundled Nacrea sample or a dropped PNG), and
- * render the annual / monthly temperature field on a regular lon/lat grid.
- *
- * Scope is deliberately narrow: no CVT mesh, no precipitation/wind/ocean,
- * no Köppen.  The page is a UI prototype for the eventual "upload heightmap →
- * climate layer" route, not a production world builder.
+ * TemperatureLab — browser temperature controls for global maps and draft recovery.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -17,73 +9,26 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { getProject, projectsKey, saveTemperatureDraft, worldDataPath } from '../projects/projectStore'
 
-import earthSample from './earth-180x90.json'
-import earthHeightmap from './earth-180x90.png'
-import nacreaSample from './nacrea-180x90.json'
-import nacreaHeightmap from './nacrea-180x90.png'
 import type { KernelResult, TemperatureResponse } from './temperature.worker'
 import { temperatureRequest } from './temperatureRequest'
 import { EARTH_PARAMS, GRID_W, GRID_H, MODEL_JANUARY_INDEX, isTemperatureParams, readTemperatureGrid,
-  temperatureTrialReturnPath, type PlanetParams } from './temperatureDraft'
+  type PlanetParams } from './temperatureDraft'
 import { loadTemperatureElevation, temperatureInputCatalog, worldTemperatureParams } from './worldTemperature'
-import { TEMPERATURE_GRADIENT, temperatureColor, type TemperaturePreview } from './temperaturePreview'
+import { TEMPERATURE_GRADIENT, type TemperaturePreview, type TrialTerrain } from './temperaturePreview'
+import { temperatureColor } from '../viewers/map/utils/colorScales'
 
 const CANVAS_W = 900
 const CANVAS_H = 450
 
-type Status = 'idle' | 'sample' | 'loading' | 'running'
+type Status = 'idle' | 'input' | 'loading' | 'running'
 type MonthSelection = 'annual' | number
-type Sample = 'earth' | 'nacrea'
-type LabError = { stage: 'sample' | 'world' | 'draft' | 'file' | 'runtime' | 'compute'; detail: string; sample?: Sample }
-
-const NACREA_PARAMS: PlanetParams = {
-  luminosity: 0.1227,
-  distanceAu: 0.3648,
-  albedo: 0.3,
-  greenhouseK: 35,
-  tiltDeg: 19.9,
-  yearDays: 99.8196,
-  rotationDays: 3.1336,
-  seaLevelM: 0,
-  elevMinM: -12116.5,
-  elevMaxM: 9000,
-  variableLapse: true,
-}
-
-const SAMPLES = {
-  earth: { meta: earthSample, image: earthHeightmap, preset: EARTH_PARAMS },
-  nacrea: { meta: nacreaSample, image: nacreaHeightmap, preset: NACREA_PARAMS },
-}
+type LabError = { stage: 'world' | 'draft' | 'runtime' | 'compute'; detail: string }
 
 function elevationFromGray(gray: Float32Array, p: PlanetParams): Float32Array {
   const span = p.elevMaxM - p.elevMinM
   const out = new Float32Array(gray.length)
   for (let i = 0; i < gray.length; i++) out[i] = p.elevMinM + gray[i] * span
   return out
-}
-
-async function decodeImageToGray(source: Blob | string): Promise<Float32Array> {
-  const blob = typeof source === 'string'
-    ? await fetch(source).then((r) => {
-        if (!r.ok) throw new Error(`heightmap fetch ${r.status}`)
-        return r.blob()
-      })
-    : source
-  const bitmap = await createImageBitmap(blob)
-  const canvas = document.createElement('canvas')
-  canvas.width = GRID_W
-  canvas.height = GRID_H
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('canvas 2d unavailable')
-  ctx.drawImage(bitmap, 0, 0, GRID_W, GRID_H)
-  const data = ctx.getImageData(0, 0, GRID_W, GRID_H).data
-  const gray = new Float32Array(GRID_W * GRID_H)
-  for (let i = 0; i < gray.length; i++) {
-    const o = i * 4
-    gray[i] = (data[o] + data[o + 1] + data[o + 2]) / 765
-  }
-  bitmap.close()
-  return gray
 }
 
 function NumberField({
@@ -117,14 +62,11 @@ interface MapLab {
   onShowPreview: () => void
 }
 
-export default function TemperatureLab({ search, map, recovery = false }: { search: URLSearchParams; map?: MapLab; recovery?: boolean }) {
+export default function TemperatureLab({ search, map }: { search: URLSearchParams; map?: MapLab }) {
   const world = search.get('world') || ''
   const planet = search.get('planet') || ''
   const branch = search.get('branch') || null
   const requestedDraft = search.get('draft') || null
-  const from = search.get('from')
-  const mapView = from === 'map' || from === 'globe' ? from : null
-  const contextual = !!world && !!planet
   const { t } = useTranslation('playground')
   const { t: tMap } = useTranslation('map')
   const queryClient = useQueryClient()
@@ -141,11 +83,8 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
   const [gray, setGray] = useState<Float32Array | null>(null)
   const [heightmapName, setHeightmapName] = useState<string>('')
   const [result, setResult] = useState<KernelResult | null>(null)
-  const [resultParams, setResultParams] = useState<PlanetParams | null>(null)
-  const [selectedSample, setSelectedSample] = useState<Sample | null>(null)
+  const [resultTerrain, setResultTerrain] = useState<TrialTerrain | null>(null)
   const [month, setMonth] = useState<MonthSelection>('annual')
-  const [dragging, setDragging] = useState(false)
-  const [bodyName, setBodyName] = useState(planet)
   const [usesDefaults, setUsesDefaults] = useState(false)
   const [draftId, setDraftId] = useState<string | null>(null)
   const [savedSnapshot, setSavedSnapshot] = useState<{ params: PlanetParams; gray: Float32Array } | null>(null)
@@ -153,7 +92,6 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
   const workerRef = useRef<Worker | null>(null)
   const inputRequest = useRef(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const save = useMutation({
     mutationFn: async ({ id, grid, values }: { id: string; grid: Float32Array; values: PlanetParams }) => {
@@ -168,36 +106,9 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
     },
   })
 
-  // --- Heightmap sample ----------------------------------------------------
-  const loadSample = useCallback(async (world: Sample) => {
-    const request = ++inputRequest.current
-    const { meta, image, preset } = SAMPLES[world]
-    setStatus('sample')
-    setError(null)
-    try {
-      const sampleGray = await decodeImageToGray(image)
-      if (request !== inputRequest.current) return
-      setGray(sampleGray)
-      setHeightmapName(meta.name)
-      setSelectedSample(world)
-      setParams({
-        ...preset,
-        elevMinM: Math.round(meta.elevation_min_m * 10) / 10,
-        elevMaxM: Math.round(meta.elevation_max_m * 10) / 10,
-        seaLevelM: Math.round(meta.sea_level_m * 10) / 10,
-      })
-      setResult(null)
-      setResultParams(null)
-    } catch (err) {
-      if (request === inputRequest.current) setError({ stage: 'sample', detail: String(err), sample: world })
-    } finally {
-      if (request === inputRequest.current) setStatus('idle')
-    }
-  }, [])
-
   const loadContext = useCallback(async () => {
     const request = ++inputRequest.current
-    setStatus('sample')
+    setStatus('input')
     setError(null)
     try {
       if (requestedDraft) {
@@ -223,7 +134,6 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
       }
       const settings = worldTemperatureParams(catalog, planet)
       if (request !== inputRequest.current) return
-      setBodyName(settings.name)
       setUsesDefaults(settings.defaults)
       setParams(settings.params)
       const [meta, blob] = await Promise.all([api.getMapMeta(world, planet, branch), api.getElevationBlob(world, planet, branch)])
@@ -240,14 +150,13 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
   }, [world, planet, branch, requestedDraft])
 
   useEffect(() => {
-    if (contextual) void loadContext()
-    else void loadSample('earth')
+    void loadContext()
     return () => {
       inputRequest.current += 1
       workerRef.current?.terminate()
       workerRef.current = null
     }
-  }, [contextual, loadContext, loadSample])
+  }, [loadContext])
 
   // --- Compute -------------------------------------------------------------
   const validParams = isTemperatureParams(params)
@@ -276,7 +185,7 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
           setStatus('running')
         } else if (data.type === 'result') {
           setResult(data.result)
-          setResultParams(params)
+          setResultTerrain({ elevation: gray, params })
           setMonth('annual')
           setStatus('idle')
           map?.onShowPreview()
@@ -314,9 +223,7 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
     const offCtx = off.getContext('2d')
     if (!offCtx) return
 
-    // Before the first temperature run, show the imported heightmap itself so
-    // the user can confirm which file is loaded.
-    if (!result || !resultParams) {
+    if (!result || !resultTerrain) {
       const img = offCtx.createImageData(GRID_W, GRID_H)
       for (let i = 0; i < gray.length; i++) {
         const v = Math.round(Math.max(0, Math.min(1, gray[i])) * 255)
@@ -346,7 +253,7 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
     ctx.drawImage(off, 0, 0, CANVAS_W, CANVAS_H)
 
     // Coastline: cell edges where the land mask changes.
-    const elev = elevationFromGray(gray, resultParams)
+    const elev = elevationFromGray(resultTerrain.elevation, resultTerrain.params)
     const sx = CANVAS_W / GRID_W
     const sy = CANVAS_H / GRID_H
     ctx.strokeStyle = 'rgba(8, 12, 22, 0.28)'
@@ -355,46 +262,19 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
     for (let y = 0; y < GRID_H; y++) {
       for (let x = 0; x < GRID_W; x++) {
         const i = y * GRID_W + x
-        const land = elev[i] > resultParams.seaLevelM
-        if (x + 1 < GRID_W && (elev[i + 1] > resultParams.seaLevelM) !== land) {
+        const land = elev[i] > resultTerrain.params.seaLevelM
+        if (x + 1 < GRID_W && (elev[i + 1] > resultTerrain.params.seaLevelM) !== land) {
           ctx.moveTo((x + 1) * sx, y * sy)
           ctx.lineTo((x + 1) * sx, (y + 1) * sy)
         }
-        if (y + 1 < GRID_H && (elev[i + GRID_W] > resultParams.seaLevelM) !== land) {
+        if (y + 1 < GRID_H && (elev[i + GRID_W] > resultTerrain.params.seaLevelM) !== land) {
           ctx.moveTo(x * sx, (y + 1) * sy)
           ctx.lineTo((x + 1) * sx, (y + 1) * sy)
         }
       }
     }
     ctx.stroke()
-  }, [gray, month, result, resultParams])
-
-  // --- Drag/drop / file input ---------------------------------------------
-  const acceptFile = useCallback(async (file: File | undefined) => {
-    if (!file) return
-    const request = ++inputRequest.current
-    setStatus('sample')
-    setError(null)
-    try {
-      const next = await decodeImageToGray(file)
-      if (request !== inputRequest.current) return
-      setGray(next)
-      setHeightmapName(file.name)
-      setSelectedSample(null)
-      setResult(null)
-      setResultParams(null)
-    } catch (err) {
-      if (request === inputRequest.current) setError({ stage: 'file', detail: String(err) })
-    } finally {
-      if (request === inputRequest.current) setStatus('idle')
-    }
-  }, [])
-
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setDragging(false)
-    if (status === 'idle') void acceptFile(e.dataTransfer.files?.[0])
-  }, [acceptFile, status])
+  }, [gray, month, result, resultTerrain])
 
   const stats = useMemo(() => {
     if (!result) return null
@@ -407,21 +287,19 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
   }, [result, t])
 
   const busy = status !== 'idle'
-  const failedSample = error?.sample
-  const sourceLabel = selectedSample === 'earth' ? t('params.presetEarth') : heightmapName
   const saved = savedSnapshot?.params === params && savedSnapshot.gray === gray
-  const backTo = recovery ? worldDataPath(world, branch) : temperatureTrialReturnPath({ world, planet, branch }, search)
-  const stale = resultParams != null && (Object.keys(params) as Array<keyof PlanetParams>)
-    .some(key => params[key] !== resultParams[key])
-  const phase = status === 'sample' ? t('action.loadingInput')
+  const stale = resultTerrain != null && (gray !== resultTerrain.elevation ||
+    (Object.keys(params) as Array<keyof PlanetParams>).some(key => params[key] !== resultTerrain.params[key]))
+  const phase = status === 'input' ? t('action.loadingInput')
     : status === 'loading' ? t('action.loadingEngine')
       : status === 'running' ? t('action.computing') : ''
   const reportPreview = map?.onPreview
   const monthLabel = month === 'annual' ? t('view.annual') : modelMonths[month]
   const field = result && (month === 'annual' ? result.annual : result.monthly[month])
   useEffect(() => {
-    reportPreview?.(field ? { field, label: monthLabel, stale, period: month, periods: calendarMonths, selectPeriod: setMonth } : null)
-  }, [field, monthLabel, stale, reportPreview, month, calendarMonths])
+    reportPreview?.(field && result && resultTerrain ? { field, terrain: resultTerrain, monthly: result.monthly,
+      label: monthLabel, stale, period: month, periods: calendarMonths, selectPeriod: setMonth } : null)
+  }, [field, result, resultTerrain, monthLabel, stale, reportPreview, month, calendarMonths])
 
   const monthSelect = (
     <select aria-label={t('view.month')} value={month}
@@ -433,48 +311,6 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
   )
   const controls = (
         <aside className={map ? 'space-y-2' : 'space-y-4'}>
-          {!map && (
-          <section className="rounded-xl border border-space-border bg-space-panel/60 p-4">
-            <h2 className="font-semibold text-gray-100">{t('heightmap.title')}</h2>
-            <p className="mt-1 text-xs text-gray-400">{t(contextual ? mapView ? 'trial.mapSourceHelp' : 'trial.sourceHelp' : 'heightmap.start')}</p>
-            {!contextual && <div className="my-3 flex flex-wrap gap-2">
-              {(['earth', 'nacrea'] as const).map(sample => (
-                <button
-                  key={sample}
-                  type="button"
-                  disabled={busy}
-                  aria-pressed={selectedSample === sample}
-                  onClick={() => void loadSample(sample)}
-                  className="rounded-md border border-space-border px-3 py-2 text-xs text-gray-200 hover:border-neon-cyan/50 focus-visible:outline focus-visible:outline-neon-cyan aria-pressed:border-neon-cyan/50 aria-pressed:bg-neon-cyan/10 aria-pressed:text-neon-cyan disabled:opacity-60"
-                >
-                  {t(sample === 'earth' ? 'heightmap.sampleEarth' : 'heightmap.sampleNacrea')}
-                </button>
-              ))}
-            </div>}
-            <button
-              type="button"
-              disabled={busy}
-              onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={onDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`mt-2 w-full rounded-lg border border-dashed p-3 text-left text-xs leading-relaxed transition-colors focus-visible:outline focus-visible:outline-neon-cyan disabled:opacity-60 ${
-                dragging ? 'border-neon-cyan bg-neon-cyan/10 text-neon-cyan' : 'border-space-border text-gray-300 hover:border-neon-cyan/40'
-              }`}
-            >
-              {t('heightmap.drop')}
-            </button>
-            <p className="mt-2 text-xs leading-relaxed text-gray-400">{t('heightmap.hint')}</p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={(e) => { void acceptFile(e.target.files?.[0]); e.target.value = '' }}
-            />
-          </section>
-          )}
-
           <section aria-label={t('params.title')} className={map ? undefined : 'rounded-xl border border-space-border bg-space-panel/60 p-4'}>
             {!map && <h2 className="mb-3 font-semibold text-gray-100">{t('params.title')}</h2>}
             {usesDefaults && <p className="mb-3 text-xs leading-relaxed text-amber-200">{t('trial.defaults')}</p>}
@@ -510,7 +346,7 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
             {phase || (error?.stage === 'runtime' || error?.stage === 'compute'
               ? t('action.retryRun') : result ? t('action.recompute') : t('action.run'))}
           </button>
-          {contextual && <div className="space-y-2 text-xs leading-relaxed text-gray-400">
+          <div className="space-y-2 text-xs leading-relaxed text-gray-400">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <button type="button" disabled={busy || !gray || !validParams || save.isPending || saved}
                 className="min-h-10 rounded border border-space-border px-3 text-gray-200 hover:border-neon-cyan disabled:opacity-50"
@@ -521,7 +357,7 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
             </div>
             <p>{t('trial.saveHelp')}</p>
             {save.isError && <p role="alert" className="text-red-300">{t('trial.saveError')}</p>}
-          </div>}
+          </div>
 
           <p role="status" className="text-xs leading-relaxed text-gray-400 empty:hidden">
             {phase || (loadSeconds != null ? t('status.engineLoaded', { seconds: loadSeconds.toFixed(1) }) : '')}
@@ -530,7 +366,6 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
           {error && (
             <div className="border-l-2 border-red-400/70 pl-3 text-xs leading-relaxed text-red-200">
               <p role="alert">{t(`error.${error.stage}`)}</p>
-              {failedSample && <button type="button" className="my-1 text-neon-cyan underline" onClick={() => void loadSample(failedSample)}>{t('action.retrySample')}</button>}
               {(error.stage === 'world' || error.stage === 'draft') && <button type="button"
                 className="my-1 text-neon-cyan underline" onClick={() => void loadContext()}>{t('trial.retry')}</button>}
               <details className="mt-1 text-gray-400">
@@ -554,17 +389,15 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-neon-cyan neon-glow-subtle">{t(contextual ? 'trial.title' : 'title')}</h1>
+            <h1 className="text-xl font-bold text-neon-cyan neon-glow-subtle">{t('trial.title')}</h1>
             <span className="rounded border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 text-[10px] text-amber-200">
               {t('badge')}
             </span>
           </div>
-          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-gray-400">{t(recovery ? 'trial.draftRecovery' : contextual ? 'trial.subtitle' : 'subtitle')}</p>
-          {contextual && <p className="mt-2 break-words text-sm text-gray-200">
-            {world} · {bodyName} · {branch || t('trial.root')}
-          </p>}
+          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-gray-400">{t('trial.draftRecovery')}</p>
+          <p className="mt-2 break-words text-sm text-gray-200">{world} · {planet} · {branch || t('trial.root')}</p>
         </div>
-        <Link to={backTo} className="text-sm text-gray-400 hover:text-neon-cyan">{t(recovery ? 'trial.openData' : contextual ? mapView ? 'trial.backMap' : 'trial.backClimate' : 'trial.backHelp')}</Link>
+        <Link to={worldDataPath(world, branch)} className="text-sm text-gray-400 hover:text-neon-cyan">{t('trial.openData')}</Link>
       </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-[310px,minmax(0,1fr)] xl:grid-cols-[340px,minmax(0,1fr)]">
@@ -581,7 +414,7 @@ export default function TemperatureLab({ search, map, recovery = false }: { sear
               </div>
               {result && monthSelect}
             </div>
-            {gray && <p className="mb-2 break-words text-xs text-gray-400">{t('stats.gridInfo', { name: sourceLabel, width: GRID_W, height: GRID_H })}</p>}
+            {gray && <p className="mb-2 break-words text-xs text-gray-400">{t('stats.gridInfo', { name: heightmapName, width: GRID_W, height: GRID_H })}</p>}
 
             {stale && <p role="status" className="mb-2 border-l-2 border-amber-400/70 pl-2 text-xs text-amber-200">{t('status.previousResult')}</p>}
 
