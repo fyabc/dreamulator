@@ -412,12 +412,6 @@ function kindKey(kind: LayerKind): string {
 /** All help sections in sidebar order. */
 export const HELP_SECTIONS: HelpSection[] = [
   {
-    id: 'cli',
-    title: 'help:section.cli.title',
-    icon: '💻',
-    render: (t) => entryKeys('cli', 7).map(({ title, content }) => ({ title: t(title), content: t(content) })),
-  },
-  {
     id: 'worlds',
     title: 'help:section.worlds.title',
     icon: '🌍',
@@ -485,6 +479,12 @@ export const HELP_SECTIONS: HelpSection[] = [
     title: 'help:section.concepts.title',
     icon: '💡',
     render: (t) => CONCEPT_HELP.map((c) => ({ title: t(c.title), content: t(c.summary) })),
+  },
+  {
+    id: 'cli',
+    title: 'help:section.cli.title',
+    icon: '💻',
+    render: (t) => entryKeys('cli', 7).map(({ title, content }) => ({ title: t(title), content: t(content) })),
   },
   {
     id: 'docs',

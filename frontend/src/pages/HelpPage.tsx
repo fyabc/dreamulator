@@ -1,28 +1,28 @@
-/**
- * HelpPage — GitBook/wiki-style help system.
- *
- * Sidebar navigation with collapsible sections + content area.  The URL hash
- * (e.g. `/help#map-controls`) drives which section is open and scrolls to it.
- * Other pages link here with target="_blank" so users can reference help
- * while keeping their map / world view open.
- *
- * All help content lives in the shared helpContent.ts module — the single
- * source of truth used by layer panels, tooltips, and this page.
- */
-
-import { useEffect, useRef, useMemo } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 import { HELP_SECTIONS, type HelpSection } from '../components/map/helpContent'
+import { isStaticMode } from '../api/mode'
 
-/** Simple markdown-like renderer for inline formatting. */
+const startId = 'start'
+
+function renderInline(text: string) {
+  return text.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*|\n)/g).map((part, index) => {
+    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+      return <code key={index} className="rounded bg-space-surface px-1 py-0.5 text-sm text-neon-cyan">{part.slice(1, -1)}</code>
+    }
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return <strong key={index} className="text-gray-200">{part.slice(2, -2)}</strong>
+    }
+    return part === '\n' ? <br key={index} /> : part
+  })
+}
+
 function renderContent(text: string) {
-  // Split into paragraphs
   return text.split('\n\n').map((block, i) => {
     const trimmed = block.trim()
     if (!trimmed) return null
 
-    // Code blocks
     if (trimmed.startsWith('```')) {
       const lines = trimmed.split('\n')
       const code = lines.slice(1, -1).join('\n')
@@ -33,133 +33,120 @@ function renderContent(text: string) {
       )
     }
 
-    // Inline code
-    const rendered = trimmed.replace(/`([^`]+)`/g, (_m, code: string) =>
-      `<code class="bg-space-surface px-1 py-0.5 rounded text-xs text-neon-cyan/80 font-mono">${code}</code>`,
-    )
-
-    // Bold
-    const withBold = rendered.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-
-    // List items starting with -
     if (trimmed.startsWith('- ')) {
       const items = trimmed.split('\n').filter((l) => l.startsWith('- '))
       return (
-        <ul key={i} className="space-y-1 my-1">
+        <ul key={i} className="my-2 list-disc space-y-1 pl-5 text-sm leading-relaxed text-gray-300">
           {items.map((item, j) => (
-            <li
-              key={j}
-              className="text-sm text-gray-400 flex gap-2"
-              dangerouslySetInnerHTML={{ __html: item.slice(2).replace(/`([^`]+)`/g, '<code class="bg-space-surface px-1 py-0.5 rounded text-xs text-neon-cyan/80 font-mono">$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong class="text-gray-200">$1</strong>') }}
-            />
+            <li key={j}>{renderInline(item.slice(2))}</li>
           ))}
         </ul>
       )
     }
 
-    // Convert single \n → <br/> for inline line breaks
-    const withBreaks = withBold.replace(/\n/g, '<br/>')
-
     return (
-      <p
-        key={i}
-        className="text-sm text-gray-400 leading-relaxed mb-2"
-        dangerouslySetInnerHTML={{ __html: withBreaks }}
-      />
+      <p key={i} className="mb-2 text-sm leading-relaxed text-gray-300">{renderInline(trimmed)}</p>
     )
   })
 }
 
 function SectionContent({ section }: { section: HelpSection }) {
   const { t } = useTranslation('help')
-  const entries = useMemo(() => section.render(t), [section, t])
+  const entries = section.render(t)
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-neon-cyan neon-glow-subtle">
-        {section.icon} {t(section.title)}
-      </h2>
+    <section id={section.id} className="scroll-mt-16 space-y-5 border-t border-space-border pt-6 lg:scroll-mt-6"
+      aria-labelledby={`help-heading-${section.id}`}>
+      <h2 id={`help-heading-${section.id}`} tabIndex={-1} className="text-xl font-semibold text-gray-100">{t(section.title)}</h2>
       {entries.map((entry, i) => (
-        <div key={i} className="glass-panel p-4">
-          <h3 className="text-base font-semibold text-gray-200 mb-2">
-            {entry.title}
-          </h3>
+        <div key={i} className="break-words">
+          <h3 className="mb-2 text-base font-semibold text-gray-100">{entry.title}</h3>
           {renderContent(entry.content)}
         </div>
       ))}
-    </div>
+    </section>
+  )
+}
+
+function GettingStarted() {
+  const { t } = useTranslation('help')
+  const mode = isStaticMode() ? 'static' : 'local'
+  const entry = mode === 'static' ? '/worlds' : '/import'
+  const steps = [
+    { key: 'first', to: entry },
+    { key: 'second', to: mode === 'static' ? '#region-selection' : '/worlds' },
+    { key: 'third', to: '#packs' },
+  ] as const
+
+  return (
+    <header id={startId} className="scroll-mt-16 lg:scroll-mt-6">
+      <h1 id={`help-heading-${startId}`} tabIndex={-1} className="text-3xl font-semibold tracking-tight text-gray-100">{t('start.title')}</h1>
+      <p className="mt-3 leading-relaxed text-gray-300">{t(`start.${mode}.intro`)}</p>
+      <ol className="mt-5 list-decimal space-y-4 pl-5 marker:font-semibold marker:text-neon-cyan">
+        {steps.map(({ key, to }) => (
+          <li key={key} className="pl-1">
+            <Link to={to} className="inline-flex min-h-8 items-center rounded font-semibold text-neon-cyan underline-offset-4 hover:underline">
+              {t(`start.${mode}.${key}.action`)}
+            </Link>
+            <p className="text-sm leading-relaxed text-gray-300">{t(`start.${mode}.${key}.description`)}</p>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-5 text-sm leading-relaxed text-gray-300">{t(`start.${mode}.backup`)}</p>
+    </header>
   )
 }
 
 export default function HelpPage() {
-  const { t } = useTranslation('common')
-  const location = useLocation()
-  const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const { t } = useTranslation('help')
+  const { hash, key } = useLocation()
+  const page = useRef<HTMLDivElement>(null)
+  const mobileToc = useRef<HTMLDetailsElement>(null)
+  const entries = [{ id: startId, title: 'start.title' }, ...HELP_SECTIONS]
+  const target = hash.slice(1)
+  const activeSection = entries.some(({ id }) => id === target) ? target : startId
 
-  // Current section from URL hash
-  const activeSection = location.hash?.slice(1) || HELP_SECTIONS[0].id
-
-  // Scroll to section when hash changes
   useEffect(() => {
-    const el = sectionRefs.current.get(activeSection)
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (mobileToc.current) mobileToc.current.open = false
+    if (!target || target !== activeSection) {
+      page.current?.scrollTo({ top: 0 })
+      return
     }
-  }, [activeSection])
+    document.getElementById(`help-heading-${target}`)?.focus({ preventScroll: true })
+    document.getElementById(target)?.scrollIntoView({ block: 'start' })
+  }, [activeSection, key, target])
+
+  const contents = <nav aria-label={t('start.contents')}>
+    <ul className="space-y-0.5">
+      {entries.map(({ id, title }) => (
+        <li key={id}>
+          <Link to={{ hash: `#${id}` }} aria-current={id === activeSection ? 'location' : undefined}
+            className={`block rounded px-3 py-2 text-sm ${id === activeSection ? 'bg-space-surface font-semibold text-neon-cyan' : 'text-gray-300 hover:bg-space-surface'}`}>
+            {t(title)}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  </nav>
 
   return (
-    <div className="flex h-[calc(100vh-56px)] md:h-screen">
-      {/* Sidebar */}
-      <nav className="w-56 shrink-0 bg-space-panel/50 border-r border-space-border overflow-y-auto p-3">
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-2">
-          {t('help.toc')}
-        </h2>
-        <ul className="space-y-0.5">
-          {HELP_SECTIONS.map((s) => {
-            const isActive = s.id === activeSection
-            return (
-              <li key={s.id}>
-                <Link
-                  to={{ hash: `#${s.id}` }}
-                  className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    isActive
-                      ? 'bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20'
-                      : 'text-gray-400 hover:bg-space-surface hover:text-gray-200 border border-transparent'
-                  }`}
-                >
-                  <span className="text-base flex-shrink-0">{s.icon}</span>
-                  <span className="truncate">{t(s.title)}</span>
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
-      </nav>
-
-      {/* Content */}
-      <main className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-3xl space-y-16">
-          {HELP_SECTIONS.map((s) => (
-            <div
-              key={s.id}
-              ref={(el) => {
-                if (el) sectionRefs.current.set(s.id, el)
-              }}
-              id={s.id}
-            >
-              <SectionContent section={s} />
-            </div>
-          ))}
+    <div ref={page} className="h-[calc(100dvh-3.5rem)] overflow-y-auto md:h-dvh">
+      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:px-6 lg:grid lg:grid-cols-[12rem_minmax(0,1fr)] lg:gap-10 lg:px-8 lg:py-6">
+        <div className="sticky top-0 z-10 bg-space-bg py-1 lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:self-start lg:overflow-y-auto lg:p-1">
+          <details ref={mobileToc} className="rounded border border-space-border lg:hidden">
+            <summary className="cursor-pointer px-3 py-3 text-sm font-medium text-gray-200">{t('start.contents')}</summary>
+            <div className="max-h-[50dvh] overflow-y-auto px-1 pb-1">{contents}</div>
+          </details>
+          <div className="hidden lg:block">
+            <p className="mb-2 px-3 text-sm font-semibold text-gray-200">{t('start.contents')}</p>
+            {contents}
+          </div>
         </div>
-
-        {/* Footer */}
-        <p className="mt-12 text-xs text-gray-600 text-center">
-          {t('help.footerDocs')} <code className="text-gray-500">docs/</code>{' '}
-          {t('help.footerDocsSuffix')}{' '}
-          {t('help.footerCli')} <code className="text-gray-500">dreamulator --help</code>
-          {t('help.footerPeriod')}
-        </p>
-      </main>
+        <article className="w-full min-w-0 max-w-[72ch] space-y-10 pb-12">
+          <GettingStarted />
+          {HELP_SECTIONS.map((section) => <SectionContent key={section.id} section={section} />)}
+        </article>
+      </div>
     </div>
   )
 }

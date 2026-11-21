@@ -221,6 +221,24 @@
       "summary": "Plate partition and evolution follow Cortial et al. (2019) Procedural Tectonic Planets: Poisson-disc seeds → spherical Voronoi partition → Euler-pole rotation → boundary re-detection → subduction/collision/erosion. See terrain-pipeline.md."
     }
   },
+  "start": {
+    "title": "Getting started on the web",
+    "contents": "Contents",
+    "local": {
+      "intro": "Import your own heightmap, build a world, then choose a place to inspect or refine.",
+      "first": { "action": "Import a global heightmap", "description": "Choose a heightmap, check the elevation range, sea level, and preview, then save it to a world. If you do not have a heightmap, create a world from a template in the worlds list." },
+      "second": { "action": "Open and build a world", "description": "On the world page, confirm the branch and terrain grid size before selecting Build. When it finishes, open the map to see the available terrain and climate layers." },
+      "third": { "action": "Inspect and refine a region", "description": "Use Region selection on the flat map or globe. Choose Move to selection to centre the view, then View region. Inspect the original elevation or use the local options to refine terrain or extract rivers and lakes." },
+      "backup": "To continue on another device, download a world backup from the World build panel. It includes regions saved in the world directory and can be restored with the command line."
+    },
+    "static": {
+      "intro": "Explore published worlds or save your own regional elevation in this browser. To build a complete world, use the local app.",
+      "first": { "action": "Open the worlds list", "description": "Choose a published world to open its map. To work with your own regional heightmap, create a browser world and import the source under World data." },
+      "second": { "action": "Choose a region on the global map", "description": "Use Move to selection to centre the view, then choose View region. You can also open an imported heightmap directly from World data." },
+      "third": { "action": "Learn how to refine and save terrain", "description": "When the region page offers browser refinement, generate a result and compare it with the source before saving or downloading it. The original elevation remains available without refinement." },
+      "backup": "Before switching devices, export a browser data archive from World data and import it from the worlds list on the other device. The archive does not include published maps or cached models."
+    }
+  },
   "section": {
     "cli": {
       "title": "CLI Quick Start",
@@ -235,7 +253,7 @@
         },
         {
           "title": "Terrain generation",
-          "content": "`dreamulator terrain generate <world> -p <planet> -n 100000 --seed 42`\n\nGenerate CVT mesh + plate partition + tectonic evolution + terrain synthesis + raster export.\n\n`dreamulator terrain generate <world> -p <planet> -n 4096`\n\nLow resolution for fast iteration (~30 s vs ~100 s at 100k).\n\n`dreamulator terrain generate <world> -p <planet> --tectonic-steps 125`\n\nTime-evolution steps (2 My each; default 50 = 100 My).\n\n`dreamulator terrain info <world> -p <planet>`\n\nView the terrain summary (land/sea ratio, elevation stats)."
+          "content": "`dreamulator build <world> --only geological`\n\nRun the geological layer and its prerequisites.\n\n`dreamulator terrain info <world> -p <planet>`\n\nView terrain statistics such as land and sea coverage and elevation."
         },
         {
           "title": "Start the server",
@@ -272,7 +290,7 @@
         },
         {
           "title": "Build & validate",
-          "content": "Click \"Build\" on the world detail page to run the pipeline. Build outputs include:\n\n- `maps/<planet>/` — elevation, CVT mesh, plates, climate rasters\n- `layers/<layer>/derived/` — engine results (JSON/YAML)\n- `build_profile.json` — per-engine/per-stage timings\n\n\"Validate\" checks world file integrity (schema, required fields)."
+          "content": "Select Build on the world page in the local app. After it finishes, open the map to view available terrain and climate. The world directory stores map products in `maps/<planet>/` and simulation results in `layers/<layer>/derived/`.\n\nCheck base settings checks the world configuration and YAML inputs for the base world. It does not run the simulation or verify the scientific accuracy of existing results."
         }
       ]
     },
