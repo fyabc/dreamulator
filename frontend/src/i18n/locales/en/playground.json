@@ -4,6 +4,13 @@
     "title": "Climate Lab",
     "previewTitle": "Climate Lab · Temperature Preview",
     "description": "Runs globally on this branch’s existing geological mesh. Trial settings and results stay in this map session and do not change the world.",
+    "browser": {
+      "description": "Run the full EBM in this browser on the current branch’s geological mesh. The first run downloads the solver. It never uploads your settings or changes the published world.",
+      "cancel": "Cancel trial",
+      "cancelled": "Trial cancelled. You can adjust the settings and run again.",
+      "usePreview": "Use temperature preview",
+      "useEbm": "Back to full EBM"
+    },
     "readingInputs": "Reading world parameters…",
     "show": "View trial result",
     "openWorld": "Open world to build it",
@@ -36,6 +43,8 @@
     },
     "stage": {
       "queued": "Start local computation",
+      "browserQueued": "Prepare browser trial",
+      "browserRuntime": "Load browser solver",
       "reading": "Read the geological mesh",
       "temperature": "Compute temperature",
       "wind": "Compute wind and pressure",
@@ -47,6 +56,14 @@
       "loading": "Load trial layers"
     },
     "error": {
+      "browser_grid_limit": "This grid exceeds the browser EBM’s size limit. Use a local server or switch to the temperature preview.",
+      "browser_unavailable": "This map does not publish the inputs required for the full EBM. You can still use the temperature preview.",
+      "browser_incompatible": "This browser lacks a feature required by the full EBM. Try an up-to-date browser or a local server.",
+      "browser_runtime": "The browser solver could not start. Check your connection and try again.",
+      "browser_source": "The EBM inputs could not be read. Check your connection and try again.",
+      "browser_run": "The full EBM could not finish. Try again or switch to the temperature preview.",
+      "browser_products": "The EBM map layers could not be loaded. Run the trial again.",
+      "browser_expired": "This browser trial has ended or been cleared. Run it again to view the layers.",
       "reference_anchor": "The Earth main world is an observational reference. Switch to a model branch to run a trial.",
       "build_inputs": "Built astronomy data or body parameters are missing. Build the world first.",
       "build_mesh": "This body has no built geological mesh. Build the world first.",

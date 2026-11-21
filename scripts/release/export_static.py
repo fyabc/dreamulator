@@ -26,7 +26,9 @@ import argparse
 import json
 import shutil
 import sys
+from dataclasses import asdict
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import yaml
 
@@ -49,6 +51,12 @@ from local_branches import local_only_branches  # noqa: E402
 
 from dreamulator import doc_render  # noqa: E402
 from dreamulator.civmap.manager import CivMapManager  # noqa: E402
+from dreamulator.climate_trial import (  # noqa: E402
+    BROWSER_TRIAL_MAX_CELLS,
+    TrialForcing,
+    TrialUnavailableError,
+    resolve_trial_source,
+)
 from dreamulator.io.loader import load_world  # noqa: E402
 from dreamulator.map.manager import MapManager  # noqa: E402
 from dreamulator.map.models import map_metadata_result, sanitize_nonfinite  # noqa: E402
@@ -270,6 +278,51 @@ def _export_layer_data(world_dir: Path, branch: str | None = None) -> dict:
     return result
 
 
+def _export_browser_trial(
+    world_dir: Path,
+    planet: str,
+    branch: str | None,
+    output: Path,
+    displayed_mesh: Path | None,
+    displayed_cells: int | None,
+) -> None:
+    from dreamulator.map.export import MESH_FILENAME, load_cvt_mesh
+
+    manifest: dict[str, object] = {"version": 1}
+    try:
+        source = resolve_trial_source(world_dir, planet, branch)
+        same_mesh = source.mesh_path == displayed_mesh and displayed_cells is not None
+        cells = displayed_cells if same_mesh else load_cvt_mesh(source.mesh_path)["num_cells"]
+        if cells > BROWSER_TRIAL_MAX_CELLS:
+            raise TrialUnavailableError("browser_grid_limit")
+        mesh_name = MESH_FILENAME if same_mesh else "climate_trial_mesh.bin"
+        config = asdict(source.config)
+        forcing = TrialForcing.from_config(source.config).model_dump(mode="json")
+        ready = json.dumps(
+            {**manifest, "cells": cells, "mesh": mesh_name, "forcing": forcing, "config": config},
+            allow_nan=False,
+            separators=(",", ":"),
+        )
+        if not same_mesh:
+            shutil.copyfile(source.mesh_path, output / mesh_name)
+    except TrialUnavailableError as error:
+        ready = json.dumps({**manifest, "reason": str(error)})
+    except (OSError, TypeError, ValueError, KeyError) as error:
+        scope = f"{world_dir.name}/{branch}/{planet}"
+        print(f"\n  WARNING: Browser trial unavailable for {scope}: {error}")
+        ready = json.dumps({**manifest, "reason": "build_inputs"})
+    (output / "climate_trial.json").write_text(ready, encoding="utf-8")
+
+
+def _export_browser_solver(root: Path, output: Path) -> None:
+    source = root / "src"
+    with ZipFile(output / "climate_solver.zip", "w", ZIP_DEFLATED) as archive:
+        package = source / "dreamulator"
+        files = [*package.rglob("*.py"), *package.rglob("*.json")]
+        for path in sorted(files):
+            archive.write(path, path.relative_to(source))
+
+
 def _export_map_data(
     world_dir: Path,
     maps_out_dir: Path,
@@ -371,16 +424,19 @@ def _export_map_data(
         if mesh_src is None and root_planet_dir is not None and root_planet_dir.is_dir():
             # Branch overlay without its own mesh inherits root terrain.
             mesh_src = find_mesh_file(root_planet_dir)
+        displayed_cells = None
         if mesh_src is not None:
             try:
-                save_cvt_mesh(
-                    planet_out / MESH_FILENAME, sanitize_nonfinite(load_cvt_mesh(mesh_src))
-                )
+                mesh = sanitize_nonfinite(load_cvt_mesh(mesh_src))
+                save_cvt_mesh(planet_out / MESH_FILENAME, mesh)
+                displayed_cells = mesh["num_cells"]
+                del mesh
             except Exception:
                 print(
                     f"\n  WARNING: {mesh_src} is not a loadable mesh "
                     f"(possible LFS pointer) — skipping",
                 )
+        _export_browser_trial(world_dir, planet_id, branch, planet_out, mesh_src, displayed_cells)
 
         for filename in ("voronoi.json", "plates.json"):
             src_path = _inherit(filename)
@@ -562,9 +618,7 @@ def _export_starter_templates(output_dir: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description=(
-            "Export world data as static JSON. Temporary local climate trials are not exported."
-        )
+        description="Export static world data and browser climate inputs, but not local results."
     )
     parser.add_argument(
         "--output",
@@ -594,6 +648,7 @@ def main() -> None:
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
     _export_starter_templates(output_dir)
+    _export_browser_solver(root, output_dir)
 
     # Discover worlds
     all_worlds = sorted(

@@ -837,19 +837,19 @@ export async function fetchSkyFast(
 
 export const api = {
   getClimateTrialInputs: (world: string, planet: string, branch: string | null) => isStaticMode()
-    ? staticApi.getClimateTrialInputs()
+    ? staticApi.getClimateTrialInputs(world, planet, branch)
     : fetchJson<ClimateTrialForcing>(`${climateTrialsPath(world, planet)}/inputs${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`, { cache: 'no-store' }),
 
-  startClimateTrial: (world: string, planet: string, branch: string | null, forcing: Partial<ClimateTrialForcing>) => isStaticMode()
-    ? staticApi.startClimateTrial()
+  startClimateTrial: (world: string, planet: string, branch: string | null, forcing: Partial<ClimateTrialForcing>, signal: AbortSignal) => isStaticMode()
+    ? staticApi.startClimateTrial(world, planet, branch, forcing, signal)
     : fetchJson<ClimateTrialJob>(climateTrialsPath(world, planet), { method: 'POST', body: JSON.stringify({ branch, forcing }) }),
 
   getClimateTrial: (world: string, planet: string, id: string, signal?: AbortSignal) => isStaticMode()
-    ? staticApi.getClimateTrial()
+    ? staticApi.getClimateTrial(id)
     : fetchJson<ClimateTrialJob>(`${climateTrialsPath(world, planet)}/${encodeURIComponent(id)}`, { cache: 'no-store', signal }),
 
   getClimateTrialProducts: async (world: string, planet: string, id: string): Promise<ClimateTrialProducts> => {
-    if (isStaticMode()) return staticApi.getClimateTrialProducts()
+    if (isStaticMode()) return staticApi.getClimateTrialProducts(id)
     const path = `${climateTrialsPath(world, planet)}/${encodeURIComponent(id)}/products`
     const [geometry, fields, monthlyBlob, yearlyBlob] = await Promise.all([
       decodeMsgpackUrl(`${API_BASE}${path}/geometry`, true),

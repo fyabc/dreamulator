@@ -17,6 +17,8 @@ import pytest
 import yaml
 
 from dreamulator.civmap.manager import CivMapManager
+from dreamulator.climate_trial import BROWSER_TRIAL_MAX_CELLS, TrialSource
+from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -45,6 +47,62 @@ def _write_yaml(path: Path, data: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, allow_unicode=True)
+
+
+def test_browser_trial_exports_resolved_grid_and_respects_budget(
+    export_static: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mesh = tmp_path / "cvt_mesh.msgpack.gz"
+    config = TerrainPipelineConfig(axial_tilt_deg=63.44, greenhouse_warming_K=30.0)
+
+    def resolve(world: Path, planet: str, branch: str | None) -> TrialSource:
+        assert (world, planet, branch) == (tmp_path, "planet_test", "model")
+        return TrialSource(config, mesh)
+
+    monkeypatch.setattr(export_static, "resolve_trial_source", resolve)
+    export_static._export_browser_trial(tmp_path, "planet_test", "model", tmp_path, mesh, 18032)
+    manifest = tmp_path / "climate_trial.json"
+    trial = json.loads(manifest.read_text(encoding="utf-8"))
+    assert trial["mesh"] == mesh.name
+    assert trial["cells"] == 18032
+    assert trial["forcing"]["axial_tilt_deg"] == 63.44
+    assert trial["config"]["greenhouse_warming_K"] == 30.0
+    assert not (tmp_path / "climate_trial_mesh.bin").exists()
+
+    export_static._export_browser_trial(
+        tmp_path, "planet_test", "model", tmp_path, mesh, BROWSER_TRIAL_MAX_CELLS + 1
+    )
+    assert json.loads(manifest.read_text(encoding="utf-8")) == {
+        "version": 1,
+        "reason": "browser_grid_limit",
+    }
+
+
+def test_browser_trial_uses_distinct_source_grid_when_needed(
+    export_static: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_mesh = tmp_path / "parent" / "cvt_mesh.json"
+    _write(source_mesh, '{"num_cells": 1200}')
+    displayed_mesh = tmp_path / "branch" / "cvt_mesh.msgpack.gz"
+    source = TrialSource(TerrainPipelineConfig(), source_mesh)
+    monkeypatch.setattr(export_static, "resolve_trial_source", lambda *_args: source)
+
+    export_static._export_browser_trial(
+        tmp_path, "planet_test", "model", tmp_path, displayed_mesh, 600
+    )
+    manifest = json.loads((tmp_path / "climate_trial.json").read_text(encoding="utf-8"))
+    assert manifest["cells"] == 1200
+    assert manifest["mesh"] == "climate_trial_mesh.bin"
+    assert (tmp_path / manifest["mesh"]).read_bytes() == source_mesh.read_bytes()
+
+
+def test_browser_trial_does_not_enable_reference_anchor(export_static: Any, tmp_path: Path) -> None:
+    _write_yaml(tmp_path / "world.yaml", {"reference_anchor": True})
+    export_static._export_browser_trial(tmp_path, "planet_earth", None, tmp_path, None, None)
+    assert json.loads((tmp_path / "climate_trial.json").read_text(encoding="utf-8")) == {
+        "version": 1,
+        "reason": "reference_anchor",
+    }
 
 
 @pytest.mark.parametrize("legacy", [False, True])

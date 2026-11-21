@@ -13,6 +13,7 @@ const runtimeFiles = [
   'pyodide.mjs', 'pyodide.asm.mjs', 'pyodide.asm.wasm', 'python_stdlib.zip', 'pyodide-lock.json',
 ]
 const mirrors = ['cdn.jsdelivr.net', 'testingcf.jsdelivr.net']
+export const ebmPackages = ['numpy', 'scipy', 'pydantic', 'rich', 'msgpack', 'pyyaml', 'pillow', 'astropy']
 
 export const playgroundRuntimePath = `playground-runtime/v${version}/`
 
@@ -35,37 +36,45 @@ async function getWheel(filename: string, checksum: string): Promise<Buffer> {
       failures.push(`${host}: ${String(error)}`)
     }
   }
-  throw new Error(`Could not download ${filename} for the browser temperature runtime. ${failures.join('; ')}`)
+  throw new Error(`Could not download ${filename} for the browser climate runtime. ${failures.join('; ')}`)
 }
 
-async function prepareRuntime(publicDir: string): Promise<void> {
-  const lock = JSON.parse(await readFile(join(distribution, 'pyodide-lock.json'), 'utf8'))
-  const { file_name: filename, sha256: checksum } = lock.packages.numpy as {
-    file_name: string; sha256: string
+async function prepareRuntime(publicDir: string, fullEbm: boolean): Promise<void> {
+  const lock = JSON.parse(await readFile(join(distribution, 'pyodide-lock.json'), 'utf8')) as {
+    packages: Record<string, { file_name: string; sha256: string; depends: string[] }>
   }
+  const wheels = new Map<string, string>()
+  function addWheel(name: string) {
+    const wheel = lock.packages[name.toLowerCase().replaceAll('_', '-')]
+    if (!wheel) throw new Error(`Pyodide does not publish a locked wheel for ${name}.`)
+    if (wheels.has(wheel.file_name)) return
+    wheels.set(wheel.file_name, wheel.sha256)
+    wheel.depends.forEach(addWheel)
+  }
+  for (const name of fullEbm ? ebmPackages : ['numpy']) addWheel(name)
   const target = join(publicDir, playgroundRuntimePath)
-  const isReady = () => [...runtimeFiles, filename].every(file => existsSync(join(target, file)))
-  if (isReady()) return
-  if (existsSync(target)) await rm(target, { recursive: true, force: true })
+  const files = [...runtimeFiles, ...wheels.keys()]
+  const missing = files.filter(file => !existsSync(join(target, file)))
+  if (!missing.length) return
 
-  await mkdir(dirname(target), { recursive: true })
+  await mkdir(target, { recursive: true })
   const staging = await mkdtemp(join(dirname(publicDir), '.playground-runtime-'))
   try {
-    await writeFile(join(staging, filename), await getWheel(filename, checksum))
-    for (const file of runtimeFiles) await copyFile(join(distribution, file), join(staging, file))
-    try {
-      await rename(staging, target)
-    } catch (error) {
-      if (!isReady()) throw error
+    for (const file of missing) {
+      const checksum = wheels.get(file)
+      const staged = join(staging, file)
+      if (checksum) await writeFile(staged, await getWheel(file, checksum))
+      else await copyFile(join(distribution, file), staged)
+      await rename(staged, join(target, file))
     }
   } finally {
     await rm(staging, { recursive: true, force: true })
   }
 }
 
-export function playgroundRuntime(): Plugin {
+export function playgroundRuntime(fullEbm: boolean): Plugin {
   return {
     name: 'dreamulator-playground-runtime',
-    configResolved: config => prepareRuntime(config.publicDir),
+    configResolved: config => prepareRuntime(config.publicDir, fullEbm),
   }
 }

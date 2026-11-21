@@ -11,7 +11,12 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from dreamulator.map.pipeline_types import TerrainPipelineConfig
+
+
+BROWSER_TRIAL_MAX_CELLS = 20_000
 
 
 class TrialUnavailableError(ValueError):
@@ -104,6 +109,7 @@ def compute_trial(
     budget: int,
     *,
     diagnostic_pngs: bool = True,
+    on_progress: Callable[[TrialProgress], None] | None = None,
 ) -> None:
     """Run the production solver and exporter without touching the input files."""
     from dreamulator.map.climate_simulator import simulate_climate
@@ -119,6 +125,9 @@ def compute_trial(
     progress = TrialProgress(stage="reading", started_at=monotonic())
 
     def publish() -> None:
+        if on_progress is not None:
+            on_progress(progress)
+            return
         temp = output / "progress.tmp"
         temp.write_text(progress.model_dump_json(), encoding="utf-8")
         temp.replace(output / "progress.json")

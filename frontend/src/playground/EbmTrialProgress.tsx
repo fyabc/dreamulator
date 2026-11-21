@@ -2,20 +2,24 @@ import { useEffect, useId, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ClimateTrialJob } from '../api/climateTrials'
 
-const stages = [
+const localStages = [
   'queued', 'reading', 'temperature', 'wind', 'ocean', 'precipitation',
   'koppen', 'writeback', 'export', 'loading',
 ]
+const browserStages = ['queued', 'browserRuntime', ...localStages.slice(1)]
 
-export function EbmTrialProgress({ phase, job, interrupted, open, starting, format }: {
+export function EbmTrialProgress({ phase, job, interrupted, open, starting, browser, format }: {
   phase: string
   job: ClimateTrialJob | undefined
   interrupted: boolean
   open: boolean
   starting: boolean
+  browser: boolean
   format: Intl.NumberFormat
 }) {
   const { t } = useTranslation('playground')
+  const stages = browser ? browserStages : localStages
+  const stageLabel = (stage: string) => t(`ebm.stage.${browser && stage === 'queued' ? 'browserQueued' : stage}`, { defaultValue: stage })
   const title = useId()
   const section = useRef<HTMLElement>(null)
   const viewport = useRef<HTMLOListElement>(null)
@@ -39,7 +43,7 @@ export function EbmTrialProgress({ phase, job, interrupted, open, starting, form
       <span className="tabular-nums text-gray-300">{t('ebm.progress.steps', { done: complete ? stages.length : Math.max(0, activeIndex), total: stages.length })}</span>
     </div>
     <div role="status" className="sr-only">
-      {complete ? t('ebm.progress.ready') : t('ebm.progress.active', { stage: t(`ebm.stage.${phase}`, { defaultValue: phase }) })}
+      {complete ? t('ebm.progress.ready') : t('ebm.progress.active', { stage: stageLabel(phase) })}
     </div>
     <ol ref={viewport} role="list" aria-labelledby={title} tabIndex={0}
       className="relative max-h-36 overflow-y-auto rounded border border-space-border bg-space-bg py-1.5 focus-visible:outline focus-visible:outline-neon-cyan motion-safe:scroll-smooth sm:max-h-52 [scrollbar-color:#526c70_transparent]">
@@ -60,7 +64,7 @@ export function EbmTrialProgress({ phase, job, interrupted, open, starting, form
             </svg> : <span className={`${active ? 'size-1.5' : 'size-1'} rounded-full bg-current`} />}
           </span>
           <div className={`pb-1.5 pt-1.5 leading-4 ${failed ? 'text-red-200' : active ? 'font-semibold text-neon-cyan' : done ? 'text-gray-200' : 'text-gray-400'}`}>
-            {t(`ebm.stage.${stage}`)}
+              {stageLabel(stage)}
             {done && <span className="sr-only"> · {t('ebm.progress.done')}</span>}
             {job && active && phase === job.stage && <div className="mt-1 space-y-0.5 font-normal tabular-nums text-gray-300">
               {job.months_done != null && <p>{t('ebm.months', { pass: job.moisture_pass, done: job.months_done, total: job.months_total })}</p>}

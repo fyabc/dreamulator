@@ -1,0 +1,87 @@
+import type { ClimateTrialForcing, ClimateTrialJob, ClimateTrialProducts } from '../api/climateTrials'
+import { composeSplitMesh, isSplitFields, isSplitGeometry } from '../api/meshColumns'
+import { decodeMonthlyClimate } from '../api/monthlyClimate'
+import { decodeYearlyClimate } from '../api/yearlyClimate'
+import type { BrowserEbmReply, BrowserEbmRequest } from './ebm.worker'
+
+interface BrowserJob {
+  job: ClimateTrialJob
+  startedAt: number
+  stageAt: number
+  products?: ClimateTrialProducts
+}
+
+let nextId = 0
+const jobs = new Map<string, BrowserJob>()
+
+export function startBrowserEbm(request: BrowserEbmRequest, signal: AbortSignal): ClimateTrialJob {
+  if (signal.aborted) throw new DOMException('Cancelled', 'AbortError')
+  if (Array.from(jobs.values()).some(({ job }) => job.state === 'running')) throw new Error('trial_busy')
+  const worker = new Worker(new URL('./ebm.worker.ts', import.meta.url), { type: 'module' })
+  const id = `browser-ebm-${++nextId}`
+  const job: ClimateTrialJob = {
+    id, state: 'running', stage: 'browserRuntime', cells: request.cells, months_done: null,
+    months_total: null, moisture_pass: null, elapsed_seconds: 0, stage_seconds: 0, error: null,
+  }
+  const startedAt = performance.now()
+  const entry: BrowserJob = { job, startedAt, stageAt: startedAt }
+  jobs.set(id, entry)
+  signal.addEventListener('abort', () => {
+    worker.terminate()
+    jobs.delete(id)
+  }, { once: true })
+
+  const finish = (error?: string, detail?: string) => {
+    worker.terminate()
+    const now = performance.now()
+    Object.assign(job, { state: error ? 'failed' : 'succeeded', error: error ?? null,
+      error_detail: detail, elapsed_seconds: (now - startedAt) / 1000,
+      stage_seconds: (now - entry.stageAt) / 1000 })
+  }
+  worker.onerror = event => finish('browser_runtime', event.message)
+  worker.onmessageerror = () => finish('browser_products')
+  worker.onmessage = ({ data }: MessageEvent<BrowserEbmReply>) => {
+    if ('error' in data) {
+      finish(data.error, data.detail)
+    } else if ('progress' in data) {
+      if (job.stage !== data.progress.stage) {
+        entry.stageAt = performance.now()
+        Object.assign(job, { months_done: null, months_total: null, moisture_pass: null })
+      }
+      const { cells, ...progress } = data.progress
+      Object.assign(job, progress, { cells: cells ?? job.cells })
+    } else {
+      try {
+        const { geometry, fields, monthly, yearly } = data.products
+        const mesh = isSplitGeometry(geometry) && isSplitFields(fields) ? composeSplitMesh(geometry, fields) : null
+        const months = decodeMonthlyClimate(monthly)
+        const years = decodeYearlyClimate(yearly)
+        if (!mesh || [mesh.cells.length, months.numCells, years.numCells].some(cells => cells !== request.cells)) {
+          throw new Error('Invalid climate trial grid')
+        }
+        entry.products = { mesh, monthly: months, yearly: years }
+        finish()
+      } catch (cause) {
+        finish('browser_products', cause instanceof Error ? cause.message : String(cause))
+      }
+    }
+  }
+  worker.postMessage(request)
+  return { ...job }
+}
+
+export function getBrowserEbm(id: string): ClimateTrialJob {
+  const entry = jobs.get(id)
+  if (!entry) throw new Error('browser_expired')
+  if (entry.job.state !== 'running') return { ...entry.job }
+  const now = performance.now()
+  return { ...entry.job, elapsed_seconds: (now - entry.startedAt) / 1000, stage_seconds: (now - entry.stageAt) / 1000 }
+}
+
+export function getBrowserEbmProducts(id: string): ClimateTrialProducts {
+  const products = jobs.get(id)?.products
+  if (!products) throw new Error('browser_expired')
+  return products
+}
+
+export type BrowserEbmSource = Pick<BrowserEbmRequest, 'config' | 'cells'> & { mesh: string; forcing: ClimateTrialForcing }

@@ -18,11 +18,12 @@ function errorCode(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-export default function EbmClimateLab({ search, open, onResult, onShow }: {
+export default function EbmClimateLab({ search, open, onResult, onShow, onPreviewMode }: {
   search: URLSearchParams
   open: boolean
   onResult: (result: ClimateTrialResult) => void
   onShow: () => void
+  onPreviewMode?: () => void
 }) {
   const { t, i18n } = useTranslation('playground')
   const world = search.get('world') ?? ''
@@ -31,13 +32,17 @@ export default function EbmClimateLab({ search, open, onResult, onShow }: {
   const [overrides, setOverrides] = useState<Partial<ClimateTrialForcing>>({})
   const shownId = useRef<string | null>(null)
   const [lastResult, setLastResult] = useState<ClimateTrialForcing | null>(null)
+  const [cancelled, setCancelled] = useState(false)
+  const controller = useRef<AbortController | null>(null)
+  useEffect(() => () => controller.current?.abort(), [])
+  const browser = Boolean(onPreviewMode)
   const inputs = useQuery({
     queryKey: ['climate-trial-inputs', world, planet, branch],
     queryFn: () => api.getClimateTrialInputs(world, planet, branch), retry: false,
   })
   const start = useMutation({
-    mutationFn: async (forcing: ClimateTrialForcing) => ({
-      job: await api.startClimateTrial(world, planet, branch, forcing), forcing,
+    mutationFn: async ({ forcing, signal }: { forcing: ClimateTrialForcing; signal: AbortSignal }) => ({
+      job: await api.startClimateTrial(world, planet, branch, forcing, signal), forcing,
     }),
   })
   const id = start.data?.job.id
@@ -81,10 +86,13 @@ export default function EbmClimateLab({ search, open, onResult, onShow }: {
   return <form className="space-y-3" onSubmit={event => {
     event.preventDefault()
     if (!current || !valid || busy) return
-    start.mutate(current)
+    controller.current?.abort()
+    controller.current = new AbortController()
+    setCancelled(false)
+    start.mutate({ forcing: current, signal: controller.current.signal })
   }}>
     <ClimateModelPicker />
-    <p className="text-xs leading-relaxed text-gray-300">{t('ebm.description')}</p>
+    <p className="text-xs leading-relaxed text-gray-300">{t(browser ? 'ebm.browser.description' : 'ebm.description')}</p>
     {inputs.isPending && <p role="status" className="text-xs text-gray-300">{t('ebm.readingInputs')}</p>}
     {current && <fieldset disabled={busy} className="space-y-2">
       <legend className="mb-2 text-xs font-semibold text-gray-200">{t('params.title')}</legend>
@@ -104,8 +112,14 @@ export default function EbmClimateLab({ search, open, onResult, onShow }: {
         {t(lastResult ? 'action.recompute' : 'action.run')}
       </button>
       {lastResult && <button type="button" onClick={onShow} className="atlas-tool-button min-h-9 text-xs">{t('ebm.show')}</button>}
+      {browser && busy && <button type="button" onClick={() => {
+        controller.current?.abort()
+        start.reset()
+        setCancelled(true)
+      }} className="atlas-tool-button min-h-9 text-xs">{t('ebm.browser.cancel')}</button>}
     </div>}
-    {phase && <EbmTrialProgress phase={phase} job={job} interrupted={Boolean(error)} open={open} starting={start.isPending} format={format} />}
+    {cancelled && <p role="status" className="text-xs text-gray-300">{t('ebm.browser.cancelled')}</p>}
+    {phase && <EbmTrialProgress phase={phase} job={job} interrupted={Boolean(error)} open={open} starting={start.isPending} browser={browser} format={format} />}
     {lastResult && phase === 'done' && !error && <p className="text-xs text-gray-300">
       {t(fields.some(({ key }) => lastResult[key] !== current?.[key]) ? 'status.previousResult' : 'ebm.ready', {
         cells: format.format(job?.cells ?? 0), seconds: format.format(job?.elapsed_seconds ?? 0),
@@ -116,7 +130,10 @@ export default function EbmClimateLab({ search, open, onResult, onShow }: {
       {(reason === 'build_mesh' || reason === 'build_inputs') && <Link to={buildPath} className="inline-flex min-h-8 items-center text-neon-cyan underline">{t('ebm.openWorld')}</Link>}
       {retry && <button type="button" className="atlas-tool-button text-xs" onClick={() => void retry()}>{t('trial.retry')}</button>}
       <details className="text-gray-300"><summary className="cursor-pointer">{t('error.details')}</summary>
-        <p className="break-words">{reason}</p></details>
+        <p className="max-h-40 overflow-auto whitespace-pre-wrap break-words">{job?.error_detail ?? reason}</p></details>
+    </div>}
+    {onPreviewMode && !busy && <div className="border-t border-space-border pt-2">
+      <button type="button" onClick={onPreviewMode} className="atlas-tool-button min-h-9 text-xs">{t('ebm.browser.usePreview')}</button>
     </div>}
   </form>
 }

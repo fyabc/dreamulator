@@ -77,14 +77,20 @@ function TemperatureTrialSession({ world, planet, branch, draft, clean, initiall
     return params
   }, [world, planet, branch, draft])
   const trial = useTemperatureTrialPreview(scope, mode, search.get('detail') === 'downscaled')
+  const { report } = trial
   const showTrial = useCallback(() => {
     if (!ebmResult) setLayerState(trialLayerState('temperature'))
     setModeSelection({ scope, mode: 'trial' })
   }, [scope, ebmResult])
   const reportEbmResult = useCallback((result: ClimateTrialResult) => {
+    report(null)
     setEbmResult(result)
     showTrial()
-  }, [showTrial])
+  }, [report, showTrial])
+  const reportPreview = useCallback((preview: Parameters<typeof report>[0]) => {
+    if (preview) setEbmResult(null)
+    report(preview)
+  }, [report])
   const attachPanel = useCallback((slot: HTMLDivElement | null) => {
     if (slot) slot.append(panelHost)
     else panelHost.remove()
@@ -121,7 +127,7 @@ function TemperatureTrialSession({ world, planet, branch, draft, clean, initiall
   return <>
     <Outlet context={session} />
     {scope && visited && createPortal(<MapTemperatureTrial search={input}
-      open={session.open} onClose={closePanel} onPreview={trial.report} onResult={reportEbmResult} onShow={showTrial} />,
+      open={session.open} onClose={closePanel} onPreview={reportPreview} onResult={reportEbmResult} onShow={showTrial} />,
     panelHost, scope)}
   </>
 }

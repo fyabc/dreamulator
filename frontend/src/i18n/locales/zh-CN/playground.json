@@ -4,6 +4,13 @@
     "title": "气候实验台",
     "previewTitle": "气候实验台 · 温度预览",
     "description": "全局试算使用当前分支已有的地质网格。参数和结果仅用于本次地图会话，不改写正式世界。",
+    "browser": {
+      "description": "使用当前分支的地质网格，在此浏览器运行完整 EBM。首次运行需要下载计算组件，输入参数不会上传，试算结果也不会改写正式世界。",
+      "cancel": "取消试算",
+      "cancelled": "试算已取消。可以调整参数后重跑。",
+      "usePreview": "改用温度预览",
+      "useEbm": "返回完整 EBM"
+    },
     "readingInputs": "正在读取世界参数…",
     "show": "查看试算结果",
     "openWorld": "前往世界构建",
@@ -36,6 +43,8 @@
     },
     "stage": {
       "queued": "启动本机计算",
+      "browserQueued": "准备浏览器试算",
+      "browserRuntime": "载入浏览器计算组件",
       "reading": "读取已有地质网格",
       "temperature": "计算温度",
       "wind": "计算风场与气压",
@@ -47,6 +56,14 @@
       "loading": "载入试算图层"
     },
     "error": {
+      "browser_grid_limit": "此网格超过浏览器完整 EBM 的规模上限。请使用本机版，或改用温度预览。",
+      "browser_unavailable": "此地图没有发布完整 EBM 所需的计算输入。可以改用温度预览。",
+      "browser_incompatible": "此浏览器缺少完整 EBM 所需的功能。请尝试新版浏览器或本机版。",
+      "browser_runtime": "未能启动浏览器计算组件。请检查网络后重试。",
+      "browser_source": "未能读取当前分支的 EBM 输入。请检查网络后重试。",
+      "browser_run": "完整 EBM 运行失败。可以重试，或改用温度预览。",
+      "browser_products": "未能载入完整 EBM 的试算图层。请重新运行。",
+      "browser_expired": "本次浏览器试算已结束或被清理。请重新运行。",
       "reference_anchor": "真实地球主干只展示参照数据。请切换到模型分支运行试算。",
       "build_inputs": "缺少已构建的天文数据或天体参数。请先构建世界。",
       "build_mesh": "此天体没有已构建的地质网格。请先构建世界。",

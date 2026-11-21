@@ -2,7 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import { readFileSync } from 'fs'
-import { playgroundRuntime, playgroundRuntimePath } from './playgroundRuntime'
+import { ebmPackages, playgroundRuntime, playgroundRuntimePath } from './playgroundRuntime'
 
 export default defineConfig(({ mode, isPreview }) => {
   // Load env vars from .env, .env.[mode], etc.
@@ -19,7 +19,7 @@ export default defineConfig(({ mode, isPreview }) => {
     // GitHub Pages serves at /<repo-name>/ — set via VITE_BASE_PATH or default to '/'
     base,
 
-    plugins: [react(), !isPreview && mode !== 'test' && playgroundRuntime()],
+    plugins: [react(), !isPreview && mode !== 'test' && playgroundRuntime(env.VITE_STATIC_MODE === 'true')],
     worker: { format: 'es' },
 
     // Inject build-time constants so version numbers never go stale.
@@ -27,6 +27,7 @@ export default defineConfig(({ mode, isPreview }) => {
       __APP_VERSION__: JSON.stringify(pkg.version),
       __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)),
       __PLAYGROUND_RUNTIME_PATH__: JSON.stringify(playgroundRuntimePath),
+      __EBM_PACKAGES__: JSON.stringify(ebmPackages),
     },
 
     resolve: {

@@ -20,6 +20,7 @@ export interface ClimateTrialJob {
   months_total: number | null
   moisture_pass: number | null
   error: string | null
+  error_detail?: string
 }
 
 export interface ClimateTrialProducts {

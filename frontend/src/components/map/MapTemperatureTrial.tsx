@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { isStaticMode } from '../../api/mode'
 import type { ClimateTrialResult } from '../../api/climateTrials'
@@ -18,7 +18,9 @@ export function MapTemperatureTrial({ open, onClose, search, onPreview, onResult
   onShow: () => void
 }) {
   const { t } = useTranslation('playground')
-  const preview = isStaticMode() || search.has('draft')
+  const [previewMode, setPreviewMode] = useState(false)
+  const browser = isStaticMode() && !search.has('draft')
+  const preview = search.has('draft') || (browser && previewMode)
   const closeButton = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (open) closeButton.current?.focus({ preventScroll: true })
@@ -39,8 +41,14 @@ export function MapTemperatureTrial({ open, onClose, search, onPreview, onResult
       </header>
       <div className="min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-2">
         <Suspense fallback={<p role="status" className="text-xs text-gray-400">{t('ebm.readingInputs')}</p>}>
-          {preview ? <TemperatureLab search={search} map={{ onPreview, onShowPreview: onShow }} />
-            : <EbmClimateLab search={search} open={open} onResult={onResult} onShow={onShow} />}
+          {preview ? <>
+            {browser && <button type="button" onClick={() => setPreviewMode(false)} className="atlas-tool-button mb-2 min-h-9 text-xs">
+              {t('ebm.browser.useEbm')}
+            </button>}
+            <TemperatureLab search={search} map={{ onPreview, onShowPreview: onShow }} />
+          </>
+            : <EbmClimateLab search={search} open={open} onResult={onResult} onShow={onShow}
+                onPreviewMode={browser ? () => setPreviewMode(true) : undefined} />}
         </Suspense>
       </div>
     </section>

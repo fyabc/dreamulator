@@ -15,6 +15,8 @@ import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
 import type { StarterFiles, StarterSettings, StarterTemplate } from '../projects/starterWorld'
 import type { WorldParameters, WorldParameterUpdate } from './worldParameters'
 import type { ParameterDefaults } from '../projects/worldParameters'
+import type { ClimateTrialForcing } from './climateTrials'
+import type { BrowserEbmSource } from '../playground/browserEbm'
 
 interface DocumentMeta {
   filename: string
@@ -37,6 +39,25 @@ const DATA_BASE = `${import.meta.env.BASE_URL}data`
 // were observed to break map loading). Revalidation costs one cheap
 // conditional request per file; unchanged large meshes answer 304.
 const FETCH_INIT: RequestInit = { cache: 'no-cache' }
+
+async function browserEbmSource(world: string, planet: string, branch: string | null, signal?: AbortSignal) {
+  const scope = `/worlds/${encodeURIComponent(world)}${branch ? `/branches/${encodeURIComponent(branch)}` : ''}`
+  const directory = `${DATA_BASE}${scope}/maps/${encodeURIComponent(planet)}/`
+  const response = await fetch(`${directory}climate_trial.json`, { ...FETCH_INIT, signal })
+  if (response.status === 404 || response.headers.get('content-type')?.includes('text/html')) {
+    throw new Error('browser_unavailable')
+  }
+  if (!response.ok) throw new Error('browser_source')
+  const data = await response.json() as { version: number } & (BrowserEbmSource | { reason: string })
+  if (data.version !== 1) throw new Error('browser_unavailable')
+  if ('reason' in data) throw new Error(data.reason)
+  if (!['cvt_mesh.msgpack.gz', 'climate_trial_mesh.bin'].includes(data.mesh) || !data.config ||
+      !data.forcing || !Number.isInteger(data.cells) || data.cells < 1) throw new Error('browser_source')
+  if (typeof Worker === 'undefined' || typeof WebAssembly === 'undefined' || typeof DecompressionStream === 'undefined') {
+    throw new Error('browser_incompatible')
+  }
+  return { ...data, mesh: new URL(`${directory}${data.mesh}`, document.baseURI).href }
+}
 
 async function fetchStaticJson<T>(path: string, onMissing?: () => T): Promise<T> {
   const response = await fetch(`${DATA_BASE}${path}`, FETCH_INIT)
@@ -256,10 +277,18 @@ export const staticApi = {
   getBuildGrid: async (): Promise<BuildGrid> => notAvailable('getBuildGrid'),
   startBuildJob: async (): Promise<BuildJob> => notAvailable('startBuildJob'),
   getBuildJob: async (): Promise<BuildJob> => notAvailable('getBuildJob'),
-  getClimateTrialInputs: async (): Promise<never> => notAvailable('getClimateTrialInputs'),
-  startClimateTrial: async (): Promise<never> => notAvailable('startClimateTrial'),
-  getClimateTrial: async (): Promise<never> => notAvailable('getClimateTrial'),
-  getClimateTrialProducts: async (): Promise<never> => notAvailable('getClimateTrialProducts'),
+  getClimateTrialInputs: async (world: string, planet: string, branch: string | null) =>
+    (await browserEbmSource(world, planet, branch)).forcing,
+  startClimateTrial: async (world: string, planet: string, branch: string | null,
+    forcing: Partial<ClimateTrialForcing>, signal: AbortSignal) => {
+    const source = await browserEbmSource(world, planet, branch, signal)
+    const { startBrowserEbm } = await import('../playground/browserEbm')
+    return startBrowserEbm({ config: source.config, cells: source.cells, mesh: source.mesh, forcing,
+      runtime: new URL(`${import.meta.env.BASE_URL}${__PLAYGROUND_RUNTIME_PATH__}`, document.baseURI).href,
+      solver: new URL(`${DATA_BASE}/climate_solver.zip`, document.baseURI).href }, signal)
+  },
+  getClimateTrial: async (id: string) => (await import('../playground/browserEbm')).getBrowserEbm(id),
+  getClimateTrialProducts: async (id: string) => (await import('../playground/browserEbm')).getBrowserEbmProducts(id),
   getPackElevation: async (): Promise<Blob> => notAvailable('getPackElevation'),
   getRegionDevice: async () => notAvailable('getRegionDevice'),
   planRegionRefinement: async (_source: RegionRefinementSource) => notAvailable('planRegionRefinement'),
