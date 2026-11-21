@@ -91,6 +91,58 @@ countries:
   name: 摩尔多瓦
   color: '#e7365a'
   description: ''
+- id: porphyria
+  name: 紫木共和国
+  color: '#9b64ba'
+  description: 疆域包括今巴西除阿马帕州以外的地区，以及今乌拉圭除科洛尼亚省以外的地区。
+- id: portugal
+  name: 葡萄牙
+  color: '#49cad1'
+  description: 葡萄牙包括本土、亚速尔群岛和马德拉，以及位于南美的北角和科洛尼亚省。
+- id: rio_de_la_plata
+  name: 拉普拉塔
+  color: '#6d9ed2'
+  description: 拉普拉塔的主要港口是河口西南岸的布宜诺斯艾利斯。
+- id: bolivia
+  name: 玻利维亚
+  color: '#cf9b58'
+  description: ''
+- id: paraguay
+  name: 巴拉圭
+  color: '#70af76'
+  description: 巴拉圭位于拉普拉塔河流域上游，以亚松森为中心。
+- id: chile
+  name: 智利
+  color: '#ce7860'
+  description: ''
+- id: peru
+  name: 秘鲁
+  color: '#6fa69d'
+  description: ''
+- id: ecuador
+  name: 厄瓜多尔
+  color: '#d0b66a'
+  description: ''
+- id: new_granada
+  name: 新格拉纳达
+  color: '#b27867'
+  description: ''
+- id: venezuela
+  name: 委内瑞拉
+  color: '#b7a45e'
+  description: ''
+- id: guyana
+  name: 圭亚那
+  color: '#76975d'
+  description: 圭亚那位于南美洲东北部，东邻苏里南。
+- id: suriname
+  name: 苏里南
+  color: '#d59b5d'
+  description: ''
+- id: french_guiana
+  name: 法属圭亚那
+  color: '#8795c9'
+  description: 法属圭亚那在奥亚波克河一带与葡萄牙的北角相邻。
 snapshots:
 - id: snap_mridfcwi
   year: 2026
@@ -1903,3 +1955,531 @@ assignments:
     country_id: civ_mrjhiid2
   - province_id: MDA-1618
     country_id: civ_mrjhiid2
+  - province_id: ARG-1309
+    country_id: rio_de_la_plata
+  - province_id: URY-8
+    country_id: porphyria
+  - province_id: CHL-2694
+    country_id: chile
+  - province_id: BOL-1936
+    country_id: bolivia
+  - province_id: BOL-1937
+    country_id: bolivia
+  - province_id: CHL-2693
+    country_id: chile
+  - province_id: BOL-1939
+    country_id: bolivia
+  - province_id: CHL-2695
+    country_id: chile
+  - province_id: PER-575
+    country_id: peru
+  - province_id: ARG-1303
+    country_id: rio_de_la_plata
+  - province_id: ARG-1301
+    country_id: rio_de_la_plata
+  - province_id: FRA-2000
+    country_id: french_guiana
+  - province_id: SUR-69
+    country_id: suriname
+  - province_id: GUY-671
+    country_id: guyana
+  - province_id: BRA-612
+    country_id: porphyria
+  - province_id: URY-6
+    country_id: porphyria
+  - province_id: GUY-676
+    country_id: guyana
+  - province_id: BRA-670
+    country_id: porphyria
+  - province_id: GUY-672
+    country_id: guyana
+  - province_id: GUY-674
+    country_id: guyana
+  - province_id: BRA-594
+    country_id: porphyria
+  - province_id: PER-572
+    country_id: peru
+  - province_id: BRA-576
+    country_id: porphyria
+  - province_id: BRA-681
+    country_id: portugal
+  - province_id: ECU-1335
+    country_id: ecuador
+  - province_id: COL-1406
+    country_id: new_granada
+  - province_id: ECU-1409
+    country_id: ecuador
+  - province_id: ECU-1411
+    country_id: ecuador
+  - province_id: COL-1407
+    country_id: new_granada
+  - province_id: SUR-37
+    country_id: suriname
+  - province_id: SUR-67
+    country_id: suriname
+  - province_id: BOL-1941
+    country_id: bolivia
+  - province_id: PRY-598
+    country_id: paraguay
+  - province_id: ARG-1307
+    country_id: rio_de_la_plata
+  - province_id: PRY-605
+    country_id: paraguay
+  - province_id: PRY-607
+    country_id: paraguay
+  - province_id: PRY-4837
+    country_id: paraguay
+  - province_id: PRY-616
+    country_id: paraguay
+  - province_id: ARG-1312
+    country_id: rio_de_la_plata
+  - province_id: PRY-620
+    country_id: paraguay
+  - province_id: PRY-610
+    country_id: paraguay
+  - province_id: ARG-1306
+    country_id: rio_de_la_plata
+  - province_id: ARG-1308
+    country_id: rio_de_la_plata
+  - province_id: PRY-609
+    country_id: paraguay
+  - province_id: BOL-1940
+    country_id: bolivia
+  - province_id: BRA-600
+    country_id: porphyria
+  - province_id: PRY-597
+    country_id: paraguay
+  - province_id: PRY-603
+    country_id: paraguay
+  - province_id: PRY-615
+    country_id: paraguay
+  - province_id: PRY-619
+    country_id: paraguay
+  - province_id: BRA-613
+    country_id: porphyria
+  - province_id: BRA-614
+    country_id: porphyria
+  - province_id: COL-1415
+    country_id: new_granada
+  - province_id: GUY-675
+    country_id: guyana
+  - province_id: VEN-65
+    country_id: venezuela
+  - province_id: VEN-39
+    country_id: venezuela
+  - province_id: BRA-592
+    country_id: porphyria
+  - province_id: COL-1424
+    country_id: new_granada
+  - province_id: COL-1426
+    country_id: new_granada
+  - province_id: COL-1283
+    country_id: new_granada
+  - province_id: PER-585
+    country_id: peru
+  - province_id: ECU-1286
+    country_id: ecuador
+  - province_id: ECU-1288
+    country_id: ecuador
+  - province_id: ECU-1285
+    country_id: ecuador
+  - province_id: PER-584
+    country_id: peru
+  - province_id: ECU-1269
+    country_id: ecuador
+  - province_id: PER-578
+    country_id: peru
+  - province_id: ECU-1268
+    country_id: ecuador
+  - province_id: PER-568
+    country_id: peru
+  - province_id: ECU-1267
+    country_id: ecuador
+  - province_id: PER-567
+    country_id: peru
+  - province_id: VEN-38
+    country_id: venezuela
+  - province_id: BOL-1292
+    country_id: bolivia
+  - province_id: PER-583
+    country_id: peru
+  - province_id: BOL-1938
+    country_id: bolivia
+  - province_id: BRA-595
+    country_id: porphyria
+  - province_id: BOL-1293
+    country_id: bolivia
+  - province_id: BRA-602
+    country_id: porphyria
+  - province_id: PER-573
+    country_id: peru
+  - province_id: ARG-1300
+    country_id: rio_de_la_plata
+  - province_id: CHL-2696
+    country_id: chile
+  - province_id: ARG-1302
+    country_id: rio_de_la_plata
+  - province_id: ARG-1273
+    country_id: rio_de_la_plata
+  - province_id: CHL-2697
+    country_id: chile
+  - province_id: ARG-1275
+    country_id: rio_de_la_plata
+  - province_id: CHL-2698
+    country_id: chile
+  - province_id: CHL-2699
+    country_id: chile
+  - province_id: CHL-2705
+    country_id: chile
+  - province_id: CHL-2703
+    country_id: chile
+  - province_id: ARG-1276
+    country_id: rio_de_la_plata
+  - province_id: CHL-20010
+    country_id: chile
+  - province_id: CHL-2700
+    country_id: chile
+  - province_id: CHL-2702
+    country_id: chile
+  - province_id: CHL-2701
+    country_id: chile
+  - province_id: ARG-1274
+    country_id: rio_de_la_plata
+  - province_id: CHL-2704
+    country_id: chile
+  - province_id: ARG-1297
+    country_id: rio_de_la_plata
+  - province_id: CHL-2691
+    country_id: chile
+  - province_id: ARG-1271
+    country_id: rio_de_la_plata
+  - province_id: CHL-2692
+    country_id: chile
+  - province_id: ARG-1272
+    country_id: rio_de_la_plata
+  - province_id: VEN-31
+    country_id: venezuela
+  - province_id: COL-1318
+    country_id: new_granada
+  - province_id: COL-1414
+    country_id: new_granada
+  - province_id: COL-1421
+    country_id: new_granada
+  - province_id: VEN-28
+    country_id: venezuela
+  - province_id: VEN-25
+    country_id: venezuela
+  - province_id: COL-1420
+    country_id: new_granada
+  - province_id: COL-1315
+    country_id: new_granada
+  - province_id: COL-1427
+    country_id: new_granada
+  - province_id: URY-10
+    country_id: porphyria
+  - province_id: URY-14
+    country_id: porphyria
+  - province_id: URY-22
+    country_id: porphyria
+  - province_id: URY-16
+    country_id: porphyria
+  - province_id: URY-12
+    country_id: porphyria
+  - province_id: ARG-1295
+    country_id: rio_de_la_plata
+  - province_id: BRA-593
+    country_id: porphyria
+  - province_id: BRA-622
+    country_id: porphyria
+  - province_id: BRA-621
+    country_id: porphyria
+  - province_id: BRA-628
+    country_id: porphyria
+  - province_id: BRA-626
+    country_id: porphyria
+  - province_id: BRA-1313
+    country_id: porphyria
+  - province_id: BRA-623
+    country_id: porphyria
+  - province_id: BRA-629
+    country_id: porphyria
+  - province_id: BRA-624
+    country_id: porphyria
+  - province_id: BRA-625
+    country_id: porphyria
+  - province_id: BRA-627
+    country_id: porphyria
+  - province_id: BRA-1311
+    country_id: porphyria
+  - province_id: URY-20
+    country_id: porphyria
+  - province_id: URY-17
+    country_id: porphyria
+  - province_id: URY-21
+    country_id: porphyria
+  - province_id: URY-5
+    country_id: porphyria
+  - province_id: URY-4
+    country_id: portugal
+  - province_id: URY-11
+    country_id: porphyria
+  - province_id: URY-9
+    country_id: porphyria
+  - province_id: ARG-5493
+    country_id: rio_de_la_plata
+  - province_id: ECU-1280
+    country_id: ecuador
+  - province_id: ECU-1270
+    country_id: ecuador
+  - province_id: COL-1404
+    country_id: new_granada
+  - province_id: PER-574
+    country_id: peru
+  - province_id: PER-570
+    country_id: peru
+  - province_id: PER-589
+    country_id: peru
+  - province_id: PER-591
+    country_id: peru
+  - province_id: PER-587
+    country_id: peru
+  - province_id: PER-3505
+    country_id: peru
+  - province_id: PER-577
+    country_id: peru
+  - province_id: PER-580
+    country_id: peru
+  - province_id: PER-566
+    country_id: peru
+  - province_id: ECU-5507
+    country_id: ecuador
+  - province_id: ECU-1282
+    country_id: ecuador
+  - province_id: COL-1408
+    country_id: new_granada
+  - province_id: GUY-678
+    country_id: guyana
+  - province_id: COL-1314
+    country_id: new_granada
+  - province_id: COL-1316
+    country_id: new_granada
+  - province_id: COL-1417
+    country_id: new_granada
+  - province_id: COL-1413
+    country_id: new_granada
+  - province_id: COL-1412
+    country_id: new_granada
+  - province_id: COL-1416
+    country_id: new_granada
+  - province_id: VEN-27
+    country_id: venezuela
+  - province_id: VEN-29
+    country_id: venezuela
+  - province_id: VEN-23
+    country_id: venezuela
+  - province_id: VEN-36
+    country_id: venezuela
+  - province_id: VEN-33
+    country_id: venezuela
+  - province_id: VEN-41
+    country_id: venezuela
+  - province_id: VEN-42
+    country_id: venezuela
+  - province_id: VEN-47
+    country_id: venezuela
+  - province_id: VEN-40
+    country_id: venezuela
+  - province_id: VEN-49
+    country_id: venezuela
+  - province_id: VEN-46
+    country_id: venezuela
+  - province_id: GUY-680
+    country_id: guyana
+  - province_id: GUY-673
+    country_id: guyana
+  - province_id: GUY-677
+    country_id: guyana
+  - province_id: GUY-679
+    country_id: guyana
+  - province_id: SUR-71
+    country_id: suriname
+  - province_id: SUR-73
+    country_id: suriname
+  - province_id: SUR-74
+    country_id: suriname
+  - province_id: SUR-72
+    country_id: suriname
+  - province_id: SUR-70
+    country_id: suriname
+  - province_id: VEN-48
+    country_id: venezuela
+  - province_id: VEN-44
+    country_id: venezuela
+  - province_id: COL-1342
+    country_id: new_granada
+  - province_id: COL+99?
+    country_id: new_granada
+  - province_id: VEN+99?
+    country_id: venezuela
+  - province_id: URY-15
+    country_id: porphyria
+  - province_id: URY-13
+    country_id: porphyria
+  - province_id: URY-7
+    country_id: porphyria
+  - province_id: URY-18
+    country_id: porphyria
+  - province_id: URY-19
+    country_id: porphyria
+  - province_id: VEN-45
+    country_id: venezuela
+  - province_id: VEN-32
+    country_id: venezuela
+  - province_id: VEN-43
+    country_id: venezuela
+  - province_id: VEN-26
+    country_id: venezuela
+  - province_id: VEN-34
+    country_id: venezuela
+  - province_id: VEN-35
+    country_id: venezuela
+  - province_id: SUR-68
+    country_id: suriname
+  - province_id: SUR-66
+    country_id: suriname
+  - province_id: PER-571
+    country_id: peru
+  - province_id: PER-586
+    country_id: peru
+  - province_id: PER-569
+    country_id: peru
+  - province_id: PER-588
+    country_id: peru
+  - province_id: PER-582
+    country_id: peru
+  - province_id: PER-579
+    country_id: peru
+  - province_id: PER-581
+    country_id: peru
+  - province_id: PER-590
+    country_id: peru
+  - province_id: PRY-606
+    country_id: paraguay
+  - province_id: PRY-617
+    country_id: paraguay
+  - province_id: PRY-604
+    country_id: paraguay
+  - province_id: PRY-618
+    country_id: paraguay
+  - province_id: PRY-611
+    country_id: paraguay
+  - province_id: PRY-608
+    country_id: paraguay
+  - province_id: ECU-1266
+    country_id: ecuador
+  - province_id: ECU-1278
+    country_id: ecuador
+  - province_id: ECU-1289
+    country_id: ecuador
+  - province_id: ECU-1290
+    country_id: ecuador
+  - province_id: ECU-1284
+    country_id: ecuador
+  - province_id: ECU-1277
+    country_id: ecuador
+  - province_id: ECU-1410
+    country_id: ecuador
+  - province_id: ECU-1279
+    country_id: ecuador
+  - province_id: ECU-1281
+    country_id: ecuador
+  - province_id: ECU-1287
+    country_id: ecuador
+  - province_id: ECU-5508
+    country_id: ecuador
+  - province_id: COL-1403
+    country_id: new_granada
+  - province_id: COL-1405
+    country_id: new_granada
+  - province_id: COL-1423
+    country_id: new_granada
+  - province_id: COL-1397
+    country_id: new_granada
+  - province_id: COL-1422
+    country_id: new_granada
+  - province_id: COL-1425
+    country_id: new_granada
+  - province_id: COL-1399
+    country_id: new_granada
+  - province_id: COL-1317
+    country_id: new_granada
+  - province_id: COL-1402
+    country_id: new_granada
+  - province_id: COL-1400
+    country_id: new_granada
+  - province_id: COL-1398
+    country_id: new_granada
+  - province_id: COL-1401
+    country_id: new_granada
+  - province_id: BRA-1294
+    country_id: porphyria
+  - province_id: BRA-599
+    country_id: porphyria
+  - province_id: BRA-601
+    country_id: porphyria
+  - province_id: BRA-596
+    country_id: porphyria
+  - province_id: BOL-1291
+    country_id: bolivia
+  - province_id: ARG-1310
+    country_id: rio_de_la_plata
+  - province_id: ARG-1305
+    country_id: rio_de_la_plata
+  - province_id: ARG-1304
+    country_id: rio_de_la_plata
+  - province_id: ARG-1298
+    country_id: rio_de_la_plata
+  - province_id: ARG-1296
+    country_id: rio_de_la_plata
+  - province_id: ARG-1299
+    country_id: rio_de_la_plata
+  - province_id: PRT-744
+    country_id: portugal
+  - province_id: PRT-747
+    country_id: portugal
+  - province_id: PRT-741
+    country_id: portugal
+  - province_id: PRT-751
+    country_id: portugal
+  - province_id: PRT-753
+    country_id: portugal
+  - province_id: PRT-750
+    country_id: portugal
+  - province_id: PRT-756
+    country_id: portugal
+  - province_id: PRT-749
+    country_id: portugal
+  - province_id: PRT-745
+    country_id: portugal
+  - province_id: PRT-743
+    country_id: portugal
+  - province_id: PRT-5498
+    country_id: portugal
+  - province_id: PRT-746
+    country_id: portugal
+  - province_id: PRT-748
+    country_id: portugal
+  - province_id: PRT-740
+    country_id: portugal
+  - province_id: PRT-752
+    country_id: portugal
+  - province_id: PRT-739
+    country_id: portugal
+  - province_id: PRT-754
+    country_id: portugal
+  - province_id: PRT-736
+    country_id: portugal
+  - province_id: PRT-735
+    country_id: portugal
+  - province_id: PRT-755
+    country_id: portugal

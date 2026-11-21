@@ -85,4 +85,4 @@ tags: [alternate-history, byzantine, second-roman-republic]
 | **地缘政治** | |
 | `geo_europe.md` | 欧洲：巴尔干诸国、意大利、哈布斯堡、俄罗斯、克里米亚 |
 | `geo_middle_east.md` | 中东与高加索：安纳托利亚、格鲁吉亚、亚美尼亚、叙利亚 |
-| `geo_overseas.md` | 海外：紫木共和国（巴西）、亚历山大港、东地中海岛屿、已失殖民地 |
+| `geo_overseas.md` | 本篇介绍紫木共和国、葡萄牙在南美的领地、拉普拉塔殖民据点，以及罗马的海外领地和殖民史。 |
