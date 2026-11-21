@@ -13,6 +13,7 @@ import type {
 } from './elevationImport'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
 import { decodeYearlyClimate, type YearlyClimateData } from './yearlyClimate'
+import type { ClimateTrialForcing, ClimateTrialJob, ClimateTrialProducts } from './climateTrials'
 import i18n from '../i18n'
 import type { CVTMesh, CVTVertex, CVTRegion, VoronoiCell } from '../viewers/map/types'
 import type { PackHeightSource, PackMeta, PackSummary, ProbeResult, RegionDevice, RegionRefinementJob,
@@ -22,6 +23,10 @@ import type { StarterSettings } from '../projects/starterWorld'
 
 const base = import.meta.env.BASE_URL
 export const API_BASE = `${base.startsWith('/') ? base.replace(/\/$/, '') : ''}/api`
+
+function climateTrialsPath(world: string, planet: string) {
+  return `/worlds/${encodeURIComponent(world)}/maps/${encodeURIComponent(planet)}/climate-trials`
+}
 
 /**
  * URL for a pack image served by /api/packs/{pack}/image/{path} — used
@@ -831,6 +836,39 @@ export async function fetchSkyFast(
 }
 
 export const api = {
+  getClimateTrialInputs: (world: string, planet: string, branch: string | null) => isStaticMode()
+    ? staticApi.getClimateTrialInputs()
+    : fetchJson<ClimateTrialForcing>(`${climateTrialsPath(world, planet)}/inputs${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`, { cache: 'no-store' }),
+
+  startClimateTrial: (world: string, planet: string, branch: string | null, forcing: Partial<ClimateTrialForcing>) => isStaticMode()
+    ? staticApi.startClimateTrial()
+    : fetchJson<ClimateTrialJob>(climateTrialsPath(world, planet), { method: 'POST', body: JSON.stringify({ branch, forcing }) }),
+
+  getClimateTrial: (world: string, planet: string, id: string, signal?: AbortSignal) => isStaticMode()
+    ? staticApi.getClimateTrial()
+    : fetchJson<ClimateTrialJob>(`${climateTrialsPath(world, planet)}/${encodeURIComponent(id)}`, { cache: 'no-store', signal }),
+
+  getClimateTrialProducts: async (world: string, planet: string, id: string): Promise<ClimateTrialProducts> => {
+    if (isStaticMode()) return staticApi.getClimateTrialProducts()
+    const path = `${climateTrialsPath(world, planet)}/${encodeURIComponent(id)}/products`
+    const [geometry, fields, monthlyBlob, yearlyBlob] = await Promise.all([
+      decodeMsgpackUrl(`${API_BASE}${path}/geometry`, true),
+      decodeMsgpackUrl(`${API_BASE}${path}/fields`, true),
+      fetchBlob(`${path}/monthly`),
+      fetch(`${API_BASE}${path}/yearly`).then(response => {
+        if (response.status === 404) return null
+        if (!response.ok) throw new ApiError(response.status, `HTTP ${response.status}`)
+        return response.arrayBuffer()
+      }),
+    ])
+    const mesh = isSplitGeometry(geometry) && isSplitFields(fields) ? composeSplitMesh(geometry, fields) : null
+    const monthly = decodeMonthlyClimate(await monthlyBlob.arrayBuffer())
+    const yearly = yearlyBlob ? decodeYearlyClimate(yearlyBlob) : null
+    if (!mesh || monthly.numCells !== mesh.cells.length || (yearly && yearly.numCells !== mesh.cells.length)) {
+      throw new Error('Invalid EBM result grid')
+    }
+    return { mesh, monthly, yearly }
+  },
   ...readApi,
 
   async saveStarterWorld(settings: StarterSettings) {

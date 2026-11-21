@@ -23,6 +23,7 @@ interface UseMonthlyClimateArgs {
   worldName?: string
   planetId?: string
   branch?: string | null
+  trialData?: MonthlyClimateData
   month: number
   /** Thematic field to bake into a texture, or null (e.g. only wind arrows wanted). */
   field: MonthlyField | null
@@ -52,6 +53,7 @@ export function useMonthlyClimate({
   worldName,
   planetId,
   branch,
+  trialData,
   month,
   field,
   monthlyMode,
@@ -68,11 +70,12 @@ export function useMonthlyClimate({
   const { data, isFetching } = useQuery({
     queryKey: ['monthlyClimate', worldName, planetId, branch],
     queryFn: () => api.getMonthlyClimate(worldName!, planetId!, branch),
-    enabled: !!worldName && !!planetId && active,
+    enabled: !trialData && !!worldName && !!planetId && active,
     retry: false,
   })
 
-  const monthly = active && data && (!cvtMesh || data.numCells === cvtMesh.cells.length) ? data : null
+  const source = trialData ?? data
+  const monthly = active && source && (!cvtMesh || source.numCells === cvtMesh.cells.length) ? source : null
   const displayingMonthly = Boolean(monthlyMode && monthly && field && (
     field === 'pressure' || field === 'pressureError' ? monthly.pressureMonthly :
       field === 'slp' ? monthly.slpMonthly : field === 'temperature' ? monthly.tMonthly.length : monthly.pMonthly.length
@@ -90,5 +93,5 @@ export function useMonthlyClimate({
   }, [monthly, month, field, displayingMonthly, downscale, native, seaLevelM, cvtMesh, cellIdMap, width, height, flipHorizontal])
   useEffect(() => () => texture?.dispose(), [texture])
 
-  return { texture, data: monthly, loading: isFetching, displayingMonthly }
+  return { texture, data: monthly, loading: !trialData && isFetching, displayingMonthly }
 }

@@ -4,10 +4,19 @@ import { DataTexture, LinearFilter, NearestFilter, RepeatWrapping, SRGBColorSpac
 import { GRID_H, GRID_W } from '../../playground/temperatureDraft'
 import { temperaturePreviewPixels, type TemperaturePreview } from '../../playground/temperaturePreview'
 import type { LayerState } from '../../components/map/MapLayerPanel'
+import type { ClimateTrialResult } from '../../api/climateTrials'
 import { climateRasterPixels, climateRasterSurface } from './climateDownscale'
 import { temperatureColor } from './utils/colorScales'
 
 export type MapMode = 'official' | 'trial'
+export type ClimateTrialTime = { monthly: boolean; month: number }
+export type EbmMapView = {
+  result: ClimateTrialResult
+  layers: LayerState
+  setLayers: (state: LayerState) => void
+  time: ClimateTrialTime
+  setTime: (time: ClimateTrialTime) => void
+}
 
 export function useTemperatureTrialPreview(scope: string | null, mode: MapMode, downscale: boolean) {
   const [reported, setReported] = useState<{ scope: string; preview: TemperaturePreview } | null>(null)
@@ -43,6 +52,7 @@ export function useTemperatureTrialPreview(scope: string | null, mode: MapMode, 
 }
 
 export type MapTemperatureTrialSession = ReturnType<typeof useTemperatureTrialPreview> & {
+  ebm: EbmMapView | null
   open: boolean
   mode: MapMode
   layerState: LayerState

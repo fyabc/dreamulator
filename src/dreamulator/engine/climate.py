@@ -132,23 +132,11 @@ class ClimateEngine(BaseEngine):
         # diverge.  Canonical physical forcing (luminosity, distance, tilt,
         # rotation, greenhouse) is still resolved from planets.yaml/stellar
         # below and overrides anything in terrain_config.yaml.
-        terrain_config_path = self.find_input("terrain_config.yaml")
-        if terrain_config_path is not None:
-            config = TerrainPipelineConfig.from_yaml(terrain_config_path)
-        else:
-            config = TerrainPipelineConfig()
-        warnings.extend(resolve_and_apply_physical_parameters(self, config, planet=planet))
-
-        from dreamulator.map.elevation_input import SOURCE_MANIFEST, load_elevation_sources
-
         try:
-            source = load_elevation_sources(self.find_input(SOURCE_MANIFEST)).get(planet.id)
+            config, config_warnings = self.resolve_config(planet)
         except ValueError as e:
             return EngineResult(engine_name=self.name, success=False, warnings=warnings + [str(e)])
-        if source is not None:
-            mapping = source.provenance.mapping
-            assert mapping is not None
-            config.sea_level_offset_m = 0.0 if mapping.mode == "threshold" else mapping.sea_level_m
+        warnings.extend(config_warnings)
 
         # ---- 4. Load CVT mesh with elevation ----
         mesh, mesh_source, mwarnings = _load_cvt_mesh_from_geological(
@@ -333,6 +321,20 @@ class ClimateEngine(BaseEngine):
                         logger.warning("Failed to update %s: %s", mesh_path, e)
 
         logger.warning("No source mesh file found to update with climate data")
+
+    def resolve_config(self, planet: Planet) -> tuple[TerrainPipelineConfig, list[str]]:
+        """Resolve climate forcing and elevation datum without writing world data."""
+        from dreamulator.map.elevation_input import SOURCE_MANIFEST, load_elevation_sources
+
+        path = self.find_input("terrain_config.yaml")
+        config = TerrainPipelineConfig.from_yaml(path) if path else TerrainPipelineConfig()
+        warnings = resolve_and_apply_physical_parameters(self, config, planet=planet)
+        source = load_elevation_sources(self.find_input(SOURCE_MANIFEST)).get(planet.id)
+        if source is not None:
+            mapping = source.provenance.mapping
+            assert mapping is not None
+            config.sea_level_offset_m = 0.0 if mapping.mode == "threshold" else mapping.sea_level_m
+        return config, warnings
 
     def _branch_name(self) -> str | None:
         """Branch this engine writes into (None for root-world builds)."""

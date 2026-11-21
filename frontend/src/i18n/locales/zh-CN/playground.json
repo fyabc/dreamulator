@@ -1,5 +1,63 @@
 {
   "badge": "实验",
+  "ebm": {
+    "title": "气候实验台",
+    "previewTitle": "气候实验台 · 温度预览",
+    "description": "全局试算使用当前分支已有的地质网格。参数和结果仅用于本次地图会话，不改写正式世界。",
+    "readingInputs": "正在读取世界参数…",
+    "show": "查看试算结果",
+    "openWorld": "前往世界构建",
+    "ready": "试算完成。已计算 {{cells}} 个单元，用时 {{seconds}} 秒。",
+    "grid": "模式网格：{{cells}} 个单元",
+    "months": "水汽收支第 {{pass}} 轮：已求解 {{done}} / {{total}} 个月。",
+    "model": {
+      "label": "气候模型",
+      "ebm": {
+        "name": "EBM",
+        "help": "能量平衡模型。使用 Dreamulator 的气候管线快速求解，提供年均和逐月图层。"
+      },
+      "eps": {
+        "name": "EPS",
+        "help": "在 WebGPU 上复现 ExoPlaSim 的大气环流模型，按时间步推进气候。（开发中）"
+      },
+      "epsPlus": {
+        "name": "EPS++",
+        "help": "在 EPS 基础上扩展气候模型，加入动态洋流等耦合过程。（开发中）"
+      }
+    },
+    "progress": {
+      "title": "运行进度",
+      "steps": "已完成 {{done}} / {{total}} 步",
+      "active": "当前阶段：{{stage}}",
+      "done": "已完成",
+      "ready": "试算完成，图层已就绪。",
+      "stageElapsed": "本阶段已用时 {{seconds}} 秒",
+      "totalElapsed": "累计用时 {{seconds}} 秒"
+    },
+    "stage": {
+      "queued": "启动本机计算",
+      "reading": "读取已有地质网格",
+      "temperature": "计算温度",
+      "wind": "计算风场与气压",
+      "ocean": "计算洋流",
+      "precipitation": "求解水汽收支与降水",
+      "koppen": "计算气候分类",
+      "writeback": "整理模式单元数据",
+      "export": "导出地图图层",
+      "loading": "载入试算图层"
+    },
+    "error": {
+      "reference_anchor": "真实地球主干只展示参照数据。请切换到模型分支运行试算。",
+      "build_inputs": "缺少已构建的天文数据或天体参数。请先构建世界。",
+      "build_mesh": "此天体没有已构建的地质网格。请先构建世界。",
+      "body_not_supported": "此天体没有可供 EBM 使用的地质层参数。请选择另一个天体。",
+      "memory_budget": "当前可用内存不足以计算此网格。请释放内存，或先用较小的网格构建世界。",
+      "trial_busy": "本机已有一个气候试算正在运行。请等待它完成后重试。",
+      "timed_out": "气候试算超过本机运行时限。可以用较小的网格重试。",
+      "params": "请填写四项有效参数，自转周期必须大于零。",
+      "generic": "无法完成本机气候试算。请重试，或查看技术详情。"
+    }
+  },
   "trial": {
     "title": "世界气候实验台",
     "root": "主干",

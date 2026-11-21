@@ -44,8 +44,8 @@ export default function MapViewerPage() {
   const { t } = useTranslation('map')
 
   const trial = useMapTemperatureTrial()
-  const trialActive = trial.mode === 'trial'
-  const vs = usePlanetViewState(worldName, routePlanetId, 'map', trialActive)
+  const trialActive = trial.mode === 'trial' && !trial.ebm
+  const vs = usePlanetViewState(worldName, routePlanetId, 'map', trialActive, trial.ebm)
   const {
     selectedBranch, setSelectedBranch,
     cleanMode, setCleanMode,
@@ -128,7 +128,7 @@ export default function MapViewerPage() {
     monthlyMode={trialActive ? typeof trial.preview?.period === 'number' : monthlyMode} monthlyData={trialActive ? null : monthlyData}
     temperaturePeriodLabel={typeof trial.preview?.period === 'number' ? trial.preview.label : undefined}
     monthIndex={monthlyMonth} onMonthlyModeChange={handleMonthlyModeChange}
-    detail={{ downscaled: downscale && (trialActive || activeMainLayer !== 'koppen' || koppenDownscale.available),
+    detail={{ downscaled: downscale,
       onChange: setDownscale, pending: koppenDownscale.pending, available: trialActive
       ? display.state.layers.temperature > 0 && Boolean(trial.preview) : koppenDownscale.available || (Boolean(cvtMesh) && canDownscale(activeMainLayer)) }}
     particleMode={particleMode} onParticleModeChange={setParticleMode} />
@@ -200,7 +200,7 @@ export default function MapViewerPage() {
       {awaitingBuild && !cleanMode && (
         <AwaitingBuildBanner world={worldName} branch={selectedBranch} />
       )}
-      {!cleanMode && !trialActive && cvtMesh && (
+      {!cleanMode && trial.mode === 'official' && cvtMesh && (
         <ClimateLegend layer={activeMainLayer} mesh={cvtMesh} monthlyMode={monthlyMode}
           monthlyData={displayingMonthly ? monthlyData : null} monthlyLoading={monthlyMode && monthlyLoading}
           monthIndex={monthlyMonth} yearlyData={yearlyData} />

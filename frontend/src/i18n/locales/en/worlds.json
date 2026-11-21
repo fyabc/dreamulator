@@ -70,6 +70,7 @@
   "temperatureTrial": {
     "title": "Climate experiments",
     "description": "Start with this branch's global elevation and available settings. Currently estimates annual and monthly temperatures without rebuilding the world.",
+    "ebmDescription": "Run the full EBM on this branch’s existing geological mesh. Try different settings and view climate layers without changing the world.",
     "planet": "Planet or moon",
     "open": "Run climate",
     "loading": "Looking for elevation maps…",

@@ -40,7 +40,7 @@ export function availableWorldLayers(mesh: CVTMesh | null, monthly: MonthlyClima
 
 export function useMapDisplayLayers(trial: MapTemperatureTrialSession, official: LayerState,
   setOfficial: (state: LayerState) => void, mesh: CVTMesh | null, monthly: MonthlyClimateData | null, hasUcc: boolean) {
-  const trialMode = trial.mode === 'trial'
+  const trialMode = trial.mode === 'trial' && !trial.ebm
   const hasTrialTemperature = Boolean(trial.preview)
   const available = useMemo(() => trialMode ? availableTrialLayers(hasTrialTemperature) : availableWorldLayers(mesh, monthly, hasUcc),
     [trialMode, hasTrialTemperature, mesh, monthly, hasUcc])

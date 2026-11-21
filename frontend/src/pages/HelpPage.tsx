@@ -99,7 +99,7 @@ function GettingStarted() {
         <ul className="flex flex-wrap gap-x-5">
           {Object.entries(temperatureSampleOrigins).map(([sample, origin]) => (
             <li key={sample}>
-              <Link to={temperatureTrialMapPath(origin)} className="inline-flex min-h-11 items-center rounded text-sm font-semibold text-neon-cyan underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-neon-cyan">
+              <Link to={temperatureTrialMapPath(mode === 'local' && sample === 'earth' ? { ...origin, branch: 'climate-dev' } : origin)} className="inline-flex min-h-11 items-center rounded text-sm font-semibold text-neon-cyan underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-neon-cyan">
                 {t(`start.temperatureSample.${sample}`)}
               </Link>
             </li>

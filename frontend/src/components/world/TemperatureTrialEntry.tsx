@@ -13,6 +13,7 @@ export default function TemperatureTrialEntry({ world, branch, preferred }: {
   preferred: string | null
 }) {
   const { t } = useTranslation('worlds', { keyPrefix: 'temperatureTrial' })
+  const staticMode = isStaticMode()
   const maps = useQuery({ queryKey: ['mapPlanets', world, branch], queryFn: () => api.listMapPlanets(world, branch) })
   const catalog = useQuery({ queryKey: ['systemCatalog', world, branch], queryFn: () => api.getSystemCatalog(world, branch), retry: false })
   const [selected, setSelected] = useState<string | null>(null)
@@ -22,7 +23,7 @@ export default function TemperatureTrialEntry({ world, branch, preferred }: {
   return <section aria-labelledby="temperature-trial-heading" className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-space-border pb-4">
     <div className="max-w-xl">
       <h2 id="temperature-trial-heading" className="font-semibold text-gray-100">{t('title')}</h2>
-      <p className="mt-1 text-sm text-gray-400">{t('description')}</p>
+      <p className="mt-1 text-sm text-gray-400">{t(staticMode ? 'description' : 'ebmDescription')}</p>
     </div>
     {planet ? <div className="flex flex-wrap items-center gap-2">
       {planets.length > 1 && <select aria-label={t('planet')} value={planet} onChange={event => setSelected(event.target.value)}
@@ -35,7 +36,7 @@ export default function TemperatureTrialEntry({ world, branch, preferred }: {
       : <div className="text-sm">
         <p className="text-gray-400">{t(maps.isError ? 'error' : 'noElevation')}</p>
         {maps.isError ? <button type="button" className="min-h-11 text-neon-cyan hover:underline" onClick={() => void maps.refetch()}>{t('retry')}</button>
-          : <Link to={isStaticMode() ? temperatureSamplesHelpPath : '/import'} className="inline-flex min-h-11 items-center text-neon-cyan hover:underline">{t(isStaticMode() ? 'samples' : 'import')}</Link>}
+          : <Link to={staticMode ? temperatureSamplesHelpPath : '/import'} className="inline-flex min-h-11 items-center text-neon-cyan hover:underline">{t(staticMode ? 'samples' : 'import')}</Link>}
       </div>}
   </section>
 }

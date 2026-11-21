@@ -1,5 +1,63 @@
 {
   "badge": "Experimental",
+  "ebm": {
+    "title": "Climate Lab",
+    "previewTitle": "Climate Lab · Temperature Preview",
+    "description": "Runs globally on this branch’s existing geological mesh. Trial settings and results stay in this map session and do not change the world.",
+    "readingInputs": "Reading world parameters…",
+    "show": "View trial result",
+    "openWorld": "Open world to build it",
+    "ready": "Trial complete. Computed {{cells}} cells in {{seconds}} s.",
+    "grid": "Model grid: {{cells}} cells",
+    "months": "Moisture budget pass {{pass}}: {{done}} of {{total}} months solved.",
+    "model": {
+      "label": "Climate model",
+      "ebm": {
+        "name": "EBM",
+        "help": "The energy balance model runs Dreamulator’s fast climate solver and provides annual and monthly layers."
+      },
+      "eps": {
+        "name": "EPS",
+        "help": "A WebGPU reimplementation of ExoPlaSim that simulates atmospheric circulation one time step at a time. (In development)"
+      },
+      "epsPlus": {
+        "name": "EPS++",
+        "help": "An extension of EPS with coupled processes such as dynamic ocean currents. (In development)"
+      }
+    },
+    "progress": {
+      "title": "Run progress",
+      "steps": "{{done}} of {{total}} steps complete",
+      "active": "Current stage: {{stage}}",
+      "done": "Complete",
+      "ready": "Trial complete. Map layers are ready.",
+      "stageElapsed": "This stage: {{seconds}} s",
+      "totalElapsed": "Total: {{seconds}} s"
+    },
+    "stage": {
+      "queued": "Start local computation",
+      "reading": "Read the geological mesh",
+      "temperature": "Compute temperature",
+      "wind": "Compute wind and pressure",
+      "ocean": "Compute ocean currents",
+      "precipitation": "Solve moisture budget and precipitation",
+      "koppen": "Classify climates",
+      "writeback": "Prepare cell data",
+      "export": "Export map layers",
+      "loading": "Load trial layers"
+    },
+    "error": {
+      "reference_anchor": "The Earth main world is an observational reference. Switch to a model branch to run a trial.",
+      "build_inputs": "Built astronomy data or body parameters are missing. Build the world first.",
+      "build_mesh": "This body has no built geological mesh. Build the world first.",
+      "body_not_supported": "This body has no geological parameters for the EBM. Select another body.",
+      "memory_budget": "There is not enough memory for this mesh. Free memory or build the world with a smaller mesh.",
+      "trial_busy": "A local climate trial is already running. Wait for it to finish and try again.",
+      "timed_out": "The trial exceeded the local runtime limit. Try a smaller mesh.",
+      "params": "Enter valid values for all four settings. The rotation period must be greater than zero.",
+      "generic": "The local climate trial could not finish. Try again or check the technical details."
+    }
+  },
   "trial": {
     "title": "World climate lab",
     "root": "Main world",

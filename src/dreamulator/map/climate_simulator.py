@@ -227,6 +227,9 @@ def simulate_climate(
     mesh: CVTMesh,
     config: TerrainPipelineConfig,
     debug: dict[str, np.ndarray] | None = None,
+    *,
+    on_progress: Callable[[str], None] | None = None,
+    on_precipitation_month: Callable[[int, int], None] | None = None,
 ) -> dict[str, float]:
     """Run climate simulation on the CVT mesh, filling cell climate fields.
 
@@ -299,6 +302,8 @@ def simulate_climate(
     # ------------------------------------------------------------------
     # Stage 1: Temperature
     # ------------------------------------------------------------------
+    if on_progress is not None:
+        on_progress("temperature")
     _t0 = _time.time()
     _console.print("  [dim]1/6  Temperature (EBM + latitude + altitude)[/dim]")
     teq_K = equilibrium_temperature(
@@ -686,6 +691,8 @@ def simulate_climate(
     # Stage 2: Wind
     phase_timings["temperature"] = _time.time() - _t0
     _console.print(f"  [green]done[/green] [dim]({phase_timings['temperature']:.1f}s)[/dim]")
+    if on_progress is not None:
+        on_progress("wind")
     _t0 = _time.time()
     _console.print("  [dim]2/6  Wind field (Hadley cells + monsoon)[/dim]")
     # ------------------------------------------------------------------
@@ -1036,6 +1043,8 @@ def simulate_climate(
     # Stage 2.5: Ocean currents (Stommel gyres + SST correction)
     phase_timings["wind"] = _time.time() - _t0
     _console.print(f"  [green]done[/green] [dim]({phase_timings['wind']:.1f}s)[/dim]")
+    if on_progress is not None:
+        on_progress("ocean")
     _t0 = _time.time()
     _console.print("  [dim]3/6  Ocean currents (Stommel gyres + SST)[/dim]")
     # ------------------------------------------------------------------
@@ -1219,6 +1228,8 @@ def simulate_climate(
     # Stage 3: Precipitation (monthly mass-conserving moisture budget)
     phase_timings["ocean"] = _time.time() - _t0
     _console.print(f"  [green]done[/green] [dim]({phase_timings['ocean']:.1f}s)[/dim]")
+    if on_progress is not None:
+        on_progress("precipitation")
     _t0 = _time.time()
     _console.print("  [dim]4/6  Precipitation (monthly moisture budget)[/dim]")
     # ------------------------------------------------------------------
@@ -1237,6 +1248,7 @@ def simulate_climate(
         edge_table=(_msrc, _mdst),
         distance_to_coast_km=distance_to_coast_km,
         ice_increment_c=_t_ice_increment,
+        on_month=on_precipitation_month,
     )
 
     # ── ④ Stationary-wave response (roadmap ④): two-pass fixed point ──
@@ -1345,6 +1357,7 @@ def simulate_climate(
             edge_table=(_msrc, _mdst),
             distance_to_coast_km=distance_to_coast_km,
             ice_increment_c=_t_ice_increment,
+            on_month=on_precipitation_month,
         )
         _resid = float(np.abs(p_monthly - _p_pass1).mean())
         _console.print(f"    [dim]wave two-pass |P₂−P₁| mean {_resid:.1f} mm[/dim]")
@@ -1410,6 +1423,7 @@ def simulate_climate(
             distance_to_coast_km=distance_to_coast_km,
             ice_increment_c=_t_ice_increment,
             omega_gate_monthly=_gate_omega,
+            on_month=on_precipitation_month,
         )
         _resid = float(np.abs(p_monthly - _p_pass1).mean())
         _console.print(f"    [dim]wave v2 two-pass |P₂−P₁| mean {_resid:.1f} mm[/dim]")
@@ -1639,6 +1653,7 @@ def simulate_climate(
                 distance_to_coast_km=distance_to_coast_km,
                 ice_increment_c=_t_ice_increment,
                 omega_gate_monthly=_wt_omega_gate,
+                on_month=on_precipitation_month,
             )
             _resid = float(np.abs(p_monthly - _p_prev).mean())
             _console.print(
@@ -1680,6 +1695,8 @@ def simulate_climate(
     # Stage 4: Köppen classification
     phase_timings["precipitation"] = _time.time() - _t0
     _console.print(f"  [green]done[/green] [dim]({phase_timings['precipitation']:.1f}s)[/dim]")
+    if on_progress is not None:
+        on_progress("koppen")
     _t0 = _time.time()
     _console.print("  [dim]5/6  Koppen classification[/dim]")
     # ------------------------------------------------------------------
@@ -1799,6 +1816,8 @@ def simulate_climate(
     # ------------------------------------------------------------------
     phase_timings["koppen"] = _time.time() - _t0
     _console.print(f"  [green]done[/green] [dim]({phase_timings['koppen']:.1f}s)[/dim]")
+    if on_progress is not None:
+        on_progress("writeback")
     _t0 = _time.time()
     _console.print("  [dim]6/6  Write results to mesh[/dim]")
 
@@ -3312,6 +3331,7 @@ def _compute_precipitation_monthly_budget(
     ice_increment_c: np.ndarray | None = None,
     omega_gate_monthly: np.ndarray | None = None,
     distance_to_coast_km: np.ndarray | None = None,
+    on_month: Callable[[int, int], None] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Precipitation from the monthly mass-conserving moisture budget.
 
@@ -3647,6 +3667,8 @@ def _compute_precipitation_monthly_budget(
         # in month order, so the result is bit-identical to the serial path.
         months = range(12)
         results: list[tuple[np.ndarray, np.ndarray, np.ndarray | None]]
+        if on_month is not None:
+            on_month(0, len(months))
         workers = min(_monthly_solve_workers(), 12)
         if workers > 1:
             from multiprocessing import get_context
@@ -3655,11 +3677,19 @@ def _compute_precipitation_monthly_budget(
             _MONTHLY_SOLVE_TASK = _solve_month
             try:
                 with get_context("fork").Pool(workers) as pool:
-                    results = pool.map(_monthly_solve_task, months, chunksize=1)
+                    results = []
+                    for result in pool.imap(_monthly_solve_task, months, chunksize=1):
+                        results.append(result)
+                        if on_month is not None:
+                            on_month(len(results), len(months))
             finally:
                 _MONTHLY_SOLVE_TASK = None
         else:
-            results = [_solve_month(m) for m in months]
+            results = []
+            for month in months:
+                results.append(_solve_month(month))
+                if on_month is not None:
+                    on_month(len(results), len(months))
 
         p_out = np.zeros((n, 12), dtype=np.float64)
         dbg_storm = np.zeros(n)

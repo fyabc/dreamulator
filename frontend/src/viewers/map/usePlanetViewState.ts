@@ -36,6 +36,7 @@ import { useKoppenDownscale } from './useKoppenDownscale'
 import { isMonthlyLayer, monthFromSearch } from '../../components/map/climateTime'
 import { useYearlyClimate } from './useYearlyClimate'
 import { useUccLayer } from './useUccLayer'
+import type { EbmMapView } from './useTemperatureTrialPreview'
 import type { ColorMode, CVTMesh, MapMetadata, VoronoiCell } from './types'
 
 /** The two pages this hook serves — decides the planet-redirect URL base. */
@@ -51,7 +52,7 @@ export interface PlanetViewState {
 
   // --- Layer state (?layer= deep link + slot semantics) ---
   layerState: LayerState
-  setLayerState: React.Dispatch<React.SetStateAction<LayerState>>
+  setLayerState: (next: LayerState) => void
   activeMainLayer: string | null
   activeColorMode: ColorMode | null
 
@@ -141,6 +142,7 @@ export function usePlanetViewState(
   routePlanetId: string | undefined,
   viewKind: PlanetViewKind,
   trialActive = false,
+  ebm?: EbmMapView | null,
 ): PlanetViewState {
   const { t } = useTranslation('map')
   const navigate = useNavigate()
@@ -170,28 +172,40 @@ export function usePlanetViewState(
   }
 
   // --- Layers (?layer= deep link, slot semantics identical to panel clicks) ---
-  const [layerState, setLayerState] = useState<LayerState>(() =>
+  const [officialLayers, setOfficialLayers] = useState<LayerState>(() =>
     initialLayerState(searchParams.get('layer'), worldName === 'earth'))
+  const layerState = ebm?.layers ?? officialLayers
+  const setLayerState = ebm?.setLayers ?? setOfficialLayers
   const activeMainLayer = activeMainLayerId(layerState)
+  const officialMainLayer = activeMainLayerId(officialLayers)
   useEffect(() => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
-      if (activeMainLayer && activeMainLayer !== 'terrain') next.set('layer', activeMainLayer)
+      if (officialMainLayer && officialMainLayer !== 'terrain') next.set('layer', officialMainLayer)
       else next.delete('layer')
       return next
     }, { replace: true })
-  }, [activeMainLayer, setSearchParams])
+  }, [officialMainLayer, setSearchParams])
 
-  const [monthlyMode, setMonthlyMode] = useState(
+  const [officialMonthlyMode, setOfficialMonthlyMode] = useState(
     () => searchParams.get('monthly') === '1' || searchParams.get('play') === '1',
   )
-  const [monthlyMonth, setMonthlyMonth] = useState(() => monthFromSearch(searchParams))
+  const [officialMonth, setOfficialMonth] = useState(() => monthFromSearch(searchParams))
+  const monthlyMode = ebm?.time.monthly ?? officialMonthlyMode
+  const monthlyMonth = ebm?.time.month ?? officialMonth
+  const setTrialTime = ebm?.setTime
   const monthlyField: MonthlyField | null = isMonthlyLayer(activeMainLayer) && activeMainLayer !== 'winds' ? activeMainLayer : null
-  const handleMonthlyModeChange = setMonthlyMode
+  const handleMonthlyModeChange = useCallback((monthly: boolean) => {
+    if (setTrialTime) setTrialTime({ monthly, month: monthlyMonth })
+    else setOfficialMonthlyMode(monthly)
+  }, [setTrialTime, monthlyMonth])
   const selectMonth = useCallback((index: number) => {
-    setMonthlyMonth(index)
-    setMonthlyMode(true)
-  }, [])
+    if (setTrialTime) setTrialTime({ monthly: true, month: index })
+    else {
+      setOfficialMonth(index)
+      setOfficialMonthlyMode(true)
+    }
+  }, [setTrialTime])
   const downscale = searchParams.get('detail') === 'downscaled'
   const setDownscale = useCallback((enabled: boolean) => {
     setSearchParams(previous => {
@@ -334,12 +348,13 @@ export function usePlanetViewState(
   })
 
   // CVT mesh data for polygon rendering + cell lookups
-  const { data: cvtMesh, isError: cvtMeshError } = useQuery({
+  const { data: officialMesh, isError: cvtMeshError } = useQuery({
     queryKey: ['cvtMesh', worldName, selectedPlanet, selectedBranch],
     queryFn: () => api.getCvtMesh(worldName!, selectedPlanet, selectedBranch),
     enabled: !!worldName && !!selectedPlanet,
     retry: false,
   })
+  const cvtMesh = ebm?.result.mesh ?? officialMesh
   // (cvtMeshError is re-declared from the query for the page error banner.)
 
   // Legacy voronoi fallback — fetched only when the CVT mesh is unavailable
@@ -387,6 +402,7 @@ export function usePlanetViewState(
   const koppenActive = !trialActive && activeMainLayer === 'koppen'
   const { texture: monthlyThematic, data: monthlyData, loading: monthlyLoading, displayingMonthly } = useMonthlyClimate({
     worldName, planetId: selectedPlanet, branch: selectedBranch, month: monthlyMonth,
+    trialData: ebm?.result.monthly,
     field: trialActive ? null : monthlyField, active: !trialActive && (koppenActive || monthlyMode || isMonthlyLayer(activeColorMode)),
     monthlyMode, downscale, native, seaLevelM,
     cvtMesh: cvtMesh ?? null, cellIdMap,
@@ -394,7 +410,8 @@ export function usePlanetViewState(
   })
   const koppenDownscale = useKoppenDownscale(koppenActive, downscale, monthlyData, cvtMesh ?? null, cellIdMap,
     meshTextureSize.width, meshTextureSize.height, seaLevelM, native)
-  const yearlyProduct = useYearlyClimate(worldName, selectedPlanet, selectedBranch)
+  const officialYearly = useYearlyClimate(ebm ? undefined : worldName, selectedPlanet, selectedBranch)
+  const yearlyProduct = ebm ? ebm.result.yearly : officialYearly
   const yearlyData = yearlyProduct && cvtMesh && yearlyProduct.numCells === cvtMesh.cells.length ? yearlyProduct : null
   const uccTexture = useUccLayer(
     yearlyData, cvtMesh ?? null, cellIdMap,
@@ -410,14 +427,14 @@ export function usePlanetViewState(
       else next.delete('season')
       if (dayNightEnabled) next.set('night', '1')
       else next.delete('night')
-      if (monthlyMode) next.set('monthly', '1')
+      if (officialMonthlyMode) next.set('monthly', '1')
       else next.delete('monthly')
-      if (monthlyMode || monthlyMonth !== 0) next.set('month', String(monthlyMonth))
+      if (officialMonthlyMode || officialMonth !== 0) next.set('month', String(officialMonth))
       else next.delete('month')
       next.delete('play')
       return next
     }, { replace: true })
-  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, monthlyMode, monthlyMonth, setSearchParams])
+  }, [sunLongitudeDeg, seasonDeg, dayNightEnabled, officialMonthlyMode, officialMonth, setSearchParams])
 
   // Esc → exit clean mode first, otherwise clear all selections
   useEffect(() => {
@@ -480,9 +497,10 @@ export function usePlanetViewState(
     return (typeof r === 'number' && r > 0 ? r : 1) * 6_371_000
   }, [selectedPlanet, bodyByName])
   const axialTiltDeg = useMemo(() => {
+    if (ebm) return ebm.result.forcing.axial_tilt_deg
     if (!selectedPlanet) return 0
     return bodyByName.get(selectedPlanet)?.axial_tilt_deg ?? 0
-  }, [selectedPlanet, bodyByName])
+  }, [selectedPlanet, bodyByName, ebm])
   const solarDeclination = solarDeclinationDeg(seasonDeg, axialTiltDeg)
 
   // --- Heightmap import (write op; live mode only) ---

@@ -1,19 +1,24 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { isStaticMode } from '../../api/mode'
+import type { ClimateTrialResult } from '../../api/climateTrials'
 import type { TemperaturePreview } from '../../playground/temperaturePreview'
 
 const TemperatureLab = lazy(() => import('../../playground/TemperatureLab'))
+const EbmClimateLab = lazy(() => import('../../playground/EbmClimateLab'))
 export const trialPanelId = 'map-climate-trial'
 export const trialButtonId = 'map-climate-trial-button'
 
-export function MapTemperatureTrial({ open, onClose, search, onPreview, onShow }: {
+export function MapTemperatureTrial({ open, onClose, search, onPreview, onResult, onShow }: {
   open: boolean
   onClose: () => void
   search: URLSearchParams
   onPreview: (preview: TemperaturePreview | null) => void
+  onResult: (result: ClimateTrialResult) => void
   onShow: () => void
 }) {
   const { t } = useTranslation('playground')
+  const preview = isStaticMode() || search.has('draft')
   const closeButton = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (open) closeButton.current?.focus({ preventScroll: true })
@@ -29,12 +34,13 @@ export function MapTemperatureTrial({ open, onClose, search, onPreview, onShow }
         onClose()
       }}>
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-space-border px-3 py-1">
-        <h2 id={`${trialPanelId}-title`} className="text-sm font-semibold text-gray-100">{t('trial.title')}</h2>
+        <h2 id={`${trialPanelId}-title`} className="text-sm font-semibold text-gray-100">{t(preview ? 'ebm.previewTitle' : 'ebm.title')}</h2>
         <button ref={closeButton} type="button" onClick={onClose} className="atlas-tool-button text-xs">{t('trial.collapse')}</button>
       </header>
       <div className="min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-2">
-        <Suspense fallback={<p role="status" className="text-xs text-gray-400">{t('action.loadingInput')}</p>}>
-          <TemperatureLab search={search} map={{ onPreview, onShowPreview: onShow }} />
+        <Suspense fallback={<p role="status" className="text-xs text-gray-400">{t('ebm.readingInputs')}</p>}>
+          {preview ? <TemperatureLab search={search} map={{ onPreview, onShowPreview: onShow }} />
+            : <EbmClimateLab search={search} open={open} onResult={onResult} onShow={onShow} />}
         </Suspense>
       </div>
     </section>

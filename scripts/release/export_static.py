@@ -561,7 +561,11 @@ def _export_starter_templates(output_dir: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Export world data as static JSON")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Export world data as static JSON. Temporary local climate trials are not exported."
+        )
+    )
     parser.add_argument(
         "--output",
         type=Path,
