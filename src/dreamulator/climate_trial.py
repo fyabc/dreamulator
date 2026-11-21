@@ -97,7 +97,14 @@ def resolve_trial_source(world_dir: Path, planet_id: str, branch: str | None) ->
     return TrialSource(config, mesh_path)
 
 
-def compute_trial(source: TrialSource, forcing: TrialForcing, output: Path, budget: int) -> None:
+def compute_trial(
+    source: TrialSource,
+    forcing: TrialForcing,
+    output: Path,
+    budget: int,
+    *,
+    diagnostic_pngs: bool = True,
+) -> None:
     """Run the production solver and exporter without touching the input files."""
     from dreamulator.map.climate_simulator import simulate_climate
     from dreamulator.map.export import (
@@ -144,7 +151,7 @@ def compute_trial(source: TrialSource, forcing: TrialForcing, output: Path, budg
     simulate_climate(mesh, source.config, on_progress=phase, on_precipitation_month=month)
     phase("export")
     save_cvt_mesh(output / MESH_FILENAME, mesh)
-    export_climate_layers(mesh, output, source.config)
+    export_climate_layers(mesh, output, source.config, diagnostic_pngs=diagnostic_pngs)
     if not (output / "climate_monthly.msgpack").is_file():
         raise TrialUnavailableError("missing_result")
 

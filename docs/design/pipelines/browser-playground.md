@@ -17,6 +17,8 @@
 
 ## 浏览器运行时与数据
 
+完整 EBM 的试算导出器允许浏览器调用方关闭温度和降水诊断 PNG。关闭后，它不做这两张图的等距圆柱投影，也不写对应的栅格量程和分辨率。球面网格、柯本分类、年均和逐月产物仍由同一导出器生成，正式构建和本机试算默认继续输出诊断图。静态站的地图工作台尚未接入完整 EBM。
+
 `frontend/src/playground/temperature.worker.ts` 在首次计算时从站点自身加载 Pyodide 与 NumPy。同一实验会话的后续运行复用已经初始化的运行时，计算不占用界面主线程。
 Vite 在开发和构建时准备这批文件。核心文件来自锁定的 `pyodide` npm 包，NumPy 的 WebAssembly 安装包从分发镜像下载，并按 Pyodide 的包清单校验 SHA-256。普通访客不需要连接第三方 CDN，也不会在打开页面时预先下载运行时。生成的运行时资源随站点发布，不入 Git。[Pyodide 上游源码](https://github.com/pyodide/pyodide/tree/314.0.7)对应当前锁定版本。
 计算线程把 `engine/climate_physics.py`、`engine/climate_seasonality.py` 和

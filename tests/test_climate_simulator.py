@@ -7,6 +7,7 @@ Uses a small synthetic mesh (100 cells) for fast execution.
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -356,8 +357,6 @@ class TestClimateSimulatorEndToEnd:
         tmp_path_factory: pytest.TempPathFactory,
     ) -> None:
         """Climate raster export should produce valid PNG files."""
-        import dataclasses
-
         from dreamulator.map.export import (
             _climate_data_available,
             export_climate_layers,
@@ -369,7 +368,7 @@ class TestClimateSimulatorEndToEnd:
         output_dir = tmp_path_factory.mktemp("climate_output")
 
         # Set export resolution (replace, not mutate — config is class-scoped)
-        export_config = dataclasses.replace(config, export_width=180, export_height=90)
+        export_config = replace(config, export_width=180, export_height=90)
         export_climate_layers(sim_mesh, output_dir, export_config)
 
         # Check files exist
@@ -392,6 +391,51 @@ class TestClimateSimulatorEndToEnd:
 
         # No NaN in output
         assert not np.any(np.isnan(temp_grid))
+
+    def test_export_without_diagnostic_pngs(
+        self,
+        sim_mesh: CVTMesh,
+        config: TerrainPipelineConfig,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import json
+
+        from dreamulator.map import export
+
+        full = tmp_path / "full"
+        lean = tmp_path / "lean"
+        full.mkdir()
+        lean.mkdir()
+        export_config = replace(config, export_width=180, export_height=90)
+        export.export_climate_layers(sim_mesh, full, export_config)
+
+        def reject_raster_export(*_args: object, **_kwargs: object) -> None:
+            pytest.fail("The lean export must not build or render diagnostic rasters")
+
+        monkeypatch.setattr(export, "build_export_tree", reject_raster_export)
+        monkeypatch.setattr(export, "export_equirectangular", reject_raster_export)
+        export.export_climate_layers(sim_mesh, lean, export_config, diagnostic_pngs=False)
+
+        assert {path.name for path in lean.iterdir()} == {path.name for path in full.iterdir()} - {
+            "temperature.png",
+            "precipitation.png",
+        }
+        for name in ("koppen.json", "climate_yearly.msgpack", "climate_monthly.msgpack"):
+            assert (full / name).read_bytes() == (lean / name).read_bytes()
+        for original, retained in zip(
+            export.load_climate_monthly(full), export.load_climate_monthly(lean), strict=True
+        ):
+            np.testing.assert_array_equal(original, retained)
+
+        full_meta, lean_meta = (
+            json.loads((directory / "climate_metadata.json").read_text(encoding="utf-8"))
+            for directory in (full, lean)
+        )
+        assert full_meta["export_resolution"] == [180, 90]
+        for key in ("temperature_range_c", "precipitation_range_mm", "export_resolution"):
+            del full_meta[key]
+        assert full_meta == lean_meta
 
 
 class TestColdTrap:

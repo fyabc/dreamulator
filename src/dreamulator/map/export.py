@@ -1247,32 +1247,13 @@ def load_climate_monthly(map_dir: Path) -> tuple[np.ndarray, np.ndarray]:
     return deq("t"), deq("p")
 
 
-def export_climate_layers(
+def _export_climate_diagnostic_rasters(
     mesh: CVTMesh,
     output_dir: Path,
-    config: TerrainPipelineConfig,
-    *,
-    climate_provenance: dict[str, object] | None = None,
-) -> None:
-    """Export climate raster and vector layers.
-
-    Produces:
-        - temperature.png (16-bit PNG, range [-40, +50] °C)
-        - precipitation.png (16-bit PNG, range [0, 6000] mm/yr)
-        - koppen.json (per-cell Köppen class codes)
-        - climate_metadata.json
-        - climate_monthly.msgpack (per-cell monthly series, when present)
-        - climate_yearly.msgpack (per-cell UCC descriptors, when present)
-
-    Args:
-        mesh: CVT mesh with climate fields populated.
-        output_dir: Output directory.
-        config: Pipeline configuration.
-    """
-    import json
-
-    width = config.export_width
-    height = config.export_height
+    width: int,
+    height: int,
+) -> dict[str, object]:
+    """Write temperature and precipitation PNGs and return their encoding metadata."""
     tree = build_export_tree(mesh)  # Stage 0.3: shared across both rasters
 
     # 1. Temperature raster
@@ -1290,6 +1271,36 @@ def export_climate_layers(
     )
     export_layer_png(precip_grid, output_dir / "precipitation.png", p_min, p_max)
     logger.info("  Exported precipitation.png [%.0f, %.0f] mm/yr", p_min, p_max)
+
+    return {
+        "temperature_range_c": [t_min, t_max],
+        "precipitation_range_mm": [p_min, p_max],
+        "export_resolution": [width, height],
+    }
+
+
+def export_climate_layers(
+    mesh: CVTMesh,
+    output_dir: Path,
+    config: TerrainPipelineConfig,
+    *,
+    climate_provenance: dict[str, object] | None = None,
+    diagnostic_pngs: bool = True,
+) -> None:
+    """Export climate metadata, classification and monthly and yearly cell data.
+
+    Set ``diagnostic_pngs=False`` to omit the temperature and precipitation
+    rasters and their encoding metadata without changing the cell data.
+    """
+    import json
+
+    raster_meta = (
+        _export_climate_diagnostic_rasters(
+            mesh, output_dir, config.export_width, config.export_height
+        )
+        if diagnostic_pngs
+        else {}
+    )
 
     # 3. Köppen classification vector data (per cell)
     koppen_by_cell = {}
@@ -1314,10 +1325,8 @@ def export_climate_layers(
 
     # 4. Climate metadata
     climate_meta = {
-        "temperature_range_c": [t_min, t_max],
-        "precipitation_range_mm": [p_min, p_max],
+        **raster_meta,
         "koppen_classes": sorted(koppen_counter.keys()),
-        "export_resolution": [width, height],
         "stellar_luminosity_sol": config.stellar_luminosity_sol,
         "orbital_distance_au": config.orbital_distance_au,
         "orbital_period_days": config.orbital_period_days,
