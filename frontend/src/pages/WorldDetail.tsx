@@ -9,7 +9,6 @@ import NarratorPanel from '../components/NarratorPanel'
 import BranchSelector from '../components/BranchSelector'
 import LayerDocuments from '../components/LayerDocuments'
 import CivMapEntry from '../components/civmap/CivMapEntry'
-import LayerDag from '../components/LayerDag'
 import LayerTabSection from '../components/world/LayerTabSection'
 import TemperatureTrialEntry from '../components/world/TemperatureTrialEntry'
 import WorldBuildPanel from '../components/world/WorldBuildPanel'
@@ -369,14 +368,6 @@ export default function WorldDetail() {
                       {world.stellar_system.orbits?.length || 0}
                     </p>
                   </section>
-                )}
-
-
-                {/* Layer DAG visualisation */}
-                {world.layers && (
-                  <LayerDag
-                    layers={world.layers}
-                  />
                 )}
               </div>
             )}

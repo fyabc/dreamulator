@@ -65,6 +65,7 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
     refetchOnWindowFocus: false,
   })
   const job = status.data
+  const jobTimestamp = job?.finished_at ?? job?.updated_at
   const lost = status.error instanceof ApiError && status.error.status === 404
   const terminal = !!job && !isActive(job) && !status.error
   const showResults = terminal || lost
@@ -88,6 +89,8 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
     ...(job?.result?.errors ?? []).filter((error) =>
       !job?.stages.some((stage) => stage.errors.includes(error))),
   ])]
+  const firstStageError = job?.state === 'failed'
+    ? job.stages.find((stage) => stage.errors.length > 0)?.errors[0] : undefined
   const conflict = start.error instanceof ApiError && start.error.status === 409 &&
     start.error.message.endsWith('is already active')
   const worldPath = `/worlds/${encodeURIComponent(world)}`
@@ -165,52 +168,62 @@ export default function WorldBuildPanel({ world, branch, readOnly }: WorldBuildP
 
       {readOnly ? <p className="text-sm text-gray-400">{t('build.referenceRoot')}</p> : (
         <>
-          <div className="space-y-1 text-sm" role="status">
-            {start.error && <p className="text-amber-300">{conflict ? t('build.busy') : t('build.startError', { error: start.error.message })}</p>}
-            {lost ? <p className="text-amber-300">{t('build.statusLost')}</p> : status.error ? (
-              <p className="text-amber-300">{t('build.statusError', { error: status.error.message })}</p>
-            ) : job ? <p className="font-medium">{t(`build.job.${job.state}`)}</p> :
-              jobId && <p className="text-gray-400">{t('build.checking')}</p>}
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
+            <div className="space-y-1" role="status">
+              {start.error && <p className="text-amber-300">{conflict ? t('build.busy') : t('build.startError', { error: start.error.message })}</p>}
+              {lost ? <p className="text-amber-300">{t('build.statusLost')}</p> : status.error ? (
+                <p className="text-amber-300">{t('build.statusError', { error: status.error.message })}</p>
+              ) : job ? <p className="font-medium">{t(`build.job.${job.state}`)}</p> :
+                jobId && <p className="text-gray-400">{t('build.checking')}</p>}
+            </div>
+            {job && !lost && jobTimestamp && (
+              <>
+                <span className="text-gray-400">{t('build.elapsed', { seconds: Math.floor(job.elapsed_seconds) })}</span>
+                <span className="text-gray-400">{t(job.finished_at ? 'build.finishedAt' : 'build.stageChanged')} <time dateTime={jobTimestamp}>
+                  {new Date(jobTimestamp).toLocaleString(i18n.resolvedLanguage)}
+                </time></span>
+              </>
+            )}
           </div>
 
           {job && !lost && (
             <>
-              <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-400">
-                <span>{t('build.elapsed', { seconds: Math.floor(job.elapsed_seconds) })}</span>
-                <span>{t('build.stageChanged')} <time dateTime={job.updated_at}>
-                  {new Date(job.updated_at).toLocaleString(i18n.resolvedLanguage)}
-                </time></span>
-              </p>
-              {job.stages.length > 0 && (
-                <ol className="divide-y divide-space-border rounded border border-space-border text-sm">
-                  {job.stages.map((stage) => (
-                    <li key={`${stage.engine}:${stage.bootstrap}`} className="px-3 py-2">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span>
-                          {t(`layer.${stage.layer}`, { defaultValue: stage.engine })}
-                          {stage.bootstrap && <span className="ml-2 text-xs text-gray-400">{t('build.bootstrap')}</span>}
-                        </span>
-                        <span className={stage.state === 'failed' ? 'text-red-300' :
-                          stage.state === 'succeeded' ? 'text-green-300' :
-                            stage.state === 'running' || stage.state === 'validating' ? 'text-neon-cyan' : 'text-gray-400'}>
-                          {t(`build.stage.${stage.state}`)}
-                        </span>
-                      </div>
-                      {stage.errors.length > 0 && (
-                        <ul className="mt-1 list-disc pl-5 break-words text-red-300">
-                          {stage.errors.map((error, index) => <li key={index}>{error}</li>)}
-                        </ul>
-                      )}
-                    </li>
-                  ))}
-                </ol>
-              )}
               {errors.length > 0 && (
                 <ul className="list-disc pl-5 break-words text-sm text-red-300">
                   {errors.map((error) => <li key={error}>{error}</li>)}
                 </ul>
               )}
+              {!errors.length && firstStageError && <p className="break-words text-sm text-red-300">{firstStageError}</p>}
               {job.state === 'failed' && <p className="text-sm text-gray-400">{t('build.failedHint')}</p>}
+              {job.stages.length > 0 && (
+                <details key={job.id} open={isActive(job)} className="text-sm">
+                  <summary className="w-fit cursor-pointer rounded text-gray-300 hover:text-neon-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-neon-cyan">
+                    {t('build.stageDetails')}
+                  </summary>
+                  <ol className="mt-2 divide-y divide-space-border rounded border border-space-border">
+                    {job.stages.map((stage) => (
+                      <li key={`${stage.engine}:${stage.bootstrap}`} className="px-3 py-2">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span>
+                            {t(`layer.${stage.layer}`, { defaultValue: stage.engine })}
+                            {stage.bootstrap && <span className="ml-2 text-xs text-gray-400">{t('build.bootstrap')}</span>}
+                          </span>
+                          <span className={stage.state === 'failed' ? 'text-red-300' :
+                            stage.state === 'succeeded' ? 'text-green-300' :
+                              stage.state === 'running' || stage.state === 'validating' ? 'text-neon-cyan' : 'text-gray-400'}>
+                            {t(`build.stage.${stage.state}`)}
+                          </span>
+                        </div>
+                        {stage.errors.length > 0 && (
+                          <ul className="mt-1 list-disc pl-5 break-words text-red-300">
+                            {stage.errors.map((error, index) => <li key={index}>{error}</li>)}
+                          </ul>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+              )}
             </>
           )}
 

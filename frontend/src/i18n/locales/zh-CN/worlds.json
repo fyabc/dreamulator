@@ -221,17 +221,6 @@
     "ecology": "生态",
     "civilization": "文明"
   },
-  "layerDag": {
-    "title": "层级架构",
-    "forkPoint": "分叉点",
-    "branchData": "分支数据",
-    "fresh": "已构建",
-    "stale": "待重建",
-    "absent": "无数据",
-    "inheritedFrom": "该层输入继承自分支",
-    "docCount": "{{count}} 篇文档",
-    "buildAge": "构建于 {{age}} 前"
-  },
   "branch": {
     "label": "分支",
     "hint": "切换世界线分支。在某一 DAG 层分叉，共享上层数据。类似于 Git branch。",
@@ -275,6 +264,8 @@
     "startNew": "开始新的构建",
     "elapsed": "已耗时 {{seconds}} 秒",
     "stageChanged": "最近阶段变化：",
+    "finishedAt": "结束于：",
+    "stageDetails": "阶段明细",
     "bootstrap": "准备继承的数据",
     "busy": "服务端已有构建在运行。请等它结束后重试。",
     "startError": "无法启动构建：{{error}}",

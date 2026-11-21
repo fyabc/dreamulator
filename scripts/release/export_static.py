@@ -498,9 +498,7 @@ def export_world(world_dir: Path, skip_branches: set[str] | None = None) -> dict
     result: dict = {}
     skip = skip_branches or set()
 
-    # 1. World config (world.yaml) — with per-layer build status enriched
-    # (same fields as the live API's get_world) so the static LayerDag shows
-    # freshness instead of the stale hand-maintained `configured` flags.
+    # 1. World config (world.yaml) — keep the same layer summary fields as the live API.
     world_data = load_yaml(world_dir / "world.yaml")
     if world_data is None:
         print(f"  WARNING: {world_dir.name}/world.yaml not found, skipping")

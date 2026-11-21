@@ -221,17 +221,6 @@
     "ecology": "Ecology",
     "civilization": "Civilization"
   },
-  "layerDag": {
-    "title": "Layer Architecture",
-    "forkPoint": "Fork point",
-    "branchData": "Branch data",
-    "fresh": "Built",
-    "stale": "Stale",
-    "absent": "No data",
-    "inheritedFrom": "Layer input inherited from branch",
-    "docCount": "{{count}} docs",
-    "buildAge": "built {{age}} ago"
-  },
   "branch": {
     "label": "Branch",
     "hint": "Switch worldline branch. Forks at a DAG layer, sharing data above it. Similar to a Git branch.",
@@ -275,6 +264,8 @@
     "startNew": "Start a new build",
     "elapsed": "Elapsed: {{seconds}} s",
     "stageChanged": "Last stage change:",
+    "finishedAt": "Finished at:",
+    "stageDetails": "Stage details",
     "bootstrap": "Prepare inherited data",
     "busy": "The server is already running a build. Wait for it to finish, then retry.",
     "startError": "Could not start the build: {{error}}",
