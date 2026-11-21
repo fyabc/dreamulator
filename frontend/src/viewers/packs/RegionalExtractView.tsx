@@ -12,7 +12,7 @@ import { regionPackWindow, type RegionWindow } from '../map/regionWindow'
 import type { LonLat } from '../map/utils/mapCoords'
 import PackMap from './PackMap'
 import PackStatusBar from './PackStatusBar'
-import RasterPointInspector from './RasterPointInspector'
+import ProbePanel from './ProbePanel'
 import RegionMapWorkspace from './RegionMapWorkspace'
 import RegionLayerPanel from './RegionLayerPanel'
 import { regionContextWindow } from './packCoords'
@@ -81,7 +81,7 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
         subtitle={t('regionWindow.summary', { lat, lon, spanKm })}
         sourceControl={sourceControl}
         status={<PackStatusBar hover={hover} window={window} />}
-        inspector={<RasterPointInspector point={pin} window={window} original={preview?.raster} refined={refined} />}
+        inspector={<ProbePanel point={pin ?? hover} window={window} original={preview?.raster} refined={refined} showingOriginal={!showRefined} />}
         onClearPoint={pin ? () => setPin(null) : undefined}
         layers={<RegionLayerPanel notice="elevationOnly" compare={refined ? { original: !showRefined, onChange: original => setShowRefined(!original) } : undefined}
           graticule={{ opacity: graticule, onChange: setGraticule }} />}
@@ -128,7 +128,7 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
           </details>}
         </>}>
         {preview ? <PackMap window={window} base={base} loading={!base} context={context} rivers={null} graticuleOpacity={graticule} pin={pin}
-          onHover={setHover} onProbe={setPin} /> : (
+          onHover={setHover} onLockPoint={setPin} /> : (
           <div className="absolute inset-0 grid place-content-center gap-2 p-4 text-center text-sm text-gray-400">
             <p role={missing || height.failed ? 'alert' : 'status'}>{t(missing ? 'packs.export.missing' : height.failed ? 'packs.export.previewFailed' : 'status.loading')}</p>
             {height.failed && <button type="button" className="min-h-11 text-neon-cyan hover:underline" onClick={height.retry}>{t('packs.export.retry')}</button>}

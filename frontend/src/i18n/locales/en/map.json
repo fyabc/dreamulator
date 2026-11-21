@@ -572,7 +572,7 @@
     "staticModeHint": "To view a region, open a published global map, choose Move to selection, then choose View region. Existing local regional maps are not published here.",
     "hoverPrompt": "Move the cursor for lon/lat",
     "loadingBase": "Loading base map…",
-    "clickToProbe": "Click to probe cell values",
+    "lockPoint": "Double-click to lock the point",
     "pickPrompt": "Regional map",
     "noPacks": "There are no saved regional maps yet. Open a global map to select an area.",
     "noMeta": "This regional map could not be loaded. Try again or choose another map.",
@@ -584,9 +584,10 @@
       "notFound": "This regional map is no longer available. Choose another map from the list.",
       "openWorlds": "Browse worlds",
       "retryList": "Reload map list",
-      "tools": "Regional tools",
-      "closeTools": "Close regional tools",
-      "closeProbe": "Close point details",
+      "refineTerrain": "Refine terrain",
+      "elevationExport": "Elevation & export",
+      "closeTools": "Close panel",
+      "unlockPoint": "Unlock point",
       "tapToProbe": "Tap the map to inspect a point"
     },
     "results": {
@@ -607,9 +608,7 @@
       "context": "Frame region and surroundings",
       "contextHint": "Recenter on the entire region and surrounding terrain",
       "contextReference": "Dashed line: region boundary. Outside: original world terrain.",
-      "currentReference": "Dashed line: region boundary. Outside: current world terrain.",
-      "zoomIn": "Zoom in",
-      "zoomOut": "Zoom out"
+      "currentReference": "Dashed line: region boundary. Outside: current world terrain."
     },
     "base": "Base",
     "conditions": {
@@ -618,6 +617,7 @@
       "reference": "Map reference",
       "rasterSource": "Data source",
       "map": "Map elevation",
+      "inputElevation": "Conditioning elevation",
       "source": "Regional source",
       "grid": "TD input grid",
       "terrain": "Elevation",
@@ -630,8 +630,10 @@
       "elevationOnly": "Browser refinement uses elevation only. Climate layers are not used.",
       "missingGrid": "This result has no recorded TD input grid. Only verifiable regional source fields are shown.",
       "unavailable": "This raster could not be read or verified.",
+      "readError": "Could not load",
       "hint": {
-        "terrain": "Inspect original or refined elevation, and the actual coarse TD input grid when recorded.",
+        "mapElevation": "Inspect elevation used in the map. When refined data is available, compare it with the original.",
+        "terrain": "Inspect the regional source elevation or the coarse elevation grid read by TD.",
         "temperature": "The regional source records surface temperature. The TD input grid uses annual mean temperature adjusted to sea level.",
         "temperatureStd": "The standard deviation of the twelve monthly mean temperatures.",
         "precipitation": "The sum of precipitation over twelve months.",
@@ -867,10 +869,8 @@
       "albedo": "Albedo"
     },
     "graticule": "Graticule",
-    "probePrompt": "Select a point inside the region to see its elevation and available data.",
+    "probePrompt": "Hover to inspect a point, or double-click to lock it.",
     "probeTitle": "Point details",
-    "rasterProbePrompt": "Select a point on the map to see its coordinates and elevation.",
-    "probing": "Probing…",
     "field": {
       "height": "Height",
       "biome": "Biome",

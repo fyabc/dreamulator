@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { ElevationRaster } from './elevationRaster'
-import { regionFields, type RegionPackBaseLayer } from './regionPackLayers'
+import { regionFields, type RegionFieldLayer } from './regionPackLayers'
 
-export function useRegionFieldPreview(raster: ElevationRaster | undefined, layer: RegionPackBaseLayer) {
-  const [preview, setPreview] = useState<{ raster: ElevationRaster; layer: RegionPackBaseLayer; url: string }>()
+export function useRegionFieldPreview(raster: ElevationRaster | undefined, layer: RegionFieldLayer | undefined) {
+  const [preview, setPreview] = useState<{ raster: ElevationRaster; layer: RegionFieldLayer; url: string; pixelated: true }>()
   useEffect(() => {
-    if (!raster) return
+    if (!raster || !layer) return
     const { range: [min, max], colors } = regionFields[layer]
     const canvas = document.createElement('canvas')
     canvas.width = raster.width
@@ -32,12 +32,12 @@ export function useRegionFieldPreview(raster: ElevationRaster | undefined, layer
     canvas.toBlob(blob => {
       if (!blob || cancelled) return
       url = URL.createObjectURL(blob)
-      setPreview({ raster, layer, url })
+      setPreview({ raster, layer, url, pixelated: true })
     })
     return () => {
       cancelled = true
       if (url) URL.revokeObjectURL(url)
     }
   }, [raster, layer])
-  return preview && preview.raster === raster && preview.layer === layer ? { url: preview.url, pixelated: true } : null
+  return preview && preview.raster === raster && preview.layer === layer ? preview : null
 }

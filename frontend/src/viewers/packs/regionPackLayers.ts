@@ -1,7 +1,7 @@
 import type { LonLat } from '../map/utils/mapCoords'
 import type { ElevationRaster } from './elevationRaster'
 import { lonLatToKm, type PackWindow } from './packCoords'
-import type { PackMeta } from './types'
+import type { PackMeta, RiverData } from './types'
 
 export const regionFields = {
   terrain: { field: 'elevation_m', unit: 'm', range: [-8000, 5000], colors: ['#0f2b51', '#427d98', '#79976a', '#a78b61', '#f5f0df'] },
@@ -12,25 +12,25 @@ export const regionFields = {
   runoff: { field: 'runoff', unit: 'mm/yr', range: [0, 2000], colors: ['#faf2db', '#addbb3', '#63b7ac', '#317d9d', '#214370'] },
 } as const
 
-export const regionPackBaseLayers = ['terrain', 'temperature', 'temperatureStd', 'precipitation', 'precipitationCv', 'runoff'] as const
+export const regionConditionLayers = ['terrain', 'temperature', 'temperatureStd', 'precipitation', 'precipitationCv'] as const
+export const regionFieldLayers = [...regionConditionLayers, 'runoff'] as const
+export const regionPackBaseLayers = ['mapElevation', ...regionFieldLayers] as const
+export type RegionFieldLayer = typeof regionFieldLayers[number]
 export type RegionPackBaseLayer = typeof regionPackBaseLayers[number]
-export type RegionRasterSource = 'map' | 'source' | 'grid'
+export type RegionRasterSource = 'source' | 'grid'
 
-export function regionRasterSources(meta: PackMeta | null, layer: RegionPackBaseLayer): RegionRasterSource[] {
-  const field = regionFields[layer].field
-  const choices: RegionRasterSource[] = []
-  if (layer === 'terrain' && meta?.height_source) choices.push('map')
-  if (meta?.condition_layers?.source.includes(field)) choices.push('source')
-  if (meta?.condition_layers?.grid.includes(field)) choices.push('grid')
-  return choices
+export function regionConditionSources(meta: PackMeta | null) {
+  return (['source', 'grid'] as const).filter(source =>
+    regionConditionLayers.some(layer => meta?.condition_layers?.[source].includes(regionFields[layer].field)))
 }
 
-export function regionRasterSource(choices: RegionRasterSource[], requested?: RegionRasterSource): RegionRasterSource | undefined {
-  if (requested && choices.includes(requested)) return requested
-  return choices.includes('map') ? 'map' : choices[choices.length - 1]
+export function regionFieldSource(meta: PackMeta | null, layer: RegionFieldLayer, selected: RegionRasterSource) {
+  const source = layer === 'runoff' ? 'source' : selected
+  return meta?.condition_layers?.[source].includes(regionFields[layer].field) ? source : undefined
 }
 
 export function regionFieldLabel(layer: RegionPackBaseLayer, source?: RegionRasterSource) {
+  if (layer === 'mapElevation') return 'packs.conditions.map'
   return `packs.conditions.${layer === 'temperature' && source === 'source' ? 'surfaceTemperature' : layer}`
 }
 
@@ -41,4 +41,37 @@ export function regionFieldAt(point: LonLat, window: PackWindow, raster: Elevati
   const row = Math.min(raster.height - 1, Math.max(0, Math.floor((0.5 - y / window.extentKmY) * raster.height)))
   const value = raster.values[row * raster.width + col]
   return Number.isFinite(value) ? { row, col, value } : undefined
+}
+
+const riverSnapKm = 2
+
+export function indexRegionRivers(rivers: RiverData) {
+  const buckets = new Map<string, { x: number; y: number; index: number }[]>()
+  rivers.segs.forEach((segment, index) => {
+    if (!Number.isFinite(rivers.flows[index])) return
+    for (const [y, x] of segment) {
+      const key = `${Math.floor(x / riverSnapKm)}:${Math.floor(y / riverSnapKm)}`
+      const bucket = buckets.get(key) ?? []
+      bucket.push({ x, y, index })
+      buckets.set(key, bucket)
+    }
+  })
+  return ({ x, y }: { x: number; y: number }) => {
+    const column = Math.floor(x / riverSnapKm)
+    const row = Math.floor(y / riverSnapKm)
+    let closest = Infinity
+    let distance = riverSnapKm ** 2
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        for (const endpoint of buckets.get(`${column + dx}:${row + dy}`) ?? []) {
+          const squared = (x - endpoint.x) ** 2 + (y - endpoint.y) ** 2
+          if (squared < distance || (squared === distance && endpoint.index < closest)) {
+            closest = endpoint.index
+            distance = squared
+          }
+        }
+      }
+    }
+    return Number.isFinite(closest) ? { flow: rivers.flows[closest], regime: rivers.regimes[closest] } : undefined
+  }
 }

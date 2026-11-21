@@ -36,7 +36,7 @@ interface PackMapProps {
   graticuleOpacity: number
   pin: LonLat | null
   onHover: (ll: LonLat | null) => void
-  onProbe: (ll: LonLat) => void
+  onLockPoint: (ll: LonLat) => void
 }
 
 const GRATICULE_INK = '#8c7355'
@@ -86,7 +86,7 @@ export default function PackMap({
   graticuleOpacity,
   pin,
   onHover,
-  onProbe,
+  onLockPoint,
 }: PackMapProps) {
   const { t } = useTranslation('map')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -99,9 +99,9 @@ export default function PackMap({
   const framingRef = useRef<{ window: PackWindow; mode: 'default' | 'fit' | 'custom' } | null>(null)
   const changeFrame = useRef<((showFullArea: boolean) => void) | null>(null)
   const hoverRef = useRef(onHover)
-  const probeRef = useRef(onProbe)
+  const lockRef = useRef(onLockPoint)
   hoverRef.current = onHover
-  probeRef.current = onProbe
+  lockRef.current = onLockPoint
   // Base raster load state (the topo composite is ~10 MB and the first render
   // of a pack can take tens of seconds server-side) — a debug-grade badge.
   const [baseLoading, setBaseLoading] = useState(false)
@@ -114,6 +114,7 @@ export default function PackMap({
       crs: L.CRS.Simple,
       attributionControl: false,
       zoomControl: false,
+      doubleClickZoom: false,
       maxZoom: 6,
       maxBoundsViscosity: 1,
       zoomSnap: 0,
@@ -136,31 +137,49 @@ export default function PackMap({
     }
   }, [])
 
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    const control = L.control.zoom({ zoomInTitle: t('packs.frame.zoomIn'), zoomOutTitle: t('packs.frame.zoomOut') }).addTo(map)
-    return () => { control.remove() }
-  }, [t])
-
   // Pointer events — rebound whenever the window (pack) changes so the
   // km → degrees conversion always uses the current geometry.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
     const bounds = boundsOf(window)
-    const move = (e: L.LeafletMouseEvent) => hoverRef.current(bounds.contains(e.latlng) ? kmToLonLat(e.latlng.lng, e.latlng.lat, window) : null)
-    const click = (e: L.LeafletMouseEvent) => {
-      if (bounds.contains(e.latlng)) probeRef.current(kmToLonLat(e.latlng.lng, e.latlng.lat, window))
+    const container = map.getContainer()
+    let frame = 0
+    let pending: L.LatLng | null = null
+    let touch = false
+    const point = (latlng: L.LatLng) => bounds.contains(latlng) ? kmToLonLat(latlng.lng, latlng.lat, window) : null
+    const move = (event: PointerEvent) => {
+      if (event.pointerType === 'touch' || event.buttons) return
+      pending = event.target instanceof Element && event.target.closest('.leaflet-control') ? null : map.mouseEventToLatLng(event)
+      if (!frame) frame = requestAnimationFrame(() => {
+        frame = 0
+        hoverRef.current(pending ? point(pending) : null)
+      })
     }
-    const leave = () => hoverRef.current(null)
-    map.on('mousemove', move)
+    const lock = (event: L.LeafletMouseEvent) => {
+      const location = point(event.latlng)
+      if (location) lockRef.current(location)
+    }
+    const pointerDown = (event: PointerEvent) => { touch = event.pointerType === 'touch' || event.pointerType === 'pen' }
+    const click = (event: L.LeafletMouseEvent) => { if (touch) lock(event) }
+    const leave = () => {
+      pending = null
+      cancelAnimationFrame(frame)
+      frame = 0
+      hoverRef.current(null)
+    }
+    container.addEventListener('pointerdown', pointerDown)
+    container.addEventListener('pointermove', move, true)
+    container.addEventListener('pointerleave', leave)
     map.on('click', click)
-    map.on('mouseout', leave)
+    map.on('dblclick', lock)
     return () => {
-      map.off('mousemove', move)
+      cancelAnimationFrame(frame)
+      container.removeEventListener('pointerdown', pointerDown)
+      container.removeEventListener('pointermove', move, true)
+      container.removeEventListener('pointerleave', leave)
       map.off('click', click)
-      map.off('mouseout', leave)
+      map.off('dblclick', lock)
     }
   }, [window])
 
@@ -306,7 +325,7 @@ export default function PackMap({
     if (pane) pane.style.opacity = String(graticuleOpacity)
   }, [graticuleOpacity])
 
-  // Click pin.
+  // Locked point.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -330,7 +349,7 @@ export default function PackMap({
 
   return (
     <>
-      <div ref={containerRef} className="atlas-region-map absolute inset-0 cursor-crosshair !bg-space-bg" />
+      <div ref={containerRef} className="absolute inset-0 cursor-crosshair !bg-space-bg" />
       {base && <button type="button" onClick={() => changeFrame.current?.(frameAction === 'fit')}
         className="atlas-tool-button absolute right-3 top-3 z-[500] min-h-11 text-xs lg:min-h-8"
         title={t(`packs.frame.${frameAction}Hint`)}>
@@ -341,7 +360,7 @@ export default function PackMap({
         {t(context.currentReference ? 'packs.frame.currentReference' : 'packs.frame.contextReference')}
       </div>}
       {(baseLoading || loading) && (
-        <div className="absolute top-3 left-14 z-[500] pointer-events-none">
+        <div className="absolute top-3 left-3 z-[500] pointer-events-none">
           <span className="inline-block animate-pulse bg-space-panel/90 border border-space-border rounded px-2 py-1 text-xs text-neon-cyan font-mono">
             {t('packs.loadingBase')}
           </span>

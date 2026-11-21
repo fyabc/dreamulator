@@ -156,25 +156,7 @@ body {
 .atlas-tool-button:hover { border-color: #76948e; color: theme('colors.neon.cyan'); }
 summary.atlas-tool-button::-webkit-details-marker { display: none; }
 
-.atlas-region-map .leaflet-control-zoom {
-  margin: .75rem;
-  border: 1px solid theme('colors.space.border');
-}
-.atlas-region-map .leaflet-bar.leaflet-control-zoom a {
-  width: 2.75rem;
-  height: 2.75rem;
-  line-height: 2.75rem;
-  background: theme('colors.space.surface');
-  color: theme('colors.gray.200');
-  border-color: theme('colors.space.border');
-}
-.atlas-region-map .leaflet-control-zoom a:hover { color: theme('colors.neon.cyan'); }
 .atlas-region-field { image-rendering: pixelated; }
-.atlas-region-map .leaflet-control-zoom a.leaflet-disabled { color: theme('colors.gray.500'); }
-
-@media (min-width: 1024px) {
-  .atlas-region-map .leaflet-bar.leaflet-control-zoom a { width: 2rem; height: 2rem; line-height: 2rem; }
-}
 
 @media (min-width: 768px) {
   .atlas-workbench { height: 100dvh; }

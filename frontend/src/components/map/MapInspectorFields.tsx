@@ -30,7 +30,7 @@ export function MapInspectorBody({ details, stats, detailsLabel, onClose }: {
           {tab === 'cell' ? (detailsLabel ?? t('inspector.cellTab')) : t('inspector.statsTab')}
         </button>)}
       </div>
-      {onClose && <button type="button" aria-label={t('packs.entry.closeProbe')} title={t('packs.entry.closeProbe')}
+      {onClose && <button type="button" aria-label={t('packs.entry.unlockPoint')} title={t('packs.entry.unlockPoint')}
         onClick={onClose} className="flex size-11 items-center justify-center rounded text-gray-300 hover:bg-space-surface lg:size-7">
         <AtlasIcon name="close" className="size-4" />
       </button>}
@@ -39,22 +39,23 @@ export function MapInspectorBody({ details, stats, detailsLabel, onClose }: {
   </div>
 }
 
-export function FieldGroup({ icon, label, defaultOpen = false, children }: {
-  icon: AtlasIconName; label: string; defaultOpen?: boolean; children: ReactNode
+export function FieldGroup({ icon, label, defaultOpen = false, alwaysOpen = false, children }: {
+  icon: AtlasIconName; label: string; defaultOpen?: boolean; alwaysOpen?: boolean; children: ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const title = <><AtlasIcon name={icon} className="size-3.5 text-gray-400" /><span className="font-medium">{label}</span></>
   return <div>
-    <button type="button" onClick={() => setOpen(value => !value)} aria-expanded={open}
+    {alwaysOpen ? <h3 className="flex items-center gap-1.5 py-0.5 pl-[17px] text-xs text-gray-300">{title}</h3>
+    : <button type="button" onClick={() => setOpen(value => !value)} aria-expanded={open}
       className="flex w-full select-none items-center gap-1.5 py-0.5 text-xs text-gray-300 hover:text-white">
       <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
         className={`transition-transform duration-150 ${open ? 'rotate-90' : ''}`}>
         <polyline points="9 6 15 12 9 18" />
       </svg>
-      <AtlasIcon name={icon} className="size-3.5 text-gray-400" />
-      <span className="font-medium">{label}</span>
-    </button>
-    {open && <dl className="ml-4 mt-1 space-y-1 text-xs">{children}</dl>}
+      {title}
+    </button>}
+    {(alwaysOpen || open) && <dl className="ml-4 mt-1 space-y-1 text-xs">{children}</dl>}
   </div>
 }
 

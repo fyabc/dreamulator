@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { isStaticMode } from '../../api/mode'
 import RegionElevationDownload from '../../components/map/RegionElevationDownload'
 import SaveProjectResult, { projectButton } from '../../components/projects/SaveProjectResult'
 import { elevationSource, openProjectRaster, type ElevationSource, type ProjectLayer } from '../../projects/elevationProject'
@@ -9,7 +10,7 @@ import { downloadBlob } from '../../utils/downloadBlob'
 import type { LonLat } from '../map/utils/mapCoords'
 import PackMap from './PackMap'
 import PackStatusBar from './PackStatusBar'
-import RasterPointInspector from './RasterPointInspector'
+import ProbePanel from './ProbePanel'
 import RegionMapWorkspace from './RegionMapWorkspace'
 import RegionLayerPanel from './RegionLayerPanel'
 import { useRegionContext } from './useRegionContext'
@@ -72,14 +73,15 @@ function SavedElevationMap({ projectId, layer, source, branch, backTo, backLabel
   const settings = temporary ?? (layer.kind === 'elevation-result' ? layer.settings : null)
 
   const unreadable = sourceRaster.isError || result.isError
+  const canRefine = layer.kind === 'elevation-source' && isStaticMode()
   return <RegionMapWorkspace backTo={backTo} backLabel={backLabel} backRef={focusReturn} subtitle={layer.name}
     status={<PackStatusBar hover={hover} window={window} />}
-    inspector={<RasterPointInspector point={pin} window={window} original={sourceRaster.data}
-      refined={settings ? selected : undefined} />}
+    inspector={<ProbePanel point={pin ?? hover} window={window} original={sourceRaster.data}
+      refined={settings ? selected : undefined} showingOriginal={compare || displayed === sourceRaster.data} />}
     onClearPoint={pin ? () => setPin(null) : undefined}
     layers={<RegionLayerPanel notice="elevationOnly" graticule={{ opacity: graticule, onChange: setGraticule }}
       compare={settings ? { original: compare, onChange: setCompare } : undefined} />}
-    regionTools={<>
+    canRefine={canRefine} regionTools={<>
     <div className="space-y-1">
       <h2 className="break-words text-sm font-semibold text-gray-200">{layer.name}</h2>
       <p>{t('extent', { lat: window.centerLat, lon: window.centerLon, span, sea })}</p>
@@ -112,11 +114,11 @@ function SavedElevationMap({ projectId, layer, source, branch, backTo, backLabel
       </dl>
     </details>}
     {temporary && <SaveProjectResult result={temporary} target={{ worldId: projectId, sourceId: source.id, branch }} />}
-    {layer.kind === 'elevation-source' && <TerrainCompute browser={{ raster: sourceRaster.data ?? null, spanKm: span, seaLevel: sea,
+    {canRefine && <TerrainCompute browser={{ raster: sourceRaster.data ?? null, spanKm: span, seaLevel: sea,
       sourceRowSpacingKm: sourceStepKm, onResult: (result) => { setTemporary(result); setCompare(false) } }} />}
   </>}>
     {selected ? <PackMap window={window} base={preview} context={context} rivers={null} graticuleOpacity={graticule}
-      pin={pin} onHover={setHover} onProbe={setPin} />
+      pin={pin} onHover={setHover} onLockPoint={setPin} />
       : <p role={unreadable ? 'alert' : 'status'} className="absolute inset-0 grid place-content-center p-4 text-center text-sm text-gray-400">
         {unreadable ? t('unreadable') : map('packs.loadingBase')}
       </p>}

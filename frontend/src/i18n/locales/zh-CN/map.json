@@ -572,7 +572,7 @@
     "staticModeHint": "请打开已发布的全球地图，点击「移动到选区」，再点击「查看区域」。本地已有的区域地图不随静态站发布。",
     "hoverPrompt": "移动鼠标查看经纬度",
     "loadingBase": "底图加载中…",
-    "clickToProbe": "点击探测格点值",
+    "lockPoint": "双击锁定点位",
     "pickPrompt": "区域地图",
     "noPacks": "还没有保存的区域地图。可以打开全球地图并选择一个区域。",
     "noMeta": "无法载入这张区域地图。请重试，或选择其他地图。",
@@ -584,9 +584,10 @@
       "notFound": "这张区域地图已不可用。请从列表选择其他地图。",
       "openWorlds": "浏览世界",
       "retryList": "重新载入地图列表",
-      "tools": "区域工具",
-      "closeTools": "关闭区域工具",
-      "closeProbe": "关闭点位详情",
+      "refineTerrain": "细化地形",
+      "elevationExport": "高程与导出",
+      "closeTools": "关闭面板",
+      "unlockPoint": "解除点位锁定",
       "tapToProbe": "点按地图查看点位信息"
     },
     "results": {
@@ -607,9 +608,7 @@
       "context": "查看选区与周边",
       "contextHint": "重新居中，显示整个选区和周边地形",
       "contextReference": "虚线为选区边界，框外为全球原始地形",
-      "currentReference": "虚线为选区边界，框外为当前全球底图",
-      "zoomIn": "放大",
-      "zoomOut": "缩小"
+      "currentReference": "虚线为选区边界，框外为当前全球底图"
     },
     "base": "底图",
     "conditions": {
@@ -618,6 +617,7 @@
       "reference": "地图参照",
       "rasterSource": "数据来源",
       "map": "地图高程",
+      "inputElevation": "条件高程",
       "source": "区域源数据",
       "grid": "TD 条件网格",
       "terrain": "高程",
@@ -630,8 +630,10 @@
       "elevationOnly": "浏览器细化仅使用高程约束，不使用气候图层。",
       "missingGrid": "这份成果未保存 TD 条件网格。这里只显示可核验的区域源数据。",
       "unavailable": "无法读取或核验此栅格。",
+      "readError": "读取失败",
       "hint": {
-        "terrain": "查看原始或细化高程。若运行有记录，也可查看 TD 实际使用的粗网格。",
+        "mapElevation": "查看地图采用的高程。有细化结果时可与原始高程对照。",
+        "terrain": "查看用于准备 TD 输入的区域高程，或 TD 实际读取的粗网格。",
         "temperature": "区域源数据记录地表气温，TD 条件网格使用折算至海平面的年均气温。",
         "temperatureStd": "一年中各月平均气温的标准差。",
         "precipitation": "十二个月的降水量之和。",
@@ -865,10 +867,8 @@
       "albedo": "反照率"
     },
     "graticule": "经纬网",
-    "probePrompt": "点击选区内的点，查看高程和可用的专题数据。",
+    "probePrompt": "悬停查看点位数据，双击锁定位置。",
     "probeTitle": "点位详情",
-    "rasterProbePrompt": "点击地图查看该点的坐标与高程。",
-    "probing": "探测中…",
     "field": {
       "height": "高程",
       "biome": "群系",

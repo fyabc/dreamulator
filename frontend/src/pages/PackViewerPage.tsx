@@ -3,8 +3,8 @@
  * also expose the recorded conditioning and hydrology used in refinement.
  */
 
-import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMemo, useState, type ReactNode } from 'react'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError, packTopoUrl } from '../api/client'
@@ -14,7 +14,7 @@ import { REGION_WINDOW_PARAM, readRegionWindow } from '../viewers/map/regionWind
 import type { LonLat } from '../viewers/map/utils/mapCoords'
 import PackMap from '../viewers/packs/PackMap'
 import PackStatusBar from '../viewers/packs/PackStatusBar'
-import ProbePanel from '../viewers/packs/ProbePanel'
+import ProbePanel, { type RegionInspectorFields } from '../viewers/packs/ProbePanel'
 import RegionalExtractView from '../viewers/packs/RegionalExtractView'
 import RegionResultSelector from '../viewers/packs/RegionResultSelector'
 import RegionMapWorkspace from '../viewers/packs/RegionMapWorkspace'
@@ -23,9 +23,9 @@ import SavedRegionView from '../viewers/packs/SavedRegionView'
 import PackElevationDownload from '../viewers/packs/PackElevationDownload'
 import RegionRefinementPanel from '../viewers/packs/RegionRefinementPanel'
 import TerrainCompute from '../viewers/packs/TerrainCompute'
-import type { PackInputMeta, PackMeta, ProbeResult } from '../viewers/packs/types'
-import type { PackWindow } from '../viewers/packs/packCoords'
-import { regionFields, regionPackBaseLayers, regionRasterSource, regionRasterSources,
+import type { PackHeightSource, PackInputMeta, PackMeta } from '../viewers/packs/types'
+import { lonLatToKm, type PackWindow } from '../viewers/packs/packCoords'
+import { indexRegionRivers, regionConditionSources, regionFieldLayers, regionFieldSource, regionFields, regionPackBaseLayers,
   type RegionPackBaseLayer, type RegionRasterSource } from '../viewers/packs/regionPackLayers'
 import { readElevationNpy } from '../viewers/packs/elevationRaster'
 import { useElevationPreview } from '../viewers/packs/useElevationPreview'
@@ -52,6 +52,15 @@ function packPalette(input: PackInputMeta | undefined) {
     range.length !== 2 || typeof sea !== 'number' || !Number.isFinite(sea)) return null
   const [min, max] = range as [number, number]
   return { min: !input?.elevation_m_global && min > sea ? sea - 1000 : min, max, sea }
+}
+
+function usePackHeight(pack: string | null, source: PackHeightSource | null | undefined, enabled: boolean) {
+  const numeric = useQuery({ queryKey: ['packElevation', pack, source], enabled: Boolean(pack && source && enabled), retry: false,
+    queryFn: () => api.getPackElevation(pack!, source!) })
+  const input = useMemo<ElevationInput | null>(() => numeric.data ? { kind: 'pack', blob: numeric.data, previewSide: 2048 } : null,
+    [numeric.data])
+  const height = useRegionElevation(input)
+  return { raster: height.ready?.kind === 'preview' ? height.ready.raster : undefined, failed: height.failed || numeric.isError }
 }
 
 export default function PackViewerPage() {
@@ -108,17 +117,14 @@ function ExistingPackViewer({ globalReturn, sourceControl }: { globalReturn?: st
     enabled: !staticMode && !!pack && metaQuery.isSuccess, retry: false, staleTime: 0 })
   const meta = metaQuery.data ?? null
   const summary = packs.data?.find((item) => item.name === pack) ?? null
-  const [requestedBase, setRequestedBase] = useState<RegionPackBaseLayer>('terrain')
-  const [requestedSources, setRequestedSources] = useState<Partial<Record<RegionPackBaseLayer, RegionRasterSource>>>({})
+  const [requestedBase, setRequestedBase] = useState<RegionPackBaseLayer>('mapElevation')
+  const [requestedSource, setRequestedSource] = useState<RegionRasterSource>('grid')
   const [showOriginal, setShowOriginal] = useState(false)
   const [graticule, setGraticule] = useState(1)
   const [riverOpacity, setRiverOpacity] = useState(1)
   const [hover, setHover] = useState<LonLat | null>(null)
   const [pin, setPin] = useState<LonLat | null>(null)
-  const [probe, setProbe] = useState<ProbeResult | null>(null)
-  const [probeLoading, setProbeLoading] = useState(false)
-  const [probeError, setProbeError] = useState<string | null>(null)
-  const probeSeq = useRef(0)
+  const point = pin ?? hover
 
   const selectPack = (name: string | null) => {
     const next = new URLSearchParams(searchParams)
@@ -128,37 +134,52 @@ function ExistingPackViewer({ globalReturn, sourceControl }: { globalReturn?: st
   }
 
   const win = useMemo(() => (meta ? windowOf(meta) : null), [meta])
-  const availableBase = useMemo(() => new Set(regionPackBaseLayers.filter(id => regionRasterSources(meta, id).length)), [meta])
-  const baseId = availableBase.has(requestedBase) ? requestedBase : regionPackBaseLayers.find(id => availableBase.has(id)) ?? 'terrain'
-  const choices = regionRasterSources(meta, baseId)
-  const temperatureSources = regionRasterSources(meta, 'temperature')
-  const representation = regionRasterSource(choices, requestedSources[baseId])
-  const canCompare = meta?.height_source === 'refined-out' && representation === 'map'
-  const original = canCompare && showOriginal
-
-  const heightSource = original ? 'input' : meta?.height_source
+  const choices = regionConditionSources(meta)
+  const source = choices.includes(requestedSource) ? requestedSource : choices[0] ?? requestedSource
+  const availableBase = new Set<RegionPackBaseLayer>(regionPackBaseLayers.filter(layer => layer === 'mapElevation'
+    ? Boolean(meta?.height_source) : Boolean(regionFieldSource(meta, layer, source))))
+  const baseId = availableBase.has(requestedBase) ? requestedBase : regionPackBaseLayers.find(id => availableBase.has(id)) ?? 'mapElevation'
+  const canCompare = meta?.height_source === 'refined-out'
+  const refinementPack = pack && !pack.startsWith('web-region-') ? pack : null
+  const original = canCompare && showOriginal && baseId === 'mapElevation'
+  const heightSource = meta?.height_source
   const palette = useMemo(() => packPalette(meta?.input), [meta])
   const worldLocation = summary?.world && summary.planet ? { world: summary.world, planet: summary.planet, branch: summary.branch } : null
   const context = useRegionContext(worldLocation, win, palette)
-  const fieldSource = representation === 'source' || representation === 'grid' ? representation : undefined
-  const field = regionFields[baseId].field
-  const condition = useQuery({ queryKey: ['packCondition', pack, fieldSource, field], enabled: Boolean(pack && fieldSource),
-    retry: false, queryFn: async () => readElevationNpy(await (await api.getPackCondition(pack!, fieldSource!, field)).arrayBuffer()) })
-  const conditionPreview = useRegionFieldPreview(condition.data, baseId)
-  const numeric = useQuery({ queryKey: ['packElevation', pack, heightSource],
-    enabled: Boolean(pack && heightSource && palette && representation === 'map'), retry: false,
-    queryFn: () => api.getPackElevation(pack!, heightSource!) })
-  const numericInput = useMemo<ElevationInput | null>(() => numeric.data ? { kind: 'pack', blob: numeric.data, previewSide: 2048 } : null,
-    [numeric.data])
-  const terrainHeight = useRegionElevation(numericInput)
-  const terrain = useElevationPreview(terrainHeight.ready?.kind === 'preview' ? terrainHeight.ready.raster : null,
+  const sources = regionFieldLayers.map(layer => regionFieldSource(meta, layer, source))
+  const conditions = useQueries({ queries: regionFieldLayers.map((layer, index) => {
+    const field = regionFields[layer].field
+    const fieldSource = sources[index]
+    return { queryKey: ['packCondition', pack, fieldSource, field], enabled: Boolean(pack && fieldSource),
+      retry: false, queryFn: async () => readElevationNpy(await (await api.getPackCondition(pack!, fieldSource!, field)).arrayBuffer()) }
+  }) })
+  const fields: RegionInspectorFields = {}
+  regionFieldLayers.forEach((layer, index) => {
+    const fieldSource = sources[index]
+    const query = conditions[index]
+    if (fieldSource) fields[layer] = { source: fieldSource, raster: query.data, loading: query.isPending, failed: query.isError }
+  })
+  const conditionLayer = baseId === 'mapElevation' ? undefined : baseId
+  const condition = conditionLayer ? fields[conditionLayer] : undefined
+  const conditionPreview = useRegionFieldPreview(condition?.raster, conditionLayer)
+  const terrainHeight = usePackHeight(pack, heightSource, Boolean(palette))
+  const originalHeight = usePackHeight(pack, canCompare ? 'input' : null, Boolean(palette && (original || point)))
+  const displayedHeight = original ? originalHeight : terrainHeight
+  const terrain = useElevationPreview(baseId === 'mapElevation' ? displayedHeight.raster ?? null : null,
     palette?.min ?? 0, palette?.max ?? 0, palette?.sea ?? 0, true)
+  const probe = useQuery({ queryKey: ['packProbe', pack, pin], enabled: Boolean(pack && pin), retry: false,
+    queryFn: () => api.probePack(pack!, pin!.lat, pin!.lon) })
+  const riverIndex = useMemo(() => rivers.data && indexRegionRivers(rivers.data), [rivers.data])
+  const river = pin && probe.data?.river_flow_accum != null
+    ? { flow: probe.data.river_flow_accum, regime: probe.data.river_regime ?? undefined }
+    : point && win ? riverIndex?.(lonLatToKm(point, win)) : undefined
 
   const base = useMemo(() => {
-    if (!pack || !representation) return null
-    if (representation !== 'map') return conditionPreview
-    return !palette || numeric.isError || terrainHeight.failed ? { url: packTopoUrl(pack, original) } : terrain
-  }, [representation, pack, original, palette, numeric.isError, terrainHeight.failed, terrain, conditionPreview])
+    if (!pack) return null
+    if (conditionLayer) return conditionPreview
+    if (!heightSource) return null
+    return !palette || displayedHeight.failed ? { url: packTopoUrl(pack, original) } : terrain
+  }, [conditionLayer, pack, heightSource, original, palette, displayedHeight.failed, terrain, conditionPreview])
 
   if (staticMode) {
     return (
@@ -174,28 +195,6 @@ function ExistingPackViewer({ globalReturn, sourceControl }: { globalReturn?: st
         </div>
       </div>
     )
-  }
-
-  const onProbe = (ll: LonLat) => {
-    setPin(ll)
-    setProbe(null)
-    setProbeError(null)
-    if (!pack) return
-    const seq = ++probeSeq.current
-    setProbeLoading(true)
-    api
-      .probePack(pack, ll.lat, ll.lon)
-      .then((data) => {
-        if (probeSeq.current !== seq) return
-        setProbe(data)
-        setProbeLoading(false)
-      })
-      .catch((err: unknown) => {
-        if (probeSeq.current !== seq) return
-        setProbe(null)
-        setProbeLoading(false)
-        setProbeError(err instanceof Error ? err.message : String(err))
-      })
   }
 
   const missingPack = metaQuery.error instanceof ApiError && metaQuery.error.status === 404
@@ -235,36 +234,35 @@ function ExistingPackViewer({ globalReturn, sourceControl }: { globalReturn?: st
       sourceControl={sourceControl}
       tools={win && !sourceControl ? packChooser : undefined}
       status={win && <PackStatusBar hover={hover} window={win} />}
-      inspector={win && <ProbePanel point={pin} probe={probe} loading={fieldSource ? condition.isFetching : probeLoading}
-        error={fieldSource ? condition.isError ? t('packs.conditions.unavailable') : null : probeError}
-        condition={fieldSource ? { layer: baseId, source: fieldSource, window: win, raster: condition.data } : undefined} />}
-      onClearPoint={pin ? () => { probeSeq.current += 1; setPin(null) } : undefined}
+      inspector={win && <ProbePanel point={point} window={win} active={baseId} source={source} fields={fields} probe={probe.data}
+        showingOriginal={original} river={river} original={heightSource === 'input' ? terrainHeight.raster : originalHeight.raster}
+        refined={heightSource !== 'input' ? terrainHeight.raster : undefined} />}
+      onClearPoint={pin ? () => setPin(null) : undefined}
       layers={win && <RegionLayerPanel availableBase={availableBase}
         value={baseId} onSelect={setRequestedBase} compare={canCompare ? { original: showOriginal, onChange: setShowOriginal } : undefined}
-        surfaceTemperatureOnly={temperatureSources.length === 1 && temperatureSources[0] === 'source'}
         notice={meta?.refined?.td_revision && !meta?.condition_layers?.grid.length ? 'missingGrid' : undefined}
-        raster={representation ? { source: representation, choices, size: condition.data && `${condition.data.width} × ${condition.data.height}`,
-          onChange: source => setRequestedSources(previous => ({ ...previous, [baseId]: source })) } : undefined}
+        conditions={choices.length ? { source, choices, onChange: setRequestedSource } : undefined}
+        rasterSize={condition?.raster && `${condition.raster.width} × ${condition.raster.height}`}
         graticule={{ opacity: graticule, onChange: setGraticule }}
         rivers={rivers.data?.segs.length ? { opacity: riverOpacity, disabled: original, onChange: setRiverOpacity } : undefined} />}
-      regionTools={win && <>
+      canRefine={Boolean(refinementPack)} regionTools={win && <>
             {summary && <p className="break-words text-xs text-gray-400" title={t('packs.hint.source')}>
               {summary.branch ? `${summary.branch} · ` : ''}{summary.mtime}
             </p>}
             {pack && meta?.height_source && <PackElevationDownload key={`${pack}:${original ? 'input' : meta.height_source}`}
               pack={pack} source={original ? 'input' : meta.height_source} input={meta.input} summary={summary} />}
             {meta?.height_source === null && <p className="text-xs text-gray-400">{t('packs.export.noNumeric')}</p>}
-            <TerrainCompute>{pack && !pack.startsWith('web-region-') && <RegionRefinementPanel source={{ kind: 'pack', pack }} globalReturn={regionReturn}
+            {refinementPack && <TerrainCompute><RegionRefinementPanel source={{ kind: 'pack', pack: refinementPack }} globalReturn={regionReturn}
               resultUrl={(result) => {
                 const params = new URLSearchParams(searchParams)
                 params.set('pack', result)
                 return `/packs?${params}`
-              }} />}</TerrainCompute>
+              }} /></TerrainCompute>}
       </>}>
-      {win ? <><PackMap window={win} base={base} loading={!base && (fieldSource ? !condition.isError : Boolean(heightSource))} context={context}
+      {win ? <><PackMap window={win} base={base} loading={!base && (conditionLayer ? Boolean(condition && !condition.failed) : Boolean(heightSource))} context={context}
         rivers={original || !riverOpacity ? null : rivers.data ?? null} riverOpacity={riverOpacity}
-        graticuleOpacity={graticule} pin={pin} onHover={setHover} onProbe={onProbe} />
-        {fieldSource && condition.isError && <p role="alert" className="absolute left-3 top-3 z-[500] rounded border border-space-border bg-space-bg px-2 py-1 text-xs text-red-300">
+        graticuleOpacity={graticule} pin={pin} onHover={setHover} onLockPoint={setPin} />
+        {condition?.failed && <p role="alert" className="absolute left-3 top-3 z-[500] rounded border border-space-border bg-space-bg px-2 py-1 text-xs text-red-300">
           {t('packs.conditions.unavailable')}</p>}</> : (
         <div className="max-w-lg space-y-2 px-3 py-5 text-sm text-gray-300 sm:px-4">
           {!sourceControl && packChooser}

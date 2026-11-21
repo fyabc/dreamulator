@@ -6,10 +6,11 @@ import MapHelpLink from './MapHelpLink'
 
 const layerPanelId = 'map-layer-panel'
 const layerButtonId = 'map-layer-button'
+export const mapLayerDesktopWidth = 'lg:w-56'
 
 type WorkPanelToggle = { id: string; buttonId: string; open: boolean; onToggle: () => void }
 
-export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, backRef, switchTo, regionControls, trialPanel, regionPanel, layersOpen, onToggleLayers, children }: {
+export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, backRef, switchTo, regionControls, trialPanel, layersOpen, onToggleLayers, children }: {
   title: string
   subtitle?: string
   view: 'map' | 'globe' | 'region'
@@ -19,7 +20,6 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
   switchTo?: string
   regionControls?: ReactNode
   trialPanel?: WorkPanelToggle
-  regionPanel?: WorkPanelToggle
   layersOpen: boolean
   onToggleLayers?: () => void
   children?: ReactNode
@@ -28,8 +28,7 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
   const tools = useRef<HTMLDetailsElement>(null)
   const toolsButton = useRef<HTMLElement>(null)
   const backText = backLabel ?? t('action.back')
-  const workPanel = regionPanel ?? trialPanel
-  const workLabel = t(regionPanel ? 'packs.entry.tools' : 'workbench.climateTrial')
+  const trialLabel = t('workbench.climateTrial')
 
   return (
     <header className="relative z-30 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 border-b border-space-border bg-space-panel px-2 py-1.5 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:gap-3 lg:px-4 lg:py-2 2xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
@@ -60,11 +59,11 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
         </div>
       )}
       <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 lg:col-start-3 lg:gap-2">
-        {workPanel && <button id={workPanel.buttonId} type="button" onClick={workPanel.onToggle}
+        {trialPanel && <button id={trialPanel.buttonId} type="button" onClick={trialPanel.onToggle}
           className="atlas-tool-button text-sm aria-expanded:border-neon-cyan/50 aria-expanded:text-neon-cyan"
-          data-tutorial-anchor={regionPanel ? 'regionTools' : 'lab'} aria-label={workLabel} title={workLabel}
-          aria-expanded={workPanel.open} aria-controls={workPanel.id}>
-          <AtlasIcon name={regionPanel ? 'geology' : 'flask'} className="size-4" /> <span className={regionPanel ? 'hidden sm:inline' : 'hidden lg:inline'}>{workLabel}</span>
+          data-tutorial-anchor="lab" aria-label={trialLabel} title={trialLabel}
+          aria-expanded={trialPanel.open} aria-controls={trialPanel.id}>
+          <AtlasIcon name="flask" className="size-4" /> <span className="hidden lg:inline">{trialLabel}</span>
         </button>}
         {onToggleLayers && <button id={layerButtonId} type="button" aria-expanded={layersOpen} aria-controls={layersOpen ? layerPanelId : undefined}
           className="atlas-tool-button text-sm lg:hidden" onClick={onToggleLayers}>
@@ -127,7 +126,7 @@ export function MapLayerDrawer({ onClose, children, persistent = false, open = t
           if (event.key !== 'Escape' || !open || !closeButton.current?.getClientRects().length) return
           event.preventDefault()
           close()
-        }} className={`${open ? 'block' : 'hidden'} absolute inset-y-0 left-0 z-50 w-64 max-w-[85%] space-y-4 overflow-y-auto border-r border-space-border bg-space-panel p-3 shadow-xl ${persistent ? 'lg:static lg:z-auto lg:block lg:w-56 lg:shrink-0 lg:shadow-none' : ''}`}>
+        }} className={`${open ? 'block' : 'hidden'} absolute inset-y-0 left-0 z-50 w-64 max-w-[85%] space-y-4 overflow-y-auto border-r border-space-border bg-space-panel p-3 shadow-xl ${persistent ? `lg:static lg:z-auto lg:block lg:shrink-0 lg:shadow-none ${mapLayerDesktopWidth}` : ''}`}>
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-gray-200">{t('label.layerSettings')}</h2>
           <button ref={closeButton} type="button" aria-label={t('workbench.closeLayers')} onClick={close}

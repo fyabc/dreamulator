@@ -145,9 +145,9 @@ export default function MapLayerPanel(props: MapLayerPanelProps) {
 
 export function MapLayerTree<Id extends string>({ state, onChange, available, temperaturePeriodLabel, monthlyMode = false,
   monthlyData = null, monthIndex = null, onMonthlyModeChange, detail, isEarth, particleMode = false, onParticleModeChange,
-  catalog, layerControls, groupCatalog = LAYER_GROUPS, expandGroups = false, marineLegend = false }: MapLayerPanelProps<Id> & {
+  catalog, layerControls, mainControls, groupCatalog = LAYER_GROUPS, expandGroups = false, marineLegend = false }: MapLayerPanelProps<Id> & {
   catalog: readonly PanelLayer<Id>[]; groupCatalog?: readonly { id: string; label: string }[]
-  layerControls?: (id: Id) => ReactNode; expandGroups?: boolean; marineLegend?: boolean
+  layerControls?: (id: Id) => ReactNode; mainControls?: ReactNode; expandGroups?: boolean; marineLegend?: boolean
 }) {
   const { t } = useTranslation('map')
   const panelId = useId()
@@ -307,6 +307,7 @@ export function MapLayerTree<Id extends string>({ state, onChange, available, te
           {t(type === 'main' ? 'panel.mainLayers' : 'panel.overlayLayers')}
         </button>)}
       </div>
+      {section === 'main' && mainControls}
       {section === 'main' && detail && <div className="space-y-1.5">
         <div role="group" aria-label={t('panel.detailTitle')} title={t('panel.detailHint')}
           className="flex rounded-md border border-space-border">
