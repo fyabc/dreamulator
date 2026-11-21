@@ -188,12 +188,21 @@
     "title": "World parameters",
     "intro": "Manage this world's parameters here. After saving changes, rebuild the world to apply them.",
     "introReadOnly": "View this world's parameters here.",
-    "scope": "{{world}} · {{branch}}",
+    "groups": {
+      "planet": "Celestial body",
+      "terrain": "Terrain and grid"
+    },
+    "details": "Details",
+    "detailsFor": "Details: {{group}}",
+    "helpFor": "Help: {{label}}",
+    "readOnlyLabel": "Read-only",
+    "inheritedLabel": "Inherited settings",
     "grid": "Terrain grid cells",
     "help": "This is how many cells cover the planet in a full build. Finer grids generally take more time and memory.",
-    "range": "Enter {{min}} to {{max}} cells.",
+    "range": "{{min}} to {{max}} cells",
     "source": "Input file:",
-    "configured": "The terrain grid is configured for {{cells}} cells.",
+    "cellsUnit": "cells",
+    "noGridValue": "No grid cell count was recorded for the full build.",
     "rebuild": "The existing world still uses the previous settings. Rebuild the world to apply the new settings.",
     "browser": "This setting stays in the world snapshot in this browser. Download and restore the snapshot locally to run a full build.",
     "save": "Save parameters",
@@ -207,11 +216,14 @@
     "planet": {
       "title": "Primary world body: {{name}}",
       "rotation_period_days": {
-        "label": "Sidereal rotation period (Earth days)",
+        "label": "Sidereal rotation period",
+        "unit": "Earth days",
+        "constraint": "Earth days, greater than 0",
         "help": "Time for one turn relative to distant stars. One Earth day equals 24 hours."
       },
       "albedo": {
-        "label": "Bond albedo (0–1)",
+        "label": "Bond albedo",
+        "constraint": "0 to 1 (unitless)",
         "help": "Fraction of incoming radiation reflected back into space. For example, 0.3 means 30% is reflected."
       },
       "inherited": "This branch uses its upstream body settings and cannot change them independently.",

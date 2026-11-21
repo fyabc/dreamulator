@@ -188,12 +188,21 @@
     "title": "世界参数",
     "intro": "在这里管理本世界的各项参数。保存修改后，需重新构建世界才能应用新设定。",
     "introReadOnly": "在这里查看本世界的各项参数。",
-    "scope": "{{world}} · {{branch}}",
-    "grid": "地形网格单元数",
+    "groups": {
+      "planet": "天体",
+      "terrain": "地形与网格"
+    },
+    "details": "详情",
+    "detailsFor": "{{group}}详情",
+    "helpFor": "{{label}}帮助",
+    "readOnlyLabel": "只读",
+    "inheritedLabel": "继承上游设定",
+    "grid": "网格单元数",
     "help": "这个数值决定正式构建将全球表面划分为多少个单元。单元越多，计算通常越慢，也越占内存。",
-    "range": "可填 {{min}} 至 {{max}} 个单元。",
+    "range": "{{min}} 至 {{max}} 个单元",
     "source": "正式输入文件：",
-    "configured": "地形网格设定为 {{cells}} 个单元。",
+    "cellsUnit": "个单元",
+    "noGridValue": "没有记录正式构建的网格单元数。",
     "rebuild": "现有世界仍使用旧设定。请重新构建世界以应用新设定。",
     "browser": "参数保存在此浏览器的世界快照中。要正式构建，请下载快照并在本机恢复。",
     "save": "保存参数",
@@ -207,11 +216,14 @@
     "planet": {
       "title": "主要天体：{{name}}",
       "rotation_period_days": {
-        "label": "自转周期（地球日）",
+        "label": "自转周期",
+        "unit": "地球日",
+        "constraint": "地球日，须大于 0",
         "help": "天体相对远方恒星自转一周的时间。1 地球日等于 24 小时。"
       },
       "albedo": {
-        "label": "邦德反照率（0–1）",
+        "label": "邦德反照率",
+        "constraint": "0 至 1（无单位）",
         "help": "天体反射回太空的入射辐射比例。例如，0.3 表示反射 30%。"
       },
       "inherited": "这个分支沿用上游的天体设定，不能单独修改。",

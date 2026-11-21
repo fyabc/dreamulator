@@ -233,7 +233,7 @@ API 模式提供服务器端写操作。静态发布模式可以浏览已发布�
 
 所有正式参数集中在「世界参数」页签。各学科页签负责展示结果；需要引导编辑时，链接到统一参数页里的对应分组，不再放一套表单。参数按用户能辨认的主题组织，先设「天体」和「地形与网格」，再按可编辑项增加「大气与气候」等分组。每项只出现一次；分组不改变输入归属和分支继承规则。
 
-宽屏将名称、数值和单位排成紧凑的行，窄屏允许换行。必要的范围和校验信息留在字段旁，较长的说明、来源文件和继承状态可在分组的「详情」中查看。暂不预留空分组；低频选项的折叠和参数搜索等字段增多后再评估。
+紧凑行与详情的当前实现见[参数页布局](../pipelines/browser-playground.md#参数页布局)。暂不预留空分组；低频选项的折叠和参数搜索等字段增多后再评估。
 
 [web-exoplasim](../web-gcm-and-frontend.md#6-web-exoplasim-qol-的增强与边界)按主题展示常用输入，[World Orogen](https://github.com/raguilar011095/planet_heightmap_generation/blob/main/docs/generate.md#controls)折叠低频地形设置，[ExoPlaSim](https://exoplasim.readthedocs.io/en/latest/tutorial.html#configuring-the-model-for-toi-700d)提供可移植配置，但不要求用户直接编辑底层输入文件。Dreamulator 暂不提供网页 YAML 编辑器，高级用户继续使用本机输入文件和 CLI。确有网页批量编辑或复用配置需求时，再考虑只在本机版开放受支持的输入文件，明确写入目标和分支，保存前展示差异并校验。保存仍不启动构建。
 
