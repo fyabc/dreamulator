@@ -39,6 +39,8 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/public/playground-runtime/
+frontend/.playground-runtime-*/
 
 # Project specific
 data/worlds/*/simulations/

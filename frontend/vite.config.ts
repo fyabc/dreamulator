@@ -2,10 +2,13 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import { readFileSync } from 'fs'
+import { playgroundRuntime, playgroundRuntimePath } from './playgroundRuntime'
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, isPreview }) => {
   // Load env vars from .env, .env.[mode], etc.
   const env = loadEnv(mode, process.cwd(), '')
+  const base = env.VITE_BASE_PATH || '/'
+  const apiPrefix = base.startsWith('/') ? base.replace(/\/$/, '') : ''
 
   // Read version from package.json so it stays in sync automatically.
   const pkg = JSON.parse(
@@ -14,15 +17,16 @@ export default defineConfig(({ mode }) => {
 
   return {
     // GitHub Pages serves at /<repo-name>/ — set via VITE_BASE_PATH or default to '/'
-    base: env.VITE_BASE_PATH || '/',
+    base,
 
-    plugins: [react()],
+    plugins: [react(), !isPreview && mode !== 'test' && playgroundRuntime()],
     worker: { format: 'es' },
 
     // Inject build-time constants so version numbers never go stale.
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
       __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)),
+      __PLAYGROUND_RUNTIME_PATH__: JSON.stringify(playgroundRuntimePath),
     },
 
     resolve: {
@@ -50,9 +54,10 @@ export default defineConfig(({ mode }) => {
       },
       port: 5173,
       proxy: {
-        '/api': {
+        [`${apiPrefix}/api`]: {
           target: 'http://127.0.0.1:8000',
           changeOrigin: true,
+          rewrite: url => url.slice(apiPrefix.length),
         },
       },
     },

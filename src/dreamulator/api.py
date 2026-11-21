@@ -117,6 +117,8 @@ def _guess_media_type(path: str) -> str:
         "html": "text/html",
         "css": "text/css",
         "js": "application/javascript",
+        "mjs": "application/javascript",
+        "wasm": "application/wasm",
         "json": "application/json",
         "svg": "image/svg+xml",
         "png": "image/png",

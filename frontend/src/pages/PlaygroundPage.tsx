@@ -14,21 +14,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
-import climatePhysicsSrc from '../../../src/dreamulator/engine/climate_physics.py?raw'
-import climateSeasonalitySrc from '../../../src/dreamulator/engine/climate_seasonality.py?raw'
-import temperatureKernelSrc from '../playground/temperature_kernel.py?raw'
-
-// Pyodide 314.x uses the `v314.0.7` distribution path on jsDelivr.
-const PYODIDE_VERSION = '314.0.7'
-const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`
+import earthSample from '../playground/earth-180x90.json'
+import earthHeightmap from '../playground/earth-180x90.png'
+import nacreaSample from '../playground/nacrea-180x90.json'
+import nacreaHeightmap from '../playground/nacrea-180x90.png'
+import type { KernelResult, TemperatureRequest, TemperatureResponse } from '../playground/temperature.worker'
 
 const GRID_W = 180
 const GRID_H = 90
 const CANVAS_W = 900
 const CANVAS_H = 450
+const MODEL_JANUARY_INDEX = 10
 
-type Status = 'idle' | 'loading' | 'ready' | 'running' | 'error'
+type Status = 'idle' | 'sample' | 'loading' | 'running'
 type MonthSelection = 'annual' | number
+type Sample = 'earth' | 'nacrea'
+type LabError = { stage: 'sample' | 'file' | 'runtime' | 'compute'; detail: string; sample?: Sample }
 
 interface PlanetParams {
   luminosity: number
@@ -42,26 +43,6 @@ interface PlanetParams {
   elevMinM: number
   elevMaxM: number
   variableLapse: boolean
-}
-
-interface KernelResult {
-  annual: number[]
-  monthly: number[][]
-  latDeg: number[]
-  globalMeanC: number
-  annualMeanC: number
-  minC: number
-  maxC: number
-  elapsedS: number
-}
-
-interface SampleMeta {
-  name: string
-  width: number
-  height: number
-  elevation_min_m: number
-  elevation_max_m: number
-  sea_level_m: number
 }
 
 const NACREA_PARAMS: PlanetParams = {
@@ -90,6 +71,11 @@ const EARTH_PARAMS: PlanetParams = {
   elevMinM: -11000,
   elevMaxM: 9000,
   variableLapse: true,
+}
+
+const SAMPLES = {
+  earth: { meta: earthSample, image: earthHeightmap, preset: EARTH_PARAMS },
+  nacrea: { meta: nacreaSample, image: nacreaHeightmap, preset: NACREA_PARAMS },
 }
 
 /** RdYlBu-ish temperature ramp, °C. */
@@ -160,16 +146,16 @@ function NumberField({
   onChange: (v: number) => void
 }) {
   return (
-    <label className="flex items-center justify-between gap-2 text-[11px] text-gray-400">
-      <span className="min-w-0 truncate">{label}</span>
+    <label className="flex items-center justify-between gap-2 text-xs text-gray-300">
+      <span>{label}</span>
       <input
         type="number"
-        value={Number.isFinite(value) ? value : 0}
-        step={step ?? 0.01}
+        value={Number.isFinite(value) ? value : ''}
+        step={step ?? 'any'}
         min={min}
         max={max}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-24 shrink-0 rounded border border-space-border bg-space-surface px-1.5 py-0.5 text-right text-[11px] text-gray-200"
+        onChange={(e) => onChange(e.target.valueAsNumber)}
+        className="w-24 shrink-0 rounded border border-space-border bg-space-surface px-2 py-1.5 text-right text-sm tabular-nums text-gray-200 focus-visible:outline focus-visible:outline-neon-cyan"
       />
     </label>
   )
@@ -178,37 +164,39 @@ function NumberField({
 export default function PlaygroundPage() {
   const { t } = useTranslation('playground')
   const { t: tMap } = useTranslation('map')
-  const months = tMap('months', { returnObjects: true }) as unknown as string[]
+  const modelMonths = tMap('months', { returnObjects: true }) as unknown as string[]
+  const monthOptions = modelMonths.map((label, modelIndex) => ({ label, modelIndex }))
+  const calendarMonths = [...monthOptions.slice(MODEL_JANUARY_INDEX), ...monthOptions.slice(0, MODEL_JANUARY_INDEX)]
 
   const [status, setStatus] = useState<Status>('idle')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LabError | null>(null)
   const [loadSeconds, setLoadSeconds] = useState<number | null>(null)
   const [params, setParams] = useState<PlanetParams>(EARTH_PARAMS)
   const [gray, setGray] = useState<Float32Array | null>(null)
   const [heightmapName, setHeightmapName] = useState<string>('')
-  const [sampleMeta, setSampleMeta] = useState<SampleMeta | null>(null)
   const [result, setResult] = useState<KernelResult | null>(null)
+  const [resultParams, setResultParams] = useState<PlanetParams | null>(null)
+  const [selectedSample, setSelectedSample] = useState<Sample | null>(null)
   const [month, setMonth] = useState<MonthSelection>('annual')
   const [dragging, setDragging] = useState(false)
 
-  const pyRef = useRef<any>(null)
-  const pyPromiseRef = useRef<Promise<any> | null>(null)
+  const workerRef = useRef<Worker | null>(null)
+  const inputRequest = useRef(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // --- Heightmap sample ----------------------------------------------------
-  const loadSample = useCallback(async (world: 'earth' | 'nacrea') => {
+  const loadSample = useCallback(async (world: Sample) => {
+    const request = ++inputRequest.current
+    const { meta, image, preset } = SAMPLES[world]
+    setStatus('sample')
+    setError(null)
     try {
-      const base = import.meta.env.BASE_URL
-      const meta = await fetch(`${base}playground/${world}-180x90.json`).then((r) => {
-        if (!r.ok) throw new Error(`sample meta ${r.status}`)
-        return r.json() as Promise<SampleMeta>
-      })
-      const sampleGray = await decodeImageToGray(`${base}playground/${world}-180x90.png`)
-      const preset = world === 'earth' ? EARTH_PARAMS : NACREA_PARAMS
-      setSampleMeta(meta)
+      const sampleGray = await decodeImageToGray(image)
+      if (request !== inputRequest.current) return
       setGray(sampleGray)
       setHeightmapName(meta.name)
+      setSelectedSample(world)
       setParams({
         ...preset,
         elevMinM: Math.round(meta.elevation_min_m * 10) / 10,
@@ -216,74 +204,61 @@ export default function PlaygroundPage() {
         seaLevelM: Math.round(meta.sea_level_m * 10) / 10,
       })
       setResult(null)
-      setStatus(pyRef.current ? 'ready' : 'idle')
-      setError(null)
+      setResultParams(null)
     } catch (err) {
-      setError(String(err))
-      setStatus('error')
+      if (request === inputRequest.current) setError({ stage: 'sample', detail: String(err), sample: world })
+    } finally {
+      if (request === inputRequest.current) setStatus('idle')
     }
   }, [])
 
   useEffect(() => {
     void loadSample('earth')
+    return () => {
+      inputRequest.current += 1
+      workerRef.current?.terminate()
+      workerRef.current = null
+    }
   }, [loadSample])
 
-  // --- Pyodide bootstrap ---------------------------------------------------
-  const ensurePyodide = useCallback(async () => {
-    if (pyRef.current) return pyRef.current
-    if (pyPromiseRef.current) return pyPromiseRef.current
-
-    const promise = (async () => {
-      setStatus('loading')
-      setError(null)
-      const t0 = performance.now()
-      const mod = await import(/* @vite-ignore */ `${PYODIDE_BASE}pyodide.mjs`)
-      const loadPyodide = mod.loadPyodide ?? mod.default?.loadPyodide
-      if (!loadPyodide) throw new Error('pyodide loader missing')
-      const py = await loadPyodide({ indexURL: PYODIDE_BASE })
-      await py.loadPackage('numpy')
-
-      for (const path of ['/engine', '/engine/dreamulator', '/engine/dreamulator/engine', '/kernel']) {
-        try { py.FS.mkdir(path) } catch { /* already exists */ }
-      }
-      py.FS.writeFile('/engine/dreamulator/__init__.py', '')
-      py.FS.writeFile('/engine/dreamulator/engine/__init__.py', '')
-      py.FS.writeFile('/engine/dreamulator/engine/climate_physics.py', climatePhysicsSrc)
-      py.FS.writeFile('/engine/dreamulator/engine/climate_seasonality.py', climateSeasonalitySrc)
-      py.FS.writeFile('/kernel/temperature_kernel.py', temperatureKernelSrc)
-      await py.runPythonAsync(`
-import sys
-sys.path.insert(0, '/engine')
-sys.path.insert(0, '/kernel')
-from temperature_kernel import compute_temperature
-`)
-      pyRef.current = py
-      setLoadSeconds((performance.now() - t0) / 1000)
-      setStatus('ready')
-      return py
-    })()
-
-    pyPromiseRef.current = promise
-    try {
-      return await promise
-    } catch (err) {
-      pyPromiseRef.current = null
-      setError(String(err))
-      setStatus('error')
-      throw err
-    }
-  }, [])
-
   // --- Compute -------------------------------------------------------------
-  const run = useCallback(async () => {
-    if (!gray) {
-      setError(t('error.noHeightmap'))
-      return
-    }
+  const validParams = Object.values(params).every(value => typeof value === 'boolean' || Number.isFinite(value))
+    && params.luminosity >= 0 && params.distanceAu >= 0.001
+    && params.albedo >= 0 && params.albedo <= 1 && params.greenhouseK >= 0
+    && params.tiltDeg >= 0 && params.tiltDeg <= 90 && params.yearDays >= 0.1
+    && params.rotationDays >= 0.01 && params.elevMinM < params.elevMaxM
+  const run = () => {
+    if (!gray || !validParams || status !== 'idle') return
+    setError(null)
     try {
-      const py = await ensurePyodide()
-      setStatus('running')
-      setError(null)
+      const worker = workerRef.current ?? new Worker(
+        new URL('../playground/temperature.worker.ts', import.meta.url), { type: 'module' },
+      )
+      setStatus(workerRef.current ? 'running' : 'loading')
+      workerRef.current = worker
+      const handleFailure = (stage: 'runtime' | 'compute', detail: string) => {
+        if (stage === 'runtime') {
+          worker.terminate()
+          workerRef.current = null
+          setLoadSeconds(null)
+        }
+        setError({ stage, detail })
+        setStatus('idle')
+      }
+      worker.onerror = event => handleFailure('runtime', event.message)
+      worker.onmessage = ({ data }: MessageEvent<TemperatureResponse>) => {
+        if (data.type === 'runtime-ready') {
+          setLoadSeconds(data.seconds)
+          setStatus('running')
+        } else if (data.type === 'result') {
+          setResult(data.result)
+          setResultParams(params)
+          setMonth('annual')
+          setStatus('idle')
+        } else {
+          handleFailure(data.stage, data.detail)
+        }
+      }
       const elev = elevationFromGray(gray, params)
       const payload = {
         width: GRID_W,
@@ -298,18 +273,17 @@ from temperature_kernel import compute_temperature
         rotation_period_days: params.rotationDays,
         variable_lapse_rate: params.variableLapse,
       }
-      py.globals.set('elev_json', JSON.stringify(Array.from(elev)))
-      py.globals.set('params_json', JSON.stringify(payload))
-      const raw = py.runPython('compute_temperature(elev_json, params_json)')
-      const parsed = JSON.parse(typeof raw === 'string' ? raw : String(raw)) as KernelResult
-      setResult(parsed)
-      setMonth('annual')
-      setStatus('ready')
+      const runtimeBase = new URL(`${import.meta.env.BASE_URL}${__PLAYGROUND_RUNTIME_PATH__}`, document.baseURI)
+      const request: TemperatureRequest = { elevation: elev, params: payload, runtimeBase: runtimeBase.href }
+      worker.postMessage(request, [elev.buffer])
     } catch (err) {
-      setError(String(err))
-      setStatus('error')
+      workerRef.current?.terminate()
+      workerRef.current = null
+      setLoadSeconds(null)
+      setError({ stage: 'runtime', detail: String(err) })
+      setStatus('idle')
     }
-  }, [ensurePyodide, gray, params, t])
+  }
 
   // --- Canvas painting -----------------------------------------------------
   useEffect(() => {
@@ -332,7 +306,7 @@ from temperature_kernel import compute_temperature
 
     // Before the first temperature run, show the imported heightmap itself so
     // the user can confirm which file is loaded.
-    if (!result) {
+    if (!result || !resultParams) {
       const img = offCtx.createImageData(GRID_W, GRID_H)
       for (let i = 0; i < gray.length; i++) {
         const v = Math.round(Math.max(0, Math.min(1, gray[i])) * 255)
@@ -362,7 +336,7 @@ from temperature_kernel import compute_temperature
     ctx.drawImage(off, 0, 0, CANVAS_W, CANVAS_H)
 
     // Coastline: cell edges where the land mask changes.
-    const elev = elevationFromGray(gray, params)
+    const elev = elevationFromGray(gray, resultParams)
     const sx = CANVAS_W / GRID_W
     const sy = CANVAS_H / GRID_H
     ctx.strokeStyle = 'rgba(8, 12, 22, 0.28)'
@@ -371,55 +345,46 @@ from temperature_kernel import compute_temperature
     for (let y = 0; y < GRID_H; y++) {
       for (let x = 0; x < GRID_W; x++) {
         const i = y * GRID_W + x
-        const land = elev[i] > params.seaLevelM
-        if (x + 1 < GRID_W && (elev[i + 1] > params.seaLevelM) !== land) {
+        const land = elev[i] > resultParams.seaLevelM
+        if (x + 1 < GRID_W && (elev[i + 1] > resultParams.seaLevelM) !== land) {
           ctx.moveTo((x + 1) * sx, y * sy)
           ctx.lineTo((x + 1) * sx, (y + 1) * sy)
         }
-        if (y + 1 < GRID_H && (elev[i + GRID_W] > params.seaLevelM) !== land) {
+        if (y + 1 < GRID_H && (elev[i + GRID_W] > resultParams.seaLevelM) !== land) {
           ctx.moveTo(x * sx, (y + 1) * sy)
           ctx.lineTo((x + 1) * sx, (y + 1) * sy)
         }
       }
     }
     ctx.stroke()
-  }, [gray, month, params.elevMaxM, params.elevMinM, params.seaLevelM, result])
+  }, [gray, month, result, resultParams])
 
   // --- Drag/drop / file input ---------------------------------------------
   const acceptFile = useCallback(async (file: File | undefined) => {
     if (!file) return
+    const request = ++inputRequest.current
+    setStatus('sample')
+    setError(null)
     try {
       const next = await decodeImageToGray(file)
+      if (request !== inputRequest.current) return
       setGray(next)
       setHeightmapName(file.name)
+      setSelectedSample(null)
       setResult(null)
-      setStatus(pyRef.current ? 'ready' : 'idle')
-      setError(null)
+      setResultParams(null)
     } catch (err) {
-      setError(String(err))
-      setStatus('error')
+      if (request === inputRequest.current) setError({ stage: 'file', detail: String(err) })
+    } finally {
+      if (request === inputRequest.current) setStatus('idle')
     }
   }, [])
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setDragging(false)
-    void acceptFile(e.dataTransfer.files?.[0])
-  }, [acceptFile])
-
-  const applyPreset = useCallback((preset: 'nacrea' | 'earth') => {
-    setParams((p) => ({
-      ...(preset === 'nacrea' ? NACREA_PARAMS : EARTH_PARAMS),
-      elevMinM: p.elevMinM,
-      elevMaxM: p.elevMaxM,
-      seaLevelM: p.seaLevelM,
-    }))
-    setResult(null)
-  }, [])
-
-  const monthLabel = month === 'annual'
-    ? t('view.annual')
-    : `${t('view.month')} ${months[month] ?? month + 1}`
+    if (status === 'idle') void acceptFile(e.dataTransfer.files?.[0])
+  }, [acceptFile, status])
 
   const stats = useMemo(() => {
     if (!result) return null
@@ -431,7 +396,14 @@ from temperature_kernel import compute_temperature
     ]
   }, [result, t])
 
-  const busy = status === 'loading' || status === 'running'
+  const busy = status !== 'idle'
+  const failedSample = error?.sample
+  const sourceLabel = selectedSample === 'earth' ? t('params.presetEarth') : heightmapName
+  const stale = resultParams != null && (Object.keys(params) as Array<keyof PlanetParams>)
+    .some(key => params[key] !== resultParams[key])
+  const phase = status === 'sample' ? t('action.loadingInput')
+    : status === 'loading' ? t('action.loadingEngine')
+      : status === 'running' ? t('action.computing') : ''
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-4 md:px-6 md:py-6">
@@ -443,72 +415,45 @@ from temperature_kernel import compute_temperature
               {t('badge')}
             </span>
           </div>
-          <p className="mt-1 max-w-3xl text-xs leading-relaxed text-gray-500">{t('subtitle')}</p>
+          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-gray-400">{t('subtitle')}</p>
         </div>
         <Link to="/worlds" className="text-sm text-gray-400 hover:text-neon-cyan">{t('back')}</Link>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[330px,minmax(0,1fr)]">
+      <div className="grid items-start gap-4 lg:grid-cols-[310px,minmax(0,1fr)] xl:grid-cols-[340px,minmax(0,1fr)]">
         {/* Controls */}
         <aside className="space-y-4">
-          <section className="rounded-xl border border-space-border bg-space-panel/60 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">{t('params.title')}</h2>
-              <div className="flex gap-1">
+          <section className="rounded-xl border border-space-border bg-space-panel/60 p-4">
+            <h2 className="font-semibold text-gray-100">{t('heightmap.title')}</h2>
+            <p className="mt-1 text-xs text-gray-400">{t('heightmap.start')}</p>
+            <div className="my-3 flex flex-wrap gap-2">
+              {(['earth', 'nacrea'] as const).map(sample => (
                 <button
+                  key={sample}
                   type="button"
-                  onClick={() => applyPreset('earth')}
-                  className="rounded border border-space-border px-1.5 py-0.5 text-[10px] text-gray-400 hover:text-neon-cyan"
+                  disabled={busy}
+                  aria-pressed={selectedSample === sample}
+                  onClick={() => void loadSample(sample)}
+                  className="rounded-md border border-space-border px-3 py-2 text-xs text-gray-200 hover:border-neon-cyan/50 focus-visible:outline focus-visible:outline-neon-cyan aria-pressed:border-neon-cyan/50 aria-pressed:bg-neon-cyan/10 aria-pressed:text-neon-cyan disabled:opacity-60"
                 >
-                  {t('params.presetEarth')}
+                  {t(sample === 'earth' ? 'heightmap.sampleEarth' : 'heightmap.sampleNacrea')}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => applyPreset('nacrea')}
-                  className="rounded border border-space-border px-1.5 py-0.5 text-[10px] text-gray-400 hover:text-neon-cyan"
-                >
-                  {t('params.presetNacrea')}
-                </button>
-              </div>
+              ))}
             </div>
-            <div className="space-y-1.5">
-              <NumberField label={t('params.luminosity')} value={params.luminosity} step={0.001} min={0} onChange={(v) => setParams((p) => ({ ...p, luminosity: v }))} />
-              <NumberField label={t('params.distance')} value={params.distanceAu} step={0.001} min={0.001} onChange={(v) => setParams((p) => ({ ...p, distanceAu: v }))} />
-              <NumberField label={t('params.albedo')} value={params.albedo} step={0.001} min={0} max={1} onChange={(v) => setParams((p) => ({ ...p, albedo: v }))} />
-              <NumberField label={t('params.greenhouse')} value={params.greenhouseK} step={0.5} min={0} onChange={(v) => setParams((p) => ({ ...p, greenhouseK: v }))} />
-              <NumberField label={t('params.tilt')} value={params.tiltDeg} step={0.1} min={0} max={90} onChange={(v) => setParams((p) => ({ ...p, tiltDeg: v }))} />
-              <NumberField label={t('params.year')} value={params.yearDays} step={0.1} min={0.1} onChange={(v) => setParams((p) => ({ ...p, yearDays: v }))} />
-              <NumberField label={t('params.rotation')} value={params.rotationDays} step={0.01} min={0.01} onChange={(v) => setParams((p) => ({ ...p, rotationDays: v }))} />
-              <NumberField label={t('params.seaLevel')} value={params.seaLevelM} step={10} onChange={(v) => setParams((p) => ({ ...p, seaLevelM: v }))} />
-              <NumberField label={t('params.elevMin')} value={params.elevMinM} step={10} onChange={(v) => setParams((p) => ({ ...p, elevMinM: v }))} />
-              <NumberField label={t('params.elevMax')} value={params.elevMaxM} step={10} onChange={(v) => setParams((p) => ({ ...p, elevMaxM: v }))} />
-              <label className="flex items-center gap-2 text-[11px] text-gray-400">
-                <input
-                  type="checkbox"
-                  checked={params.variableLapse}
-                  onChange={(e) => setParams((p) => ({ ...p, variableLapse: e.target.checked }))}
-                  className="h-3 w-3 accent-neon-cyan"
-                />
-                {t('params.variableLapse')}
-              </label>
-            </div>
-          </section>
-
-          <section className="rounded-xl border border-space-border bg-space-panel/60 p-3">
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{t('heightmap.title')}</h2>
-            <div
+            <button
+              type="button"
+              disabled={busy}
               onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
               onDragLeave={() => setDragging(false)}
               onDrop={onDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`cursor-pointer rounded-lg border border-dashed p-3 text-center text-[11px] leading-relaxed transition-colors ${
-                dragging ? 'border-neon-cyan bg-neon-cyan/10 text-neon-cyan' : 'border-space-border text-gray-500 hover:border-neon-cyan/40'
+              className={`w-full rounded-lg border border-dashed p-3 text-left text-xs leading-relaxed transition-colors focus-visible:outline focus-visible:outline-neon-cyan disabled:opacity-60 ${
+                dragging ? 'border-neon-cyan bg-neon-cyan/10 text-neon-cyan' : 'border-space-border text-gray-300 hover:border-neon-cyan/40'
               }`}
             >
-              <div className="mb-1 text-lg">🗺️</div>
-              <div>{t('heightmap.drop')}</div>
-              <div className="mt-1 text-[10px] text-gray-600">{t('heightmap.hint')}</div>
-            </div>
+              {t('heightmap.drop')}
+            </button>
+            <p className="mt-2 text-xs leading-relaxed text-gray-400">{t('heightmap.hint')}</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -516,38 +461,57 @@ from temperature_kernel import compute_temperature
               className="hidden"
               onChange={(e) => { void acceptFile(e.target.files?.[0]); e.target.value = '' }}
             />
-            <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-gray-500">
-              <span className="truncate" title={heightmapName}>{heightmapName || t('heightmap.none')}</span>
-              <div className="flex shrink-0 gap-2">
-                <button type="button" onClick={() => void loadSample('earth')} className="text-neon-cyan/80 hover:text-neon-cyan">
-                  {t('heightmap.sampleEarth')}
-                </button>
-                <button type="button" onClick={() => void loadSample('nacrea')} className="text-neon-cyan/80 hover:text-neon-cyan">
-                  {t('heightmap.sampleNacrea')}
-                </button>
-              </div>
-            </div>
+          </section>
+
+          <section className="rounded-xl border border-space-border bg-space-panel/60 p-4">
+            <h2 className="mb-3 font-semibold text-gray-100">{t('params.title')}</h2>
+            <fieldset disabled={busy} className="min-w-0 space-y-2 disabled:opacity-60">
+              <NumberField label={t('params.albedo')} value={params.albedo} step={0.001} min={0} max={1} onChange={(v) => setParams((p) => ({ ...p, albedo: v }))} />
+              <NumberField label={t('params.greenhouse')} value={params.greenhouseK} step={0.5} min={0} onChange={(v) => setParams((p) => ({ ...p, greenhouseK: v }))} />
+              <NumberField label={t('params.tilt')} value={params.tiltDeg} step={0.1} min={0} max={90} onChange={(v) => setParams((p) => ({ ...p, tiltDeg: v }))} />
+              <details className="border-t border-space-border pt-2">
+                <summary className="cursor-pointer rounded py-1 text-sm text-gray-300 hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan">{t('params.advanced')}</summary>
+                <div className="mt-2 space-y-2">
+                  <NumberField label={t('params.luminosity')} value={params.luminosity} step={0.001} min={0} onChange={(v) => setParams((p) => ({ ...p, luminosity: v }))} />
+                  <NumberField label={t('params.distance')} value={params.distanceAu} step={0.001} min={0.001} onChange={(v) => setParams((p) => ({ ...p, distanceAu: v }))} />
+                  <NumberField label={t('params.year')} value={params.yearDays} step={0.1} min={0.1} onChange={(v) => setParams((p) => ({ ...p, yearDays: v }))} />
+                  <NumberField label={t('params.rotation')} value={params.rotationDays} step={0.01} min={0.01} onChange={(v) => setParams((p) => ({ ...p, rotationDays: v }))} />
+                  <NumberField label={t('params.seaLevel')} value={params.seaLevelM} step={10} onChange={(v) => setParams((p) => ({ ...p, seaLevelM: v }))} />
+                  <NumberField label={t('params.elevMin')} value={params.elevMinM} step={10} onChange={(v) => setParams((p) => ({ ...p, elevMinM: v }))} />
+                  <NumberField label={t('params.elevMax')} value={params.elevMaxM} step={10} onChange={(v) => setParams((p) => ({ ...p, elevMaxM: v }))} />
+                  <label className="flex items-center gap-2 text-xs text-gray-300">
+                    <input type="checkbox" checked={params.variableLapse} onChange={(e) => setParams((p) => ({ ...p, variableLapse: e.target.checked }))} className="h-4 w-4 accent-neon-cyan" />
+                    {t('params.variableLapse')}
+                  </label>
+                </div>
+              </details>
+            </fieldset>
           </section>
 
           <button
             type="button"
-            onClick={() => void run()}
-            disabled={busy || !gray}
+            onClick={run}
+            disabled={busy || !gray || !validParams}
             className="w-full rounded-lg border border-neon-cyan/40 bg-neon-cyan/15 px-3 py-2 text-sm font-medium text-neon-cyan transition-colors hover:bg-neon-cyan/25 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {status === 'loading'
-              ? t('action.loadingEngine')
-              : status === 'running'
-                ? t('action.computing')
-                : result ? t('action.recompute') : t('action.run')}
+            {phase || (error?.stage === 'runtime' || error?.stage === 'compute'
+              ? t('action.retryRun') : result ? t('action.recompute') : t('action.run'))}
           </button>
 
-          <div className="text-[10px] leading-relaxed text-gray-600">
-            {loadSeconds != null && <div>{t('status.engineLoaded', { seconds: loadSeconds.toFixed(1) })}</div>}
-            {status === 'error' && <div className="text-red-400">{error}</div>}
-            {status !== 'error' && error && <div className="text-red-400">{error}</div>}
-            <div className="mt-1">{t('note')}</div>
-          </div>
+          <p role="status" className="text-xs leading-relaxed text-gray-400 empty:hidden">
+            {phase || (loadSeconds != null ? t('status.engineLoaded', { seconds: loadSeconds.toFixed(1) }) : '')}
+          </p>
+          {!validParams && <p role="alert" className="text-xs text-amber-200">{t('error.params')}</p>}
+          {error && (
+            <div className="border-l-2 border-red-400/70 pl-3 text-xs leading-relaxed text-red-200">
+              <p role="alert">{t(`error.${error.stage}`)}</p>
+              {failedSample && <button type="button" className="my-1 text-neon-cyan underline" onClick={() => void loadSample(failedSample)}>{t('action.retrySample')}</button>}
+              <details className="mt-1 text-gray-400">
+                <summary className="cursor-pointer">{t('error.details')}</summary>
+                <p className="max-h-32 overflow-auto whitespace-pre-wrap break-words">{error.detail}</p>
+              </details>
+            </div>
+          )}
         </aside>
 
         {/* Preview */}
@@ -558,32 +522,29 @@ from temperature_kernel import compute_temperature
                 <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                   {result ? t('view.title') : t('view.heightmapPreview')}
                 </h2>
-                <span className="text-[10px] text-gray-500">{GRID_W}×{GRID_H}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMonth('annual')}
-                  className={`rounded px-2 py-0.5 text-[11px] ${month === 'annual' ? 'bg-neon-cyan/20 text-neon-cyan' : 'text-gray-500 hover:text-gray-300'}`}
+              {result && (
+                <select
+                  aria-label={t('view.month')}
+                  value={month}
+                  onChange={(event) => setMonth(event.target.value === 'annual' ? 'annual' : Number(event.target.value))}
+                  className="rounded-md border border-space-border bg-space-surface px-2 py-1.5 text-xs text-gray-200 focus-visible:outline focus-visible:outline-neon-cyan"
                 >
-                  {t('view.annual')}
-                </button>
-                <input
-                  type="range"
-                  min={0}
-                  max={11}
-                  step={1}
-                  value={month === 'annual' ? 0 : month}
-                  disabled={!result}
-                  onChange={(e) => setMonth(parseInt(e.target.value))}
-                  className="w-24 accent-neon-cyan disabled:opacity-40"
-                />
-                <span className="w-20 text-right text-[10px] text-gray-400">{monthLabel}</span>
-              </div>
+                  <option value="annual">{t('view.annual')}</option>
+                  {calendarMonths.map(({ label, modelIndex }) => (
+                    <option key={modelIndex} value={modelIndex}>{label}</option>
+                  ))}
+                </select>
+              )}
             </div>
+            {gray && <p className="mb-2 break-words text-xs text-gray-400">{t('stats.gridInfo', { name: sourceLabel, width: GRID_W, height: GRID_H })}</p>}
+
+            {stale && <p role="status" className="mb-2 border-l-2 border-amber-400/70 pl-2 text-xs text-amber-200">{t('status.previousResult')}</p>}
 
             <canvas
               ref={canvasRef}
+              role="img"
+              aria-label={result ? t('view.title') : t('view.heightmapPreview')}
               width={CANVAS_W}
               height={CANVAS_H}
               className="w-full rounded-lg border border-space-border bg-[#0a0a1a]"
@@ -601,18 +562,13 @@ from temperature_kernel import compute_temperature
               </div>
             )}
 
-            {!result && gray && (
-              <div className="mt-2 truncate text-[10px] text-gray-500" title={heightmapName}>
-                {heightmapName}
-              </div>
-            )}
-
             {!result && (
               <div className="mt-3 rounded-lg border border-space-border bg-space-surface/60 p-3 text-xs leading-relaxed text-gray-500">
                 {t('view.placeholder')}
               </div>
             )}
           </div>
+          <p className="text-xs leading-relaxed text-gray-400">{t('note')}</p>
 
           {stats && (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -625,11 +581,6 @@ from temperature_kernel import compute_temperature
             </div>
           )}
 
-          <div className="text-[10px] leading-relaxed text-gray-600">
-            {result && sampleMeta && (
-              <span>{t('stats.gridInfo', { name: heightmapName, width: GRID_W, height: GRID_H })}</span>
-            )}
-          </div>
         </section>
       </div>
     </div>

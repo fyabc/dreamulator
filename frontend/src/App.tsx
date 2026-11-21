@@ -36,9 +36,10 @@ function App() {
   // BrowserRouter for local dev with FastAPI backend.
   const staticMode = isStaticMode()
   const Router = staticMode ? HashRouter : BrowserRouter
+  const base = import.meta.env.BASE_URL
 
   return (
-    <Router>
+    <Router basename={!staticMode && base.startsWith('/') ? base : undefined}>
       <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<Layout />}>

@@ -18,7 +18,8 @@ import type { PackHeightSource, PackMeta, PackSummary, ProbeResult, RegionDevice
   RegionRefinementPlan, RegionRefinementSource, RiverData } from '../viewers/packs/types'
 import type { SkyBackground, SkyCulture, SkyEphemerisResult } from '../viewers/sky/types'
 
-export const API_BASE = '/api'
+const base = import.meta.env.BASE_URL
+export const API_BASE = `${base.startsWith('/') ? base.replace(/\/$/, '') : ''}/api`
 
 /**
  * URL for a pack image served by /api/packs/{pack}/image/{path} — used
@@ -387,7 +388,7 @@ const liveOnlyApi = {
     const formData = new FormData()
     formData.append('file', pngBlob, 'elevation.png')
     const params = branch ? `?branch=${encodeURIComponent(branch)}` : ''
-    return fetch(`/api/worlds/${world}/maps/${planetId}/elevation${params}`, {
+    return fetch(`${API_BASE}/worlds/${world}/maps/${planetId}/elevation${params}`, {
       method: 'POST',
       body: formData,
     }).then((r) => r.json())
@@ -444,7 +445,7 @@ const liveOnlyApi = {
     const formData = new FormData()
     formData.append('file', file)
     const params = branch ? `?branch=${encodeURIComponent(branch)}` : ''
-    return fetch(`/api/worlds/${world}/geography-raster${params}`, {
+    return fetch(`${API_BASE}/worlds/${world}/geography-raster${params}`, {
       method: 'POST',
       body: formData,
     }).then((r) => r.json())

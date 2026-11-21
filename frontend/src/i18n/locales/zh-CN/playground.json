@@ -1,11 +1,11 @@
 {
-  "title": "浏览器气候实验台",
+  "title": "浏览器温度实验台",
   "badge": "实验",
-  "subtitle": "在浏览器里运行引擎的纯温度模型：拖入一张高度图，得到年均/逐月温度首图。当前只算温度，不含 CVT 网格、降水、风场与 Köppen。",
+  "subtitle": "用现成样例或自己的高程图快速试算温度。参数和结果只用于当前实验，不会写入世界。",
   "back": "← 返回世界",
   "params": {
-    "title": "行星参数",
-    "presetNacrea": "Nacrea",
+    "title": "试算参数",
+    "advanced": "高级参数",
     "presetEarth": "地球",
     "luminosity": "恒星光度 (L☉)",
     "distance": "轨道半长轴 (AU)",
@@ -20,28 +20,32 @@
     "variableLapse": "温度相关湿绝热递减率"
   },
   "heightmap": {
-    "title": "高度图",
-    "drop": "拖入 PNG / JPEG 高度图，或点击选择",
-    "hint": "图像按 180×90 等距圆柱重采样；灰度值线性映射到上面的最低/最高高程。",
-    "none": "尚未载入高度图",
+    "title": "选择高程来源",
+    "start": "样例会同时载入高程和对应的试算参数。",
+    "drop": "选择或拖入自己的高程图",
+    "hint": "支持 PNG、JPEG 和 WebP。图像会缩放到 180 × 90，灰度按高级参数中的高程范围换算。",
     "sampleEarth": "地球示例",
     "sampleNacrea": "Nacrea 示例"
   },
   "action": {
-    "run": "运行温度首图",
+    "run": "计算温度",
     "recompute": "重新计算",
-    "loadingEngine": "正在加载浏览器运行时…",
+    "retryRun": "重试计算",
+    "retrySample": "重试加载样例",
+    "loadingInput": "正在读取高程图…",
+    "loadingEngine": "正在加载并初始化浏览器运行时…",
     "computing": "正在计算…"
   },
   "status": {
-    "engineLoaded": "浏览器运行时加载耗时 {{seconds}} s"
+    "engineLoaded": "浏览器运行时已就绪，本页重跑无需再次初始化。首次加载耗时 {{seconds}} 秒。",
+    "previousResult": "正在显示上次计算的结果。重新计算后才会应用当前参数。"
   },
   "view": {
     "title": "温度场",
-    "heightmapPreview": "高度图预览",
+    "heightmapPreview": "高程预览",
     "annual": "年均",
-    "month": "月份",
-    "placeholder": "载入高度图后点击「运行温度首图」。第一次运行会从 CDN 下载浏览器 Python 运行时（约数 MB），之后切换月份只重算温度，不再重新加载。"
+    "month": "温度时段",
+    "placeholder": "首次计算需要加载浏览器运行时，可能多等一会儿。计算完成后，可以切换年均和逐月温度，无需重算。"
   },
   "stats": {
     "globalMean": "全球均温（能量平衡）",
@@ -51,7 +55,12 @@
     "gridInfo": "{{name}} · {{width}}×{{height}} 规则经纬网格"
   },
   "error": {
-    "noHeightmap": "请先载入一张高度图。"
+    "sample": "高程样例加载失败。请重试，或选择自己的高程图。",
+    "file": "无法读取这张高程图。请选择可打开的 PNG、JPEG 或 WebP 文件。",
+    "runtime": "浏览器运行时未能启动。请重试；如果仍失败，可展开技术详情。",
+    "compute": "本次温度计算未完成。请检查参数后重试。",
+    "params": "请填写有效参数，并确认最低高程低于最高高程。",
+    "details": "查看技术详情"
   },
-  "note": "原型说明：温度来自引擎的 1D EBM 与季节热容模型；高程按湿绝热递减率订正，海岸距离用网格 BFS 近似。降水、风场、洋流与 Köppen 尚未接入。"
+  "note": "结果来自一维能量平衡与季节热容模型。这是温度试算，不包含降水、风、洋流或气候分类。"
 }

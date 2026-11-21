@@ -5,3 +5,5 @@ declare const __APP_VERSION__: string
 
 /** Injected by Vite define — ISO date string (YYYY-MM-DD) at build time. */
 declare const __BUILD_DATE__: string
+
+declare const __PLAYGROUND_RUNTIME_PATH__: string
