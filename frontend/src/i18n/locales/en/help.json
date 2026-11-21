@@ -357,11 +357,11 @@
       "entries": [
         {
           "title": "Overview",
-          "content": "CivMap overlays fictional territorial coloring on a real Earth administrative base map. Leaflet renders GeoJSON boundaries with ADM0 (country) / ADM1 (province) levels."
+          "content": "The civilization map draws fictional territories on real Earth administrative boundaries. Province boundaries (ADM1) support individual edits. National boundaries (ADM0) support painting an entire country at once. The optional external basemap is off by default in the full-screen view.\n\nIf local boundaries are missing, run `uv run python scripts/dev/prepare_civmap_data.py` from the project root, then reload the map. The static site can only show published boundaries and territories."
         },
         {
           "title": "Basics",
-          "content": "**Click a country** — select and highlight its borders\n**Paint mode** — pick a color and click a country to paint (simulate territorial division)\n**Snapshots** — create/switch time snapshots, each saving the territorial assignments at that time\n\nData lives in GeoJSON + LFS, with branch inheritance."
+          "content": "In a world's **Civilization** tab, select **Open civilization map** above the documents. The map opens for the current branch.\n\nEditing is locked by default in the local app. Select **Editing locked** to unlock it, then choose a country and click the map to paint. Select **Editing enabled** to lock it again. Use **Undo** or Ctrl+Z (⌘Z on macOS) to undo the last territory edit. The static site is read-only."
         }
       ]
     },

@@ -13,8 +13,9 @@ import type {
   GeoBoundaryCollection,
   TerritoryAssignment,
 } from '../components/civmap/types'
+import { API_BASE } from './client'
 
-const BASE = '/api/worlds'
+const BASE = `${API_BASE}/worlds`
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(url, init)

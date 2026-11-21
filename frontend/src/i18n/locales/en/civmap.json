@@ -3,7 +3,9 @@
     "toolbar": "Toolbar",
     "editorTitle": "Civ Map — {{world}}",
     "readonly": "Read-only",
-    "previewMap": "🏛️ Civilization Map"
+    "editLocked": "Editing locked",
+    "editing": "Editing enabled",
+    "browsing": "Browse mode"
   },
   "tool": {
     "paint": "Paint",
@@ -32,6 +34,12 @@
   },
   "action": {
     "back": "← Back",
+    "backToWorld": "Back to the Civilization tab",
+    "closeTools": "Close toolbar",
+    "help": "Help",
+    "basemap": "Basemap",
+    "retry": "Reload",
+    "undo": "Undo",
     "edit": "Edit",
     "newCountry": "New Country",
     "newSnapshot": "New Snapshot",
@@ -40,13 +48,15 @@
     "cancel": "Cancel",
     "save": "Save",
     "deleteCountry": "Delete country",
-    "editMap": "Edit map →",
-    "fullscreen": "Fullscreen"
+    "openMap": "Open civilization map",
+    "lockEditing": "Lock editing"
   },
   "label": {
     "optional": "Optional",
     "loading": "Loading...",
     "loadingMap": "Loading map data...",
+    "on": "On",
+    "off": "Off",
     "level": "Level:",
     "paintByCountry": "⚡ Painting by country",
     "year": "Year",
@@ -57,18 +67,36 @@
     "noDescription": "(no description)"
   },
   "hint": {
+    "undo": "Undo the last paint or erase action (Ctrl+Z / ⌘Z)",
+    "noCountries": "This world has no published countries.",
+    "noSnapshots": "This world has no published snapshots.",
     "addCountry": "Click \"+ Add\" to create a fictional country",
     "addSnapshot": "Click \"+ Add\" to create a snapshot",
     "createSnapshotFirst": "⚠️ Create a snapshot first to paint",
-    "notPaintedStatic": "Not painted yet — edit in API mode",
-    "notPaintedLive": "Not painted yet — click \"Edit map\" to start",
-    "readonly": "Read-only mode — map editing is only available in API mode"
+    "lockEditing": "Lock editing to browse without making changes",
+    "unlockEditing": "Unlock to edit territories, countries, and snapshots"
+  },
+  "mapState": {
+    "savingAssignments": "Saving territory changes…",
+    "undone": "Last territory change undone.",
+    "undoConflict": "The affected territories or countries have changed. Nothing was undone.",
+    "paintConflict": "The snapshot or country changed. No territory was edited.",
+    "assignmentSaveFailed": "Could not confirm that the territory change was saved. Check your connection and the map.",
+    "missing": "No province boundaries available",
+    "missingLive": "This world or branch has no province boundaries (ADM1). Prepare the boundary data locally, then reload the map.",
+    "missingStatic": "Province boundaries (ADM1) have not been published for this world, so the static site cannot display its territories.",
+    "loadFailed": "Could not load map data",
+    "loadFailedDetail": "Could not read boundaries or territories. Check your connection and reload.",
+    "unavailable": "Map unavailable",
+    "basemapFailed": "The basemap could not load and was turned off. Boundaries and territories are still available.",
+    "loadingAdm0": "Loading national boundaries. You can still browse, but painting is paused.",
+    "adm0Unavailable": "National boundaries are unavailable. Reload or switch back to provinces."
   },
   "status": {
-    "painting": "🖌️ Painting: {{name}}",
-    "erasing": "🧹 Erase mode",
-    "selecting": "👆 Select mode",
-    "currentSnapshot": "📅 Current snapshot: {{id}}"
+    "painting": "Painting: {{name}}",
+    "erasing": "Erase mode",
+    "selecting": "Select mode",
+    "currentSnapshot": "Current snapshot: {{id}}"
   },
   "stats": {
     "countries": "Countries: {{count}}",

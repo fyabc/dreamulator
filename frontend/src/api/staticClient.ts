@@ -7,6 +7,7 @@
 
 import type { BuildGrid, BuildJob } from './buildJobs'
 import type { SystemCatalog } from './catalogAdapter'
+import type { CivTerritory, GeoBoundaryCollection } from '../components/civmap/types'
 import type { RegionRefinementSource } from '../viewers/packs/types'
 import type { MapResultMetadata } from './resultContract'
 import { decodeMonthlyClimate, type MonthlyClimateData } from './monthlyClimate'
@@ -34,8 +35,9 @@ const DATA_BASE = `${import.meta.env.BASE_URL}data`
 // conditional request per file; unchanged large meshes answer 304.
 const FETCH_INIT: RequestInit = { cache: 'no-cache' }
 
-async function fetchStaticJson<T>(path: string): Promise<T> {
+async function fetchStaticJson<T>(path: string, onMissing?: () => T): Promise<T> {
   const response = await fetch(`${DATA_BASE}${path}`, FETCH_INIT)
+  if (response.status === 404 && onMissing) return onMissing()
   if (!response.ok) {
     throw new Error(`Static data not found: ${path} (HTTP ${response.status})`)
   }
@@ -449,13 +451,9 @@ export const staticApi = {
 
   // ---- CivMap read operations ----
 
-  getCivBoundaries: async (name: string, level: string): Promise<any> => {
-    try {
-      return await fetchStaticJson(`/worlds/${name}/civmap/${level}.geojson`)
-    } catch {
-      return null
-    }
-  },
+  getCivBoundaries: (name: string, level: string) => fetchStaticJson<GeoBoundaryCollection | null>(
+    `/worlds/${name}/civmap/${level}.geojson`, () => null,
+  ),
 
   getCivMapping: async (name: string): Promise<Record<string, string[]>> => {
     try {
@@ -465,24 +463,20 @@ export const staticApi = {
     }
   },
 
-  getCivTerritory: async (name: string, branch?: string | null) => {
-    const result = await fetchBranchAwareJson<any>(
-      name,
-      branch,
-      '/civ_territory.json',
-      '/civ_territory.json',
-    )
+  getCivTerritory: async (name: string, branch?: string | null): Promise<CivTerritory> => {
+    const root = `/worlds/${name}`
+    const branchTerritory = branch
+      ? await fetchStaticJson<CivTerritory | null>(`${root}/branches/${branch}/civ_territory.json`, () => null)
+      : null
+    const result = branchTerritory ?? await fetchStaticJson<CivTerritory | null>(`${root}/civ_territory.json`, () => null)
     return result ?? { countries: [], snapshots: [], active_snapshot: null, assignments: {} }
   },
 
   getCivAvailableLevels: async (name: string): Promise<string[]> => {
-    // Check which GeoJSON files exist by trying to fetch metadata
-    try {
-      const meta = await fetchStaticJson<any>(`/worlds/${name}/civmap/metadata.json`)
-      return Object.keys(meta.levels || {})
-    } catch {
-      return []
-    }
+    const meta = await fetchStaticJson<{ levels?: Record<string, unknown> }>(
+      `/worlds/${name}/civmap/metadata.json`, () => ({}),
+    )
+    return Object.keys(meta.levels ?? {})
   },
 
   // CivMap write operations — not available in static mode

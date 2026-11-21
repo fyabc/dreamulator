@@ -8,7 +8,7 @@ import { formatRadius, formatMass } from '../viewers/utils/scale'
 import NarratorPanel from '../components/NarratorPanel'
 import BranchSelector from '../components/BranchSelector'
 import LayerDocuments from '../components/LayerDocuments'
-import CivMapPreview from '../components/civmap/CivMapPreview'
+import CivMapEntry from '../components/civmap/CivMapEntry'
 import LayerDag from '../components/LayerDag'
 import LayerTabSection from '../components/world/LayerTabSection'
 import WorldBuildPanel from '../components/world/WorldBuildPanel'
@@ -752,12 +752,10 @@ export default function WorldDetail() {
             )}
 
             {activeTab === 'civilization' && (
-              <LayerTabSection
-                worldName={worldName!}
-                tab="civilization"
-                documents={<LayerDocuments worldName={worldName!} layer="civilization" branch={selectedBranch} />}
-                derived={<CivMapPreview worldName={worldName!} branch={selectedBranch} />}
-              />
+              <div className="space-y-4">
+                <CivMapEntry world={worldName!} branch={selectedBranch} />
+                <LayerDocuments worldName={worldName!} layer="civilization" branch={selectedBranch} />
+              </div>
             )}
 
             {activeTab === 'design-notes' && (

@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import AtlasIcon, { type AtlasIconName } from './AtlasIcon'
@@ -20,6 +21,14 @@ interface NavigationItem {
   path: string
   label: string
   icon: AtlasIconName
+  matchMap?: boolean
+}
+
+interface SidebarHint {
+  label: string
+  anchor: HTMLElement
+  left: number
+  top: number
 }
 
 export default function Sidebar({
@@ -31,9 +40,27 @@ export default function Sidebar({
   const location = useLocation()
   const { t } = useTranslation()
   const closeButton = useRef<HTMLButtonElement>(null)
+  const hintElement = useRef<HTMLDivElement>(null)
+  const [hint, setHint] = useState<SidebarHint | null>(null)
   useEffect(() => {
     if (open) closeButton.current?.focus()
   }, [open])
+  useEffect(() => {
+    setHint(null)
+  }, [collapsed, location.pathname])
+  useEffect(() => {
+    if (!hint) return
+    const dismissHint = () => setHint(null)
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') dismissHint()
+    }
+    window.addEventListener('keydown', dismissOnEscape)
+    window.addEventListener('resize', dismissHint)
+    return () => {
+      window.removeEventListener('keydown', dismissOnEscape)
+      window.removeEventListener('resize', dismissHint)
+    }
+  }, [hint])
   const devMode = useDevModeStore((s) => s.devMode)
   const setDevMode = useDevModeStore((s) => s.setDevMode)
   const experimental = useExperimentalStore((s) => s.experimental)
@@ -49,6 +76,8 @@ export default function Sidebar({
     { path: '/', label: t('nav.home'), icon: 'home' },
     { path: '/worlds', label: t('nav.worlds'), icon: 'globe' },
     ...(isStaticMode() ? [] : [{ path: '/import', label: t('nav.import'), icon: 'import' as const }]),
+  ]
+  const utilityItems: NavigationItem[] = [
     // Region pack QA page — local packs only, hidden in the static build.
     ...(isStaticMode() ? [] : [{ path: '/packs', label: t('nav.packs'), icon: 'frame' as const }]),
     // Experimental browser Pyodide playground — opt-in via the experimental flag.
@@ -67,7 +96,7 @@ export default function Sidebar({
     : currentWorld
     ? [
         { path: `/worlds/${currentWorld}${branch ? `?${overviewSearch}` : ''}`, label: t('nav.overview'), icon: 'overview' },
-        { path: `/worlds/${currentWorld}/globe${search}`, label: t('nav.map'), icon: 'globe' },
+        { path: `/worlds/${currentWorld}/globe${search}`, label: t('nav.map'), icon: 'globe', matchMap: true },
         { path: `/worlds/${currentWorld}/viewer3d${search}`, label: t('nav.viewer3d'), icon: 'orbit' },
         // API-only view (parameterized engine query) — hidden in static mode.
         ...(isStaticMode()
@@ -75,6 +104,47 @@ export default function Sidebar({
           : [{ path: `/worlds/${currentWorld}/sky${search}`, label: t('nav.sky'), icon: 'stars' as const }]),
       ]
     : []
+
+  const revealHint = (label: string, anchor: HTMLElement) => {
+    if (!collapsed) return
+    const { right, top, height } = anchor.getBoundingClientRect()
+    setHint({ label, anchor, left: right, top: top + height / 2 })
+  }
+
+  const renderNavLinks = (items: NavigationItem[]) => items.map((item) => {
+    const path = item.path.split('?')[0]
+    const isActive = location.pathname === path || (item.matchMap
+      && /\/worlds\/[^/]+\/(?:globe|map)(?:\/|$)/.test(location.pathname))
+    return (
+      <Link
+        key={item.path}
+        to={item.path}
+        onClick={onClose}
+        aria-label={collapsed ? item.label : undefined}
+        onPointerEnter={(event) => { if (event.pointerType === 'mouse') revealHint(item.label, event.currentTarget) }}
+        onPointerLeave={(event) => {
+          if (event.currentTarget.matches(':focus-visible') || (event.relatedTarget instanceof Node && hintElement.current?.contains(event.relatedTarget))) return
+          setHint(null)
+        }}
+        onFocus={(event) => { if (event.currentTarget.matches(':focus-visible')) revealHint(item.label, event.currentTarget) }}
+        onBlur={() => setHint(null)}
+        aria-current={isActive ? 'page' : undefined}
+        className={[
+          'flex items-center rounded-lg transition-all duration-200',
+          collapsed ? 'md:justify-center md:px-0 md:py-3' : '',
+          'px-4 py-2.5 gap-3',
+          isActive
+            ? 'bg-space-surface text-neon-cyan border border-space-border'
+            : 'text-gray-400 hover:bg-space-surface hover:text-gray-200 border border-transparent',
+        ].join(' ')}
+      >
+        <AtlasIcon name={item.icon} />
+        <span className={['font-medium text-sm', collapsed ? 'md:hidden' : ''].join(' ')}>
+          {item.label}
+        </span>
+      </Link>
+    )
+  })
 
   return (
     <aside
@@ -111,72 +181,33 @@ export default function Sidebar({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const isActive =
-            item.path === '/'
-              ? location.pathname === '/'
-              : location.pathname.startsWith(item.path)
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              onClick={onClose}
-              title={collapsed ? item.label : undefined}
-              aria-current={location.pathname === item.path ? 'page' : undefined}
-              className={[
-                'flex items-center rounded-lg transition-all duration-200',
-                collapsed ? 'md:justify-center md:px-0 md:py-3' : '',
-                'px-4 py-2.5 gap-3',
-                isActive
-                  ? 'bg-space-surface text-neon-cyan border border-space-border'
-                  : 'text-gray-400 hover:bg-space-surface hover:text-gray-200 border border-transparent',
-              ].join(' ')}
-            >
-              <AtlasIcon name={item.icon} />
-              <span className={['font-medium text-sm', collapsed ? 'md:hidden' : ''].join(' ')}>
-                {item.label}
-              </span>
-            </Link>
-          )
-        })}
-
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto" onScroll={() => setHint(null)}>
+        {renderNavLinks(navItems)}
         {/* World-specific nav items */}
         {worldNavItems.length > 0 && (
           <>
-            <div className={['pt-3 mt-3 border-t border-space-border', collapsed ? 'md:hidden' : ''].join(' ')}>
-              <span className="text-xs text-gray-600 uppercase tracking-wide">{currentWorld}</span>
+            <div className="mt-3 border-t border-space-border pt-3">
+              <span className={`text-xs text-gray-600 uppercase tracking-wide ${collapsed ? 'md:sr-only' : ''}`}>{currentWorld}</span>
             </div>
-            {worldNavItems.map((item) => {
-              const path = item.path.split('?')[0]
-              const isActive = location.pathname === path || (item.icon === 'globe'
-                && /\/worlds\/[^/]+\/(?:globe|map)(?:\/|$)/.test(location.pathname))
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={onClose}
-                  title={collapsed ? item.label : undefined}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={[
-                    'flex items-center rounded-lg transition-all duration-200',
-                    collapsed ? 'md:justify-center md:px-0 md:py-3' : '',
-                    'px-4 py-2.5 gap-3',
-                    isActive
-                      ? 'bg-space-surface text-neon-cyan border border-space-border'
-                      : 'text-gray-400 hover:bg-space-surface hover:text-gray-200 border border-transparent',
-                  ].join(' ')}
-                >
-                  <AtlasIcon name={item.icon} />
-                  <span className={['font-medium text-sm', collapsed ? 'md:hidden' : ''].join(' ')}>
-                    {item.label}
-                  </span>
-                </Link>
-              )
-            })}
+            {renderNavLinks(worldNavItems)}
           </>
         )}
+        <div className="mt-3 space-y-1 border-t border-space-border pt-3">
+          {renderNavLinks(utilityItems)}
+        </div>
       </nav>
+
+      {collapsed && hint && createPortal(
+        <div ref={hintElement} aria-hidden="true"
+          className="fixed z-50 hidden -translate-y-1/2 pl-2 md:block" style={{ left: hint.left, top: hint.top }}
+          onPointerLeave={(event) => {
+            if (hint.anchor.matches(':focus-visible') || (event.relatedTarget instanceof Node && hint.anchor.contains(event.relatedTarget))) return
+            setHint(null)
+          }}>
+          <span className="block rounded-md border border-space-border bg-space-panel px-3 py-1.5 text-sm text-slate-100">{hint.label}</span>
+        </div>,
+        document.body,
+      )}
 
       {/* Footer with collapse toggle */}
       <div className="p-4 border-t border-space-border">

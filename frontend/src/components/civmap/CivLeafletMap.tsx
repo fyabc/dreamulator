@@ -10,8 +10,7 @@
  *   - adm0: click selects all provinces of the country
  */
 
-import { useEffect, useRef, useCallback, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type {
@@ -38,8 +37,9 @@ interface CivLeafletMapProps {
   toolMode: PaintToolMode
   onProvinceHover: (info: ProvinceInfo | null) => void
   /** Called with province_id (adm1_code). Parent handles ADM0 expansion. */
-  onProvincePaint: (provinceId: string) => void
-  loading?: boolean
+  onProvincePaint?: (provinceId: string) => void
+  showBasemap: boolean
+  onBasemapError: () => void
 }
 
 /** Build a lookup from province_id → fictional country_id */
@@ -115,13 +115,15 @@ export default function CivLeafletMap({
   toolMode,
   onProvinceHover,
   onProvincePaint,
-  loading,
+  showBasemap,
+  onBasemapError,
 }: CivLeafletMapProps) {
-  const { t } = useTranslation('civmap')
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const adm1LayerRef = useRef<L.GeoJSON | null>(null)
   const adm0LayerRef = useRef<L.GeoJSON | null>(null)
+  const paintHandler = useRef(onProvincePaint)
+  useLayoutEffect(() => { paintHandler.current = onProvincePaint }, [onProvincePaint])
 
   const assignmentMap = useMemo(() => buildAssignmentMap(assignments), [assignments])
   const countryMap = useMemo(() => buildCountryMap(countries), [countries])
@@ -138,7 +140,19 @@ export default function CivLeafletMap({
       worldCopyJump: true,
     })
 
-    L.tileLayer(
+    mapRef.current = map
+
+    return () => {
+      map.remove()
+      mapRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !showBasemap) return
+
+    const basemap = L.tileLayer(
       'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
       {
         attribution:
@@ -147,15 +161,13 @@ export default function CivLeafletMap({
         subdomains: 'abcd',
         maxZoom: 12,
       },
-    ).addTo(map)
-
-    mapRef.current = map
+    ).on('tileerror', onBasemapError).addTo(map)
 
     return () => {
-      map.remove()
-      mapRef.current = null
+      basemap.off('tileerror', onBasemapError)
+      basemap.remove()
     }
-  }, [])
+  }, [showBasemap, onBasemapError])
 
   // Style for ADM1 province fill layer
   const getAdm1Style = useCallback(
@@ -166,9 +178,9 @@ export default function CivLeafletMap({
       const fc = fictionalCountryId ? countryMap.get(fictionalCountryId) : undefined
 
       return {
-        fillColor: fc?.color || '#333',
-        fillOpacity: fc ? 0.7 : 0.3,
-        color: level === 'adm0' ? '#444' : '#666',
+        fillColor: fc?.color || '#374556',
+        fillOpacity: fc ? 0.7 : 0.58,
+        color: level === 'adm0' ? '#516173' : '#8190a2',
         weight: level === 'adm0' ? 0.3 : 0.5,
         opacity: 0.6,
       }
@@ -216,13 +228,13 @@ export default function CivLeafletMap({
 
         featureLayer.on('click', () => {
           const id = (feature.id as string) || ''
-          onProvincePaint(id)
+          paintHandler.current?.(id)
         })
       },
     }).addTo(map)
 
     adm1LayerRef.current = layer
-  }, [adm1Geojson, getAdm1Style, assignmentMap, countryMap, provinceCountryMap, countryProvinceMap, level, onProvinceHover, onProvincePaint])
+  }, [adm1Geojson, getAdm1Style, assignmentMap, countryMap, provinceCountryMap, countryProvinceMap, level, onProvinceHover])
 
   // Update ADM0 border overlay when level or data changes
   useEffect(() => {
@@ -254,17 +266,6 @@ export default function CivLeafletMap({
   }, [toolMode])
 
   return (
-    <div className="relative w-full h-full">
-      <div
-        ref={mapContainerRef}
-        className="w-full h-full"
-        style={{ cursor: cursorStyle, background: '#1a1a2e' }}
-      />
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-[1000]">
-          <div className="text-white text-lg">{t('label.loadingMap')}</div>
-        </div>
-      )}
-    </div>
+    <div ref={mapContainerRef} className="h-full w-full !bg-space-bg" style={{ cursor: cursorStyle }} />
   )
 }

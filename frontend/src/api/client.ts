@@ -18,7 +18,7 @@ import type { PackHeightSource, PackMeta, PackSummary, ProbeResult, RegionDevice
   RegionRefinementPlan, RegionRefinementSource, RiverData } from '../viewers/packs/types'
 import type { SkyBackground, SkyCulture, SkyEphemerisResult } from '../viewers/sky/types'
 
-const API_BASE = '/api'
+export const API_BASE = '/api'
 
 /**
  * URL for a pack image served by /api/packs/{pack}/image/{path} — used

@@ -35,7 +35,7 @@ from typing import Any
 
 DEFAULT_OUTPUT = (
     Path(__file__).resolve().parents[2]
-    / "data" / "worlds" / "earth" / "layers" / "geological" / "input" / "maps" / "earth_reference"
+    / "data" / "worlds" / "earth" / "maps" / "earth_reference"
 )
 
 # Natural Earth GeoJSON (public domain) — official vector repo

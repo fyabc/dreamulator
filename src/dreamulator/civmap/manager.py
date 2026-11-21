@@ -2,7 +2,7 @@
 
 Handles two types of data:
 1. **Reference GeoJSON** — real-world admin boundaries (shared across branches,
-   stored under geological/input/maps/earth_reference/)
+   stored under maps/earth_reference/)
 2. **Territory data** — fictional countries + assignments (per-branch,
    stored under civilization/input/)
 """
@@ -37,20 +37,16 @@ class CivMapManager:
     # Reference GeoJSON (read-only, shared across branches)
     # -------------------------------------------------------------------
 
-    def _reference_dir(self) -> Path | None:
-        """Resolve the reference GeoJSON directory.
-
-        Looks in geological/input/maps/earth_reference/ via the resolver
-        (supports branch inheritance — a civilization-fork branch inherits
-        the geological layer from the parent).
-        """
+    def reference_dir(self) -> Path | None:
+        """Find the world-wide reference boundaries, including legacy installs."""
+        root_dir = self.world_dir / "maps" / "earth_reference"
+        if any(root_dir.glob("adm*.geojson")):
+            return root_dir
         input_dir = self._resolver.get_input_dir("geological")
         if input_dir is None:
             return None
         ref_dir = input_dir / "maps" / "earth_reference"
-        if ref_dir.exists():
-            return ref_dir
-        return None
+        return ref_dir if ref_dir.is_dir() else None
 
     def get_boundary_geojson(
         self,
@@ -67,7 +63,7 @@ class CivMapManager:
         Returns:
             GeoJSON FeatureCollection dict, or None if not found.
         """
-        ref_dir = self._reference_dir()
+        ref_dir = self.reference_dir()
         if ref_dir is None:
             return None
 
@@ -84,7 +80,7 @@ class CivMapManager:
 
     def list_available_levels(self) -> list[str]:
         """List available admin boundary levels (e.g. ['adm0', 'adm1'])."""
-        ref_dir = self._reference_dir()
+        ref_dir = self.reference_dir()
         if ref_dir is None:
             return []
         levels = []
@@ -104,7 +100,7 @@ class CivMapManager:
             Dict of ``{iso_a2: [adm1_code, ...]}``, e.g. ``{"GR": ["GRC-2884", ...]}``.
             Empty dict if ADM1 data is not available.
         """
-        ref_dir = self._reference_dir()
+        ref_dir = self.reference_dir()
         if ref_dir is None:
             return {}
         adm1_path = ref_dir / "adm1.geojson"

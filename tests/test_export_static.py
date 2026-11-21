@@ -10,10 +10,13 @@ context is unavailable.
 from __future__ import annotations
 
 import importlib.util
+import json
 from typing import TYPE_CHECKING, Any
 
 import pytest
 import yaml
+
+from dreamulator.civmap.manager import CivMapManager
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -42,6 +45,37 @@ def _write_yaml(path: Path, data: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, allow_unicode=True)
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_export_civmap_reference_matches_api(
+    export_static: Any, tmp_path: Path, legacy: bool
+) -> None:
+    world = tmp_path / "earth"
+    root_reference = world / "maps" / "earth_reference"
+    legacy_reference = world / "layers" / "geological" / "input" / "maps" / "earth_reference"
+    root_reference.mkdir(parents=True)
+    reference = legacy_reference if legacy else root_reference
+    boundary = {
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "id": "GRC-2884", "properties": {"iso_a2": "GR"}}],
+    }
+    _write(reference / "adm1.geojson", json.dumps(boundary))
+    if not legacy:
+        _write(legacy_reference / "adm0.geojson", "{}")
+        _write(reference / "metadata.json", '{"levels":{"adm0":{},"adm1":{"features":1}}}')
+
+    manager = CivMapManager(world)
+    assert manager.list_available_levels() == ["adm1"]
+    assert manager.get_boundary_geojson("adm1") == boundary
+    output = tmp_path / "out"
+    export_static._export_civmap_reference(world, output)
+    civmap = output / "civmap"
+    metadata = json.loads((civmap / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["levels"] == {"adm1": {} if legacy else {"features": 1}}
+    mapping = json.loads((civmap / "mapping.json").read_text(encoding="utf-8"))
+    assert mapping == manager.get_country_province_mapping() == {"GR": ["GRC-2884"]}
+    assert (civmap / "adm1.geojson").read_bytes() == (reference / "adm1.geojson").read_bytes()
 
 
 TEMPLATE_DOC = (

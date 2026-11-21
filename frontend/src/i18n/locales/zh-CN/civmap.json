@@ -3,7 +3,9 @@
     "toolbar": "工具栏",
     "editorTitle": "文明地图 — {{world}}",
     "readonly": "只读",
-    "previewMap": "🏛️ 文明地图"
+    "editLocked": "编辑已锁定",
+    "editing": "编辑中",
+    "browsing": "浏览模式"
   },
   "tool": {
     "paint": "涂色",
@@ -32,6 +34,12 @@
   },
   "action": {
     "back": "← 返回",
+    "backToWorld": "返回文明页签",
+    "closeTools": "关闭工具栏",
+    "help": "帮助",
+    "basemap": "背景底图",
+    "retry": "重新加载",
+    "undo": "撤销",
     "edit": "编辑",
     "newCountry": "新国家",
     "newSnapshot": "新快照",
@@ -40,13 +48,15 @@
     "cancel": "取消",
     "save": "保存",
     "deleteCountry": "删除国家",
-    "editMap": "编辑地图 →",
-    "fullscreen": "全屏查看"
+    "openMap": "打开文明地图",
+    "lockEditing": "锁定编辑"
   },
   "label": {
     "optional": "可选",
     "loading": "加载中...",
     "loadingMap": "加载地图数据中...",
+    "on": "开",
+    "off": "关",
     "level": "层级:",
     "paintByCountry": "⚡ 以国家为单位涂色",
     "year": "年份",
@@ -57,18 +67,36 @@
     "noDescription": "(无描述)"
   },
   "hint": {
+    "undo": "撤销上一次涂色或擦除（Ctrl+Z / ⌘Z）",
+    "noCountries": "这个世界没有已发布的国家。",
+    "noSnapshots": "这个世界没有已发布的时间快照。",
     "addCountry": "点击 \"+ 新增\" 创建架空国家",
     "addSnapshot": "点击 \"+ 新增\" 创建时间快照",
     "createSnapshotFirst": "⚠️ 请先创建时间快照才能涂色",
-    "notPaintedStatic": "尚未涂色 — 请在 API 模式下编辑",
-    "notPaintedLive": "尚未涂色 — 点击「编辑地图」开始",
-    "readonly": "只读模式 — 地图编辑仅在 API 模式下可用"
+    "lockEditing": "锁定后只能浏览地图",
+    "unlockEditing": "解锁后可以修改领土、国家和快照"
+  },
+  "mapState": {
+    "savingAssignments": "正在保存领土修改…",
+    "undone": "已撤销上一次领土修改。",
+    "undoConflict": "相关领土或国家已变化，未撤销。",
+    "paintConflict": "相关快照或国家已变化，未修改领土。",
+    "assignmentSaveFailed": "无法确认领土修改已保存。请检查连接和地图状态。",
+    "missing": "没有可用的省级边界",
+    "missingLive": "这个世界或分支缺少省级边界（ADM1）。在本机准备边界数据后，再重新加载地图。",
+    "missingStatic": "这个世界没有发布省级边界（ADM1），目前无法在静态站显示领土地图。",
+    "loadFailed": "地图数据加载失败",
+    "loadFailedDetail": "未能读取边界或领土数据。请检查连接，然后重新加载。",
+    "unavailable": "地图不可用",
+    "basemapFailed": "背景底图加载失败，已关闭。行政边界和领土仍可使用。",
+    "loadingAdm0": "正在加载国界。期间仍可浏览，但不能涂色。",
+    "adm0Unavailable": "国界不可用。请重新加载或切回省级边界。"
   },
   "status": {
-    "painting": "🖌️ 涂色: {{name}}",
-    "erasing": "🧹 擦除模式",
-    "selecting": "👆 选择模式",
-    "currentSnapshot": "📅 当前快照: {{id}}"
+    "painting": "涂色：{{name}}",
+    "erasing": "擦除模式",
+    "selecting": "选择模式",
+    "currentSnapshot": "当前快照：{{id}}"
   },
   "stats": {
     "countries": "国家: {{count}}",

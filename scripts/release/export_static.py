@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -45,6 +46,7 @@ _ensure_importable()
 from local_branches import local_only_branches  # noqa: E402
 
 from dreamulator import doc_render  # noqa: E402
+from dreamulator.civmap.manager import CivMapManager  # noqa: E402
 from dreamulator.map.manager import MapManager  # noqa: E402
 from dreamulator.map.models import map_metadata_result, sanitize_nonfinite  # noqa: E402
 from dreamulator.resolver import LayerResolver  # noqa: E402
@@ -430,54 +432,36 @@ def _write_branch_defaults(branch_out_dir: Path, branch_data: dict) -> None:
 def _export_civmap_reference(
     world_dir: Path,
     world_out_dir: Path,
-    branch: str | None = None,
 ) -> None:
-    """Export CivMap reference GeoJSON data and country→province mapping.
-
-    GeoJSON files are stored in the repo with Git LFS and copied as-is
-    to the static output. No download or optimization needed.
-    """
-    # Since v0.10.0, reference GeoJSON lives in the top-level maps/ directory
-    # alongside planet map data (world root only; branches reuse root data).
-    ref_dir = world_dir / "maps" / "earth_reference"
-    if not ref_dir.exists():
+    """Export shared reference boundaries from the same location as the live API."""
+    manager = CivMapManager(world_dir)
+    ref_dir = manager.reference_dir()
+    levels = manager.list_available_levels()
+    if ref_dir is None or not levels:
         return
 
     civmap_out = world_out_dir / "civmap"
     civmap_out.mkdir(parents=True, exist_ok=True)
 
-    # Copy GeoJSON files as-is (stored in repo via Git LFS)
-    for level in ("adm0", "adm1", "adm2"):
-        src = ref_dir / f"{level}.geojson"
-        if src.exists():
-            dst = civmap_out / f"{level}.geojson"
-            dst.write_bytes(src.read_bytes())
+    for level in levels:
+        shutil.copyfile(ref_dir / f"{level}.geojson", civmap_out / f"{level}.geojson")
 
     # Copy metadata
     meta_src = ref_dir / "metadata.json"
+    meta: dict = {}
     if meta_src.exists():
         with meta_src.open("r", encoding="utf-8") as f:
             meta = json.load(f)
-        with civmap_out.joinpath("metadata.json").open("w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, separators=(",", ":"))
+    level_metadata = meta.get("levels", {})
+    meta["levels"] = {level: level_metadata.get(level, {}) for level in levels}
+    with civmap_out.joinpath("metadata.json").open("w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, separators=(",", ":"))
 
     # Generate and export country→province mapping from ADM1
-    adm1_path = ref_dir / "adm1.geojson"
-    if adm1_path.exists():
-        try:
-            with adm1_path.open("r", encoding="utf-8") as f:
-                adm1 = json.load(f)
-            mapping: dict[str, list[str]] = {}
-            for feature in adm1.get("features", []):
-                props = feature.get("properties", {})
-                iso_a2 = props.get("iso_a2")
-                adm1_code = feature.get("id")
-                if iso_a2 and adm1_code:
-                    mapping.setdefault(iso_a2, []).append(adm1_code)
-            with civmap_out.joinpath("mapping.json").open("w", encoding="utf-8") as f:
-                json.dump(mapping, f, ensure_ascii=False)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
+    if "adm1" in levels:
+        mapping = manager.get_country_province_mapping()
+        with civmap_out.joinpath("mapping.json").open("w", encoding="utf-8") as f:
+            json.dump(mapping, f, ensure_ascii=False)
 
 
 def export_world(world_dir: Path, skip_branches: set[str] | None = None) -> dict:
@@ -600,7 +584,7 @@ def main() -> None:
         map_planets = _export_map_data(world_dir, maps_out_dir, branch=None)
 
         # Export CivMap reference data (GeoJSON + mapping)
-        _export_civmap_reference(world_dir, world_out_dir, branch=None)
+        _export_civmap_reference(world_dir, world_out_dir)
 
         # Export per-branch data (with _inherit: true merge)
         branch_count = 0
