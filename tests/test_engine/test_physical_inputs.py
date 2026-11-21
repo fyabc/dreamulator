@@ -388,6 +388,7 @@ def test_consistency_check_skips_bodies_absent_from_planets() -> None:
 def test_build_system_catalog_nacrea(tmp_path: Path) -> None:
     catalog, warnings = build_system_catalog(_gaia_stub(tmp_path))
     assert warnings == []
+    assert "reference_epoch" not in catalog
 
     # Stars carry computed physics + habitable zones
     (star,) = catalog["stars"]
@@ -422,6 +423,18 @@ def test_build_system_catalog_nacrea(tmp_path: Path) -> None:
     # Target body is flagged for the frontend; no role-flattened duplicate
     assert catalog["target_body_id"] == "satellite_nacrea"
     assert "target_parameters" not in catalog
+
+
+@pytest.mark.parametrize(
+    "reference_epoch",
+    [{"label": "J0"}, {"label": "J2000.0", "julian_date": {"value": 2451545.0, "scale": "TDB"}}],
+)
+def test_build_system_catalog_publishes_reference_epoch(
+    tmp_path: Path, reference_epoch: dict[str, object]
+) -> None:
+    stellar = _write(tmp_path, "stellar.yaml", {"reference_epoch": reference_epoch})
+    catalog, _ = build_system_catalog(_StubEngine({"stellar.yaml": stellar}))
+    assert catalog["reference_epoch"] == reference_epoch
 
 
 def test_catalog_computed_stars_beat_stale_derived(tmp_path: Path) -> None:
@@ -562,6 +575,7 @@ def _dynamics_stub(
     nacrea_inclination: float | None = 9.0,
     nacrea_a_au: float = 0.00494,
     cadence: bool = False,
+    explicit_orientation: bool = False,
 ) -> _StubEngine:
     """_gaia_stub variant with equatorial geometry + optional retrograde sibling.
 
@@ -605,6 +619,11 @@ def _dynamics_stub(
     ]
     if aegis_tilt is not None:
         bodies[0]["axial_tilt_deg"] = aegis_tilt
+    if explicit_orientation:
+        bodies[0].update(
+            spin_axis_ecliptic_longitude_deg=0.0,
+            prime_meridian_phase_at_epoch_deg=115.6789,
+        )
     if cadence:
         bodies.append(
             {"id": "satellite_cadence", "mass_earth": 0.012, "body_type": "natural_satellite"}
@@ -691,6 +710,18 @@ def test_catalog_warns_missing_equatorial_reference(tmp_path: Path) -> None:
     assert any("no prograde satellite within" in w and "planet_aegis" in w for w in warnings)
     # The satellite itself still carries its inclination semantics.
     assert by_id["satellite_nacrea"]["derived"]["prograde"] is True
+
+
+@pytest.mark.parametrize("inclination", [9.0, 30.0])
+def test_catalog_prefers_explicit_spin_orientation(tmp_path: Path, inclination: float) -> None:
+    catalog, warnings = build_system_catalog(
+        _dynamics_stub(tmp_path, nacrea_inclination=inclination, explicit_orientation=True)
+    )
+    parent = next(body for body in catalog["bodies"] if body["id"] == "planet_aegis")
+    assert parent["derived"]["spin_axis_ecliptic_longitude_deg"] == 0.0
+    assert parent["derived"]["prime_meridian_phase_at_epoch_deg"] == 115.6789
+    assert "equatorial_reference_satellite" not in parent["derived"]
+    assert not any("no prograde satellite within" in warning for warning in warnings)
 
 
 def test_build_system_catalog_without_inputs(tmp_path: Path) -> None:

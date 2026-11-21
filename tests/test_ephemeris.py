@@ -10,10 +10,13 @@ switches over.  The module itself stays world-agnostic.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
+from dreamulator.engine.astronomy import AstronomyEngine
 from dreamulator.engine.ephemeris import (
     ObserverFrame,
     _elements_from_entity,
@@ -29,6 +32,7 @@ from dreamulator.engine.sky_geometry import (
     lambert_phase,
     sky_position,
 )
+from dreamulator.guard.facts import load_entities
 from dreamulator.query_registry import list_queries
 
 # The frozen instant of the EP1 dawn shot (days after the catalog epoch).
@@ -479,6 +483,85 @@ def test_spin_axis_ladder() -> None:
     # A planet without the spin-axis azimuth is rejected, not guessed.
     with pytest.raises(ValueError, match="spin-axis azimuth"):
         observer_frame_km(ENTITIES, "planet_aegis", 0.0, 0.0, 0.0)
+
+
+def test_explicit_prime_meridian_phase_advances_eastward() -> None:
+    observer = {
+        **ENTITIES["planet_aegis"],
+        "spin_axis_ecliptic_longitude_deg": 0.0,
+        "axial_tilt_deg": 30.0,
+        "rotation_period_days": 1.0,
+    }
+    entities = {**ENTITIES, "planet_aegis": observer}
+    node_at_epoch = observer_frame_km(entities, "planet_aegis", 0.0, 0.0, 0.0)
+    assert node_at_epoch.up == pytest.approx((0.0, 1.0, 0.0))
+    observer["prime_meridian_phase_at_epoch_deg"] = 90.0
+    greenwich_at_epoch = observer_frame_km(entities, "planet_aegis", 0.0, 0.0, 0.0)
+    assert greenwich_at_epoch.up == pytest.approx((-math.sqrt(3) / 2, 0.0, 0.5))
+    greenwich_later = observer_frame_km(entities, "planet_aegis", 0.25, 0.0, 0.0)
+    assert greenwich_later.up == pytest.approx((0.0, -1.0, 0.0))
+    east_at_epoch = observer_frame_km(entities, "planet_aegis", 0.0, 0.0, 90.0)
+    assert east_at_epoch.up == pytest.approx(greenwich_later.up)
+
+
+@pytest.fixture(scope="module")
+def earth_entities(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+    root = Path(__file__).resolve().parents[1] / "data" / "worlds" / "earth"
+    output = tmp_path_factory.mktemp("earth-astronomy")
+    engine = AstronomyEngine(
+        root,
+        seed=0,
+        layer_input_dirs={
+            layer: root / "layers" / layer / "input" for layer in ("astronomy", "geological")
+        },
+        layer_output_dir=output,
+    )
+    assert engine.run().success
+    catalog = yaml.safe_load((output / "system_catalog.yaml").read_text(encoding="utf-8"))
+    assert catalog["target_body_id"] == "planet_earth"
+    return load_entities(catalog)
+
+
+@pytest.mark.parametrize(
+    ("lat", "lon", "at_days", "sun_az_alt", "moon_az_alt"),
+    [
+        (51.4779, 0.0, 0.0, (178.96188, 15.48109), (237.56711, 9.38649)),
+        (51.4779, 0.0, 0.25, (254.36679, -17.14072), (311.78512, -41.97248)),
+        (51.4779, 0.0, 1.0, (178.84793, 15.56280), (226.58980, 11.68020)),
+        (24.10, 121.45, 0.0, (258.10911, -35.76209), (356.55111, -76.97811)),
+        (24.10, 121.45, 0.25, (93.99573, -62.22808), (99.44925, -8.79853)),
+        (24.10, 121.45, 1.0, (258.17613, -35.63652), (309.90287, -75.62718)),
+    ],
+)
+def test_earth_j2000_sky_against_horizons(
+    earth_entities: dict[str, Any],
+    lat: float,
+    lon: float,
+    at_days: float,
+    sun_az_alt: tuple[float, float],
+    moon_az_alt: tuple[float, float],
+) -> None:
+    """Airless JPL Horizons azimuth and elevation; allow the catalog's orbit approximation."""
+    result = sky_ephemeris(
+        earth_entities,
+        "planet_earth",
+        lat,
+        lon,
+        at_days,
+        targets=["star_sol", "satellite_moon"],
+        include_events=False,
+    )
+    for target, (reference_az, reference_alt), tolerance_deg in zip(
+        result.targets, (sun_az_alt, moon_az_alt), (0.05, 0.7), strict=True
+    ):
+        alt = math.radians(target.altitude_deg)
+        ref_alt = math.radians(reference_alt)
+        delta_az = math.radians(target.azimuth_deg - reference_az)
+        cosine = math.sin(alt) * math.sin(ref_alt) + (
+            math.cos(alt) * math.cos(ref_alt) * math.cos(delta_az)
+        )
+        separation_deg = math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
+        assert separation_deg < tolerance_deg
 
 
 # ---------------------------------------------------------------------------

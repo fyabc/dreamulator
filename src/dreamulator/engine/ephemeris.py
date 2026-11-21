@@ -38,12 +38,12 @@ Frames and conventions (this module is the single authority for them):
      an M4 refinement; physical libration itself needs (B−A)/C, which the
      catalog does not carry, and stays at arcsecond level).
   2. ``spin_axis_ecliptic_longitude_deg`` present → axis tilted by
-     ``axial_tilt_deg`` from +z toward that ecliptic longitude.  Rotation phase
-     ``θ = 2π·t / rotation_period_days`` with the zero-parameter epoch
-     convention: **at t = 0 the prime meridian points at the ascending node of
-     the body equator on the ecliptic** (the body's own equinox direction).
-     The catalog epoch carries no spin-phase information, so this is a declared
-     convention, not a derivation.
+     ``axial_tilt_deg`` from +z toward that ecliptic longitude. The optional
+     ``prime_meridian_phase_at_epoch_deg`` rotates the epoch meridian eastward
+     from the equatorial ascending node (or ecliptic x for zero obliquity).
+     With no phase specified, the epoch meridian points at that reference
+     direction by convention. In both cases the meridian then advances by
+     ``2π·t / rotation_period_days``.
   3. Otherwise: a non-locked *satellite* with ``axial_tilt_deg`` 0 or absent
      falls back to its orbit normal, rotating about it with the same
      node-anchored phase convention (the orbit's own ascending node as t = 0
@@ -455,14 +455,13 @@ def _prime_meridian(
             )
         )
         return parent
-    # Node-anchored rotation phase: at t = 0 the prime meridian points at the
-    # ascending node — of the body equator when the spin azimuth is known,
-    # of the orbit when the axis is the orbit-normal fallback.
+    phase = 0.0
     if spin_source == "spin_axis_ecliptic_longitude":
         node = _cross((0.0, 0.0, 1.0), axis)
         if _norm(node) < 1e-12:  # zero obliquity: the node is degenerate
             node = (1.0, 0.0, 0.0)
         node = _normalize(node)
+        phase = math.radians(float(entity.get("prime_meridian_phase_at_epoch_deg") or 0.0))
     else:
         elements = _elements_from_entity(entity)
         node = (
@@ -470,9 +469,9 @@ def _prime_meridian(
             math.sin(elements.node_rad),
             0.0,
         )
-    theta = 2.0 * math.pi * t_days / float(entity["rotation_period_days"])
-    west = _cross(axis, node)
-    return _normalize(_add(_scale(node, math.cos(theta)), _scale(west, math.sin(theta))))
+    theta = phase + 2.0 * math.pi * t_days / float(entity["rotation_period_days"])
+    east = _cross(axis, node)
+    return _normalize(_add(_scale(node, math.cos(theta)), _scale(east, math.sin(theta))))
 
 
 def _normalize_latlon(lat_deg: float, lon_deg: float) -> tuple[float, float]:

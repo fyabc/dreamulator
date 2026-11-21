@@ -140,6 +140,30 @@ def test_export_layer_data_branch_without_derived_degrades(
     assert "{{ entities.planet_test.solar_day_days | round2 }}" in sample["content"]
 
 
+def test_export_layer_data_keeps_the_resolved_catalog_epoch(
+    export_static: Any, tmp_path: Path
+) -> None:
+    world = tmp_path / "test-world"
+    _build_world(world)
+    branch = world / "branches" / "new-epoch"
+    _write_yaml(branch / "branch.yaml", {"name": "new-epoch", "fork_layer": "astronomy"})
+    branch_epoch = {"label": "J0"}
+    _write_yaml(
+        branch / "layers" / "astronomy" / "input" / "stellar.yaml",
+        {"stars": [], "reference_epoch": branch_epoch},
+    )
+    _write_yaml(
+        branch / "layers" / "astronomy" / "derived" / "system_catalog.yaml",
+        {**SAMPLE_CATALOG, "reference_epoch": branch_epoch},
+    )
+
+    assert "reference_epoch" not in export_static._export_layer_data(world)["system_catalog"]
+    assert (
+        export_static._export_layer_data(world, "new-epoch")["system_catalog"]["reference_epoch"]
+        == branch_epoch
+    )
+
+
 def test_export_map_data_branch_overlay_without_elevation(
     export_static: Any, tmp_path: Path
 ) -> None:

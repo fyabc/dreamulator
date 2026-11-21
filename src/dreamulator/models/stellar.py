@@ -6,7 +6,7 @@ import re
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, FiniteFloat, field_validator, model_validator
 
 from .common import AU, Day, EarthMass, Kelvin, SolarLuminosity, SolarMass, SolarRadius, Vec3
 
@@ -131,6 +131,16 @@ class OrbitingBody(BaseModel):
     axial_tilt_deg: float | None = Field(
         default=None, ge=0, le=180, description="Axial obliquity in degrees"
     )
+    spin_axis_ecliptic_longitude_deg: float | None = Field(
+        default=None, ge=0, lt=360, description="Spin pole longitude in the orbital reference frame"
+    )
+    prime_meridian_phase_at_epoch_deg: float | None = Field(
+        default=None,
+        ge=0,
+        lt=360,
+        description="Eastward angle along the body equator from its ascending node to longitude 0 "
+        "at the orbital epoch; uses the reference frame's x-axis if the obliquity is zero",
+    )
     albedo: float | None = Field(default=None, ge=0, le=1, description="Geometric albedo")
 
     # Rotational / tidal dynamics — optional, single-sourced in stellar.yaml
@@ -174,6 +184,38 @@ class OrbitingBody(BaseModel):
         description="Free-form narrative keyed by aspect (e.g. 'surface', 'interior', 'history')",
     )
 
+    @model_validator(mode="after")
+    def _check_prime_meridian_phase(self) -> OrbitingBody:
+        if (
+            self.prime_meridian_phase_at_epoch_deg is not None
+            and self.spin_axis_ecliptic_longitude_deg is None
+        ):
+            raise ValueError("prime_meridian_phase_at_epoch_deg requires an explicit spin pole")
+        return self
+
+
+class EpochTimeScale(StrEnum):
+    TT = "TT"
+    TDB = "TDB"
+    TCB = "TCB"
+
+
+class JulianEpochDate(BaseModel):
+    value: FiniteFloat = Field(description="Julian date of the reference instant")
+    scale: EpochTimeScale = Field(description="Time scale used for this Julian date")
+
+
+class ReferenceEpoch(BaseModel):
+    label: str = Field(min_length=1, description="Short name of the catalog's reference instant")
+    julian_date: JulianEpochDate | None = Field(
+        default=None, description="Absolute date, if the reference instant has one"
+    )
+
+    @field_validator("label", mode="before")
+    @classmethod
+    def _strip_label(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
+
 
 class StellarSystem(BaseModel):
     """A system of one or more stars and their orbiting bodies."""
@@ -182,6 +224,9 @@ class StellarSystem(BaseModel):
     description: str | None = Field(
         default=None,
         description="Free-form narrative: system description, formation history, lore, etc.",
+    )
+    reference_epoch: ReferenceEpoch | None = Field(
+        default=None, description="Reference instant at zero elapsed catalog days"
     )
     stars: list[Star] = Field(min_length=1, description="Stars in the system")
     orbits: list[OrbitalElements] = Field(

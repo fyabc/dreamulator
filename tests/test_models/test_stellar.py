@@ -7,6 +7,7 @@ from dreamulator.models.stellar import (
     LuminosityClass,
     OrbitalElements,
     OrbitingBody,
+    ReferenceEpoch,
     Star,
     StellarSystem,
 )
@@ -131,6 +132,7 @@ class TestStellarSystem:
             stars=[Star(id="star_sol", name="Sol", spectral_class="G2", mass=1.0)],
         )
         assert len(system.stars) == 1
+        assert system.reference_epoch is None
 
     def test_duplicate_star_ids_rejected(self):
         with pytest.raises(ValidationError, match="unique"):
@@ -143,7 +145,25 @@ class TestStellarSystem:
             )
 
 
+@pytest.mark.parametrize(
+    "invalid_epoch", [{"label": " "}, {"label": "J0", "julian_date": {"value": 0}}]
+)
+def test_reference_epoch_rejects_incomplete_metadata(invalid_epoch):
+    with pytest.raises(ValidationError):
+        ReferenceEpoch.model_validate(invalid_epoch)
+
+
 class TestOrbitingBody:
+    def test_prime_meridian_phase_requires_spin_pole(self):
+        with pytest.raises(ValidationError, match="requires an explicit spin pole"):
+            OrbitingBody(
+                id="planet_earth",
+                name="Earth",
+                mass_earth=1.0,
+                radius_km=6371.0,
+                prime_meridian_phase_at_epoch_deg=0.0,
+            )
+
     def test_valid_moon(self):
         body = OrbitingBody(
             id="satellite_moon",

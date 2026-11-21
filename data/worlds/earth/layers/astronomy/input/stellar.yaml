@@ -1,5 +1,10 @@
 # The Solar System — stellar data
 name: Solar System
+reference_epoch:
+  label: J2000.0
+  julian_date:
+    value: 2451545.0
+    scale: TDB
 stars:
   - id: star_sol
     name: Sun
@@ -328,3 +333,10 @@ bodies:
     surface:
       composition: nitrogen_ice_with_ch4_and_co_ices
       has_atmosphere: true           # tenuous N₂ (~1.4 Pa), cryovolcanism
+  - id: planet_earth
+    name: Earth
+    body_type: terrestrial
+    mass_earth: 1.0
+    radius_km: 6371.0
+    spin_axis_ecliptic_longitude_deg: 90.00362816
+    prime_meridian_phase_at_epoch_deg: 100.19060900

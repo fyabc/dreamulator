@@ -71,6 +71,7 @@ from dreamulator.engine.stellar_physics import (
     solar_day_days,
 )
 from dreamulator.models.planet import PlanetType
+from dreamulator.models.stellar import ReferenceEpoch
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -976,6 +977,10 @@ def build_system_catalog(
         # in each body's ``orbit`` block.
         "orbits": [o for o in (input_data.get("orbits") or []) if isinstance(o, dict)],
     }
+    if (epoch := input_data.get("reference_epoch")) is not None:
+        catalog["reference_epoch"] = ReferenceEpoch.model_validate(epoch).model_dump(
+            mode="json", exclude_none=True
+        )
     entries = _catalog_bodies(input_data, raw_bodies, planets, index, computed_stars)
     warnings.extend(_annotate_satellite_dynamics(entries, index))
     warnings.extend(_annotate_magnetic_fields(entries, index, {p.id: p for p in planets}))
@@ -1123,9 +1128,8 @@ def _annotate_satellite_dynamics(
     """Sibling separations, spin-axis azimuth convention, stability warnings.
 
     Mutates ``entries`` in place: adjacent-satellite mutual-Hill separations
-    land on each satellite's ``derived`` block, and every parent with an
-    equatorial reference satellite gains the spin-axis azimuth.  Convention
-    (Cassini-state fossil, zero new authored fields): the prograde satellite
+    land on each satellite's ``derived`` block. For parents without an explicit
+    pole, the fallback convention uses the prograde satellite
     whose inclination is closest to the parent's ``axial_tilt_deg`` — both
     measured against the heliocentric ecliptic, the ``stellar.yaml`` reference
     plane — defines the equatorial plane, so its ascending node Ω fixes the
@@ -1173,22 +1177,23 @@ def _annotate_satellite_dynamics(
                     "(Gladman 1993; certified configurations may be exempt)"
                 )
 
-        # Spin-axis azimuth from the equatorial reference satellite.
         tilt = index.body_tilt.get(parent_id)
         if tilt is None:
             continue
-        ref = _equatorial_reference(parent_id, index)
-        if ref is not None:
-            ref_sid, node = ref
-            derived = parent.setdefault("derived", {})
-            derived["equatorial_reference_satellite"] = ref_sid
-            derived["spin_axis_ecliptic_longitude_deg"] = round((node - 90.0) % 360.0, 2)
-        else:
-            warnings.append(
-                f"planet '{parent_id}': no prograde satellite within "
-                f"{_EQUATORIAL_TOLERANCE_DEG:.0f}° of axial tilt {tilt:.1f}°; spin-axis "
-                "azimuth not derivable (equatorial-orbit convention)"
-            )
+        derived = parent.get("derived", {})
+        if "spin_axis_ecliptic_longitude_deg" not in derived:
+            ref = _equatorial_reference(parent_id, index)
+            if ref is not None:
+                ref_sid, node = ref
+                derived = parent.setdefault("derived", {})
+                derived["equatorial_reference_satellite"] = ref_sid
+                derived["spin_axis_ecliptic_longitude_deg"] = round((node - 90.0) % 360.0, 2)
+            else:
+                warnings.append(
+                    f"planet '{parent_id}': no prograde satellite within "
+                    f"{_EQUATORIAL_TOLERANCE_DEG:.0f}° of axial tilt {tilt:.1f}°; spin-axis "
+                    "azimuth not derivable (equatorial-orbit convention)"
+                )
 
         # Planetary spin-axis precession (needs the parent's authored j2 + C/MR²
         # and the full satellite list, so it lives here rather than in the
@@ -1450,6 +1455,10 @@ def _catalog_body_entry(
 
     # ---- Derived: lock state, instellation, solar day, HZ membership ----
     derived: dict[str, Any] = {}
+    for angle_key in ("spin_axis_ecliptic_longitude_deg", "prime_meridian_phase_at_epoch_deg"):
+        value = _as_float(raw.get(angle_key))
+        if value is not None:
+            derived[angle_key] = value
     if rotation is not None and orbital_period is not None and orbital_period > 0:
         derived["tidally_locked"] = abs(rotation - orbital_period) <= 0.02 * orbital_period
 

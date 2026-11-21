@@ -155,7 +155,7 @@ def _export_layer_data(world_dir: Path, branch: str | None = None) -> dict:
     """Export layer data for a world or branch using the resolver.
 
     Handles _inherit: true merge for input files.
-    Returns a dict with keys: stellar, habitable_zones, planets, climate, ecology.
+    The complete resolved system catalog is exported, including its optional reference epoch.
     """
     resolver = LayerResolver(world_dir, branch)
     result: dict = {}

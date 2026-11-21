@@ -74,6 +74,34 @@
       "title": "ClimateSource",
       "type": "string"
     },
+    "EpochTimeScale": {
+      "enum": [
+        "TT",
+        "TDB",
+        "TCB"
+      ],
+      "title": "EpochTimeScale",
+      "type": "string"
+    },
+    "JulianEpochDate": {
+      "properties": {
+        "value": {
+          "description": "Julian date of the reference instant",
+          "title": "Value",
+          "type": "number"
+        },
+        "scale": {
+          "$ref": "#/$defs/EpochTimeScale",
+          "description": "Time scale used for this Julian date"
+        }
+      },
+      "required": [
+        "value",
+        "scale"
+      ],
+      "title": "JulianEpochDate",
+      "type": "object"
+    },
     "Layer": {
       "description": "World building layers, ordered from fundamental to derived.",
       "enum": [
@@ -318,6 +346,36 @@
           "description": "Axial obliquity in degrees",
           "title": "Axial Tilt Deg"
         },
+        "spin_axis_ecliptic_longitude_deg": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 360,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Spin pole longitude in the orbital reference frame",
+          "title": "Spin Axis Ecliptic Longitude Deg"
+        },
+        "prime_meridian_phase_at_epoch_deg": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 360,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Eastward angle along the body equator from its ascending node to longitude 0 at the orbital epoch; uses the reference frame's x-axis if the obliquity is zero",
+          "title": "Prime Meridian Phase At Epoch Deg"
+        },
         "albedo": {
           "anyOf": [
             {
@@ -445,6 +503,33 @@
         "radius_km"
       ],
       "title": "OrbitingBody",
+      "type": "object"
+    },
+    "ReferenceEpoch": {
+      "properties": {
+        "label": {
+          "description": "Short name of the catalog's reference instant",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "julian_date": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JulianEpochDate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Absolute date, if the reference instant has one"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "ReferenceEpoch",
       "type": "object"
     },
     "SimulationSeed": {
@@ -591,6 +676,18 @@
           "default": null,
           "description": "Free-form narrative: system description, formation history, lore, etc.",
           "title": "Description"
+        },
+        "reference_epoch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReferenceEpoch"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Reference instant at zero elapsed catalog days"
         },
         "stars": {
           "description": "Stars in the system",
