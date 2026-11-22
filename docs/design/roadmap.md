@@ -430,6 +430,12 @@
    代码版本，改了算法而未提升 schema 版本时旧缓存仍会命中；`plates` 阶段的字段清单也漏了
    `coherent_motion`、`convection_harmonics` 等板块运动参数。
 
+9. **普通标量图层的降尺度在渲染线程同步计算**（2026-11-23）— 温度、降水等图层切换
+   「降尺度」时要在渲染过程中重建约 2048×1024 的网格。像素缓存与逐像素索引优化后，
+   首次约 0.36 s、重复切换没有长任务，但首次仍会冻结主线程。成熟修法是参照柯本降尺度
+   （`frontend/src/viewers/map/koppenDownscale.worker.ts`）搬进 Web Worker，计算期间先
+   显示模式网格。
+
 ## 八、内部文档链接
 
 - `docs/design/architecture.md` — 项目架构（层级架构与分支管理）
