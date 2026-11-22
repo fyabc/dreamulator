@@ -134,18 +134,31 @@ export function downscaledClimatePixels(
       }
     }
   }
-  const indexAt = (column: number, row: number) => {
-    const columnAt = Math.floor((column + 0.5) * meshWidth / width)
-    const rowAt = Math.floor((row + 0.5) * meshHeight / height)
-    return byId.get(cellIds[rowAt * meshWidth + columnAt])
+  // Per-output-pixel cell index, resolved once.  The old per-pixel `byId.get`
+  // (two map lookups per pixel plus one in the fallback) dominated this bake.
+  const maxId = cells.reduce((highest, cell) => cell.id > highest ? cell.id : highest, 0)
+  const idIndex = maxId <= cells.length * 4 ? new Int32Array(maxId + 1).fill(-1) : null
+  if (idIndex) for (let index = 0; index < cells.length; index++) idIndex[cells[index].id] = index
+  const cellAt = new Int32Array(width * height).fill(-1)
+  const columnAt = new Int32Array(width)
+  const rowAt = new Int32Array(height)
+  for (let column = 0; column < width; column++) columnAt[column] = Math.floor((column + 0.5) * meshWidth / width)
+  for (let row = 0; row < height; row++) rowAt[row] = Math.floor((row + 0.5) * meshHeight / height)
+  for (let row = 0; row < height; row++) {
+    const sourceRow = rowAt[row]
+    for (let column = 0; column < width; column++) {
+      const id = cellIds[sourceRow * meshWidth + columnAt[column]]
+      cellAt[row * width + column] = idIndex ? idIndex[id] : (byId.get(id) ?? -1)
+    }
   }
-  const surface = (column: number, row: number) => {
-    const index = indexAt(column, row)
-    if (index == null || !Number.isFinite(values[index])) return NaN
-    const heightAboveSea = nativeHeight?.(column, row) ?? 0
-    return landOnly && heightAboveSea < 0 && cells[index].elevation >= seaLevelM ? NaN : heightAboveSea
-  }
+  const elevation = cells.map(cell => cell.elevation)
   const scale = scalarScale(field, Boolean(monthly), cells, seaLevelM)
+  const surface = (column: number, row: number) => {
+    const index = cellAt[row * width + column]
+    if (index < 0 || !Number.isFinite(values[index])) return NaN
+    const heightAboveSea = nativeHeight?.(column, row) ?? 0
+    return landOnly && heightAboveSea < 0 && elevation[index] >= seaLevelM ? NaN : heightAboveSea
+  }
   return climateRasterPixels(grid, width, height, value => scalarColor(scale, value), surface,
-    (column, row) => values[indexAt(column, row) ?? -1] ?? NaN)
+    (column, row) => values[cellAt[row * width + column]] ?? NaN)
 }

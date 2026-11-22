@@ -248,7 +248,10 @@ export function getLayerTextures(inputs: BakeInputs, needed: ReadonlySet<Overlay
   const height = inputs.meshHeight ?? inputs.height
   const overlays = {} as Record<OverlayName, THREE.DataTexture>
   for (const name of OVERLAYS) {
-    if (!needed.has(name) || !palette || !inputs.cellIdMap) {
+    // Empty palettes mean "this world has no data for the layer" (e.g. the
+    // observed-Köppen earth root).  Keep the 1×1 placeholder so the renderer
+    // falls back to the terrain instead of compositing a transparent sheet.
+    if (!needed.has(name) || !palette || !inputs.cellIdMap || palette[name].size === 0) {
       overlays[name] = transparentPlaceholder()
       continue
     }

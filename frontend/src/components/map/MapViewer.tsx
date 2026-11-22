@@ -66,6 +66,9 @@ interface MapViewerProps {
   /** Right-click clears the pinned selection (easier than double-clicking the
    *  same cell again when the map is zoomed out). */
   onClearSelection?: () => void
+  /** Fired once the first frame with the baked terrain has been presented;
+   *  the page keeps its loading placeholder up until then. */
+  onReady?: () => void
   hoveredCell: number | null
   selectedCells: Set<number>
   regionBoundary?: readonly LonLat[] | null
@@ -130,6 +133,7 @@ export default function MapViewer({
   onCellHover,
   onCellClick,
   onClearSelection,
+  onReady,
   hoveredCell,
   selectedCells,
   regionBoundary,
@@ -229,6 +233,13 @@ export default function MapViewer({
     const rafId = requestAnimationFrame(() => setIsRendering(false))
     return () => cancelAnimationFrame(rafId)
   }, [cellIdMap])
+
+  // First-frame signal for the page's loading gate.  Re-armed whenever the
+  // elevation data changes (planet / branch / terrain source switch).
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
+  const readyNotified = useRef(false)
+  useEffect(() => { readyNotified.current = false }, [elevation])
 
   // Drag state
   const [isDragging, setIsDragging] = useState(false)
@@ -474,6 +485,10 @@ export default function MapViewer({
         // Compose layer textures into the shared target (cheap fullscreen quad).
         gpuCompositeRef.current?.(renderer)
         renderer.render(scene, camera)
+        if (!readyNotified.current) {
+          readyNotified.current = true
+          onReadyRef.current?.()
+        }
       }
       rafId = requestAnimationFrame(loop)
     }

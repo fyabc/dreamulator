@@ -69,6 +69,10 @@ export default function MapViewerPage() {
   } = vs
   const display = useMapDisplayLayers(trial, layerState, setLayerState, cvtMesh, monthlyData, Boolean(uccTexture))
   const elevationReady = Boolean(elevation && elevationDims.w > 0)
+  const [mapPainted, setMapPainted] = useState(false)
+  useEffect(() => {
+    if (!elevationReady) setMapPainted(false)
+  }, [elevationReady, selectedPlanet, selectedBranch, terrainSource])
   const loadingMessage = elevError ? t('label.noMapData')
     : elevation && elevationDims.w === 0 ? t('label.decodingHeightmap') : t('label.mapDataLoading')
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(() =>
@@ -280,6 +284,7 @@ export default function MapViewerPage() {
                     onCellHover={handleCellHover}
                     onCellClick={selectCell}
                     onClearSelection={clearSelection}
+                    onReady={() => setMapPainted(true)}
                     hoveredCell={cleanMode ? null : hoveredCell}
                     selectedCells={cleanMode ? emptySelection : selectedCells}
                     regionBoundary={cleanMode ? null : regionBoundary}
@@ -301,6 +306,11 @@ export default function MapViewerPage() {
                     onViewStateChange={setViewState}
                   />
                   {legend()}
+                  {!mapPainted && (
+                    <div className="absolute inset-0 z-20 flex bg-[#0a0a1a]">
+                      <MapDataLoading message={t('label.generatingTexture')} />
+                    </div>
+                  )}
                 </div>
                 {!cleanMode && (
                   <MobileCellCard
@@ -382,6 +392,7 @@ export default function MapViewerPage() {
                     onCellHover={handleCellHover}
                     onCellClick={selectCell}
                     onClearSelection={clearSelection}
+                    onReady={() => setMapPainted(true)}
                     hoveredCell={cleanMode ? null : hoveredCell}
                     selectedCells={cleanMode ? emptySelection : selectedCells}
                     regionBoundary={cleanMode ? null : regionBoundary}
@@ -424,6 +435,11 @@ export default function MapViewerPage() {
                       terrain or landsea base map is the active main layer. */}
                   {!cleanMode && (
                     <MapLegend visible={trialActive ? !display.texture : activeMainLayer === 'terrain' || activeMainLayer === 'landsea'} />
+                  )}
+                  {!mapPainted && (
+                    <div className="absolute inset-0 z-20 flex bg-[#0a0a1a]">
+                      <MapDataLoading message={t('label.generatingTexture')} />
+                    </div>
                   )}
                 </div>
                 {!cleanMode && (

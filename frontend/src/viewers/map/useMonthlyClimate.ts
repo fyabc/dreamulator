@@ -40,6 +40,25 @@ interface UseMonthlyClimateArgs {
   flipHorizontal: boolean
 }
 
+/** Downscaled pixel buffers are deterministic per (layer, month, data, mesh,
+ * terrain) and cost ~0.5 s to recompute on a 2M-pixel grid.  Toggling the
+ * detail switch off/on used to recompute every time; keep the last few
+ * results so repeated toggles are instant. */
+interface DownscaleCacheEntry {
+  field: ScalarLayer
+  monthly: MonthlyClimateData | null
+  month: number
+  monthlyValues: boolean
+  native: ClimateRasterTerrain | null
+  cvtMesh: CVTMesh
+  cellIdMap: CellIdMap
+  seaLevelM: number
+  width: number
+  height: number
+  pixels: Uint8Array
+}
+const downscaleCache: DownscaleCacheEntry[] = []
+
 export interface MonthlyClimateResult {
   /** Baked colour texture for `field`, or null. */
   texture: ScalarTexture | null
@@ -83,9 +102,22 @@ export function useMonthlyClimate({
     if (downscale) {
       const outputWidth = Math.min(width, 2048)
       const outputHeight = Math.min(height, 1024)
-      const pixels = downscaledClimatePixels(field, cvtMesh.cells, cellIdMap, width, height, outputWidth, outputHeight,
-        seaLevelM, native, monthly, displayingMonthly ? month : null)
-      return pixels ? { layer: field, texture: makeTexture(pixels, outputWidth, outputHeight) } : null
+      const hit = downscaleCache.find(entry => entry.field === field && entry.monthly === monthly &&
+        entry.month === month && entry.monthlyValues === displayingMonthly &&
+        entry.native === native && entry.cvtMesh === cvtMesh &&
+        entry.cellIdMap === cellIdMap && entry.seaLevelM === seaLevelM &&
+        entry.width === width && entry.height === height)
+      let pixels = hit?.pixels
+      if (!pixels) {
+        const computed = downscaledClimatePixels(field, cvtMesh.cells, cellIdMap, width, height, outputWidth, outputHeight,
+          seaLevelM, native, monthly, displayingMonthly ? month : null)
+        if (!computed) return null
+        pixels = computed
+        downscaleCache.unshift({ field, monthly, month, monthlyValues: displayingMonthly,
+          native, cvtMesh, cellIdMap, seaLevelM, width, height, pixels })
+        if (downscaleCache.length > 3) downscaleCache.pop()
+      }
+      return { layer: field, texture: makeTexture(pixels, outputWidth, outputHeight) }
     }
     return displayingMonthly && monthly ? {
       layer: field, texture: bakeMonthlyLayer(monthly, month, field, cvtMesh, cellIdMap, width, height, flipHorizontal),
