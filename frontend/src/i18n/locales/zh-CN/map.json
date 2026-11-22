@@ -345,6 +345,7 @@
   },
   "time": {
     "landMean": "{{layer}} · 陆地平均",
+    "cellValue": "{{layer}} · 单元格 {{lat}}°, {{lon}}°",
     "globalMean": "{{layer}} · 全球平均",
     "windSpeed": "风速",
     "chartHint": "点击柱形切换到对应月份。",

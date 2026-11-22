@@ -1,8 +1,32 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { ebmPackages, playgroundRuntime, playgroundRuntimePath } from './playgroundRuntime'
+
+/** Preview-only: missing /data/ files answer 404 instead of index.html. */
+function previewMissingData404(): Plugin {
+  let directory = ''
+  return {
+    name: 'preview-missing-data-404',
+    configResolved(config) {
+      directory = path.resolve(config.root, config.build.outDir)
+    },
+    configurePreviewServer(server) {
+      // Registered before Vite's static middleware, so missing data files
+      // answer 404 instead of falling through to the SPA index.
+      server.middlewares.use((request, response, next) => {
+        const pathname = decodeURIComponent((request.url ?? '').split('?')[0])
+        if (!pathname.startsWith('/data/') || existsSync(path.join(directory, pathname))) {
+          next()
+          return
+        }
+        response.statusCode = 404
+        response.end()
+      })
+    },
+  }
+}
 
 export default defineConfig(({ mode, isPreview }) => {
   // Load env vars from .env, .env.[mode], etc.
@@ -19,13 +43,11 @@ export default defineConfig(({ mode, isPreview }) => {
     // GitHub Pages serves at /<repo-name>/ — set via VITE_BASE_PATH or default to '/'
     base,
 
-    // The app routes through HashRouter, so it needs no HTML fallback for
-    // unknown paths.  Returning 404 (instead of index.html) keeps `vite
-    // preview` faithful to GitHub Pages, where the static client's
-    // branch→root map fallback depends on a missing file answering 404.
-    appType: 'mpa',
+    // The dev server keeps Vite's SPA fallback for BrowserRouter deep links.
+    // Static previews still answer missing data files with 404 via the
+    // preview-only middleware below, matching GitHub Pages for map fallbacks.
 
-    plugins: [react(), !isPreview && mode !== 'test' && playgroundRuntime(env.VITE_STATIC_MODE === 'true')],
+    plugins: [react(), previewMissingData404(), !isPreview && mode !== 'test' && playgroundRuntime(env.VITE_STATIC_MODE === 'true')],
     worker: { format: 'es' },
 
     // Inject build-time constants so version numbers never go stale.

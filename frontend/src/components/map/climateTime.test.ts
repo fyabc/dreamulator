@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import { EARTH_PARAMS, GRID_H, GRID_W } from '../../playground/temperatureDraft'
 import type { VoronoiCell } from '../../viewers/map/types'
-import { countSubzeroMonths, isMonthlyLayer, monthFromSearch, officialMonthlyMeans, trialLandTemperatureMeans } from './climateTime'
+import { cellMonthlySeries, countSubzeroMonths, isMonthlyLayer, monthFromSearch, officialMonthlyMeans, trialLandTemperatureMeans } from './climateTime'
 
 describe('monthly temperature chart', () => {
   it('counts only strictly subzero months in a complete finite year', () => {
@@ -41,6 +41,20 @@ describe('monthly temperature chart', () => {
     expect(monthFromSearch(new URLSearchParams('monthly=1&month=10&season=180'))).toBe(10)
     expect(monthFromSearch(new URLSearchParams('monthly=1&season=180'))).toBe(6)
     expect(monthFromSearch(new URLSearchParams('season=180'))).toBe(0)
+  })
+
+  it('follows one cell row for the hovered-cell chart', () => {
+    const months = (first: number, second: number) => new Float32Array([
+      ...Array(12).fill(first), ...Array(12).fill(second),
+    ])
+    const data = { months: 12, numCells: 2, tMonthly: months(5, 17), pMonthly: months(40, 220),
+      windEastMonthly: months(3, 6), windNorthMonthly: months(4, 8) } as MonthlyClimateData
+    const cells = [{ id: 7, lat: 10, lon: 20 }, { id: 19, lat: -40, lon: 120 }] as VoronoiCell[]
+    expect(cellMonthlySeries('temperature', data, cells, cells[1])).toEqual(Array(12).fill(17))
+    expect(cellMonthlySeries('precipitation', data, cells, cells[0])?.[3]).toBe(40)
+    expect(Math.round(cellMonthlySeries('winds', data, cells, cells[1])![0])).toBe(10)
+    expect(cellMonthlySeries('slp', data, cells, cells[0])).toBeUndefined()
+    expect(cellMonthlySeries('temperature', { ...data, tMonthly: months(NaN, NaN) }, cells, cells[0])).toBeUndefined()
   })
 
   it('uses the trial sea level and latitude-area weighting', () => {

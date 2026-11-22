@@ -345,6 +345,7 @@
   },
   "time": {
     "landMean": "{{layer}} · Land average",
+    "cellValue": "{{layer}} · cell {{lat}}°, {{lon}}°",
     "globalMean": "{{layer}} · Global average",
     "windSpeed": "Wind speed",
     "chartHint": "Select a bar to switch to that month.",

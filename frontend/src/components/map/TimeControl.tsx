@@ -3,9 +3,9 @@ import { useTranslation } from 'react-i18next'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import type { TemperaturePreview } from '../../playground/temperaturePreview'
 import { MODEL_JANUARY_INDEX } from '../../playground/temperatureDraft'
-import type { CVTMesh } from '../../viewers/map/types'
+import type { CVTMesh, VoronoiCell } from '../../viewers/map/types'
 import AtlasIcon from '../AtlasIcon'
-import { climateWindowLabel, isMonthlyLayer, monthlyLayers, officialMonthlyMeans, trialLandTemperatureMeans, type MonthlyLayer } from './climateTime'
+import { cellMonthlySeries, climateWindowLabel, isMonthlyLayer, monthlyLayers, officialMonthlyMeans, trialLandTemperatureMeans, type MonthlyLayer } from './climateTime'
 
 interface TimeControlProps {
   monthlyMode: boolean
@@ -19,6 +19,8 @@ interface TimeControlProps {
     means: readonly number[]
     labelAt: (index: number) => string
     first: number
+    scope: 'cell' | 'layer'
+    cell?: { lat: number; lon: number }
   }
 }
 
@@ -27,9 +29,11 @@ function TimeControl({ monthlyMode, onMonthlyModeChange, monthIndex, onSelectMon
   const hintId = useId()
   const plot = series?.means.some(Number.isFinite) ? series : undefined
   const spec = plot ? monthlyLayers[plot.layer] : undefined
-  const name = plot && spec ? t(spec.landOnly ? 'time.landMean' : 'time.globalMean', {
-    layer: t(plot.layer === 'winds' ? 'time.windSpeed' : `help:layer.${plot.layer}.label`),
-  }) : undefined
+  const layerLabel = plot ? t(plot.layer === 'winds' ? 'time.windSpeed' : `help:layer.${plot.layer}.label`) : ''
+  const name = plot && spec ? plot.scope === 'cell' && plot.cell
+    ? t('time.cellValue', { layer: layerLabel, lat: plot.cell.lat.toFixed(1), lon: plot.cell.lon.toFixed(1) })
+    : t(spec.landOnly ? 'time.landMean' : 'time.globalMean', { layer: layerLabel })
+    : undefined
   const formatValue = (value: number) => Number.isFinite(value) ? `${value.toFixed(1)} ${spec?.unit}` : '—'
   const max = plot ? Math.max(1, ...plot.means.filter(Number.isFinite).map(Math.abs)) : 1
   const signed = plot?.means.some(value => value < 0)
@@ -89,19 +93,27 @@ function TimeControl({ monthlyMode, onMonthlyModeChange, monthIndex, onSelectMon
   )
 }
 
-export const MapTimeControl = memo(function MapTimeControl({ trialMode, preview, mesh, layer, monthlyData, ...official }:
+export const MapTimeControl = memo(function MapTimeControl({ trialMode, preview, mesh, layer, monthlyData, cell, ...official }:
   Omit<TimeControlProps, 'climateAvailable' | 'series'> & {
     trialMode: boolean; preview: TemperaturePreview | null; mesh: CVTMesh | null
     layer: string | null; monthlyData: MonthlyClimateData | null
+    /** Hovered or pinned cell: the chart follows it instead of the layer mean. */
+    cell?: VoronoiCell | null
   }) {
   const { t } = useTranslation('map')
   const monthlyLayer = isMonthlyLayer(layer) ? layer : null
   const means = useMemo(() => !trialMode && monthlyData && mesh && monthlyLayer
     ? officialMonthlyMeans(monthlyLayer, monthlyData, mesh.cells) : undefined, [trialMode, monthlyData, mesh, monthlyLayer])
+  const cellValues = useMemo(() => !trialMode && monthlyData && mesh && monthlyLayer && cell
+    ? cellMonthlySeries(monthlyLayer, monthlyData, mesh.cells, cell) : undefined,
+  [trialMode, monthlyData, mesh, monthlyLayer, cell])
   if (trialMode) return <TrialTimeControl preview={preview} layer={layer} />
-  return <TimeControl {...official} climateAvailable loading={official.loading && monthlyLayer != null} series={means && monthlyLayer ? {
-    layer: monthlyLayer, means, labelAt: index => climateWindowLabel(t, monthlyData, index),
-    first: monthlyData?.month0 === 'vernal_equinox' && means.length === 12 ? MODEL_JANUARY_INDEX : 0,
+  const values = cellValues ?? means
+  const scope = cellValues ? 'cell' as const : 'layer' as const
+  return <TimeControl {...official} climateAvailable loading={official.loading && monthlyLayer != null} series={values && monthlyLayer ? {
+    layer: monthlyLayer, means: values, scope, cell: scope === 'cell' && cell ? { lat: cell.lat, lon: cell.lon } : undefined,
+    labelAt: index => climateWindowLabel(t, monthlyData, index),
+    first: monthlyData?.month0 === 'vernal_equinox' && values.length === 12 ? MODEL_JANUARY_INDEX : 0,
   } : undefined} />
 })
 
@@ -126,6 +138,6 @@ function TrialTimeControl({ preview, layer }: { preview: TemperaturePreview | nu
       if (monthlyMode && index < 0) selectMonth(lastMonth)
       if (!monthlyMode) preview?.selectPeriod('annual')
     }} onSelectMonth={selectMonth} series={means && periods ? {
-      layer: 'temperature', means, labelAt: month => periods[month].label, first: 0,
+      layer: 'temperature', means, labelAt: month => periods[month].label, first: 0, scope: 'layer',
     } : undefined} />
 }

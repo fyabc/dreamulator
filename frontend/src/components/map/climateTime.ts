@@ -91,6 +91,31 @@ export function officialMonthlyMeans(layer: MonthlyLayer, data: MonthlyClimateDa
   })
 }
 
+export function cellMonthlySeries(
+  layer: MonthlyLayer, data: MonthlyClimateData, cells: readonly VoronoiCell[],
+  cell: Pick<VoronoiCell, 'id' | 'lat' | 'lon'>,
+) {
+  const spec = monthlyLayers[layer]
+  const values = data[spec.field]
+  const months = data.months
+  if (!values || !months || values.length !== cells.length * months) return undefined
+  // Monthly rows follow mesh-cell order; ids are normally the array index, but
+  // fall back to a lookup when an export numbers cells differently.
+  const direct = cells[cell.id]
+  const index = direct?.id === cell.id ? cell.id : cells.findIndex((item) => item.id === cell.id)
+  if (index < 0) return undefined
+  const north = data.windNorthMonthly
+  if (layer === 'winds' && (!north || north.length !== values.length)) return undefined
+  const series = Array.from({ length: months }, (_, month) => {
+    const offset = index * months + month
+    let value = values[offset]
+    if (layer === 'winds' && north) value = Math.hypot(value, north[offset])
+    if (layer === 'pressureError') value -= observedSlpAnomAt(cell.lat, cell.lon, (month + 2) % 12)
+    return value
+  })
+  return series.some(Number.isFinite) ? series : undefined
+}
+
 export function trialLandTemperatureMeans(fields: readonly (readonly number[])[], { elevation, params }: TrialTerrain) {
   const isLand = (height: number) => params.elevMinM + height * (params.elevMaxM - params.elevMinM) > params.seaLevelM
   const weights = elevation.map((height, index) => isLand(height)

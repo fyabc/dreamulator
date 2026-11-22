@@ -260,7 +260,7 @@ export default function GlobeViewerPage() {
     <div className="border-b border-space-border pb-3">
       <MapTimeControl mesh={cvtMesh} trialMode={trialActive} preview={trial.preview}
         layer={trialActive ? display.trialInspectionLayer : vs.activeColorMode}
-        monthlyData={monthlyData} loading={monthlyLoading} monthlyMode={monthlyMode}
+        monthlyData={monthlyData} loading={monthlyLoading} monthlyMode={monthlyMode} cell={trialActive ? null : inspectorCell}
         onMonthlyModeChange={handleMonthlyModeChange} monthIndex={monthlyMonth} onSelectMonth={selectMonth} />
     </div>
     <MapCellInspector trialMode={trialActive} trial={trial.preview} cursor={cursor}
