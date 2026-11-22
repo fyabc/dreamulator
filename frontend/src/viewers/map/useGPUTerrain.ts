@@ -184,7 +184,7 @@ export interface GPUTerrainResult {
    *  no overlay layer is active; safe to call from multiple canvases. */
   renderComposite: (renderer: THREE.WebGLRenderer) => void
   /** Idle-time pre-bake + GPU upload of the common overlays. */
-  warmOverlays: (renderer: THREE.WebGLRenderer) => void
+  warmOverlays: (renderer: THREE.WebGLRenderer, overlays?: readonly OverlayName[]) => void
 }
 
 /** Overlay textures needed for the currently visible layers. */
@@ -473,14 +473,16 @@ export default function useGPUTerrain({
   /** Pre-bake and upload the home-row overlays during idle so their first
    *  selection costs only a composite, not a cell scan plus a 32 MB texture
    *  upload.  Call from a requestIdleCallback with the page's renderer. */
-  const warmOverlays = useCallback((renderer: THREE.WebGLRenderer) => {
+  const warmOverlays = useCallback((renderer: THREE.WebGLRenderer,
+    overlays: readonly OverlayName[] = ['temperature', 'precipitation']) => {
     if (!elevation || width <= 0 || height <= 0) return
+    const names = new Set<OverlayName>(overlays)
     const textures = getLayerTextures({
       elevation, width, height, seaLevel, elevMinM, elevMaxM,
       waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight,
       lowMemory,
-    }, new Set<OverlayName>(['temperature', 'precipitation']))
-    for (const name of ['temperature', 'precipitation'] as const) {
+    }, names)
+    for (const name of overlays) {
       const texture = textures[name]
       if (((texture.image as { width?: number } | undefined)?.width ?? 0) > 1) renderer.initTexture(texture)
     }

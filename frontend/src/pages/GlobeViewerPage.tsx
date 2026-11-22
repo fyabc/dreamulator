@@ -11,11 +11,10 @@
  */
 
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import useIsDesktop from '../hooks/useIsDesktop'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import * as THREE from 'three'
 import GlobeViewer, { type GlobeVertex, type GlobeRegion, type GlobeRegionFlight } from '../viewers/GlobeViewer'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapLayerPanel from '../components/map/MapLayerPanel'
@@ -31,13 +30,11 @@ import QuickLayerSwitch from '../components/map/QuickLayerSwitch'
 import TimeModeToggle from '../components/map/TimeModeToggle'
 import { trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
-import { mark } from '../utils/perf'
 import { GRID_H, GRID_W } from '../playground/temperatureDraft'
 import { useMapTemperatureTrial } from '../viewers/map/useTemperatureTrialPreview'
 import { useMapDisplayLayers } from '../viewers/map/useMapDisplayLayers'
 import useRafCoalesced from '../viewers/map/useRafCoalesced'
-import { buildCellKDTree, type KDTree3D } from '../components/map/utils/kdtree'
-import type { PointProjector, VoronoiCell } from '../viewers/map/types'
+import type { PointProjector } from '../viewers/map/types'
 import { normalisedToMeters } from '../viewers/map/utils/mapCoords'
 import GlobeCurrentArrows from '../components/map/GlobeCurrentArrows'
 import GlobeWindArrows from '../components/map/GlobeWindArrows'
@@ -171,34 +168,23 @@ export default function GlobeViewerPage() {
   }, [terrainTexture])
 
   // --- KD-tree ---
-  const [kdTree, setKdTree] = useState<KDTree3D | null>(null)
-  useEffect(() => {
-    const cells = cvtMesh?.cells
-    if (!cells || cells.length === 0) {
-      setKdTree(null)
-      return
-    }
-    let cancelled = false
-    const build = () => {
-      if (cancelled) return
-      mark('hover-kd-tree-start')
-      setKdTree(buildCellKDTree(cells as VoronoiCell[]))
-      mark('hover-kd-tree-end')
-    }
-    const idle = typeof window.requestIdleCallback === 'function'
-      ? window.requestIdleCallback(build, { timeout: 1500 }) : undefined
-    const timer = idle === undefined ? window.setTimeout(build, 300) : undefined
-    return () => {
-      cancelled = true
-      if (idle !== undefined) window.cancelIdleCallback(idle)
-      if (timer !== undefined) window.clearTimeout(timer)
-    }
-  }, [cvtMesh])
 
   // --- CVT mesh data for polygon highlights ---
   const globeVertices = useMemo<GlobeVertex[] | undefined>(() => cvtMesh?.vertices, [cvtMesh])
   const globeRegions = useMemo<GlobeRegion[] | undefined>(() => cvtMesh?.regions, [cvtMesh])
   // --- Handlers ---
+
+  /** Cell under a geographic point, sampled from the same cell-ID map that
+   *  colours the globe texture (replaces the idle KD-tree build). */
+  const cellAtLonLat = useCallback((lon: number, lat: number): number => {
+    if (!cellIdMap || meshTextureSize.width < 2 || meshTextureSize.height < 2) return -1
+    const px = Math.max(0, Math.min(meshTextureSize.width - 1,
+      Math.round(((lon + 180) / 360) * (meshTextureSize.width - 1))))
+    const py = Math.max(0, Math.min(meshTextureSize.height - 1,
+      Math.round(((90 - lat) / 180) * (meshTextureSize.height - 1))))
+    const id = cellIdMap[py * meshTextureSize.width + px]
+    return id === 0xffffffff ? -1 : id
+  }, [cellIdMap, meshTextureSize.width, meshTextureSize.height])
 
   const handleCellHoverLonLat = useCallback((lon: number, lat: number) => {
     const mapW = elevationDims.w
@@ -209,17 +195,10 @@ export default function GlobeViewerPage() {
       ? (elevation?.[Math.max(0, Math.min(mapH - 1, py)) * mapW + Math.max(0, Math.min(mapW - 1, px))] ?? 0)
       : 0
 
-    if (kdTree) {
-      const rad = THREE.MathUtils.degToRad(lat)
-      const cosLat = Math.cos(rad)
-      const cellId = kdTree.nearest(
-        cosLat * Math.cos(THREE.MathUtils.degToRad(lon)),
-        Math.sin(rad),
-        cosLat * Math.sin(THREE.MathUtils.degToRad(lon)),
-      )
-      handleCellHover(cellId >= 0 ? cellId : null)
-
-      const meshElev = terrainSource === 'mesh' && cellId >= 0 ? voronoiCells[cellId]?.elevation : undefined
+    const cellId = cellIdMap ? cellAtLonLat(lon, lat) : -1
+    if (cellId >= 0) {
+      handleCellHover(cellId)
+      const meshElev = terrainSource === 'mesh' ? voronoiCells[cellId]?.elevation : undefined
       setCursor({
         lon: Math.round(lon * 100) / 100,
         lat: Math.round(lat * 100) / 100,
@@ -239,23 +218,17 @@ export default function GlobeViewerPage() {
         pixelY: py,
       })
     }
-  }, [elevation, elevationDims, elevMin, elevMax, kdTree, voronoiCells, terrainSource, handleCellHover, setCursor])
+  }, [elevation, elevationDims, elevMin, elevMax, cellIdMap, cellAtLonLat, voronoiCells, terrainSource, handleCellHover, setCursor])
 
   const handleCellClickLonLat = useCallback((lon: number, lat: number, ctrlKey: boolean) => {
-    if (!kdTree) {
+    if (!cellIdMap) {
       if (trialActive) handleCellHoverLonLat(lon, lat)
       return
     }
-    const rad = THREE.MathUtils.degToRad(lat)
-    const cosLat = Math.cos(rad)
-    const cellId = kdTree.nearest(
-      cosLat * Math.cos(THREE.MathUtils.degToRad(lon)),
-      Math.sin(rad),
-      cosLat * Math.sin(THREE.MathUtils.degToRad(lon)),
-    )
+    const cellId = cellAtLonLat(lon, lat)
     if (cellId < 0) return
     selectCell(cellId, ctrlKey)
-  }, [kdTree, selectCell, trialActive, handleCellHoverLonLat])
+  }, [cellIdMap, cellAtLonLat, selectCell, trialActive, handleCellHoverLonLat])
 
   // --- URLs ---
   const branchQS = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''

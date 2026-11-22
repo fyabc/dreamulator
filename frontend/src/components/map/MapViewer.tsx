@@ -18,7 +18,6 @@ import { WebGLRenderer } from 'three'
 import useCellIdMap from '../../viewers/map/useCellIdMap'
 import useGPUTerrain from '../../viewers/map/useGPUTerrain'
 import { useTranslation } from 'react-i18next'
-import { mark } from '../../utils/perf'
 import type { TrialTerrain } from '../../playground/temperaturePreview'
 import { GRID_H, GRID_W } from '../../playground/temperatureDraft'
 import useRafCoalesced from '../../viewers/map/useRafCoalesced'
@@ -40,7 +39,6 @@ import type {
   VoronoiCell,
   CVTMesh,
 } from '../../viewers/map/types'
-import { buildCellKDTree, type KDTree3D } from './utils/kdtree'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -199,30 +197,6 @@ export default function MapViewer({
   const elevMin = metadata?.elevation_min_m ?? -11000
   const elevMax = metadata?.elevation_max_m ?? 9000
 
-  // KD-tree for hover picking — built after first paint so the initial
-  // texture bake and decode own the critical path.
-  const [kdTree, setKdTree] = useState<KDTree3D | null>(null)
-  useEffect(() => {
-    if (!voronoiCells || voronoiCells.length === 0) {
-      setKdTree(null)
-      return
-    }
-    let cancelled = false
-    const build = () => {
-      if (cancelled) return
-      mark('hover-kd-tree-start')
-      setKdTree(buildCellKDTree(voronoiCells))
-      mark('hover-kd-tree-end')
-    }
-    const idle = typeof window.requestIdleCallback === 'function'
-      ? window.requestIdleCallback(build, { timeout: 1500 }) : undefined
-    const timer = idle === undefined ? window.setTimeout(build, 300) : undefined
-    return () => {
-      cancelled = true
-      if (idle !== undefined) window.cancelIdleCallback(idle)
-      if (timer !== undefined) window.clearTimeout(timer)
-    }
-  }, [voronoiCells])
 
   // Cell-ID map and layer bakes.  On phones both are capped at 2048 px wide
   // (same cap as usePlanetViewState) so the base textures, overlay textures and
@@ -233,6 +207,21 @@ export default function MapViewer({
     return { width: 2048, height: Math.max(1, Math.round(size.height * 2048 / size.width)) }
   }, [metadata, lowMemory])
   const cellIdMap = useCellIdMap({ cvtMesh, ...meshSize })
+
+  /** Nearest cell for a geographic point, sampled from the same cell-ID map
+   *  that colours the texture.  This replaces the KD-tree: it picks exactly the
+   *  cell drawn under the cursor and avoids a ~600 ms idle tree build. */
+  const cellAtLonLat = useCallback((lon: number, lat: number): number => {
+    if (cellIdMap && meshSize.width > 0 && meshSize.height > 1) {
+      const px = Math.max(0, Math.min(meshSize.width - 1,
+        Math.round(((lon + 180) / 360) * (meshSize.width - 1))))
+      const py = Math.max(0, Math.min(meshSize.height - 1,
+        Math.round(((90 - lat) / 180) * (meshSize.height - 1))))
+      const id = cellIdMap[py * meshSize.width + px]
+      return id === 0xffffffff ? -1 : id
+    }
+    return -1
+  }, [cellIdMap, meshSize.width, meshSize.height])
 
   // Loading indicator (useEffect avoids rAF in render body, enables cleanup)
   const { t } = useTranslation('map')
@@ -249,6 +238,9 @@ export default function MapViewer({
   onReadyRef.current = onReady
   const readyNotified = useRef(false)
   useEffect(() => { readyNotified.current = false }, [elevation])
+  /** Set while a finger is on the map; compatibility mouse events emitted for
+   *  touch must not run hover hit-testing or wheel handling. */
+  const touchActiveRef = useRef(false)
 
   // Drag state
   const [isDragging, setIsDragging] = useState(false)
@@ -321,7 +313,12 @@ export default function MapViewer({
       const renderer = rendererRef.current
       if (!renderer) return
       warmedRef.current = true
-      gpuWarmRef.current(renderer)
+      // Two callbacks: one overlay bakes + uploads in ~300 ms, and running both
+      // in a single idle slice made a 600 ms long task.
+      gpuWarmRef.current(renderer, ['temperature'])
+      const finish = () => gpuWarmRef.current(renderer, ['precipitation'])
+      if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(finish, { timeout: 8000 })
+      else window.setTimeout(finish, 4000)
     }
     const idle = typeof window.requestIdleCallback === 'function'
       ? window.requestIdleCallback(run, { timeout: 4000 }) : undefined
@@ -509,6 +506,7 @@ export default function MapViewer({
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      if (touchActiveRef.current) return
       if (e.button !== 0 && e.button !== 1) return
       const rect = containerRef.current?.getBoundingClientRect()
       if (!rect) return
@@ -526,6 +524,7 @@ export default function MapViewer({
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
+      if (touchActiveRef.current) return
       const rect = containerRef.current?.getBoundingClientRect()
       if (!rect) return
       const px = e.clientX - rect.left
@@ -566,18 +565,9 @@ export default function MapViewer({
         const ep = lonLatToArrayPixel(ll, mapW, mapH)
         const elev = ep ? (elevation[ep.py * mapW + ep.px] ?? 0) : 0
 
-        // KD-tree cell lookup
-        let cellId = -1
-        if (kdTree) {
-          const lonRad = (ll.lon * Math.PI) / 180
-          const latRad = (ll.lat * Math.PI) / 180
-          const cosLat = Math.cos(latRad)
-          const qx = cosLat * Math.cos(lonRad)
-          const qy = Math.sin(latRad)
-          const qz = cosLat * Math.sin(lonRad)
-          cellId = kdTree.nearest(qx, qy, qz)
-          onCellHover?.(cellId >= 0 ? cellId : null)
-        }
+        // Cell lookup (KD-tree on desktop, cell-ID map on phones)
+        const cellId = cellIdMap ? cellAtLonLat(ll.lon, ll.lat) : -1
+        if (cellIdMap) onCellHover?.(cellId >= 0 ? cellId : null)
         const meshElev = terrainSource === 'mesh' && cellId >= 0 ? voronoiCells[cellId]?.elevation : undefined
         onCursorMove?.({
           lon: Math.round(ll.lon * 100) / 100,
@@ -590,7 +580,7 @@ export default function MapViewer({
       })
     },
     [elevation, isDragging, zoom, mapCenter, vp, mapW, mapH, elevMin, elevMax,
-     onCursorMove, onCellHover, kdTree, terrainSource, voronoiCells],
+     onCursorMove, onCellHover, cellIdMap, cellAtLonLat, terrainSource, voronoiCells],
   )
 
   // --- Touch: single-finger pan + two-finger pinch zoom ---
@@ -611,6 +601,7 @@ export default function MapViewer({
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect) return
     suppressClickRef.current = false
+    touchActiveRef.current = true
     if (e.touches.length >= 2) {
       const [a, b] = [e.touches[0], e.touches[1]]
       touchRef.current = {
@@ -666,12 +657,14 @@ export default function MapViewer({
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 0) {
       touchRef.current = null
+      touchActiveRef.current = false
       return
     }
     // One finger lifted after a pinch: continue as a pan with the remaining one.
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect) { touchRef.current = null; return }
     const point = e.touches[0]
+    touchActiveRef.current = true
     touchRef.current = {
       mode: 'pan',
       startX: point.clientX - rect.left, startY: point.clientY - rect.top,
@@ -680,16 +673,21 @@ export default function MapViewer({
     }
   }, [])
 
-  // --- Zoom ---
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault()
-      const factor = e.deltaY > 0 ? 0.9 : 1.1
-      const newZoom = Math.max(1, Math.min(MAX_ZOOM, zoomRef.current * factor))
-      syncZoom(newZoom)
-    },
-    [],
-  )
+  // --- Zoom (native non-passive wheel listener) ---
+  // React attaches wheel listeners passively, so preventDefault() inside an
+  // onWheel handler is ignored and logs a console warning; attach our own with
+  // { passive: false } so the page does not scroll under the map.
+  useEffect(() => {
+    const element = containerRef.current
+    if (!element) return
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      const factor = event.deltaY > 0 ? 0.9 : 1.1
+      syncZoom(Math.max(1, Math.min(MAX_ZOOM, zoomRef.current * factor)))
+    }
+    element.addEventListener('wheel', onWheel, { passive: false })
+    return () => element.removeEventListener('wheel', onWheel)
+  }, [syncZoom])
 
   // --- Click ---
   // Ctrl+click (single) → toggle cell without replacing other selections.
@@ -701,17 +699,12 @@ export default function MapViewer({
         (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
       // Plain click pans (desktop); a tap selects the cell on touch devices.
       if (!ctrl && !isTouch) return
-      if (!kdTree && !trialTemperature) return
+      if (!cellIdMap && !trialTemperature) return
       const rect = containerRef.current?.getBoundingClientRect()
       if (!rect) return
       const ll = unproject(e.clientX - rect.left, e.clientY - rect.top)
       if (isNaN(ll.lon) || isNaN(ll.lat) || ll.lat < -90 || ll.lat > 90) return
-      const lonRad = (ll.lon * Math.PI) / 180
-      const latRad = (ll.lat * Math.PI) / 180
-      const cosLat = Math.cos(latRad)
-      const cellId = kdTree?.nearest(
-        cosLat * Math.cos(lonRad), Math.sin(latRad), cosLat * Math.sin(lonRad),
-      ) ?? -1
+      const cellId = cellAtLonLat(ll.lon, ll.lat)
       if (cellId >= 0 || trialTemperature) {
         if (cellId >= 0) onCellClick?.(cellId, ctrl)
         // A tap fires no mousemove, so update cursor/hover explicitly.
@@ -729,12 +722,13 @@ export default function MapViewer({
         onCellHover?.(cellId >= 0 ? cellId : null)
       }
     },
-    [kdTree, trialTemperature, unproject, onCellClick, elevation, elevMin, elevMax, mapW, mapH, onCursorMove, onCellHover, terrainSource, voronoiCells],
+    [cellIdMap, cellAtLonLat, trialTemperature, unproject, onCellClick, elevation, elevMin, elevMax, mapW, mapH, onCursorMove, onCellHover, terrainSource, voronoiCells],
   )
 
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
-      if (!kdTree || !onCellClick) return
+      if (touchActiveRef.current) return
+      if (!cellIdMap || !onCellClick) return
       const rect = containerRef.current?.getBoundingClientRect()
       if (!rect) return
       const ll = unproject(
@@ -743,16 +737,10 @@ export default function MapViewer({
       )
       // Out of lat range — ignore
       if (isNaN(ll.lon) || isNaN(ll.lat) || ll.lat < -90 || ll.lat > 90) return
-      const lonRad = (ll.lon * Math.PI) / 180
-      const latRad = (ll.lat * Math.PI) / 180
-      const cosLat = Math.cos(latRad)
-      const qx = cosLat * Math.cos(lonRad)
-      const qy = Math.sin(latRad)
-      const qz = cosLat * Math.sin(lonRad)
-      const cellId = kdTree.nearest(qx, qy, qz)
+      const cellId = cellAtLonLat(ll.lon, ll.lat)
       if (cellId >= 0) onCellClick(cellId, e.ctrlKey || e.metaKey)
     },
-    [kdTree, unproject, onCellClick],
+    [cellIdMap, cellAtLonLat, unproject, onCellClick],
   )
 
   /** Right-click clears the selection.  The browser menu is suppressed only
@@ -766,16 +754,34 @@ export default function MapViewer({
     }
   }, [onClearSelection])
 
-  // --- Callback effect ---
+  // --- Callback effect (throttled: the page re-renders on every update) ---
+  const viewPending = useRef<{
+    mapCenter: { lon: number; lat: number }
+    zoom: number
+    containerWidth: number
+    containerHeight: number
+  } | null>(null)
+  const viewTimer = useRef(0)
+  const viewLast = useRef(0)
   useEffect(() => {
-    onZoomChange?.(zoom)
-    onViewStateChange?.({
-      mapCenter,
-      zoom,
+    viewPending.current = {
+      mapCenter, zoom,
       containerWidth: containerSize.width,
       containerHeight: containerSize.height,
-    })
+    }
+    if (viewTimer.current) return
+    const flush = () => {
+      viewTimer.current = 0
+      viewLast.current = performance.now()
+      const state = viewPending.current
+      if (!state) return
+      onZoomChange?.(state.zoom)
+      onViewStateChange?.(state)
+    }
+    const wait = Math.max(0, 120 - (performance.now() - viewLast.current))
+    viewTimer.current = window.setTimeout(flush, wait)
   }, [zoom, mapCenter, containerSize, onZoomChange, onViewStateChange])
+  useEffect(() => () => { if (viewTimer.current) window.clearTimeout(viewTimer.current) }, [])
 
   // --- Cleanup on leave ---
   const handleMouseLeave = useCallback(() => {
@@ -795,7 +801,6 @@ export default function MapViewer({
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
       onMouseMove={handleMouseMove}
-      onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
       onClick={handleClick}
