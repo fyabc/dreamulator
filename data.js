@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795359121120,
+  "lastUpdate": 1795381427123,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2419,6 +2419,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00012110642691674953",
             "extra": "mean: 5.955155799999545 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "1fd8113c998e54e671f9247e32dca21d9d1386d5",
+          "message": "docs(roadmap): register synchronous layer downscaling as tech debt\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-23T05:02:54+08:00",
+          "tree_id": "578e30f7c7422387a199e9b32e32e98c6d3707af",
+          "url": "https://github.com/fyabc/dreamulator/commit/1fd8113c998e54e671f9247e32dca21d9d1386d5"
+        },
+        "date": 1795381426437,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.4857867171800392,
+            "unit": "iter/sec",
+            "range": "stddev: 0.09642635447334298",
+            "extra": "mean: 2.0585165559999994 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 5.804190266673548,
+            "unit": "iter/sec",
+            "range": "stddev: 0.042834171310274616",
+            "extra": "mean: 172.28932100000094 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.493241398092991,
+            "unit": "iter/sec",
+            "range": "stddev: 0.6412171614329674",
+            "extra": "mean: 401.084307666667 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1065.3448436013005,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00005862777982362891",
+            "extra": "mean: 938.6632000015993 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 258.8091919914576,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000038908875283183214",
+            "extra": "mean: 3.8638504000005014 msec\nrounds: 5"
           }
         ]
       }
