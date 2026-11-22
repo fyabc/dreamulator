@@ -17,6 +17,7 @@ import * as THREE from 'three'
 import { WebGLRenderer } from 'three'
 import useCellIdMap from '../../viewers/map/useCellIdMap'
 import useGPUTerrain from '../../viewers/map/useGPUTerrain'
+import { mark } from '../../utils/perf'
 import { useTranslation } from 'react-i18next'
 import type { TrialTerrain } from '../../playground/temperaturePreview'
 import { GRID_H, GRID_W } from '../../playground/temperatureDraft'
@@ -187,10 +188,29 @@ export default function MapViewer({
   const elevMin = metadata?.elevation_min_m ?? -11000
   const elevMax = metadata?.elevation_max_m ?? 9000
 
-  // KD-tree
-  const kdTree = useMemo<KDTree3D | null>(() => {
-    if (!voronoiCells || voronoiCells.length === 0) return null
-    return buildCellKDTree(voronoiCells)
+  // KD-tree for hover picking — built after first paint so the initial
+  // texture bake and decode own the critical path.
+  const [kdTree, setKdTree] = useState<KDTree3D | null>(null)
+  useEffect(() => {
+    if (!voronoiCells || voronoiCells.length === 0) {
+      setKdTree(null)
+      return
+    }
+    let cancelled = false
+    const build = () => {
+      if (cancelled) return
+      mark('hover-kd-tree-start')
+      setKdTree(buildCellKDTree(voronoiCells))
+      mark('hover-kd-tree-end')
+    }
+    const idle = typeof window.requestIdleCallback === 'function'
+      ? window.requestIdleCallback(build, { timeout: 1500 }) : undefined
+    const timer = idle === undefined ? window.setTimeout(build, 300) : undefined
+    return () => {
+      cancelled = true
+      if (idle !== undefined) window.cancelIdleCallback(idle)
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
   }, [voronoiCells])
 
   // Cell-ID map

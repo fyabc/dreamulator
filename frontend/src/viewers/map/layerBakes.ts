@@ -153,17 +153,44 @@ export interface BakeInputs {
 // Module-level bake cache — survives component unmount/remount (route nav)
 // ---------------------------------------------------------------------------
 
-interface BakeCacheEntry extends BakeInputs {
-  textures: LayerTextures
+export type OverlayName = 'koppen' | 'plates' | 'boundaries' | 'biomes' | 'npp' | 'domesticable' |
+  'habitable' | 'agriculture' | 'soil' | 'provinces' | 'temperature' | 'precipitation' |
+  'temperatureError' | 'precipitationError' | 'pressure' | 'slp'
+
+const OVERLAYS: readonly OverlayName[] = ['koppen', 'plates', 'boundaries', 'biomes', 'npp',
+  'domesticable', 'habitable', 'agriculture', 'soil', 'provinces', 'temperature',
+  'precipitation', 'temperatureError', 'precipitationError', 'pressure', 'slp']
+
+/** Layers painted per cell (nearest magnification keeps category edges crisp). */
+const CATEGORICAL: ReadonlySet<OverlayName> = new Set<OverlayName>(['koppen', 'plates',
+  'boundaries', 'biomes', 'domesticable', 'habitable', 'agriculture', 'soil', 'provinces'])
+
+const ALL_OVERLAYS: ReadonlySet<OverlayName> = new Set(OVERLAYS)
+
+type CellPalettes = ReturnType<typeof buildCellPalettes>
+
+interface BaseTextures {
+  terrainThematic: THREE.DataTexture
+  terrainWithCoastlines: THREE.DataTexture
+  landseaThematic: THREE.DataTexture
+  coastlines: THREE.DataTexture
 }
 
-let bakeCache: BakeCacheEntry | null = null
+interface BakeCache {
+  inputs: BakeInputs
+  raster: boolean
+  textures: BaseTextures
+  palettes: CellPalettes | null
+}
+
+let bakeCache: BakeCache | null = null
+const overlayCache = new Map<OverlayName, THREE.DataTexture>()
+let placeholderTexture: THREE.DataTexture | null = null
 
 function sameBakeInputs(a: BakeInputs, b: BakeInputs): boolean {
   // cellIdMap is intentionally NOT part of the key: it is derived
   // deterministically from (cvtMesh, width, height), and each mounted map
-  // viewer builds its own array — comparing identity would thrash the cache
-  // (every consumer re-baking over the previous one's entry).
+  // viewer builds its own array — comparing identity would thrash the cache.
   return (
     a.elevation === b.elevation &&
     a.width === b.width &&
@@ -180,29 +207,65 @@ function sameBakeInputs(a: BakeInputs, b: BakeInputs): boolean {
   )
 }
 
-/** Bake (or reuse cached) per-layer textures for the given inputs. */
-export function getLayerTextures(inputs: BakeInputs): LayerTextures {
-  if (bakeCache && sameBakeInputs(bakeCache, inputs)) {
-    return bakeCache.textures
-  }
-  // Dispose stale GPU textures before replacing.
-  if (bakeCache) {
-    const t = bakeCache.textures
-    t.terrainThematic.dispose(); t.landseaThematic.dispose(); t.koppen.dispose()
-    t.plates.dispose(); t.boundaries.dispose(); t.coastlines.dispose()
-    t.biomes.dispose(); t.npp.dispose(); t.domesticable.dispose()
-    t.habitable.dispose(); t.agriculture.dispose()
-    t.soil.dispose(); t.provinces.dispose()
-    t.temperature.dispose(); t.precipitation.dispose()
-    t.temperatureError.dispose(); t.precipitationError.dispose()
-    t.terrainWithCoastlines.dispose()
-  }
+function rasterTerrain(inp: BakeInputs): boolean {
+  return inp.terrainSource === 'raster' || !(inp.cvtMesh && inp.cvtMesh.cells.length) || !inp.cellIdMap
+}
 
-  mark('layer-bake-start')
-  const textures = bakeAll(inputs)
-  mark('layer-bake-end')
-  bakeCache = { ...inputs, textures }
-  return textures
+function transparentPlaceholder(): THREE.DataTexture {
+  placeholderTexture ??= makeTexture(new Uint8Array([0, 0, 0, 0]), 1, 1)
+  return placeholderTexture
+}
+
+function disposeBase(textures: BaseTextures): void {
+  textures.terrainThematic.dispose()
+  textures.terrainWithCoastlines.dispose()
+  textures.landseaThematic.dispose()
+  textures.coastlines.dispose()
+}
+
+/** Bake base textures and keep per-cell palettes for later on-demand layers. */
+export function getLayerTextures(inputs: BakeInputs, needed: ReadonlySet<OverlayName> = ALL_OVERLAYS): LayerTextures {
+  const raster = rasterTerrain(inputs)
+  if (!bakeCache || !sameBakeInputs(bakeCache.inputs, inputs) || bakeCache.raster !== raster) {
+    mark('layer-bake-start')
+    if (bakeCache) {
+      disposeBase(bakeCache.textures)
+      for (const texture of overlayCache.values()) texture.dispose()
+      overlayCache.clear()
+    }
+    const { textures, palettes } = bakeBase(inputs, raster)
+    bakeCache = { inputs, raster, textures, palettes }
+    mark('layer-bake-end')
+  }
+  let palette = bakeCache.palettes
+  if (!palette && inputs.cvtMesh && inputs.cvtMesh.cells.length &&
+    OVERLAYS.some((name) => needed.has(name))) {
+    palette = buildCellPalettes(inputs.cvtMesh, inputs.elevMinM, inputs.elevMaxM,
+      inputs.seaLevel, inputs.waterDepthFactor)
+    bakeCache.palettes = palette
+  }
+  const width = inputs.meshWidth ?? inputs.width
+  const height = inputs.meshHeight ?? inputs.height
+  const overlays = {} as Record<OverlayName, THREE.DataTexture>
+  for (const name of OVERLAYS) {
+    if (!needed.has(name) || !palette || !inputs.cellIdMap) {
+      overlays[name] = transparentPlaceholder()
+      continue
+    }
+    let texture = overlayCache.get(name)
+    if (!texture) {
+      mark(`layer-bake-${name}-start`)
+      const buf = bakeCellLayer(palette[name], width, height, inputs.cellIdMap, inputs.flipHorizontal)
+      texture = makeTexture(buf, width, height, CATEGORICAL.has(name) ? { nearestMag: true } : undefined)
+      mark(`layer-bake-${name}-end`)
+      overlayCache.set(name, texture)
+    }
+    overlays[name] = texture
+  }
+  return {
+    ...bakeCache.textures,
+    ...overlays,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -742,132 +805,77 @@ export function bakeUccLayer(
   return makeTexture(buf, width, height, { nearestMag: true })
 }
 
-function bakeAll(inp: BakeInputs): LayerTextures {
-  const { meshWidth: width = inp.width, meshHeight: height = inp.height, cvtMesh, cellIdMap, flipHorizontal } = inp
+function bakeBase(inp: BakeInputs, raster: boolean): { textures: BaseTextures; palettes: CellPalettes | null } {
+  const { meshWidth: meshWidthRaw = inp.width, meshHeight: meshHeightRaw = inp.height,
+    cvtMesh, cellIdMap, flipHorizontal } = inp
+  const meshWidth = meshWidthRaw
+  const meshHeight = meshHeightRaw
+  let palettes: CellPalettes | null = null
+  let terrainBuf: Uint8Array
+  let landseaBuf: Uint8Array
+  let coastBuf: Uint8Array
+  let mergeCoast: Uint8Array
+  let terrainWidth = 1
+  let terrainHeight = 1
+  let coastWidth = 1
+  let coastHeight = 1
 
-  // 1x1 transparent fallback
-  const empty: Uint8Array = new Uint8Array([0, 0, 0, 0])
-  let terrainThemBuf: Uint8Array = empty
-  let landseaThemBuf: Uint8Array = empty
-  let koppenBuf: Uint8Array = empty
-  let platesBuf: Uint8Array = empty
-  let boundariesBuf: Uint8Array = empty
-  let coastlinesBuf: Uint8Array = empty
-  let biomesBuf: Uint8Array = empty
-  let nppBuf: Uint8Array = empty
-  let domesticableBuf: Uint8Array = empty
-  let habitableBuf: Uint8Array = empty
-  let agricultureBuf: Uint8Array = empty
-  let soilBuf: Uint8Array = empty
-  let provincesBuf: Uint8Array = empty
-  let temperatureBuf: Uint8Array = empty
-  let precipitationBuf: Uint8Array = empty
-  let temperatureErrorBuf: Uint8Array = empty
-  let precipitationErrorBuf: Uint8Array = empty
-  let pressureBuf: Uint8Array = empty
-  let slpBuf: Uint8Array = empty
-  let kw = 1, kh = 1
-  const hasMesh = cvtMesh && cvtMesh.cells.length > 0 && cellIdMap
-  const useRaster = !hasMesh || inp.terrainSource === 'raster'
-  if (cvtMesh && hasMesh) {
-    const palettes = buildCellPalettes(cvtMesh, inp.elevMinM, inp.elevMaxM, inp.seaLevel, inp.waterDepthFactor)
-    if (!useRaster) {
-      terrainThemBuf = bakeCellLayer(palettes.terrainThematic, width, height, cellIdMap, flipHorizontal)
-      landseaThemBuf = bakeCellLayer(palettes.landseaThematic, width, height, cellIdMap, flipHorizontal)
-      coastlinesBuf = bakeCoastlineMask(width, height, cvtMesh, cellIdMap, inp.seaLevel, flipHorizontal)
+  if (!raster && cvtMesh && cellIdMap) {
+    palettes = buildCellPalettes(cvtMesh, inp.elevMinM, inp.elevMaxM, inp.seaLevel, inp.waterDepthFactor)
+    terrainBuf = bakeCellLayer(palettes.terrainThematic, meshWidth, meshHeight, cellIdMap, flipHorizontal)
+    landseaBuf = bakeCellLayer(palettes.landseaThematic, meshWidth, meshHeight, cellIdMap, flipHorizontal)
+    coastBuf = bakeCoastlineMask(meshWidth, meshHeight, cvtMesh, cellIdMap, inp.seaLevel, flipHorizontal)
+    terrainWidth = meshWidth
+    terrainHeight = meshHeight
+    coastWidth = meshWidth
+    coastHeight = meshHeight
+    mergeCoast = coastBuf
+    if (inp.elevation.length === inp.width * inp.height && inp.width > meshWidth) {
+      // Mesh colours stay per-cell, but the coastline reads the elevation
+      // raster: a cell-boundary mask is one cell wide and reads as dashes.
+      coastBuf = bakeRasterCoastMask(inp)
+      coastWidth = inp.width
+      coastHeight = inp.height
+      mergeCoast = downsampleCoast(coastBuf, inp.width, inp.height, meshWidth, meshHeight)
     }
-    koppenBuf = bakeCellLayer(palettes.koppen, width, height, cellIdMap, flipHorizontal)
-    platesBuf = bakeCellLayer(palettes.plates, width, height, cellIdMap, flipHorizontal)
-    boundariesBuf = bakeCellLayer(palettes.boundaries, width, height, cellIdMap, flipHorizontal)
-    biomesBuf = bakeCellLayer(palettes.biomes, width, height, cellIdMap, flipHorizontal)
-    nppBuf = bakeCellLayer(palettes.npp, width, height, cellIdMap, flipHorizontal)
-    domesticableBuf = bakeCellLayer(palettes.domesticable, width, height, cellIdMap, flipHorizontal)
-    habitableBuf = bakeCellLayer(palettes.habitable, width, height, cellIdMap, flipHorizontal)
-    agricultureBuf = bakeCellLayer(palettes.agriculture, width, height, cellIdMap, flipHorizontal)
-    soilBuf = bakeCellLayer(palettes.soil, width, height, cellIdMap, flipHorizontal)
-    provincesBuf = bakeCellLayer(palettes.provinces, width, height, cellIdMap, flipHorizontal)
-    temperatureBuf = bakeCellLayer(palettes.temperature, width, height, cellIdMap, flipHorizontal)
-    precipitationBuf = bakeCellLayer(palettes.precipitation, width, height, cellIdMap, flipHorizontal)
-    temperatureErrorBuf = bakeCellLayer(palettes.temperatureError, width, height, cellIdMap, flipHorizontal)
-    precipitationErrorBuf = bakeCellLayer(palettes.precipitationError, width, height, cellIdMap, flipHorizontal)
-    pressureBuf = bakeCellLayer(palettes.pressure, width, height, cellIdMap, flipHorizontal)
-    slpBuf = bakeCellLayer(palettes.slp, width, height, cellIdMap, flipHorizontal)
-    kw = width; kh = height
-  }
-  let terrainWidth = kw, terrainHeight = kh
-  let coastWidth = kw, coastHeight = kh
-  let mergeCoastBuf = coastlinesBuf
-  if (useRaster && inp.elevation.length === inp.width * inp.height && inp.width > 0) {
-    const raster = bakeRasterTerrain(inp)
-    terrainThemBuf = raster.terrain
-    landseaThemBuf = raster.landsea
-    coastlinesBuf = raster.coast
-    terrainWidth = inp.width; terrainHeight = inp.height
-    coastWidth = inp.width; coastHeight = inp.height
-    mergeCoastBuf = raster.coast
-  } else if (inp.elevation.length === inp.width * inp.height && inp.width > kw) {
-    // Mesh colours stay per-cell, but the coastline reads the elevation raster:
-    // a cell-boundary mask is one cell wide and reads as dashes when zoomed out.
-    coastlinesBuf = bakeRasterCoastMask(inp)
-    coastWidth = inp.width; coastHeight = inp.height
-    mergeCoastBuf = downsampleCoast(coastlinesBuf, inp.width, inp.height, kw, kh)
+  } else {
+    const rasterTerrain = bakeRasterTerrain(inp)
+    terrainBuf = rasterTerrain.terrain
+    landseaBuf = rasterTerrain.landsea
+    coastBuf = rasterTerrain.coast
+    mergeCoast = rasterTerrain.coast
+    terrainWidth = inp.width
+    terrainHeight = inp.height
+    coastWidth = inp.width
+    coastHeight = inp.height
   }
 
-  // Merge terrain + feature layers → self-contained textures for the 3D globe
-  // so it doesn't need the FBO composite pass (which has a known color-space
-  // round-trip issue with MeshStandardMaterial PBR pipeline on some GPUs).
-
-  // Helper: blend a feature layer (alpha=255 where present, 0 elsewhere) over
-  // the terrain at the given opacity [0,1].
-  function mergeFeature(
-    base: Uint8Array,
-    feature: Uint8Array,
-    opacity: number,
-  ): Uint8Array {
-    const out = new Uint8Array(base.length)
-    for (let i = 0; i < base.length; i += 4) {
-      const fa = (feature[i + 3] / 255) * opacity
-      if (fa > 0.001) {
-        out[i] = Math.round(base[i] * (1 - fa) + feature[i] * fa)
-        out[i + 1] = Math.round(base[i + 1] * (1 - fa) + feature[i + 1] * fa)
-        out[i + 2] = Math.round(base[i + 2] * (1 - fa) + feature[i + 2] * fa)
-      } else {
-        out[i] = base[i]
-        out[i + 1] = base[i + 1]
-        out[i + 2] = base[i + 2]
-      }
-      out[i + 3] = 255
-    }
-    return out
-  }
-
-  const terrainWithCoastBuf = mergeFeature(terrainThemBuf, mergeCoastBuf, 1.0)
-
-  // Texture filter policy:
-  // - Continuous data (terrain, NPP): magFilter=LinearFilter → smooth when zoomed in
-  // - Categorical data (plates, Köppen, biomes, boundaries, coastlines,
-  //   domesticable): magFilter=NearestFilter → crisp cell edges
-  // - All textures: minFilter=NearestFilter (no mipmaps needed; crisp when zoomed out)
+  const terrainWithCoastBuf = mergeFeature(terrainBuf, mergeCoast, 1.0)
   return {
-    terrainThematic: makeTexture(terrainThemBuf, terrainWidth, terrainHeight),
-    terrainWithCoastlines: makeTexture(terrainWithCoastBuf, terrainWidth, terrainHeight, { mipmaps: true }),
-    landseaThematic: makeTexture(landseaThemBuf, terrainWidth, terrainHeight, { nearestMag: true }),
-    koppen: makeTexture(koppenBuf, kw, kh, { nearestMag: true }),
-    plates: makeTexture(platesBuf, kw, kh, { nearestMag: true }),
-    boundaries: makeTexture(boundariesBuf, kw, kh, { nearestMag: true }),
-    coastlines: makeTexture(coastlinesBuf, coastWidth, coastHeight, { nearestMag: true }),
-    biomes: makeTexture(biomesBuf, kw, kh, { nearestMag: true }),
-    npp: makeTexture(nppBuf, kw, kh),
-    domesticable: makeTexture(domesticableBuf, kw, kh, { nearestMag: true }),
-    habitable: makeTexture(habitableBuf, kw, kh, { nearestMag: true }),
-    agriculture: makeTexture(agricultureBuf, kw, kh, { nearestMag: true }),
-    soil: makeTexture(soilBuf, kw, kh, { nearestMag: true }),
-    provinces: makeTexture(provincesBuf, kw, kh, { nearestMag: true }),
-    temperature: makeTexture(temperatureBuf, kw, kh),
-    precipitation: makeTexture(precipitationBuf, kw, kh),
-    temperatureError: makeTexture(temperatureErrorBuf, kw, kh),
-    precipitationError: makeTexture(precipitationErrorBuf, kw, kh),
-    pressure: makeTexture(pressureBuf, kw, kh),
-    slp: makeTexture(slpBuf, kw, kh),
+    textures: {
+      terrainThematic: makeTexture(terrainBuf, terrainWidth, terrainHeight),
+      terrainWithCoastlines: makeTexture(terrainWithCoastBuf, terrainWidth, terrainHeight, { mipmaps: true }),
+      landseaThematic: makeTexture(landseaBuf, terrainWidth, terrainHeight, { nearestMag: true }),
+      coastlines: makeTexture(coastBuf, coastWidth, coastHeight, { nearestMag: true }),
+    },
+    palettes,
   }
+}
+
+function mergeFeature(base: Uint8Array, feature: Uint8Array, opacity: number): Uint8Array {
+  const out = new Uint8Array(base.length)
+  for (let i = 0; i < base.length; i += 4) {
+    const fa = (feature[i + 3] / 255) * opacity
+    if (fa > 0.001) {
+      out[i] = Math.round(base[i] * (1 - fa) + feature[i] * fa)
+      out[i + 1] = Math.round(base[i + 1] * (1 - fa) + feature[i + 1] * fa)
+      out[i + 2] = Math.round(base[i + 2] * (1 - fa) + feature[i + 2] * fa)
+    } else {
+      out[i] = base[i]
+      out[i + 1] = base[i + 1]
+      out[i + 2] = base[i + 2]
+    }
+    out[i + 3] = 255
+  }
+  return out
 }

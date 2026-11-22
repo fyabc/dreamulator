@@ -29,6 +29,7 @@ import type { TerrainSource } from './elevationSource'
 import * as THREE from 'three'
 import type { ColorMode } from './types'
 import type { ScalarTexture } from './useMonthlyClimate'
+import type { OverlayName } from './layerBakes'
 import type { CVTMesh } from './types'
 import type { CellIdMap } from './useCellIdMap'
 import { DEFAULT_WATER_DEPTH_FACTOR, getLayerTextures, type LayerTextures } from './layerBakes'
@@ -182,6 +183,32 @@ export interface GPUTerrainResult {
   renderComposite: (renderer: THREE.WebGLRenderer) => void
 }
 
+/** Overlay textures needed for the currently visible layers. */
+function neededOverlays(layers: Record<string, number | undefined>): ReadonlySet<OverlayName> {
+  const needed = new Set<OverlayName>()
+  const add = (layer: string, texture: OverlayName) => {
+    if ((layers[layer] ?? 0) > 0) needed.add(texture)
+  }
+  add('koppen', 'koppen')
+  add('plates', 'plates')
+  add('boundaries', 'boundaries')
+  add('biomes', 'biomes')
+  add('npp', 'npp')
+  add('domesticable', 'domesticable')
+  add('habitable', 'habitable')
+  add('agriculture', 'agriculture')
+  add('soil', 'soil')
+  add('provinces', 'provinces')
+  add('temperature', 'temperature')
+  add('precipitation', 'precipitation')
+  add('temperatureError', 'temperatureError')
+  add('precipitationError', 'precipitationError')
+  add('pressure', 'pressure')
+  add('pressureError', 'pressure')
+  add('slp', 'slp')
+  return needed
+}
+
 export default function useGPUTerrain({
   elevation,
   width,
@@ -205,14 +232,15 @@ export default function useGPUTerrain({
   dayNight = 0,
 }: UseGPUTerrainOptions): GPUTerrainResult {
   // --- Bake per-layer textures (DATA-driven only; opacity-independent) ---
+  const needed = useMemo(() => neededOverlays(layers), [layers])
   const baked: LayerTextures | null = useMemo(() => {
     if (!elevation || width <= 0 || height <= 0) return null
     return getLayerTextures({
       elevation, width, height, seaLevel, elevMinM, elevMaxM,
       waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight,
-    })
-  }, [elevation, width, height, seaLevel, elevMinM, elevMaxM,
-      waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight])
+    }, needed)
+  }, [elevation, width, height, seaLevel, elevMinM, elevMaxM, waterDepthFactor, flipHorizontal,
+      cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight, needed])
 
   const overrideWidth = Math.max(scalarThematic?.texture.image.width ?? 0, koppenTexture?.image.width ?? 0)
   const overrideHeight = Math.max(scalarThematic?.texture.image.height ?? 0, koppenTexture?.image.height ?? 0)

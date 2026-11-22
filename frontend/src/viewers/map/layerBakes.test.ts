@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bakeMonthlyLayer, getLayerTextures } from './layerBakes'
+import { bakeMonthlyLayer, getLayerTextures, type OverlayName } from './layerBakes'
 import type { CVTMesh, VoronoiCell } from './types'
 import { temperatureColor } from './utils/colorScales'
 
@@ -26,5 +26,22 @@ describe('model-grid ocean climate layers', () => {
     expect(Array.from(temperature.image.data)).toEqual([...temperatureColor(22), 255, 0, 0, 0, 0])
     expect(precipitation.image.data[3]).toBe(255)
     expect(precipitation.image.data[7]).toBe(0)
+  })
+
+  it('bakes only the requested overlay layers and reuses the base cache', () => {
+    const mesh: CVTMesh = { num_cells: 2, seed: 1, vertices: [], regions: [], cells: [
+      { id: 7, elevation: -4000, water_class: 'ocean', temperature_C: 25, koppen_class: 'Ocean' },
+      { id: 8, elevation: -4000, water_class: 'ocean', temperature_C: 3, koppen_class: 'Ocean' },
+    ] as VoronoiCell[] }
+    const inputs = { cvtMesh: mesh, elevation: new Float32Array([0, 0]), width: 2, height: 1,
+      cellIdMap: new Uint32Array([7, 8]), seaLevel: 0, elevMinM: -4000, elevMaxM: 4000,
+      waterDepthFactor: 1, flipHorizontal: false }
+    const base = getLayerTextures(inputs, new Set<OverlayName>())
+    expect(base.temperature.image.width).toBe(1)
+    expect(base.koppen.image.width).toBe(1)
+    const koppen = getLayerTextures(inputs, new Set<OverlayName>(['koppen']))
+    expect(koppen.koppen.image.width).toBe(2)
+    expect(koppen.temperature.image.width).toBe(1)
+    expect(koppen.terrainThematic).toBe(base.terrainThematic)
   })
 })

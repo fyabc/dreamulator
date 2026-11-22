@@ -11,7 +11,7 @@
  */
 
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import * as THREE from 'three'
@@ -28,6 +28,7 @@ import RegionWindowPanel from '../components/map/RegionWindowPanel'
 import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
 import { trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
+import { mark } from '../utils/perf'
 import { GRID_H, GRID_W } from '../playground/temperatureDraft'
 import { useMapTemperatureTrial } from '../viewers/map/useTemperatureTrialPreview'
 import { useMapDisplayLayers } from '../viewers/map/useMapDisplayLayers'
@@ -165,10 +166,28 @@ export default function GlobeViewerPage() {
   }, [terrainTexture])
 
   // --- KD-tree ---
-  const kdTree = useMemo<KDTree3D | null>(() => {
+  const [kdTree, setKdTree] = useState<KDTree3D | null>(null)
+  useEffect(() => {
     const cells = cvtMesh?.cells
-    if (!cells || cells.length === 0) return null
-    return buildCellKDTree(cells as VoronoiCell[])
+    if (!cells || cells.length === 0) {
+      setKdTree(null)
+      return
+    }
+    let cancelled = false
+    const build = () => {
+      if (cancelled) return
+      mark('hover-kd-tree-start')
+      setKdTree(buildCellKDTree(cells as VoronoiCell[]))
+      mark('hover-kd-tree-end')
+    }
+    const idle = typeof window.requestIdleCallback === 'function'
+      ? window.requestIdleCallback(build, { timeout: 1500 }) : undefined
+    const timer = idle === undefined ? window.setTimeout(build, 300) : undefined
+    return () => {
+      cancelled = true
+      if (idle !== undefined) window.cancelIdleCallback(idle)
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
   }, [cvtMesh])
 
   // --- CVT mesh data for polygon highlights ---
