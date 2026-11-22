@@ -21,6 +21,7 @@ export interface ClimateTrialJob {
   moisture_pass: number | null
   error: string | null
   error_detail?: string
+  builds_mesh?: true
 }
 
 export interface ClimateTrialProducts {
@@ -52,7 +53,7 @@ export const browserClimateAssets = ['geometry', 'fields', 'monthly', 'yearly', 
 export const maxBrowserClimateTrials = 8
 export type SavedBrowserEbm = {
   metadata: SavedClimateTrial
-  assets: Record<typeof browserClimateAssets[number], Blob>
+  assets: Record<typeof browserClimateAssets[number], Blob> & { terrain?: Blob }
 }
 
 export type ClimateTrialResult = ClimateTrialProducts & {

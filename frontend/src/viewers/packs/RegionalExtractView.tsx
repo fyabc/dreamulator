@@ -56,7 +56,8 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
   const [temporary, setTemporary] = useState<BrowserTerrainResult | null>(null)
   const [requestedSource, setRequestedSource] = useState('')
   const project = useQuery({ queryKey: projectKey(world), queryFn: () => getProject(world), enabled: staticMode, retry: false })
-  const savedResults = matchingBrowserRegionResults(project.data, { planet, branch }, window)
+  const climateResult = staticMode && regionParams.get('climateResult') || undefined
+  const savedResults = matchingBrowserRegionResults(project.data, { planet, branch, climateResult }, window)
   const saved = savedResults.find(({ layer }) => layer.id === requestedSource)
   const current = saved?.layer.id ?? (temporary && requestedSource === currentBrowserRefinement ? currentBrowserRefinement : '')
   const savedRasters = useQuery({ queryKey: ['region-saved-rasters', world, saved?.layer.id], enabled: Boolean(saved),
@@ -93,6 +94,7 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
     if (!result) return
     height.download(`${world}-${planet}-${lat}_${lon}-${result.recipe.method}`, null, format, {
       world, planet, branch, source: 'browser_terrain_diffusion', seed: result.recipe.seed,
+      ...(climateResult && { climate_result: climateResult }),
       ...(result.conditioning && { conditioning: result.conditioning.climate ? 'climate' : 'elevation_only', td_grid: result.conditioning }),
       model_manifest_sha256: result.manifestSha256,
       processing_mode: result.recipe.method, processing_recommendation: result.recommendation, source_native_spacing_km: result.nativeSpacingKm,
@@ -127,7 +129,7 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
             <p>{t(showingResult ? 'packs.compute.refinedHint' : 'packs.export.globalHint')}</p>
           </div>
           <TerrainCompute browser={{ raster: preview?.raster ?? null, spanKm, seaLevel: sea,
-            nativeEstimateKm, worldSource: { world, planet, branch, window },
+            nativeEstimateKm, worldSource: { world, planet, branch, window, browserWorld: meta.data?.browser_heightmap, climateResult },
             sourceRowSpacingKm: preview && preview.sourceHeight > 1 ? stepKm : null, onResult: (result) => {
             setTemporary(result)
             setRequestedSource(currentBrowserRefinement)
@@ -147,6 +149,8 @@ export default function RegionalExtractView({ world, planet, branch, radiusKm, s
               downloadLabel={t('packs.compute.download')} exporting={height.exporting} failed={height.failed}
               onDownload={(_, format) => downloadRefined(format)} />
             {current === currentBrowserRefinement && temporary && preview && <SaveProjectResult result={temporary} target={{ worldId: world, planet, branch,
+              browserWorld: meta.data?.browser_heightmap,
+              climateResult,
               sourceName: `${world} · ${planet} · ${lat}°, ${lon}° · ${spanKm} km`, raster: preview.raster,
               frame: { window, min, max, sea, sourceStepKm: stepKm } }} />}
           </div>}

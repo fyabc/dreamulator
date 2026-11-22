@@ -5,12 +5,13 @@ export const currentBrowserRefinement = 'current-browser-refinement'
 
 export function matchingBrowserRegionResults(project: LocalProject | null | undefined,
   location: NonNullable<ElevationSource['location']>, window: PackWindow) {
-  if (!project?.published) return []
+  if (!project || (!project.published && (!project.creationSnapshot || project.creationKind === 'starter'))) return []
   const results: { layer: ElevationResult; source: ElevationSource }[] = []
   for (const layer of project.layers) {
     if (layer.kind !== 'elevation-result') continue
     const source = elevationSource(project.layers, layer)
-    if (!source || source.location?.planet !== location.planet || source.location.branch !== location.branch) continue
+    if (!source || source.location?.planet !== location.planet || source.location.branch !== location.branch ||
+        source.location.climateResult !== location.climateResult) continue
     const frame = source.frame.window
     if (frame.centerLat !== window.centerLat || (frame.centerLon - window.centerLon) % 360 !== 0 ||
       frame.radiusKm !== window.radiusKm || frame.projection !== window.projection ||

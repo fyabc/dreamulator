@@ -12,9 +12,15 @@ import LayerTabSection from '../components/world/LayerTabSection'
 import TemperatureTrialEntry from '../components/world/TemperatureTrialEntry'
 import WorldBuildPanel from '../components/world/WorldBuildPanel'
 import WorldParametersPanel from '../components/world/WorldParametersPanel'
-import { getProject, projectKey, projectRegionPath } from '../projects/projectStore'
+import WorldSourceBadge from '../components/world/WorldSourceBadge'
+import { getProject, projectKey, projectRegionPath, worldOverviewPath } from '../projects/projectStore'
+import { hasProjectHeightmap } from '../projects/elevationProject'
+import { heightmapMapPath, latestHeightmapClimate } from '../projects/heightmapWorld'
+import { worldLayers, type WorldLayer } from '../projects/worldLayers'
+import { useWorkflowTutorial } from '../tutorial/tutorialProgress'
 
 const WorldDataPanel = lazy(() => import('../components/world/WorldDataPanel'))
+const BrowserWorldBuildPanel = lazy(() => import('../components/world/BrowserWorldBuildPanel'))
 
 /** Pick a Unicode glyph + color class based on body type and mass. */
 function bodyIcon(planetType: string | undefined, massEarth: number | undefined) {
@@ -83,7 +89,7 @@ function renderNarrative(text: string) {
 
 export default function WorldDetail() {
   const { worldName } = useParams<{ worldName: string }>()
-  const { t } = useTranslation('worlds')
+  const { t, i18n } = useTranslation('worlds')
   const staticMode = isStaticMode()
   const browserWorld = useQuery({ queryKey: projectKey(worldName ?? ''), queryFn: () => getProject(worldName!),
     enabled: staticMode && !!worldName, retry: false })
@@ -100,9 +106,7 @@ export default function WorldDetail() {
     | 'narrate'
     | 'data'
     | 'parameters'
-  const availableTabs: TabType[] = localWorld
-    ? ['data', 'parameters']
-    : staticMode
+  const availableTabs: TabType[] = staticMode
     ? ['overview', 'data', 'parameters', 'astronomy', 'planets', 'climate', 'ecology', 'civilization', 'design-notes']
     : [
         'overview',
@@ -123,7 +127,7 @@ export default function WorldDetail() {
   const legacyLayer = staticMode && activeTab === 'data' ? searchParams.get('layer') : null
 
   // Branch and tab persisted in URL search params (?branch=ERE-if&tab=civilization)
-  const selectedBranch = searchParams.get('branch') || null
+  const selectedBranch = localWorld ? null : searchParams.get('branch') || null
 
   // Sync activeTab to URL
   const setActiveTabAndPersist = (tab: TabType) => {
@@ -149,43 +153,49 @@ export default function WorldDetail() {
     enabled: !!worldName && !localWorld && legacyLayer === null && (!staticMode || !browserWorld.isPending),
   })
   const nativeStarter = !staticMode && world?.metadata?.tags?.includes('browser-starter')
-  const starterMaps = useQuery({ queryKey: ['mapPlanets', worldName, selectedBranch],
+  const archive = localWorld?.creationSnapshot
+  const localOverview = useQuery({ queryKey: ['browser-world-overview', worldName, localWorld?.updatedAt],
+    queryFn: async () => (await import('../projects/browserWorldOverview')).readBrowserWorldOverview(archive!),
+    enabled: !!archive && activeTab !== 'data' && activeTab !== 'parameters', retry: false, staleTime: Infinity })
+  const overviewMaps = useQuery({ queryKey: ['mapPlanets', worldName, selectedBranch],
     queryFn: () => api.listMapPlanets(worldName!, selectedBranch),
-    enabled: !!nativeStarter && activeTab === 'data',
+    enabled: !!world && !localWorld,
+    retry: false,
   })
+  const guideMap = useWorkflowTutorial(state => state.progress?.step === 'map' && state.progress.world === worldName && !selectedBranch)
 
-  const { data: stellarSystem } = useQuery({
+  const { data: publishedStellarSystem } = useQuery({
     queryKey: ['astronomy', worldName, selectedBranch],
     queryFn: () => api.getStellarSystem(worldName!, selectedBranch),
-    enabled: !!worldName && activeTab === 'astronomy',
+    enabled: !!worldName && !localWorld && (!staticMode || browserWorld.isSuccess) && activeTab === 'astronomy',
     retry: false,
   })
 
   const { data: systemCatalog } = useQuery({
     queryKey: ['systemCatalog', worldName, selectedBranch],
     queryFn: () => api.getSystemCatalog(worldName!, selectedBranch),
-    enabled: !!worldName && activeTab === 'astronomy',
+    enabled: !!worldName && !localWorld && (!staticMode || browserWorld.isSuccess) && activeTab === 'astronomy',
     retry: false,
   })
 
-  const { data: planets } = useQuery({
+  const { data: publishedPlanets } = useQuery({
     queryKey: ['planets', worldName, selectedBranch],
     queryFn: () => api.getPlanets(worldName!, selectedBranch),
-    enabled: !!worldName && activeTab === 'planets',
+    enabled: !!worldName && !localWorld && (!staticMode || browserWorld.isSuccess) && activeTab === 'planets',
     retry: false,
   })
 
   const { data: climateData } = useQuery({
     queryKey: ['climate', worldName, selectedBranch],
     queryFn: () => api.getClimate(worldName!, selectedBranch),
-    enabled: !!worldName && activeTab === 'climate',
+    enabled: !!worldName && !localWorld && (!staticMode || browserWorld.isSuccess) && activeTab === 'climate',
     retry: false,
   })
 
   const { data: ecologyData } = useQuery({
     queryKey: ['ecology', worldName, selectedBranch],
     queryFn: () => api.getEcology(worldName!, selectedBranch),
-    enabled: !!worldName && activeTab === 'ecology',
+    enabled: !!worldName && !localWorld && (!staticMode || browserWorld.isSuccess) && activeTab === 'ecology',
     retry: false,
   })
 
@@ -203,6 +213,32 @@ export default function WorldDetail() {
   }
   const waiting = isLoading || (staticMode && !!worldName && browserWorld.isPending)
   const offlineData = staticMode && !!error && browserWorld.data?.published === true
+  const localMap = localWorld && hasProjectHeightmap(localWorld) ? heightmapMapPath(localWorld.id) : null
+  const firstMappedPlanet = overviewMaps.data?.[0]
+  const map = localMap ?? (worldName && firstMappedPlanet ? `${worldOverviewPath(worldName)}/map${guideMap
+    ? `/${encodeURIComponent(firstMappedPlanet)}?layer=temperature`
+    : selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}` : null)
+  const showBuild = activeTab === 'overview' || activeTab === 'parameters'
+  const snapshot = localOverview.data
+  const overviewWorld = localWorld ? snapshot?.world : world
+  const overviewSystem = localWorld ? snapshot?.stellarSystem : world?.stellar_system
+  const stellarSystem = localWorld ? snapshot?.stellarSystem : publishedStellarSystem
+  const planets = localWorld ? snapshot?.planets : publishedPlanets
+  const stars = localWorld ? snapshot?.stellarSystem?.stars ?? [] : systemCatalog?.stars ?? []
+  const latestClimate = localWorld ? latestHeightmapClimate(localWorld) : undefined
+  const format = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 })
+  const layerStatus = (layer: WorldLayer | 'design-notes') => {
+    if (layer === 'design-notes') return 'noNotes'
+    if (layer === 'climate' && latestClimate) return 'savedClimate'
+    if (layer === 'geological' && latestClimate) return 'savedGrid'
+    if (layer === 'geological' && localMap) return 'heightmap'
+    if (archive && localOverview.isPending) return 'reading'
+    if (localOverview.isError) return 'unavailable'
+    return snapshot?.inputs.includes(layer) ? 'inputs' : 'notBuilt'
+  }
+  const layerDocuments = (layer: WorldLayer | 'design-notes') => localWorld ? (
+    <p className="text-sm text-gray-300">{t(`browserOverview.status.${layerStatus(layer)}`)}</p>
+  ) : <LayerDocuments worldName={worldName!} layer={layer} branch={selectedBranch} />
 
   if (worldName && legacyLayer !== null) {
     return <Navigate to={projectRegionPath(worldName, legacyLayer, selectedBranch)} replace />
@@ -238,11 +274,11 @@ export default function WorldDetail() {
               <h1 className="min-w-0 break-words text-2xl font-bold text-neon-cyan neon-glow-subtle sm:text-3xl">
                 {localWorld?.name ?? (nativeStarter ? world.metadata.description : worldName)}
               </h1>
-              {staticMode && (
-                <span className="rounded border border-space-border bg-space-surface px-2 py-0.5 text-xs text-gray-300">
-                  {t(localWorld ? 'worldData.localBadge' : 'worldData.publishedBadge')}
-                </span>
-              )}
+              {staticMode && <WorldSourceBadge source={localWorld ? 'browser' : offlineData ? 'offline' : 'published'} />}
+              {map && <Link to={map} data-tutorial-anchor={localMap ? 'browserMap' : 'map'}
+                className="atlas-tool-button text-sm">{t('action.openWorldMap')}</Link>}
+              {nativeStarter && overviewMaps.data?.length === 0 && <Link to={`/import?${new URLSearchParams({ world: worldName })}`}
+                className="atlas-tool-button text-sm">{t('creation.starter.importHeightmap')}</Link>}
             </div>
 
             {!staticMode && world && (
@@ -251,8 +287,14 @@ export default function WorldDetail() {
                 world={worldName}
                 branch={selectedBranch}
                 readOnly={!selectedBranch && (worldName === 'earth' || world.reference_anchor === true)}
+                visible={showBuild}
+                hasMap={!!firstMappedPlanet}
               />
             )}
+
+            {localWorld && <Suspense fallback={null}>
+              <BrowserWorldBuildPanel key={localWorld.id} project={localWorld} visible={showBuild} />
+            </Suspense>}
 
             {/* Tabs — horizontally scrollable on mobile */}
             <div className="flex gap-1 sm:gap-2 mb-4 sm:mb-6 border-b border-space-border overflow-x-auto">
@@ -278,25 +320,23 @@ export default function WorldDetail() {
             )}
 
             {(activeTab === 'data' || offlineData) && <Suspense fallback={<p>{t('worldData.loading')}</p>}>
-              <WorldDataPanel key={worldName} id={worldName} published={!localWorld} publishedAvailable={!!world}
-                nativeCreation={!staticMode && world?.metadata?.tags?.includes('browser-heightmap') && !selectedBranch}
-                nativeStarterWithoutMap={!!nativeStarter && starterMaps.data?.length === 0} />
+              <WorldDataPanel key={worldName} id={worldName} published={!localWorld} publishedAvailable={!!world} />
             </Suspense>}
 
-            {activeTab === 'overview' && world && (
+            {activeTab === 'overview' && (overviewWorld || localWorld) && (
               <div className="space-y-6">
                 <section className="glass-panel p-4 sm:p-6">
                   <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                     {t('detail.metadata')}
                   </h2>
-                  {world.metadata?.description && (
+                  {overviewWorld?.metadata?.description && (
                     <p className="text-gray-300 text-sm leading-relaxed mb-4">
-                      {world.metadata.description}
+                      {overviewWorld.metadata.description}
                     </p>
                   )}
-                  {world.metadata?.tags?.length > 0 && (
+                  {overviewWorld?.metadata?.tags?.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-4">
-                      {world.metadata.tags.map((tag: string) => (
+                      {overviewWorld.metadata.tags.map((tag: string) => (
                         <span
                           key={tag}
                           className="text-xs px-2 py-1 rounded bg-space-surface/60 text-gray-300 border border-space-border"
@@ -310,46 +350,61 @@ export default function WorldDetail() {
                     <div>
                       <dt className="text-gray-500 text-sm">{t('detail.created')}</dt>
                       <dd className="font-medium mt-0.5">
-                        {world.metadata?.created || 'N/A'}
+                        {overviewWorld?.metadata?.created || '—'}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-gray-500 text-sm">{t('detail.version')}</dt>
                       <dd className="font-medium mt-0.5">
-                        {world.metadata?.version || 'N/A'}
+                        {overviewWorld?.metadata?.version || '—'}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-gray-500 text-sm">{t('detail.seed')}</dt>
                       <dd className="font-medium mt-0.5 font-mono">
-                        {world.seed?.seed ?? 'N/A'}
+                        {overviewWorld?.seed?.seed ?? '—'}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-gray-500 text-sm">{t('detail.dreamulatorVersion')}</dt>
                       <dd className="font-medium mt-0.5">
-                        {world.metadata?.dreamulator_version || 'N/A'}
+                        {overviewWorld?.metadata?.dreamulator_version || '—'}
                       </dd>
                     </div>
                   </dl>
                 </section>
 
-                {world.stellar_system && (
+                {localWorld && <section className="glass-panel p-4 sm:p-6" aria-labelledby="world-layer-status">
+                  <h2 id="world-layer-status" className="mb-3 text-xl font-semibold text-neon-cyan">{t('browserOverview.layers')}</h2>
+                  <dl className="divide-y divide-space-border text-sm">
+                    {worldLayers.map(layer => {
+                      const tab = layer === 'geological' ? 'planets' : layer
+                      return <div key={layer} className="grid grid-cols-[minmax(6rem,1fr)_2fr] items-baseline gap-2 py-2">
+                        <dt>{tab === 'physics' || tab === 'chemistry' ? t(`layer.${layer}`) :
+                          <button type="button" className="text-neon-cyan underline-offset-4 hover:underline"
+                            onClick={() => setActiveTabAndPersist(tab)}>{t(`layer.${layer}`)}</button>}</dt>
+                        <dd className="text-gray-300">{t(`browserOverview.status.${layerStatus(layer)}`)}</dd>
+                      </div>
+                    })}
+                  </dl>
+                </section>}
+
+                {overviewSystem && (
                   <section className="glass-panel p-4 sm:p-6">
                     <h2 className="text-xl font-semibold mb-4 text-neon-cyan neon-glow-subtle">
                       {t('detail.starSystem')}
                     </h2>
                     <p className="mb-2">
                       <span className="text-gray-500">{t('field.name')}</span>
-                      {world.stellar_system.name}
+                      {overviewSystem.name}
                     </p>
                     <p className="mb-2">
                       <span className="text-gray-500">{t('field.stars')}</span>
-                      {world.stellar_system.stars?.length || 0}
+                      {overviewSystem.stars?.length || 0}
                     </p>
                     <p>
                       <span className="text-gray-500">{t('field.orbit')}</span>
-                      {world.stellar_system.orbits?.length || 0}
+                      {overviewSystem.orbits?.length || 0}
                     </p>
                   </section>
                 )}
@@ -360,8 +415,9 @@ export default function WorldDetail() {
               <LayerTabSection
                 worldName={worldName!}
                 tab="astronomy"
-                documents={<LayerDocuments worldName={worldName!} layer="astronomy" branch={selectedBranch} />}
-                derived={
+                documents={layerDocuments('astronomy')}
+                input={!!localWorld}
+                derived={localWorld && !stellarSystem ? null : (
               <div>
                 {stellarSystem ? (
                   <div>
@@ -380,19 +436,19 @@ export default function WorldDetail() {
                     {/* Body encyclopedia — merged system catalog (auto-generated
                         from stellar.yaml + planets.yaml; planets.yaml is
                         authoritative for shared fields) */}
-                    {systemCatalog && ((systemCatalog.bodies?.length ?? 0) > 0 || (systemCatalog.stars?.length ?? 0) > 0) && (
+                    {(stars.length > 0 || (systemCatalog?.bodies?.length ?? 0) > 0) && (
                       <section className="mb-6">
                         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
                           {t('detail.bodyEncyclopedia')}
                           <span className="ml-2 text-xs text-gray-600 normal-case tracking-normal">
-                            {t('detail.bodyEncyclopediaHint')}
+                            {!localWorld && t('detail.bodyEncyclopediaHint')}
                           </span>
                         </h3>
 
                         {/* Star cards */}
-                        {(systemCatalog.stars ?? []).length > 0 && (
+                        {stars.length > 0 && (
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-                            {(systemCatalog.stars as any[]).map((star: any) => (
+                            {stars.map((star: any) => (
                               <div
                                 key={star.id}
                                 className="bg-space-surface/60 rounded-lg p-4 border border-space-border"
@@ -443,7 +499,7 @@ export default function WorldDetail() {
 
                         {/* Body cards — hierarchical by parent_id (satellites nest under
                             their planet; planets orbit the star shown above) */}
-                        {(() => {
+                        {systemCatalog && (() => {
                           const bodies = (systemCatalog.bodies as any[]) ?? []
                           const bodyIds = new Set(bodies.map((b: any) => b.id))
                           const childrenOf = new Map<string, any[]>()
@@ -584,13 +640,19 @@ export default function WorldDetail() {
                         })()}
                       </section>
                     )}
-
+                    {localWorld && snapshot?.stellarSystem?.orbits.map(orbit => (
+                      <p key={orbit.body_id} className="mt-2 text-sm text-gray-300">
+                        <span className="text-gray-500">{t('field.orbit')}</span>
+                        {orbit.body_id} {t('detail.orbiting', { parent: orbit.parent_id })}
+                        {typeof orbit.semi_major_axis_au === 'number' && ` · ${format.format(orbit.semi_major_axis_au)} AU`}
+                      </p>
+                    ))}
                   </div>
                 ) : (
                   <p className="text-gray-500">{t('detail.noStarSystem')}</p>
                 )}
               </div>
-                }
+                )}
               />
             )}
 
@@ -598,8 +660,9 @@ export default function WorldDetail() {
               <LayerTabSection
                 worldName={worldName!}
                 tab="planets"
-                documents={<LayerDocuments worldName={worldName!} layer="geological" branch={selectedBranch} />}
-                derived={
+                documents={layerDocuments('geological')}
+                input={!!localWorld}
+                derived={localWorld && !planets?.length ? null : (
               <div>
                 {planets ? (
                   <div className="space-y-4">
@@ -632,11 +695,11 @@ export default function WorldDetail() {
                             </p>
                             <p>
                               <span className="text-gray-500">{t('field.mass')}</span>
-                              {formatMass(planet.mass)}
+                              {typeof planet.mass === 'number' ? formatMass(planet.mass) : '—'}
                             </p>
                             <p>
                               <span className="text-gray-500">{t('field.radius')}</span>
-                              {formatRadius(planet.radius)}
+                              {typeof planet.radius === 'number' ? formatRadius(planet.radius) : '—'}
                             </p>
                             <p>
                               <span className="text-gray-500">{t('field.albedo')}</span>
@@ -702,7 +765,7 @@ export default function WorldDetail() {
                   <p className="text-gray-500">{t('detail.noGeologyLayer')}</p>
                 )}
               </div>
-                }
+                )}
               />
             )}
 
@@ -711,8 +774,20 @@ export default function WorldDetail() {
               <LayerTabSection
                 worldName={worldName!}
                 tab="climate"
-                documents={<LayerDocuments worldName={worldName!} layer="climate" branch={selectedBranch} />}
-                derived={
+                documents={layerDocuments('climate')}
+                derived={localWorld ? latestClimate && (
+                  <dl className="grid grid-cols-2 gap-4 text-sm">
+                    {[
+                      [t('browserOverview.climate.solver'), `EBM ${latestClimate.inputs.solver_version}`],
+                      [t('parameters.grid'), format.format(latestClimate.cells)],
+                      [t('field.axialTilt'), `${format.format(latestClimate.inputs.forcing.axial_tilt_deg)}°`],
+                      [t('field.albedo'), format.format(latestClimate.inputs.forcing.albedo)],
+                    ].map(([label, value]) => <div key={label}>
+                      <dt className="text-gray-400">{label}</dt>
+                      <dd className="mt-0.5 tabular-nums">{value}</dd>
+                    </div>)}
+                  </dl>
+                ) : (
               <div>
                 {climateData ? (
                   <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono bg-space-surface/40 rounded-lg p-4 overflow-auto">
@@ -722,7 +797,7 @@ export default function WorldDetail() {
                   <p className="text-gray-500">{t('detail.noClimateData')}</p>
                 )}
               </div>
-                }
+                )}
               />
             </>}
 
@@ -730,8 +805,8 @@ export default function WorldDetail() {
               <LayerTabSection
                 worldName={worldName!}
                 tab="ecology"
-                documents={<LayerDocuments worldName={worldName!} layer="ecology" branch={selectedBranch} />}
-                derived={
+                documents={layerDocuments('ecology')}
+                derived={localWorld ? null : (
               <div>
                 {ecologyData ? (
                   <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono bg-space-surface/40 rounded-lg p-4 overflow-auto">
@@ -741,19 +816,19 @@ export default function WorldDetail() {
                   <p className="text-gray-500">{t('detail.noEcologyData')}</p>
                 )}
               </div>
-                }
+                )}
               />
             )}
 
             {activeTab === 'civilization' && (
               <div className="space-y-4">
-                <CivMapEntry world={worldName!} branch={selectedBranch} />
-                <LayerDocuments worldName={worldName!} layer="civilization" branch={selectedBranch} />
+                {!localWorld && <CivMapEntry world={worldName!} branch={selectedBranch} />}
+                {layerDocuments('civilization')}
               </div>
             )}
 
             {activeTab === 'design-notes' && (
-              <LayerDocuments worldName={worldName!} layer="design-notes" branch={selectedBranch} />
+              layerDocuments('design-notes')
             )}
 
             {activeTab === 'narrate' && !staticMode && (

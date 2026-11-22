@@ -289,11 +289,12 @@ export default function GlobeViewerPage() {
       : 'atlas-workbench flex flex-col'}>
       {!cleanMode && (
       <MapWorkbenchToolbar title={currentPlanet?.name ?? selectedPlanet ?? t('title.globe')} view="globe"
-        backTo={searchParams.has('draft') || searchParams.has('climateResult') ? worldDataPath(worldName, selectedBranch) :
+        backTo={searchParams.has('draft') || (!meta?.browser_heightmap && searchParams.has('climateResult')) ? worldDataPath(worldName, selectedBranch) :
           `/worlds/${worldName}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/map/${selectedPlanet}${mapQS}` : undefined}
         regionControls={selectedPlanet && (elevation || cvtMesh) ? (
           <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
+            climateResult={meta?.browser_heightmap && trial.mode === 'trial' ? searchParams.get('climateResult') ?? undefined : undefined}
             branch={selectedBranch} radiusKm={planetRadiusM / 1000}
             modeControl={trialReady ? { mode: trial.mode, onChange: trial.selectMode } : undefined}
             onMoveToRegion={() => {
@@ -346,9 +347,9 @@ export default function GlobeViewerPage() {
             const qs = next.toString()
             navigate(`/worlds/${worldName}/globe/${id}${qs ? `?${qs}` : ''}`)
           }} />}
-        <Link to={`/worlds/${worldName}/viewer3d${stellarQS}`} className="atlas-tool-button text-sm">
+        {!meta?.browser_heightmap && <Link to={`/worlds/${worldName}/viewer3d${stellarQS}`} className="atlas-tool-button text-sm">
           {t('label.stellarShort')}
-        </Link>
+        </Link>}
       </MapWorkbenchToolbar>
       )}
 
@@ -405,7 +406,7 @@ export default function GlobeViewerPage() {
               <GlobeViewer
                 texture={displayTexture}
                 renderComposite={renderComposite}
-                onTransition={handleTransition}
+                onTransition={meta?.browser_heightmap ? undefined : handleTransition}
                 onCellHover={handleCellHoverLonLat}
                 onCellClick={handleCellClickLonLat}
                 onHoverOut={() => { handleCellHover(null); setCursor(null) }}

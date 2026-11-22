@@ -20,6 +20,7 @@ export interface MapMetadata {
   voronoi_seed: number | null
   voronoi_num_cells: number
   pipeline_version?: string | null
+  browser_heightmap?: true
   elevation_import?: {
     source_resolution: number[]
     output_resolution: number[]

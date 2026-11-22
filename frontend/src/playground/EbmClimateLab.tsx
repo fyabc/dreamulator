@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { tutorialMilestone } from '../tutorial/tutorialProgress'
 import { api } from '../api/client'
 import type { ClimateTrialForcing, ClimateTrialResult } from '../api/climateTrials'
-import { savedClimateKey } from '../api/climateTrials'
+import { savedClimateKey, savedClimateMapPath } from '../api/climateTrials'
 import { projectsKey } from '../projects/projectStore'
 import { ClimateModelPicker } from './ClimateModelPicker'
 import { EbmTrialProgress } from './EbmTrialProgress'
@@ -110,9 +110,10 @@ export default function EbmClimateLab({ search, open, onResult, onShow, onPrevie
   })
   const saving = save.isPending || fork.isPending
   const forkError = fork.variables === id && fork.error ? errorCode(fork.error) : null
-  const saved = save.isSuccess && save.variables === id
+  const saved = save.variables === id ? save.data : undefined
   const saveError = save.variables === id && save.error ? errorCode(save.error) : null
   const worldData = `/worlds/${encodeURIComponent(world)}?${new URLSearchParams(branch ? { tab: 'data', branch } : { tab: 'data' })}`
+  const regionWindow = new URLSearchParams(location.search).get('window')
 
   return <form className="space-y-3" onSubmit={event => {
     event.preventDefault()
@@ -159,6 +160,9 @@ export default function EbmClimateLab({ search, open, onResult, onShow, onPrevie
     {id && phase === 'done' && !error && <div className="space-y-1.5 border-t border-space-border pt-3 text-xs">
       {saved ? <>
         <p role="status" className="text-neon-cyan">{t(browser ? 'ebm.saved.browserConfirmed' : 'ebm.saved.confirmed')}</p>
+        {saved.surface.browser_heightmap && <Link to={`${savedClimateMapPath(world, saved)}${regionWindow
+          ? `&${new URLSearchParams({ window: regionWindow })}` : ''}`}
+          className="atlas-tool-button min-h-9 text-xs">{t('ebm.saved.openForRegion')}</Link>}
         <Link to={worldData} className="inline-flex min-h-9 items-center text-neon-cyan hover:underline">{t('trial.openData')}</Link>
       </> : <>
         <button type="button" disabled={saving} onClick={() => save.mutate(id)} className="atlas-tool-button min-h-9 text-xs">

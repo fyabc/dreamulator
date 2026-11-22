@@ -74,7 +74,7 @@ export function observeTutorialRoute(progress: TutorialProgress, pathname: strin
   if ((progress.step === 'region' || progress.step === 'refine') && route.region && !route.query.has('pack') && progress.region !== search) {
     return { ...progress, step: 'refine', region: search, muted: progress.step === 'refine' && progress.muted }
   }
-  if (progress.step === 'browserMap' && route.creation) {
+  if (progress.step === 'browserMap' && (route.creation || route.map) && !route.branch) {
     return { ...progress, step: 'browserView', muted: false }
   }
   if (progress.step === 'browserView' && route.detail && route.query.get('tab') === 'data') {
@@ -93,21 +93,23 @@ export function guideForRoute(progress: TutorialProgress, pathname: string, sear
   const officialMap = `${map}?${mapParams}`
   const data = `${world}?tab=data`
   const tutorialMap = route.map && route.planet === progress.planet && route.branch === (progress.branch ?? null)
+  const tab = route.query.get('tab')
+  const buildVisible = route.detail && (!tab || tab === 'overview' || tab === 'parameters')
 
   switch (progress.step) {
     case 'source': return { active: pathname === '/new-world' && route.query.get('start') === 'heightmap', to: tutorialStartPath,
       anchors: ['configure', 'upload'], chapter: 1 }
     case 'parameters': return { active: route.detail && !route.branch, to: data, anchors: ['parameters'], chapter: 1 }
-    case 'build': return { active: route.detail && !route.branch, to: `${world}?tab=parameters`, anchors: ['building', 'build'], chapter: 1 }
+    case 'build': return { active: buildVisible && !route.branch, to: `${world}?tab=parameters`, anchors: ['building', 'build'], chapter: 1 }
     case 'map': return { active: route.detail && !route.branch, to: `${world}?tab=parameters`, anchors: ['map'], chapter: 2 }
     case 'monthly': return { active: tutorialMap, to: officialMap, anchors: ['monthly'], chapter: 2 }
     case 'climate': return { active: tutorialMap, to: officialMap, anchors: ['trialBranch', 'trialWait', 'trialRun', 'lab'], chapter: 2 }
     case 'region': return { active: tutorialMap, to: officialMap, anchors: ['regionOpen', 'regionForm', 'region'], chapter: 3 }
     case 'refine': return { active: route.region && !route.query.has('pack'), to: `/packs${progress.region ?? ''}`,
       anchors: ['regionResult', 'refining', 'refineRun', 'refine', 'regionTools'], chapter: 3 }
-    case 'backup': return { active: route.detail, to: world, anchors: ['snapshot'], chapter: 4 }
-    case 'browserMap': return { active: route.detail && route.query.get('tab') === 'data', to: data, anchors: ['browserMap'], chapter: 2 }
-    case 'browserView': return { active: route.creation, to: `${map}?creation=1`, anchors: ['browserView'], chapter: 2 }
+    case 'backup': return { active: buildVisible, to: world, anchors: ['snapshot'], chapter: 4 }
+    case 'browserMap': return { active: route.detail && !route.branch, to: world, anchors: ['browserMap'], chapter: 2 }
+    case 'browserView': return { active: (route.creation || route.map) && !route.branch, to: map, anchors: ['browserView'], chapter: 2 }
     case 'browserBackup': return { active: route.detail && route.query.get('tab') === 'data', to: data, anchors: ['browserBackup'], chapter: 2 }
     case 'done': return { active: true, to: world, anchors: [], chapter: progress.flow === 'browser' ? 2 : 4 }
   }

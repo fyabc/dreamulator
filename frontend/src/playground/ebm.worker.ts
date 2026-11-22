@@ -4,7 +4,8 @@ import type { ClimateTrialForcing, ClimateTrialJob, SavedClimateTrial } from '..
 export interface BrowserEbmRequest {
   runtime: string
   solver: string
-  mesh: string
+  mesh: string | { image: Blob; name: string; sha256: string;
+    mapping: { mode: 'range'; min_m: number; max_m: number; sea_level_m: number } }
   cells: number
   forcing: Partial<ClimateTrialForcing>
   config: Record<string, unknown>
@@ -15,7 +16,7 @@ type Progress = Pick<ClimateTrialJob, 'stage' | 'cells' | 'months_done' | 'month
 export type BrowserEbmReply = { progress: Partial<Progress> & Pick<Progress, 'stage'> }
   | { error: string; detail: string }
   | { products: { geometry: unknown; fields: unknown; monthly: ArrayBuffer; yearly: ArrayBuffer;
-      geometryBytes: ArrayBuffer; fieldBytes: ArrayBuffer; inputs: SavedClimateTrial['inputs'] } }
+      geometryBytes: ArrayBuffer; fieldBytes: ArrayBuffer; terrain?: ArrayBuffer; inputs: SavedClimateTrial['inputs'] } }
 
 const send = self.postMessage.bind(self) as (message: BrowserEbmReply, transfer?: Transferable[]) => void
 
@@ -50,15 +51,41 @@ self.onmessage = async ({ data: request }: MessageEvent<BrowserEbmRequest>) => {
     py.unpackArchive(await resource(request.solver), 'zip', { extractDir: '/solver' })
 
     error = 'browser_source'
-    send({ progress: { stage: 'reading' } })
-    py.FS.writeFile('/mesh.bin', await resource(request.mesh))
     py.globals.set('trial_request', JSON.stringify({ config: request.config, forcing: request.forcing }))
     py.globals.set('report_progress', (json: string) => send({ progress: JSON.parse(json) as Progress }))
+    if (typeof request.mesh === 'string') {
+      send({ progress: { stage: 'reading' } })
+      py.FS.writeFile('/mesh.bin', await resource(request.mesh))
+    } else {
+      send({ progress: { stage: 'browserMesh' } })
+      py.FS.writeFile('/elevation.png', new Uint8Array(await request.mesh.image.arrayBuffer()))
+      py.globals.set('elevation_request', JSON.stringify({ name: request.mesh.name, mapping: request.mesh.mapping }))
+      await py.runPythonAsync(`
+import json, sys
+from pathlib import Path
+sys.path.insert(0, '/solver')
+from dreamulator.map.cvt_mesh import generate_cvt_mesh
+from dreamulator.map.elevation_input import sample_elevation_import
+from dreamulator.map.export import save_cvt_mesh
+from dreamulator.map.importer import import_heightmap_metres
+from dreamulator.map.models import ElevationMapping
+from dreamulator.map.pipeline_types import TerrainPipelineConfig
+source = json.loads(elevation_request)
+mapping = ElevationMapping.model_validate(source['mapping'])
+imported = import_heightmap_metres(Path('/elevation.png').read_bytes(), mapping, filename=source['name'])
+mesh = generate_cvt_mesh(TerrainPipelineConfig.from_dict(json.loads(trial_request)['config']))
+sample_elevation_import(mesh, imported)
+save_cvt_mesh(Path('/mesh.bin'), mesh)
+del mesh, imported
+Path('/elevation.png').unlink()
+`)
+    }
     error = 'browser_run'
     await py.runPythonAsync(`
 import json, sys
 from pathlib import Path
-sys.path.insert(0, '/solver')
+if '/solver' not in sys.path:
+    sys.path.insert(0, '/solver')
 from dreamulator.climate_trial import BROWSER_TRIAL_MAX_CELLS, TrialForcing, TrialSource, compute_trial
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
 request = json.loads(trial_request)
@@ -73,6 +100,17 @@ compute_trial(
     error = 'browser_products'
     send({ progress: { stage: 'loading' } })
     const read = (name: string) => new Uint8Array(py.FS.readFile(`/result/${name}`)).buffer
+    let terrain: ArrayBuffer | undefined
+    if (typeof request.mesh !== 'string') {
+      py.globals.set('native_key', request.mesh.sha256)
+      await py.runPythonAsync(`
+from dreamulator.map.export import MESH_FILENAME
+from dreamulator.map.td_world_source import terrain_packet
+result = Path('/result')
+(result / 'terrain.msgpack').write_bytes(terrain_packet(result, result / MESH_FILENAME, native_key))
+`)
+      terrain = read('terrain.msgpack')
+    }
     const split = async (compressed: ArrayBuffer) => {
       const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))
       return decode(await new Response(stream).arrayBuffer())
@@ -85,8 +123,8 @@ compute_trial(
     const monthly = read('climate_monthly.msgpack')
     const yearly = read('climate_yearly.msgpack')
     const inputs = JSON.parse(py.FS.readFile('/result/inputs.json', { encoding: 'utf8' })) as SavedClimateTrial['inputs']
-    send({ products: { geometry, fields, monthly, yearly, geometryBytes, fieldBytes, inputs } },
-      [...buffers, monthly, yearly, geometryBytes, fieldBytes])
+    send({ products: { geometry, fields, monthly, yearly, geometryBytes, fieldBytes, terrain, inputs } },
+      [...buffers, monthly, yearly, geometryBytes, fieldBytes, ...(terrain ? [terrain] : [])])
   } catch (cause) {
     send({ error, detail: cause instanceof Error ? cause.message : String(cause) })
   }

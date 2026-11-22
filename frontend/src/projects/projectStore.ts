@@ -1,4 +1,4 @@
-import { assertProjectCapacity, projectBytes, type LocalProject } from './elevationProject'
+import { assertProjectCapacity, hasProjectHeightmap, projectBytes, type LocalProject } from './elevationProject'
 import type { TemperatureDraft } from '../playground/temperatureDraft'
 import type { SavedBrowserEbm } from '../api/climateTrials'
 
@@ -54,7 +54,8 @@ export function listProjects() {
     const request = store.getAll()
     request.onsuccess = () => done(request.result)
   }).then((projects) => projects.map((project) => ({ id: project.id, name: project.name, updatedAt: project.updatedAt, published: project.published,
-    layers: project.layers.length, bytes: projectBytes(project) })).sort((left, right) => right.updatedAt - left.updatedAt))
+    layers: project.layers.length, bytes: projectBytes(project), hasMap: hasProjectHeightmap(project) }))
+    .sort((left, right) => right.updatedAt - left.updatedAt))
 }
 
 export async function addProject(project: LocalProject) {
@@ -89,10 +90,11 @@ export function saveTemperatureDraft(worldId: string, draft: TemperatureDraft) {
   }), publishedWorld(worldId))
 }
 
-export function saveBrowserClimateResult(worldId: string, trial: SavedBrowserEbm) {
+export async function saveBrowserClimateResult(worldId: string, trial: SavedBrowserEbm) {
+  const initial = trial.metadata.surface.browser_heightmap ? undefined : publishedWorld(worldId)
   return updateProject(worldId, project => ({ ...project,
     climateTrials: [trial, ...(project.climateTrials ?? [])],
-  }), publishedWorld(worldId))
+  }), initial)
 }
 
 export function deleteBrowserClimateResult(worldId: string, id: string) {
@@ -105,7 +107,7 @@ export async function restoreWorld(world: LocalProject) {
   if (!world.published) {
     try { return await addProject(world) }
     catch (error) {
-      if (!(error instanceof DOMException) || error.name !== 'ConstraintError') throw error
+      if (world.creationSnapshot || !(error instanceof DOMException) || error.name !== 'ConstraintError') throw error
       return addProject({ ...world, id: crypto.randomUUID(), layers: copyLayers(world) })
     }
   }

@@ -1,11 +1,15 @@
+import { useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
-import { listProjects, projectsKey, restoreWorld, worldDataPath } from '../projects/projectStore'
+import { deleteProject, listProjects, projectKey, projectsKey, restoreWorld, worldDataPath, worldOverviewPath } from '../projects/projectStore'
+import { heightmapMapPath } from '../projects/heightmapWorld'
+import WorldSourceBadge from '../components/world/WorldSourceBadge'
 
-const worldLinkClass = 'text-sm px-3 py-1.5 rounded transition-all bg-space-surface text-gray-300 border space-border hover:border-neon-cyan/30 hover:text-neon-cyan'
+const linkClass = 'atlas-tool-button min-h-11 text-sm focus-visible:outline focus-visible:outline-neon-cyan disabled:opacity-50'
+const deleteClass = 'min-h-11 rounded px-3 text-sm text-red-300 hover:underline focus-visible:outline focus-visible:outline-red-300 disabled:opacity-50'
 
 function WorldDescription({ id }: { id: string }) {
   const { data: description } = useQuery({
@@ -19,145 +23,107 @@ function WorldDescription({ id }: { id: string }) {
 }
 
 export default function WorldList() {
-  const { t } = useTranslation('worlds')
+  const { t, i18n } = useTranslation('worlds')
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const importInput = useRef<HTMLInputElement>(null)
   const staticMode = isStaticMode()
 
-  const { data: worlds, isLoading, error } = useQuery({
-    queryKey: ['worlds'],
-    queryFn: api.listWorlds,
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: (name: string) => api.deleteWorld(name),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['worlds'] })
-    },
-  })
+  const catalog = useQuery({ queryKey: ['worlds'], queryFn: api.listWorlds })
+  const projects = useQuery({ queryKey: projectsKey, queryFn: listProjects, enabled: staticMode, retry: false })
+  const restore = useMutation({ mutationFn: async (file: File) => {
+    const magic = new Uint8Array(await file.slice(0, 2).arrayBuffer())
+    if (magic[0] === 31 && magic[1] === 139) return (await api.restoreBrowserCreation(file)).id
+    const { readWorldBackup } = await import('../projects/worldDataArchive')
+    const backup = await readWorldBackup(file)
+    if (!backup.published && (catalog.data ?? await api.listWorlds()).some(id => id.toLowerCase() === backup.id.toLowerCase())) {
+      throw new Error(t('worldData.collision'))
+    }
+    return restoreWorld(backup)
+  }, onSuccess: async id => {
+    await queryClient.invalidateQueries({ queryKey: projectsKey })
+    navigate(worldOverviewPath(id))
+  } })
+  const erase = useMutation({ mutationFn: ({ id, browser }: { id: string; browser: boolean }) =>
+    browser ? deleteProject(id) : api.deleteWorld(id),
+  onSuccess: async (_, { id, browser }) => {
+    if (browser) queryClient.removeQueries({ queryKey: projectKey(id), exact: true })
+    await queryClient.invalidateQueries({ queryKey: browser ? projectsKey : ['worlds'] })
+  } })
 
   if (searchParams.get('create') === '1') return <Navigate to="/new-world?start=template" replace />
 
-  return (
-    <div className="relative min-h-screen">
-
-      <div className="relative z-10 px-6 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-neon-cyan neon-glow-subtle">
-            {t('title.list')}
-          </h1>
-            <Link
-              to="/new-world"
-              className="px-4 py-2 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25 hover:shadow-[0_0_12px_rgba(0,212,255,0.15)]"
-            >
-              + {t('action.newWorld')}
-            </Link>
-        </div>
-
-        {staticMode && <BrowserWorlds published={worlds} />}
-
-        {isLoading && <div className="text-center py-12 text-gray-400">{t('status.loading')}</div>}
-
-        {error && (
-          <div className="text-center py-12 text-red-400">{t('status.loadError')}: {error.message}</div>
-        )}
-
-        {!isLoading && !error && worlds && worlds.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {worlds.map((worldName) => (
-              <div key={worldName} className="glass-panel p-6">
-                <Link to={`/worlds/${worldName}`} className="block">
-                  <h3 className="text-xl font-semibold mb-2 text-neon-cyan neon-glow-subtle">
-                    {worldName}
-                  </h3>
-                </Link>
-                <WorldDescription id={worldName} />
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <Link to={`/worlds/${encodeURIComponent(worldName)}/map`} className={worldLinkClass}>
-                    {t('action.openWorldMap')}
-                  </Link>
-                  <Link
-                    to={`/worlds/${worldName}`}
-                    className={worldLinkClass}
-                  >
-                    {t('action.worldOverview')}
-                  </Link>
-                  {!staticMode && (
-                    <button
-                      onClick={() => {
-                        if (confirm(t('confirm.deleteWorld', { name: worldName }))) {
-                          deleteMutation.mutate(worldName)
-                        }
-                      }}
-                      className="text-sm px-3 py-1.5 rounded transition-all bg-red-900/30 text-red-400 border border-red-500/20 hover:bg-red-900/50"
-                    >
-                      {t('action.deleteWorld')}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!isLoading && !error && worlds && worlds.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-lg mb-4 text-gray-400">
-              {staticMode ? t('status.noWorldsStatic') : t('status.noWorlds')}
-            </p>
-            {!staticMode && (
-              <Link
-                to="/new-world"
-                className="px-6 py-3 rounded-lg font-medium transition-all bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/25"
-              >
-                {t('action.createFirstWorld')}
-              </Link>
-            )}
-          </div>
-        )}
-
-      </div>
-    </div>
-  )
-}
-
-function BrowserWorlds({ published }: { published?: string[] }) {
-  const { t, i18n } = useTranslation('worlds', { keyPrefix: 'worldData' })
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const data = useQuery({ queryKey: projectsKey, queryFn: listProjects, retry: false })
-  const open = async (id: string) => {
-    await queryClient.invalidateQueries({ queryKey: projectsKey })
-    navigate(worldDataPath(id))
-  }
-  const restore = useMutation({ mutationFn: async (file: File) => {
-    const magic = new Uint8Array(await file.slice(0, 2).arrayBuffer())
-    if (magic[0] === 31 && magic[1] === 139) {
-      return (await api.restoreBrowserCreation(file)).id
-    }
-    const { readWorldBackup } = await import('../projects/worldDataArchive')
-    return restoreWorld(await readWorldBackup(file))
-  }, onSuccess: open })
-  const busy = restore.isPending
-  const local = data.data?.filter((world) => !world.published || !published?.includes(world.id)) ?? []
-  const bytes = data.data?.reduce((sum, world) => sum + world.bytes, 0)
+  const published = catalog.data ?? []
+  const publishedIds = new Set(published.map(id => id.toLowerCase()))
+  const local = projects.data?.filter(project => !project.published && !publishedIds.has(project.id.toLowerCase())) ?? []
+  const offline = projects.data?.filter(project => project.published && !publishedIds.has(project.id.toLowerCase())) ?? []
+  const entries = [
+    ...local.map(project => ({ id: project.id, name: project.name, source: 'browser' as const,
+      map: project.hasMap ? heightmapMapPath(project.id) : null })),
+    ...published.map(id => ({ id, name: id, source: 'catalog' as const, map: `${worldOverviewPath(id)}/map` })),
+    ...(!catalog.isPending ? offline.map(project => ({ id: project.id, name: project.name,
+      source: 'offline' as const, map: null })) : []),
+  ]
+  const busy = restore.isPending || erase.isPending
+  const bytes = projects.data?.reduce((total, project) => total + project.bytes, 0)
   const size = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 }).format((bytes ?? 0) / 1e6)
-  return <section className="mb-8 space-y-4 rounded border border-space-border bg-space-panel p-4">
-    <h2 className="text-xl font-semibold">{t('browserWorlds')}</h2>
-    <label className="flex flex-wrap items-center gap-2 text-sm">{t('import')}
-      <input type="file" className="max-w-full" accept=".tar,.gz,.dreamulator" disabled={busy} onChange={(event) => {
-        const file = event.currentTarget.files?.[0]
-        event.currentTarget.value = ''
-        if (file && !busy) restore.mutate(file)
-      }} />
-    </label>
-    {busy && <p role="status">{t('saving')}</p>}
-    {(data.isError || restore.isError) && <p role="alert" className="text-red-300">
-      {t(restore.isError ? 'importFailed' : 'unreadable')}{restore.isError && ` ${restore.error.message}`}
-    </p>}
-    {bytes !== undefined && <p className="text-sm text-gray-400">{t('usage', { size: `${size} MB` })}</p>}
-    {!!local.length && <ul className="space-y-1 text-sm">{local.map((world) => <li key={world.id}>
-      <Link className="break-all text-neon-cyan hover:underline" to={worldDataPath(world.id)}>{world.name}</Link>
-    </li>)}</ul>}
-  </section>
+  const loading = catalog.isLoading || projects.isLoading
+
+  return <div className="mx-auto min-h-screen max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+    <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <h1 className="text-3xl font-bold text-neon-cyan">{t('title.list')}</h1>
+      <div className="flex flex-wrap items-center gap-2">
+        {staticMode && <>
+          <button type="button" className={linkClass} disabled={busy} onClick={() => importInput.current?.click()}>
+            {t('worldData.import')}
+          </button>
+          <input ref={importInput} type="file" hidden accept=".tar,.gz,.dreamulator" onChange={event => {
+            const file = event.currentTarget.files?.[0]
+            event.currentTarget.value = ''
+            if (file && !busy) restore.mutate(file)
+          }} />
+        </>}
+        <Link to="/new-world" className="atlas-primary text-sm">
+          {t('action.newWorld')}
+        </Link>
+      </div>
+    </header>
+    {loading && <p role="status" className="mb-3 text-sm text-gray-300">{t('status.loading')}</p>}
+    {restore.isPending && <p role="status">{t('worldData.saving')}</p>}
+    {erase.isPending && <p role="status">{t('worldData.deleting')}</p>}
+    {catalog.error && <p role="alert" className="mb-3 text-sm text-red-300">{t('status.loadError')}: {catalog.error.message}</p>}
+    {projects.isError && <p role="alert" className="mb-3 text-sm text-red-300">{t('worldData.unreadable')}</p>}
+    {restore.error && <p role="alert" className="mb-3 text-sm text-red-300">{t('worldData.importFailed')} {restore.error.message}</p>}
+    {erase.isError && <p role="alert" className="mb-3 text-sm text-red-300">{t('worldData.deleteFailed')}</p>}
+
+    {entries.length > 0 ? <ul className="divide-y divide-space-border border-y border-space-border">
+      {entries.map(({ id, name, source, map }) => {
+        const overview = worldOverviewPath(id)
+        const target = source === 'offline' ? worldDataPath(id) : overview
+        return <li key={id} className="flex flex-col gap-x-5 gap-y-2 py-3 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <Link to={target} className="block break-words font-semibold text-gray-100 hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan">
+              {name}
+            </Link>
+            {staticMode && <WorldSourceBadge source={source === 'catalog' ? 'published' : source} />}
+            {source === 'catalog' && <WorldDescription id={id} />}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:w-80 sm:shrink-0">
+            {map && <Link className={linkClass} to={map}>{t('action.openWorldMap')}</Link>}
+            {source !== 'offline' && <Link className={linkClass} to={overview}>{t('action.worldOverview')}</Link>}
+            {source !== 'catalog' && <Link className={linkClass} to={worldDataPath(id)}>{t('worldData.title')}</Link>}
+            {(!staticMode || source === 'browser') && <button type="button" className={deleteClass} disabled={busy}
+              onClick={() => {
+                if (window.confirm(t(source === 'browser' ? 'worldData.confirmDelete' : 'confirm.deleteWorld', { name }))) {
+                  erase.mutate({ id, browser: source === 'browser' })
+                }
+              }}>{t('action.deleteWorld')}</button>}
+          </div>
+        </li>
+      })}
+    </ul> : !loading && !catalog.error && !projects.isError &&
+      <p className="py-6 text-gray-400">{t(staticMode ? 'status.noWorldsStatic' : 'status.noWorlds')}</p>}
+    {bytes !== undefined && bytes > 0 && <p className="mt-4 text-sm text-gray-400">{t('worldData.usage', { size: `${size} MB` })}</p>}
+  </div>
 }

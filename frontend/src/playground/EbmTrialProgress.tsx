@@ -8,8 +8,9 @@ const localStages = [
   'koppen', 'writeback', 'export', 'loading',
 ]
 const browserStages = ['queued', 'browserRuntime', ...localStages.slice(1)]
+const browserHeightmapStages = ['queued', 'browserRuntime', 'browserMesh', ...localStages.slice(1)]
 
-export function EbmTrialProgress({ phase, job, interrupted, open, starting, browser, format }: {
+export function EbmTrialProgress({ phase, job, interrupted, open, starting, browser, format, embedded = false }: {
   phase: string
   job: ClimateTrialJob | undefined
   interrupted: boolean
@@ -17,9 +18,10 @@ export function EbmTrialProgress({ phase, job, interrupted, open, starting, brow
   starting: boolean
   browser: boolean
   format: Intl.NumberFormat
+  embedded?: boolean
 }) {
   const { t } = useTranslation('playground')
-  const stages = browser ? browserStages : localStages
+  const stages = browser ? job?.builds_mesh ? browserHeightmapStages : browserStages : localStages
   const stageLabel = (stage: string) => t(`ebm.stage.${browser && stage === 'queued' ? 'browserQueued' : stage}`, { defaultValue: stage })
   const title = useId()
   const section = useRef<HTMLElement>(null)
@@ -44,7 +46,7 @@ export function EbmTrialProgress({ phase, job, interrupted, open, starting, brow
     }
   })
 
-  return <section ref={section} aria-labelledby={title} className="space-y-2 border-t border-space-border pt-3 text-xs">
+  return <section ref={section} aria-labelledby={title} className={`space-y-2 text-xs${embedded ? '' : ' border-t border-space-border pt-3'}`}>
     <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
       <h3 id={title} className="font-semibold text-gray-100">{t('ebm.progress.title')}</h3>
       <span className="tabular-nums text-gray-300">{t('ebm.progress.steps', { done: complete ? stages.length : Math.max(0, activeIndex), total: stages.length })}</span>
@@ -54,7 +56,7 @@ export function EbmTrialProgress({ phase, job, interrupted, open, starting, brow
     </div>
     <ProgressTimeline items={items} titleId={title} current={stages[activeIndex]} follow={open} />
     {job && !complete && <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 tabular-nums text-gray-300">
-      <span>{t('ebm.progress.totalElapsed', { seconds: format.format(job.elapsed_seconds) })}</span>
+      {!embedded && <span>{t('ebm.progress.totalElapsed', { seconds: format.format(job.elapsed_seconds) })}</span>}
       {job.cells != null && <span>{t('ebm.grid', { cells: format.format(job.cells) })}</span>}
     </div>}
   </section>

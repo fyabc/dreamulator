@@ -10,7 +10,8 @@ export const projectButton = 'rounded border border-space-border bg-space-surfac
 export const projectField = 'min-w-0 rounded border border-space-border bg-space-bg px-2 py-1 text-gray-200'
 
 type Target = { worldId: string } & ({ sourceId: string; branch?: string | null } | {
-  planet: string; branch: string | null; sourceName: string; raster: ElevationRaster; frame: ElevationFrame
+  planet: string; branch: string | null; sourceName: string; raster: ElevationRaster; frame: ElevationFrame;
+  browserWorld?: true; climateResult?: string
 })
 
 export default function SaveProjectResult({ target, result }: { target: Target; result: BrowserTerrainResult }) {
@@ -18,13 +19,14 @@ export default function SaveProjectResult({ target, result }: { target: Target; 
   const queryClient = useQueryClient()
   const save = useMutation({ mutationFn: async (current: BrowserTerrainResult) => {
     const input = 'sourceId' in target ? null : { ...makeElevationSource(target.sourceName, target.raster, target.frame),
-      location: { planet: target.planet, branch: target.branch } }
+      location: { planet: target.planet, branch: target.branch, ...(target.climateResult && { climateResult: target.climateResult }) } }
     const sourceId = 'sourceId' in target ? target.sourceId : input!.id
     const output = makeElevationResult(t(`layer.${current.recipe.method}`), sourceId, current)
+    const initial = input && !('browserWorld' in target && target.browserWorld) ? publishedWorld(target.worldId) : undefined
     await updateProject(target.worldId, (world) => {
       if (!input && !world.layers.some((layer) => layer.kind === 'elevation-source' && layer.id === sourceId)) throw new Error('Source is missing')
       return { ...world, layers: input ? [...world.layers, input, output] : [...world.layers, output] }
-    }, input ? publishedWorld(target.worldId) : undefined)
+    }, initial)
     return output.id
   }, onSuccess: () => queryClient.invalidateQueries({ queryKey: projectsKey }) })
 

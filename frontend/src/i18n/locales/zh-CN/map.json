@@ -702,10 +702,11 @@
       "browserTitle": "生成细化地形（浏览器实验）",
       "browserHint": "首次下载模型：约 1.14 GB",
       "conditions": {
-        "loading": "正在准备正式世界的 TD 条件…",
+        "loading": "正在准备当前区域的 TD 条件…",
         "climate": "使用正式高程和气候。TD 条件网格：{{size}} × {{size}}。",
+        "browserClimate": "使用此世界的原始高程和已保存的气候试算。TD 条件网格：{{size}} × {{size}}。",
         "elevation": "没有可用的配套气候，仅使用高程。TD 条件网格：{{size}} × {{size}}。",
-        "failed": "无法读取正式世界的 TD 条件，暂不能运行。",
+        "failed": "无法读取所选数据的 TD 条件，暂不能运行。",
         "retry": "重新读取条件"
       },
       "modelCache": {

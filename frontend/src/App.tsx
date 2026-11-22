@@ -17,13 +17,7 @@ const HelpPage = lazy(() => import('./pages/HelpPage'))
 const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage'))
 const ImportPage = lazy(() => import('./pages/ImportPage'))
 const NewWorldPage = lazy(() => import('./pages/NewWorldPage'))
-const CreationMapPage = lazy(() => import('./pages/CreationMapPage'))
 const MapWorkbenchRoute = lazy(() => import('./pages/MapWorkbenchRoute'))
-
-function PlanetMapRoute() {
-  const [search] = useSearchParams()
-  return search.get('creation') === '1' ? <CreationMapPage /> : <MapViewerPage />
-}
 
 const PageFallback = () => (
   <div className="flex items-center justify-center min-h-[60vh]">
@@ -63,7 +57,7 @@ function App() {
             <Route path="worlds/:worldName" element={<WorldDetail />} />
             <Route element={<MapWorkbenchRoute />}>
               <Route path="worlds/:worldName/map" element={<MapViewerPage />} />
-              <Route path="worlds/:worldName/map/:planetId" element={<PlanetMapRoute />} />
+              <Route path="worlds/:worldName/map/:planetId" element={<MapViewerPage />} />
               <Route path="worlds/:worldName/globe/:planetId?" element={<GlobeViewerPage />} />
             </Route>
             <Route path="worlds/:worldName/viewer3d" element={<StellarSystemViewerPage />} />

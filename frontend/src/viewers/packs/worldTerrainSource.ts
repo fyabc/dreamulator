@@ -1,6 +1,6 @@
 import { decode } from '@msgpack/msgpack'
 import { KDTree3D } from '../../components/map/utils/kdtree'
-import { interpolate } from './elevationRaster'
+import { interpolate, type ElevationRaster } from './elevationRaster'
 import { pxToLonLat, type PackWindow } from './packCoords'
 import { prepareTerrainConditions, terrainClimateFields, terrainLapseRate, type TerrainClimateConditions } from './terrainConditions'
 
@@ -48,7 +48,7 @@ export async function readNativeTerrain(blob: Blob) {
 }
 
 export function prepareWorldTerrainSource(source: NonNullable<ReturnType<typeof decodeWorldTerrainSource>>, window: PackWindow,
-  native: Awaited<ReturnType<typeof readNativeTerrain>> | null) {
+  native: Awaited<ReturnType<typeof readNativeTerrain>> | ElevationRaster | null) {
   if (Boolean(source.native) !== Boolean(native) || window.projection !== 'azimuthal_equidistant' || window.extentKmX !== window.extentKmY) {
     throw new Error('Invalid TD source window or missing native elevation')
   }

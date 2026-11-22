@@ -15,7 +15,8 @@ export default function TemperatureTrialEntry({ world, branch, preferred }: {
   const { t } = useTranslation('worlds', { keyPrefix: 'temperatureTrial' })
   const staticMode = isStaticMode()
   const maps = useQuery({ queryKey: ['mapPlanets', world, branch], queryFn: () => api.listMapPlanets(world, branch) })
-  const catalog = useQuery({ queryKey: ['systemCatalog', world, branch], queryFn: () => api.getSystemCatalog(world, branch), retry: false })
+  const catalog = useQuery({ queryKey: ['systemCatalog', world, branch], queryFn: () => api.getSystemCatalog(world, branch),
+    enabled: (maps.data?.length ?? 0) > 1, retry: false })
   const [selected, setSelected] = useState<string | null>(null)
   const planets = maps.data ?? []
   const planet = [selected, preferred, catalog.data?.target_body_id, planets[0]].find(value => value && planets.includes(value))

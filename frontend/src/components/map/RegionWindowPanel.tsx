@@ -17,6 +17,7 @@ interface RegionWindowPanelProps {
   world: string
   planet: string
   branch: string | null
+  climateResult?: string
   radiusKm: number
   selectedPoint?: LonLat | null
   onMoveToRegion: () => void
@@ -27,7 +28,7 @@ interface RegionWindowPanelProps {
 }
 
 export default function RegionWindowPanel({
-  world, planet, branch, radiusKm, selectedPoint, onMoveToRegion, onRegionScale, scaleAltitudeKm, scaleDetail, modeControl,
+  world, planet, branch, climateResult, radiusKm, selectedPoint, onMoveToRegion, onRegionScale, scaleAltitudeKm, scaleDetail, modeControl,
 }: RegionWindowPanelProps) {
   const { t } = useTranslation('map')
   const [search, setSearch] = useSearchParams()
@@ -40,6 +41,7 @@ export default function RegionWindowPanel({
   const regionParams = new URLSearchParams({ world, planet, radius: String(radiusKm),
     view: location.pathname.split('/')[3] === 'globe' ? 'globe' : 'map' })
   if (branch) regionParams.set('branch', branch)
+  if (climateResult) regionParams.set('climateResult', climateResult)
   if (window) regionParams.set(REGION_WINDOW_PARAM, encodeRegionWindow(window))
 
   const writeWindow = (nextWindow: string | null) => setSearch((previous) => {

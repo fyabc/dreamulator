@@ -11,8 +11,6 @@
   "close": "Close",
   "complete": "Tutorial complete",
   "chapterCount": "Part {{chapter}} of {{total}}",
-  "sample": "Use the Earth sample",
-  "sampleError": "The Earth sample is unavailable. You can still upload your own global heightmap.",
   "chapters": {
     "local": { "1": "Import and build a world", "2": "Explore and change its climate", "3": "Refine a region", "4": "Back up the whole world" },
     "browser": { "1": "Import a global heightmap", "2": "View and back up your world" }
@@ -25,7 +23,7 @@
     "source": "Upload your own global heightmap or load the Earth sample.",
     "upload": "Choose a global heightmap, or select Use the Earth sample.",
     "configure": "Check the elevations for pure black and white and the sea level. Name and save your world.",
-    "configureBrowser": "Check the elevation range and choose a name. You can preview temperature before saving in this browser. Full builds, climate branches and refinement with climate input require a local server.",
+    "configureBrowser": "Check the elevation range, name the world, and save it in this browser. To build this world in full, create climate branches, or refine it with climate input, use the local app.",
     "parameters": "Open World parameters. The source heightmap is saved; the rest of the world hasn’t been built yet.",
     "build": "You can keep the default of 18,432 spherical cells. Save any changes before selecting Build.",
     "building": "Wait for the layers to finish building before opening the map. You can leave this page in the meantime.",
@@ -46,8 +44,8 @@
     "regionResult": "The region pack is saved. Open the result to compare the original and refined terrain.",
     "backup": "Download the world backup. It includes settings, layers, branches and saved region packs.",
     "snapshot": "Download the world backup. It includes settings, layers, branches and saved region packs.",
-    "browserMap": "Open your saved map. If you ran the temperature preview, it will be there too.",
-    "browserView": "Inspect the heightmap and any saved temperature preview, then return to World data to make a backup.",
+    "browserMap": "Open the global map to inspect your imported elevation.",
+    "browserView": "Inspect the heightmap, then return to World data to make a backup.",
     "browserBackup": "Download the world backup. You can import it from the world list in another browser.",
     "done": "The download has started. Your work stays where you saved it. Keep exploring, or restart the tutorial from Help."
   }

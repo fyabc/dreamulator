@@ -7,7 +7,7 @@ const window: PackWindow = { centerLat: 24.1, centerLon: -180, radiusKm: 6371, e
   projection: 'azimuthal_equidistant' }
 const location = { planet: 'planet_terra', branch: 'tilt-6344' }
 
-function resultPair(id: string, locationOverride: Partial<typeof location> = {}, frame: Partial<PackWindow> = {}) {
+function resultPair(id: string, locationOverride: Partial<NonNullable<ElevationSource['location']>> = {}, frame: Partial<PackWindow> = {}) {
   const data = { width: 1, height: 1, data: new Blob([new Float32Array([5])]) }
   const source: ElevationSource = { ...data, id: `${id}-source`, name: 'Original', kind: 'elevation-source',
     frame: { window: { ...window, ...frame }, min: 0, max: 10, sea: 0, sourceStepKm: 10 }, location: { ...location, ...locationOverride } }
@@ -27,5 +27,14 @@ describe('browser regional result choices', () => {
 
     expect(matchingBrowserRegionResults(project, location, window)).toEqual([{ layer, source }])
     expect(matchingBrowserRegionResults({ ...project, published: undefined }, location, window)).toEqual([])
+  })
+
+  it('keeps a browser world’s results scoped to the climate trial used in refinement', () => {
+    const selected = { ...location, branch: null, climateResult: 'current' }
+    const [source, layer] = resultPair('matching', selected)
+    const project: LocalProject = { id: 'self-made', name: 'Self-made', updatedAt: 1, creationSnapshot: new Blob(),
+      layers: [source, layer, ...resultPair('old', { ...selected, climateResult: 'old' })] }
+    expect(matchingBrowserRegionResults(project, selected, window)).toEqual([{ layer, source }])
+    expect(matchingBrowserRegionResults(project, { ...selected, climateResult: undefined }, window)).toEqual([])
   })
 })

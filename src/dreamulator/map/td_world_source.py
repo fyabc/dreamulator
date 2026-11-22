@@ -33,12 +33,17 @@ def terrain_source(
     """Keep mesh and monthly climate together, using the same directory as the CLI."""
     map_dir = manager._maps_dir(planet)
     mesh_path = find_mesh_file(map_dir) if map_dir is not None else None
-    if map_dir is None or mesh_path is None:
+    if map_dir is None or mesh_path is None or not (map_dir / "climate_monthly.msgpack").is_file():
         return msgpack.packb(None), None
+    retained = world_elevation_source(manager.world_dir, manager.branch, planet)
+    native_key = native_terrain_key(retained[0]) if retained else None
+    return terrain_packet(map_dir, mesh_path, native_key), retained
+
+
+def terrain_packet(map_dir: Path, mesh_path: Path, native_key: str | None = None) -> bytes:
+    """Encode co-registered conditioning fields from a single climate result directory."""
     try:
         temperature, precipitation = load_climate_monthly(map_dir)
-    except FileNotFoundError:
-        return msgpack.packb(None), None
     except (KeyError, TypeError) as error:
         raise ValueError("Invalid TD monthly climate file") from error
     mesh = load_cvt_mesh_model(mesh_path)
@@ -56,8 +61,7 @@ def terrain_source(
         (cell.elevation for cell in mesh.cells), dtype="<f8", count=len(mesh.cells)
     )
     fields = conditioning_fields(heights, temperature, precipitation)
-    retained = world_elevation_source(manager.world_dir, manager.branch, planet)
-    packet = msgpack.packb(
+    packet: bytes = msgpack.packb(
         {
             "version": 1,
             "cells": len(mesh.cells),
@@ -65,10 +69,10 @@ def terrain_source(
             "fields": {
                 name: values.astype("<f8", copy=False).tobytes() for name, values in fields.items()
             },
-            "native": native_terrain_key(retained[0]) if retained is not None else None,
+            "native": native_key,
         }
     )
-    return packet, retained
+    return packet
 
 
 def write_native_terrain(stream: BinaryIO, retained: tuple[ElevationImportSource, Path]) -> None:

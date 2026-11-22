@@ -1,13 +1,16 @@
 import { lazy, useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Outlet, useMatch, useSearchParams } from 'react-router-dom'
+import { Navigate, Outlet, useMatch, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
+import { isStaticMode } from '../api/mode'
 import type { ClimateTrialResult } from '../api/climateTrials'
 import { MapTemperatureTrial, trialButtonId } from '../components/map/MapTemperatureTrial'
 import { initialLayerState } from '../components/map/layerStateInit'
 import type { TemperatureOrigin } from '../playground/temperatureDraft'
+import { canDefaultToHeightmapClimate, defaultHeightmapClimateSearch, heightmapPlanet } from '../projects/heightmapWorld'
+import { getProject, projectKey, worldOverviewPath } from '../projects/projectStore'
 import { useTemperatureTrialPreview, type ClimateTrialTime, type MapMode, type MapTemperatureTrialSession } from '../viewers/map/useTemperatureTrialPreview'
 
 const TemperatureLab = lazy(() => import('../playground/TemperatureLab'))
@@ -15,19 +18,29 @@ const TemperatureLab = lazy(() => import('../playground/TemperatureLab'))
 export default function MapWorkbenchRoute() {
   const match = useMatch('/worlds/:worldName/:view/:planetId?')
   const { worldName, view, planetId } = match?.params ?? {}
+  const { t } = useTranslation('playground')
   const [search] = useSearchParams()
-  if (view === 'map' && planetId && search.get('creation') === '1') return <Outlet />
   const branch = search.get('branch') || null
   const draft = search.get('draft')
   const saved = search.get('climateResult')
   const clean = search.get('clean') === '1'
+  const useBrowserDefault = isStaticMode() && !!worldName && canDefaultToHeightmapClimate(planetId, search)
+  const project = useQuery({ queryKey: projectKey(worldName ?? ''), queryFn: () => getProject(worldName!),
+    enabled: useBrowserDefault, retry: false })
+  if (useBrowserDefault && project.isLoading) {
+    return <p role="status" className="p-6 text-sm text-gray-300">{t('action.loadingInput')}</p>
+  }
+  const defaultSearch = useBrowserDefault && project.data ? defaultHeightmapClimateSearch(project.data, search) : null
+  if (defaultSearch && worldName && view) {
+    return <Navigate replace to={`${worldOverviewPath(worldName)}/${view}/${heightmapPlanet}?${defaultSearch}`} />
+  }
   if (worldName && planetId && draft) {
     return <DraftWorkbench key={JSON.stringify([worldName, planetId, branch, draft])}
       world={worldName} planet={planetId} branch={branch} draft={draft} clean={clean} />
   }
   return <TemperatureTrialSession key={JSON.stringify([worldName, planetId, branch, saved])}
     world={worldName} planet={planetId} branch={branch} saved={saved}
-    clean={clean} initiallyOpen={Boolean(saved) || search.get('trial') === 'climate'} />
+    clean={clean} initiallyOpen={search.get('trial') === 'climate'} />
 }
 
 function DraftWorkbench({ world, planet, branch, draft, clean }: TemperatureOrigin & { draft: string; clean: boolean }) {
@@ -62,10 +75,10 @@ function TemperatureTrialSession({ world, planet, branch, draft, saved, clean, i
 }) {
   const [open, setOpen] = useState(initiallyOpen)
   const [search] = useSearchParams()
-  const [visited, setVisited] = useState(initiallyOpen)
+  const [visited, setVisited] = useState(initiallyOpen || Boolean(saved))
   const [revision, setRevision] = useState(0)
   const [modeSelection, setModeSelection] = useState<{ scope: string | null; mode: MapMode } | null>(null)
-  const [layerState, setLayerState] = useState(() => trialLayerState(null))
+  const [layerState, setLayerState] = useState(() => trialLayerState(saved ? 'temperature' : null))
   const [ebmResult, setEbmResult] = useState<ClimateTrialResult | null>(null)
   const [trialTime, setTrialTime] = useState<ClimateTrialTime>({ monthly: false, month: 0 })
   const [panelHost] = useState(() => document.createElement('div'))
@@ -88,8 +101,8 @@ function TemperatureTrialSession({ world, planet, branch, draft, saved, clean, i
   const reportEbmResult = useCallback((result: ClimateTrialResult) => {
     report(null)
     setEbmResult(result)
-    showTrial()
-  }, [report, showTrial])
+    if (!saved) showTrial()
+  }, [report, saved, showTrial])
   const reportPreview = useCallback((preview: Parameters<typeof report>[0]) => {
     if (preview) setEbmResult(null)
     report(preview)
@@ -98,6 +111,7 @@ function TemperatureTrialSession({ world, planet, branch, draft, saved, clean, i
     if (slot) slot.append(panelHost)
     else panelHost.remove()
   }, [panelHost])
+  const showSavedError = useCallback(() => setOpen(true), [])
   const openPanel = () => {
     panelTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setVisited(true)
@@ -130,7 +144,8 @@ function TemperatureTrialSession({ world, planet, branch, draft, saved, clean, i
   return <>
     <Outlet context={session} />
     {scope && visited && createPortal(<MapTemperatureTrial search={input}
-      open={session.open} onClose={closePanel} onPreview={reportPreview} onResult={reportEbmResult} onShow={showTrial} />,
+      open={session.open} onClose={closePanel} onPreview={reportPreview} onResult={reportEbmResult} onShow={showTrial}
+      onSavedError={showSavedError} />,
     panelHost, scope)}
   </>
 }

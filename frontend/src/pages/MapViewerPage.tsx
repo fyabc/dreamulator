@@ -103,11 +103,11 @@ export default function MapViewerPage() {
 
   // Forward current lighting (sun/season/night) + branch to the 3D globe link.
   const globeSearch = new URLSearchParams(searchParams)
-  globeSearch.delete('trial')
+  if (!meta?.browser_heightmap) globeSearch.delete('trial')
   const globeQS = globeSearch.size ? `?${globeSearch}` : ''
   const backSearch = new URLSearchParams()
   if (selectedBranch) backSearch.set('branch', selectedBranch)
-  if (searchParams.has('draft') || searchParams.has('climateResult')) {
+  if (searchParams.has('draft') || (!meta?.browser_heightmap && searchParams.has('climateResult'))) {
     backSearch.set('tab', 'data')
   } else if (trialFromClimate) {
     backSearch.set('tab', 'climate')
@@ -149,10 +149,12 @@ export default function MapViewerPage() {
       : 'atlas-workbench flex flex-col'}>
       {!cleanMode && (
       <MapWorkbenchToolbar title={currentPlanetName ?? selectedPlanet ?? t('title.mapFallback')} view="map"
+        backAnchor={meta?.browser_heightmap ? 'browserView' : undefined}
         backTo={`/worlds/${worldName}${backSearch.size ? `?${backSearch}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/globe/${selectedPlanet}${globeQS}` : undefined}
         regionControls={selectedPlanet && (elevation || cvtMesh) ? (
           <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
+            climateResult={meta?.browser_heightmap && trial.mode === 'trial' ? searchParams.get('climateResult') ?? undefined : undefined}
             branch={selectedBranch} radiusKm={planetRadiusM / 1000}
             modeControl={trialReady ? { mode: trial.mode, onChange: trial.selectMode } : undefined}
             onMoveToRegion={() => setRegionMoveRevision((revision) => revision + 1)}

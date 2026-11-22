@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
 import { isStaticMode } from '../../api/mode'
 import type { ElevationRaster } from './elevationRaster'
-import type { PackWindow } from './packCoords'
+import type { WorldTerrainSelection } from './loadWorldTerrainConditions'
 import { prepareTerrainConditions, snapshotTerrainConditions, type TerrainConditionSnapshot } from './terrainConditions'
 import { getWebGpuDevice, type WebGpuDevice } from './webGpuDevice'
 import type { TerrainProgress, TerrainStage } from './terrainRefinement'
@@ -42,7 +42,7 @@ interface BrowserInput {
   sourceRowSpacingKm: number | null
   nativeEstimateKm?: number | null
   seaLevel: number
-  worldSource?: { world: string; planet: string; branch: string | null; window: PackWindow }
+  worldSource?: WorldTerrainSelection
   onResult: (result: BrowserTerrainResult) => void
 }
 
@@ -202,7 +202,7 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
     staleTime: 60_000, queryFn: async ({ signal }) => {
       if (!source) return null
       const { loadWorldTerrainConditions } = await import('./loadWorldTerrainConditions')
-      return loadWorldTerrainConditions(source.world, source.planet, source.branch, source.window, signal)
+      return loadWorldTerrainConditions(source, signal)
     } })
   const cache = useQuery({ queryKey: modelCacheKey, queryFn: readTerrainModelCacheBytes,
     enabled: modelManagerOpen && !busy, staleTime: 0, retry: false })
@@ -295,7 +295,7 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
         <p role="alert" className="text-red-300">{t('conditions.failed')}</p>
         <button type="button" className={button} onClick={() => void conditions.refetch()}>{t('conditions.retry')}</button>
       </div> : <p role="status">{t(source && (conditions.isPending || conditions.isFetching) ? 'conditions.loading'
-        : conditions.data ? 'conditions.climate' : 'conditions.elevation', { size: plan.inputSize })}</p>)}
+        : conditions.data ? source?.browserWorld ? 'conditions.browserClimate' : 'conditions.climate' : 'conditions.elevation', { size: plan.inputSize })}</p>)}
       {!configured ? <p>{t('notPublished')}</p> : <>
         {!plan && <p>{t('windowLimit', { min: minTerrainSpanKm, max: maxTerrainSpanKm })}</p>}
         {plan && !busy && <>

@@ -5,25 +5,19 @@ import { useTranslation } from 'react-i18next'
 import AtlasIcon from '../AtlasIcon'
 import { isStaticMode } from '../../api/mode'
 import { temperatureTrialMapPath } from '../../playground/temperatureDraft'
-import ImportProjectElevation from '../projects/ImportProjectElevation'
 import { projectButton } from '../projects/SaveProjectResult'
 import { elevationSource, projectBytes } from '../../projects/elevationProject'
 import { deleteProject, getProject, projectKey, projectRegionPath, projectsKey, publishedWorld, removeProjectLayer, restoreWorld, updateProject } from '../../projects/projectStore'
-import { exportWorldData, readWorldBackup } from '../../projects/worldDataArchive'
-import { downloadBlob } from '../../utils/downloadBlob'
-import { heightmapMapPath } from '../../projects/heightmapWorld'
+import { downloadWorldBackup, readWorldBackup } from '../../projects/worldDataArchive'
 import SavedClimateTrials from './SavedClimateTrials'
 import { tutorialMilestone } from '../../tutorial/tutorialProgress'
 
-export default function WorldDataPanel({ id, published, publishedAvailable, nativeCreation = false, nativeStarterWithoutMap = false }: {
+export default function WorldDataPanel({ id, published, publishedAvailable }: {
   id: string
   published: boolean
   publishedAvailable: boolean
-  nativeCreation?: boolean
-  nativeStarterWithoutMap?: boolean
 }) {
   const { t, i18n } = useTranslation('worlds', { keyPrefix: 'worldData' })
-  const { t: creationText } = useTranslation('worlds', { keyPrefix: 'creation' })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [search] = useSearchParams()
@@ -54,38 +48,14 @@ export default function WorldDataPanel({ id, published, publishedAvailable, nati
 
   const hasLayers = world.layers.length > 0
   const drafts = world.temperatureDrafts ?? []
-  const hasLocalData = hasLayers || drafts.length > 0 || (world.climateTrials?.length ?? 0) > 0
+  const hasLocalData = !!world.creationSnapshot || hasLayers || drafts.length > 0 || (world.climateTrials?.length ?? 0) > 0
   const overviewSearch = new URLSearchParams(search)
   for (const param of ['doc', 'layer', 'tab']) overviewSearch.delete(param)
   const formatNumber = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 })
   const bytes = projectBytes(world)
   const size = formatNumber.format(bytes >= 1e6 ? bytes / 1e6 : bytes / 1e3)
-  const starter = world.creationKind === 'starter' || nativeStarterWithoutMap
 
   return <div className="space-y-5">
-    {((!staticMode && publishedAvailable) || (staticMode && (publishedAvailable || world.climateTrials?.length))) && <SavedClimateTrials world={id} />}
-    {(world.creationSnapshot || nativeCreation) && <section className="space-y-2 border-b border-space-border pb-4">
-      <h2 className="text-lg font-semibold">{creationText(starter ? 'starter.savedHeading' : 'savedHeading')}</h2>
-      <p className="max-w-prose text-sm text-gray-400">{creationText(starter ? 'starter.savedBrowserHelp' : 'savedHelp')}</p>
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        {!starter && <Link to={heightmapMapPath(id)} data-tutorial-anchor="browserMap" className="inline-flex min-h-11 items-center gap-2 text-neon-cyan hover:underline">
-          {creationText('openSavedMap')} <AtlasIcon name="arrow" />
-        </Link>}
-        {world.creationSnapshot && <button type="button" data-tutorial-anchor={starter ? undefined : 'browserBackup'}
-          className={`${projectButton} min-h-11 px-3`} onClick={() => {
-            if (!world.creationSnapshot) return
-            downloadBlob(world.creationSnapshot, `${id}.dreamulator.tar.gz`)
-            if (!starter) tutorialMilestone({ type: 'backup', world: id })
-          }}>{creationText('download')}</button>}
-      </div>
-    </section>}
-    {nativeStarterWithoutMap && <section className="space-y-2 border-b border-space-border pb-4">
-      <h2 className="text-lg font-semibold">{creationText('starter.savedHeading')}</h2>
-      <p className="max-w-prose text-sm text-gray-400">{creationText('starter.savedLocalHelp')}</p>
-      <Link to={`/import?${new URLSearchParams({ world: id })}`} className="inline-flex min-h-11 items-center gap-2 text-sm text-neon-cyan hover:underline">
-        {creationText('starter.importHeightmap')} <AtlasIcon name="arrow" />
-      </Link>
-    </section>}
     {published && <section aria-labelledby="published-data-heading"
       className="flex flex-wrap items-center justify-between gap-x-5 gap-y-1 border-b border-space-border pb-3">
       <div className="space-y-1">
@@ -101,15 +71,18 @@ export default function WorldDataPanel({ id, published, publishedAvailable, nati
         <h2 id="browser-data-heading" className="text-xl font-semibold text-gray-100">{t('browserData')}</h2>
         <p className="text-sm text-gray-400">{t('usage', { size: `${size} ${bytes >= 1e6 ? 'MB' : 'kB'}` })}</p>
       </header>
-      {(staticMode || hasLayers) && <div className="max-w-2xl space-y-3">
+      {world.creationSnapshot && <p className="text-sm text-gray-400">{t(world.creationKind === 'starter' ? 'storedSettings' : 'storedHeightmap')}</p>}
+      {!hasLocalData && <p className="text-sm text-gray-400">{t('noLayers')}</p>}
+      {hasLayers && <div className="max-w-2xl space-y-3">
         <h3 className="text-sm font-medium text-gray-200">{t('layers')}</h3>
-        {hasLayers ? <ul className="divide-y divide-space-border border-y border-space-border text-sm">
+        <ul className="divide-y divide-space-border border-y border-space-border text-sm">
           {world.layers.map((layer) => {
             const source = elevationSource(world.layers, layer)
             const span = source?.frame.window.extentKmX
-            return <li key={layer.id}>
+            const inUse = world.layers.some(other => other.kind === 'elevation-result' && other.sourceId === layer.id)
+            return <li key={layer.id} className="flex items-center gap-2">
               <Link to={layerPath(layer.id)}
-                className="flex min-h-11 items-center justify-between gap-3 px-3 py-2.5 text-gray-200 hover:bg-space-surface focus-visible:bg-space-surface">
+                className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 text-gray-200 hover:bg-space-surface focus-visible:bg-space-surface">
                 <span className="min-w-0 space-y-1">
                   <span className="block break-words font-medium">{layer.name}</span>
                   <span className="block text-xs text-gray-400">{t(layer.kind === 'elevation-source' ? 'sourceLayer' : 'resultLayer')}
@@ -118,14 +91,17 @@ export default function WorldDataPanel({ id, published, publishedAvailable, nati
                 </span>
                 <AtlasIcon name="arrow" className="size-4 text-neon-cyan" />
               </Link>
+              <button type="button" className="min-h-11 shrink-0 px-2 text-xs text-red-300 hover:underline disabled:text-gray-500 disabled:no-underline"
+                disabled={busy || inUse} title={inUse ? t('sourceInUse') : undefined} aria-label={t('deleteLayerNamed', { name: layer.name })}
+                onClick={() => { if (window.confirm(t('confirmLayerDelete', { name: layer.name }))) remove.mutate(layer.id) }}>{t('deleteLayer')}</button>
             </li>
           })}
-        </ul> : <p role="status" className="text-sm text-gray-400">{t('noLayers')}</p>}
-        {staticMode && <ImportProjectElevation world={world} onSaved={(savedId) => navigate(layerPath(savedId))} />}
+        </ul>
+        {remove.isError && <p role="alert" className="text-sm text-red-300">{t('deleteFailed')}</p>}
       </div>}
-      {published && <div className="max-w-2xl space-y-2">
+      {drafts.length > 0 && <div className="max-w-2xl space-y-2">
         <h3 className="text-sm font-medium text-gray-200">{t('temperatureDrafts')}</h3>
-        {drafts.length ? <ul className="divide-y divide-space-border border-y border-space-border text-sm">
+        <ul className="divide-y divide-space-border border-y border-space-border text-sm">
           {drafts.map(draft => <li key={draft.id} className="flex flex-wrap items-center gap-x-3 px-3 py-1">
             <Link to={temperatureTrialMapPath({ world: id, planet: draft.planet, branch: draft.branch }, draft.id)}
               className="flex min-h-11 min-w-0 flex-1 basis-48 flex-col justify-center break-words py-1.5 text-neon-cyan hover:underline">
@@ -136,18 +112,24 @@ export default function WorldDataPanel({ id, published, publishedAvailable, nati
               aria-label={t('deleteDraftNamed', { name: draft.source })}
               onClick={() => { if (window.confirm(t('deleteDraftNamed', { name: draft.source }))) removeDraft.mutate(draft.id) }}>{t('deleteDraft')}</button>
           </li>)}
-        </ul> : <p className="text-sm text-gray-400">{t('noTemperatureDrafts')}</p>}
+        </ul>
         {removeDraft.isError && <p role="alert" className="text-sm text-red-300">{t('deleteFailed')}</p>}
       </div>}
+      {staticMode && !!world.climateTrials?.length && <SavedClimateTrials world={id} />}
     </section>
+    {!staticMode && publishedAvailable && <SavedClimateTrials world={id} />}
 
     <section aria-labelledby="world-backup-heading" className="space-y-2 border-t border-space-border pt-4 text-sm">
       <h2 id="world-backup-heading" className="font-semibold text-gray-200">{t('backup')}</h2>
       <p className="max-w-2xl leading-relaxed text-gray-400">{t(published ? 'publishedBackupHelp' : 'localHelp')}</p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        {hasLocalData && <button type="button" className={`${projectButton} min-h-11 px-3`} disabled={busy} onClick={() => {
+        {hasLocalData && <button type="button" data-tutorial-anchor={world.creationSnapshot ? 'browserBackup' : undefined}
+          className={`${projectButton} min-h-11 px-3`} disabled={busy} onClick={() => {
           setExportError(false)
-          try { downloadBlob(exportWorldData(world), `${world.id}-world-data.tar`) }
+          try {
+            downloadWorldBackup(world)
+            if (world.creationSnapshot) tutorialMilestone({ type: 'backup', world: id })
+          }
           catch { setExportError(true) }
         }}>{t('export')}</button>}
         {staticMode ? <Link to="/worlds" className="inline-flex min-h-11 items-center text-neon-cyan hover:underline">{t('restoreFromWorlds')}</Link>
@@ -163,31 +145,17 @@ export default function WorldDataPanel({ id, published, publishedAvailable, nati
       {exportError && <p role="alert" className="text-red-300">{t('exportFailed')}</p>}
       {restore.isError && <p role="alert" className="text-red-300">{t('restoreHereFailed')}</p>}
       {restore.isSuccess && <p role="status" className="text-green-300">{t('restoredHere')}</p>}
-      <p className="max-w-2xl leading-relaxed text-gray-400">{t(staticMode ? 'fullSnapshotHelp' : 'serverSnapshotHelp')}</p>
+      {!staticMode && <p className="max-w-2xl leading-relaxed text-gray-400">{t('serverSnapshotHelp')}</p>}
     </section>
 
     {(!published || hasLocalData) && <details className="space-y-3 border-t border-space-border pt-2 text-sm">
       <summary className="min-h-11 cursor-pointer content-center font-medium text-gray-300">{t('manageStorage')}</summary>
-      {hasLayers && <ul className="max-w-2xl divide-y divide-space-border border-y border-space-border">
-        {world.layers.map((layer) => {
-          const inUse = world.layers.some((other) => other.kind === 'elevation-result' && other.sourceId === layer.id)
-          return <li key={layer.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1">
-            <div className="min-w-0 flex-1 basis-40 text-gray-300">
-              <p className="break-words">{layer.name}</p>
-              {inUse && <p className="text-xs text-gray-400">{t('sourceInUse')}</p>}
-            </div>
-            <button type="button" className="min-h-11 px-2 text-red-300 hover:underline disabled:text-gray-500 disabled:no-underline"
-              disabled={busy || inUse} aria-label={t('deleteLayerNamed', { name: layer.name })}
-              onClick={() => { if (window.confirm(t('confirmLayerDelete', { name: layer.name }))) remove.mutate(layer.id) }}>{t('deleteLayer')}</button>
-          </li>
-        })}
-      </ul>}
       <p className="max-w-2xl text-gray-400">{t(published ? 'clearHelp' : 'deleteWorldHelp', { name: world.name })}</p>
       <button type="button" className="min-h-11 rounded border border-space-border px-3 text-red-300 hover:border-red-300 disabled:opacity-50"
         disabled={busy} onClick={() => { if (window.confirm(t(published ? 'confirmClear' : 'confirmDelete', { name: world.name }))) erase.mutate() }}>
         {t(published ? 'clear' : 'deleteWorld')}
       </button>
-      {(erase.isError || remove.isError) && <p role="alert" className="text-red-300">{t('deleteFailed')}</p>}
+      {erase.isError && <p role="alert" className="text-red-300">{t('deleteFailed')}</p>}
     </details>}
   </div>
 }

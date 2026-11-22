@@ -22,7 +22,8 @@ export function restoreBrowserEbm(id: string, value: unknown, assets: SavedBrows
       metadata.surface?.planet_id !== metadata.planet || metadata.surface.projection !== 'equirectangular' ||
       ![metadata.surface.width, metadata.surface.height].every(value => Number.isSafeInteger(value) && value > 0 && value <= 8192) ||
       ![metadata.surface.elevation_min_m, metadata.surface.elevation_max_m, metadata.surface.sea_level_m].every(Number.isFinite) ||
-      browserClimateAssets.some(key => !assets[key].size || assets[key].size > maxAssetBytes)) {
+      browserClimateAssets.some(key => !assets[key].size || assets[key].size > maxAssetBytes) ||
+      (assets.terrain && (!assets.terrain.size || assets.terrain.size > maxAssetBytes))) {
     throw new Error('Invalid browser climate result')
   }
   return { metadata, assets }

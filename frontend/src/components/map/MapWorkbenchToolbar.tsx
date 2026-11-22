@@ -10,13 +10,14 @@ export const mapLayerDesktopWidth = 'lg:w-56'
 
 type WorkPanelToggle = { id: string; buttonId: string; open: boolean; onToggle: () => void }
 
-export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, backRef, switchTo, regionControls, trialPanel, layersOpen, onToggleLayers, children }: {
+export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, backRef, backAnchor, switchTo, regionControls, trialPanel, layersOpen, onToggleLayers, children }: {
   title: string
   subtitle?: string
   view: 'map' | 'globe' | 'region'
   backTo: string
   backLabel?: string
   backRef?: Ref<HTMLAnchorElement>
+  backAnchor?: string
   switchTo?: string
   regionControls?: ReactNode
   trialPanel?: WorkPanelToggle
@@ -33,7 +34,7 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
   return (
     <header className="relative z-30 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 border-b border-space-border bg-space-panel px-2 py-1.5 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:gap-3 lg:px-4 lg:py-2 2xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
       <div className="flex min-w-0 items-center gap-2">
-        <Link ref={backRef} to={backTo} className="inline-flex size-11 shrink-0 items-center justify-center rounded text-gray-300 hover:bg-space-surface"
+        <Link ref={backRef} to={backTo} data-tutorial-anchor={backAnchor} className="inline-flex size-11 shrink-0 items-center justify-center rounded text-gray-300 hover:bg-space-surface"
           aria-label={backText} title={backText}><AtlasIcon name="back" /></Link>
         <div className="min-w-0">
           <h1 className="truncate text-lg font-semibold text-gray-100" title={title}>{title}</h1>

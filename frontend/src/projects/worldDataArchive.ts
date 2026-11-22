@@ -3,6 +3,7 @@ import { assertProjectCapacity, importProject, maxProjectBytes, readElevationLay
 import { maxTemperatureDrafts, restoreTemperatureDraft } from '../playground/temperatureDraft'
 import { browserClimateAssets, maxBrowserClimateTrials } from '../api/climateTrials'
 import { restoreBrowserEbm } from '../playground/savedBrowserEbm'
+import { downloadBlob } from '../utils/downloadBlob'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
@@ -11,7 +12,7 @@ const maxMetadata = 16 * 1024
 const worldId = /^[a-zA-Z0-9_-]{1,100}$/
 const layerId = /^[a-f0-9-]{36}$/
 const archivePath = /^[a-zA-Z0-9_./-]{1,100}$/
-const maxFiles = 2 + 128 * 3 + maxTemperatureDrafts * 2 + maxBrowserClimateTrials * (browserClimateAssets.length + 1)
+const maxFiles = 3 + 128 * 3 + maxTemperatureDrafts * 2 + maxBrowserClimateTrials * (browserClimateAssets.length + 2)
 const maxArchive = maxProjectBytes + maxFiles * (maxMetadata + 2 * blockSize) + 2 * blockSize
 
 function tarHeader(path: string, bytes: number) {
@@ -93,7 +94,7 @@ function layerMetadata(world: LocalProject, layer: ProjectLayer, source: Elevati
     km_per_px: { x: extentKmX / layer.width, y: extentKmY / layer.height },
     sea_level_m: sea, elevation_m_global: [min, max], height_gaea_png_range_m: [min, max], climate: {},
     source: { kind: 'external-heightmap', world: world.id,
-      planet: source.location?.planet ?? null, branch: source.location?.branch ?? null },
+      planet: source.location?.planet ?? null, branch: source.location?.branch ?? null, climate_result: source.location?.climateResult },
     browser: {
       name: layer.name, kind: layer.kind,
       ...(layer.kind === 'elevation-source' ? { source_step_km: sourceStepKm,
@@ -114,8 +115,10 @@ export function exportWorldData(world: LocalProject) {
   }
   json('world-data.json', { type: 'dreamulator-world-data', version: 1, id: world.id, name: world.name,
     published: world.published === true, layers: world.layers.map((layer) => layer.id),
+    ...(world.creationSnapshot && { creation: world.creationKind ?? 'heightmap' }),
     ...(world.climateTrials?.length && { climate_trials: world.climateTrials.map(trial => trial.metadata.id) }),
     ...(world.temperatureDrafts?.length && { temperature_drafts: world.temperatureDrafts.map(draft => draft.id) }) })
+  if (world.creationSnapshot) files.set('creation.tar.gz', world.creationSnapshot)
   for (const draft of world.temperatureDrafts ?? []) {
     const { id, grid, ...metadata } = draft
     if (!layerId.test(id)) throw new Error('Invalid temperature draft ID')
@@ -127,6 +130,7 @@ export function exportWorldData(world: LocalProject) {
     const dir = `experiments/climate/${metadata.id}`
     json(`${dir}/result.json`, metadata)
     for (const key of browserClimateAssets) files.set(`${dir}/${key}`, assets[key])
+    if (assets.terrain) files.set(`${dir}/terrain`, assets.terrain)
   }
   if (!world.published) {
     const timestamp = new Date(world.updatedAt).toISOString()
@@ -143,6 +147,10 @@ export function exportWorldData(world: LocalProject) {
     if (layer.kind === 'elevation-source' && layer.original) files.set(`${path}/original.png`, layer.original.data)
   }
   return writeTar(files)
+}
+
+export function downloadWorldBackup(world: LocalProject) {
+  downloadBlob(exportWorldData(world), `${world.id}-world-data.tar`)
 }
 
 export async function importWorldData(file: Blob): Promise<LocalProject> {
@@ -167,6 +175,21 @@ export async function importWorldData(file: Blob): Promise<LocalProject> {
     const config = await json('world.yaml')
     if (!record(config) || !record(config.metadata) || config.metadata.name !== manifest.id) throw new Error('Mismatched world config')
   }
+  let creationSnapshot: Blob | undefined
+  if (manifest.creation !== undefined) {
+    if (manifest.published || (manifest.creation !== 'heightmap' && manifest.creation !== 'starter')) {
+      throw new Error('Invalid world creation manifest')
+    }
+    creationSnapshot = take('creation.tar.gz')
+    const { readCreationSnapshot } = await import('./creationSnapshot')
+    const snapshot = await readCreationSnapshot(creationSnapshot)
+    if (snapshot.id !== manifest.id) throw new Error('Mismatched world snapshot')
+    if (manifest.creation === 'starter') {
+      await (await import('./starterWorld')).readStarterSnapshot(snapshot)
+    } else {
+      await (await import('./heightmapWorld')).readHeightmapSnapshot(snapshot)
+    }
+  }
   const layers = await readElevationLayers(await Promise.all(manifest.layers.map(async (id: unknown) => {
     if (typeof id !== 'string' || !layerId.test(id)) throw new Error('Invalid layer ID')
     const meta = await json(`${packPath(id)}/meta.json`)
@@ -174,7 +197,8 @@ export async function importWorldData(file: Blob): Promise<LocalProject> {
       meta.source.world !== manifest.id || !Array.isArray(meta.elevation_m_global)) throw new Error('Invalid region metadata')
     const [min, max] = meta.elevation_m_global
     return { ...meta.browser, id, width: meta.grid.w, height: meta.grid.h, sourceId: meta.browser.source_id,
-      ...(meta.source.planet !== null && { location: { planet: meta.source.planet, branch: meta.source.branch } }),
+      ...(meta.source.planet !== null && { location: { planet: meta.source.planet, branch: meta.source.branch,
+        ...(meta.source.climate_result !== undefined && { climateResult: meta.source.climate_result }) } }),
       frame: { min, max, sea: meta.sea_level_m, sourceStepKm: meta.browser.source_step_km,
         window: { centerLat: meta.center_lat, centerLon: meta.center_lon, radiusKm: meta.radius_km,
           extentKmX: meta.extent_km.x, extentKmY: meta.extent_km.y, projection: meta.projection } } }
@@ -206,11 +230,13 @@ export async function importWorldData(file: Blob): Promise<LocalProject> {
     if (typeof id !== 'string' || !layerId.test(id)) throw new Error('Invalid climate trial ID')
     const dir = `experiments/climate/${id}`
     const assets = { geometry: take(`${dir}/geometry`), fields: take(`${dir}/fields`),
-      monthly: take(`${dir}/monthly`), yearly: take(`${dir}/yearly`), elevation: take(`${dir}/elevation`) }
+      monthly: take(`${dir}/monthly`), yearly: take(`${dir}/yearly`), elevation: take(`${dir}/elevation`),
+      ...(files.has(`${dir}/terrain`) && { terrain: take(`${dir}/terrain`) }) }
     return restoreBrowserEbm(id, await json(`${dir}/result.json`), assets)
   }))
   if (files.size) throw new Error('Unexpected world archive entries')
   const world: LocalProject = { id: manifest.id, name: manifest.name, updatedAt: Date.now(), layers,
+    ...(creationSnapshot && { creationSnapshot, ...(manifest.creation === 'starter' && { creationKind: 'starter' as const }) }),
     ...(manifest.published && { published: true }), ...(temperatureDrafts.length && { temperatureDrafts }),
     ...(climateTrials.length && { climateTrials }) }
   assertProjectCapacity(world)

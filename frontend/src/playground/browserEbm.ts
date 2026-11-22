@@ -26,6 +26,7 @@ export function startBrowserEbm(request: BrowserEbmRequest, signal: AbortSignal,
   const job: ClimateTrialJob = {
     id, state: 'running', stage: 'browserRuntime', cells: request.cells, months_done: null,
     months_total: null, moisture_pass: null, elapsed_seconds: 0, stage_seconds: 0, error: null,
+    ...(typeof request.mesh !== 'string' && { builds_mesh: true }),
   }
   const startedAt = performance.now()
   const entry: BrowserJob = { job, startedAt, stageAt: startedAt, scope }
@@ -56,7 +57,7 @@ export function startBrowserEbm(request: BrowserEbmRequest, signal: AbortSignal,
       Object.assign(job, progress, { cells: cells ?? job.cells })
     } else {
       try {
-        const { geometry, fields, monthly, yearly, geometryBytes, fieldBytes, inputs } = data.products
+        const { geometry, fields, monthly, yearly, geometryBytes, fieldBytes, terrain, inputs } = data.products
         const mesh = isSplitGeometry(geometry) && isSplitFields(fields) ? composeSplitMesh(geometry, fields) : null
         const months = decodeMonthlyClimate(monthly)
         const years = decodeYearlyClimate(yearly)
@@ -65,7 +66,7 @@ export function startBrowserEbm(request: BrowserEbmRequest, signal: AbortSignal,
         }
         entry.products = { mesh, monthly: months, yearly: years }
         entry.archive = { geometry: new Blob([geometryBytes]), fields: new Blob([fieldBytes]),
-          monthly: new Blob([monthly]), yearly: new Blob([yearly]) }
+          monthly: new Blob([monthly]), yearly: new Blob([yearly]), ...(terrain && { terrain: new Blob([terrain]) }) }
         entry.inputs = inputs
         finish()
       } catch (cause) {
@@ -107,4 +108,4 @@ export async function saveBrowserEbm(id: string, scope: BrowserJob['scope'], loa
   return result.metadata
 }
 
-export type BrowserEbmSource = Pick<BrowserEbmRequest, 'config' | 'cells'> & { mesh: string; forcing: ClimateTrialForcing }
+export type BrowserEbmSource = Pick<BrowserEbmRequest, 'config' | 'cells' | 'mesh'> & { forcing: ClimateTrialForcing }

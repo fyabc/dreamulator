@@ -81,6 +81,8 @@ export default function PackViewerPage() {
   if (world && planet && selection) {
     const globalParams = new URLSearchParams({ [REGION_WINDOW_PARAM]: rawWindow! })
     if (branch) globalParams.set('branch', branch)
+    const climateResult = search.get('climateResult')
+    if (climateResult) globalParams.set('climateResult', climateResult)
     const view = search.get('view') === 'globe' ? 'globe' : 'map'
     const globalReturn = typeof state?.regionReturn === 'string' ? state.regionReturn
       : `/worlds/${encodeURIComponent(world)}/${view}/${encodeURIComponent(planet)}?${globalParams}`

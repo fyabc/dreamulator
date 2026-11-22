@@ -75,7 +75,7 @@ describe('world data archives', () => {
         surface: { planet_id: 'planet_earth', projection: 'equirectangular', width: 4096, height: 2048,
           elevation_min_m: -10000, elevation_max_m: 8000, sea_level_m: 0, voronoi_num_cells: 320, voronoi_seed: 5 } },
       assets: { elevation: new Blob(['surface']), geometry: new Blob(['geometry']), fields: new Blob(['fields']),
-        monthly: new Blob(['monthly']), yearly: new Blob(['yearly']) },
+        monthly: new Blob(['monthly']), yearly: new Blob(['yearly']), terrain: new Blob(['terrain']) },
     }
     const world = { ...exampleProject(), id: 'earth', published: true as const, layers: [], climateTrials: [trial] }
     const restored = await importWorldData(exportWorldData(world))
@@ -83,7 +83,7 @@ describe('world data archives', () => {
     const [saved] = restored.climateTrials ?? []
     expect(saved.metadata).toEqual(trial.metadata)
     expect(await Promise.all(Object.values(saved.assets).map(asset => asset.text()))).toEqual([
-      'geometry', 'fields', 'monthly', 'yearly', 'surface',
+      'geometry', 'fields', 'monthly', 'yearly', 'surface', 'terrain',
     ])
     await expect(importWorldData(exportWorldData({ ...world, climateTrials: [trial, trial] }))).rejects.toThrow('Invalid climate trial manifest')
   })
@@ -120,7 +120,7 @@ describe('world data archives', () => {
     const sample = exampleProject()
     const [source, result] = sample.layers
     if (source.kind !== 'elevation-source') throw new Error('Missing test source')
-    const location = { planet: 'planet_gaia', branch: 'test-climate' }
+    const location = { planet: 'planet_gaia', branch: 'test-climate', climateResult: crypto.randomUUID() }
     const world = { ...sample, id: 'global-earth-1024x512', published: true as const,
       layers: [{ ...source, location }, result] }
     const archive = exportWorldData(world)

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { BuildJob, BuildStage } from '../../api/buildJobs'
 import ProgressTimeline, { type TimelineItem } from '../ProgressTimeline'
 import { buildStageSteps } from './buildStageSteps'
+import { WorldBuildStageDetails } from './WorldBuildCard'
 
 const stateStyle: Record<BuildStage['state'], TimelineItem['state']> = {
   pending: 'pending', validating: 'active', running: 'active', succeeded: 'done',
@@ -54,15 +55,12 @@ export default function WorldBuildProgress({ job, running }: { job: BuildJob; ru
     }))
   }
 
-  return <details open={running} className="space-y-2 border-t border-space-border pt-2 text-sm">
-    <summary id={titleId} className="w-fit cursor-pointer rounded text-gray-300 hover:text-neon-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-neon-cyan">
-      {t('build.stageDetails')}
-    </summary>
+  return <WorldBuildStageDetails running={running} titleId={titleId}>
     {current && <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs text-gray-300">
       <span role="status" className="font-semibold text-neon-cyan">{current.step
         ? t('build.currentStep', { layer: current.layer, step: current.step }) : current.layer}</span>
       {current.total > 0 && <span className="tabular-nums">{t('build.stepCount', { done: current.done, total: current.total })}</span>}
     </div>}
     <ProgressTimeline items={items} titleId={titleId} current={current?.id} follow={running} />
-  </details>
+  </WorldBuildStageDetails>
 }

@@ -40,6 +40,7 @@ export default function SavedRegionView({ projectId, layerId, branch }: {
 
   const matches = source?.location ? matchingBrowserRegionResults(project.data, source.location, source.frame.window) : undefined
   if (layer && source) return <SavedElevationMap projectId={projectId} layer={layer} source={source} branch={branch} matches={matches}
+    browserWorld={project.data?.creationSnapshot && project.data.creationKind !== 'starter' ? true : undefined}
     backTo={backTo} backLabel={backLabel} />
 
   return <RegionMapWorkspace backTo={backTo} backLabel={backLabel} backRef={focusReturn}>
@@ -48,12 +49,13 @@ export default function SavedRegionView({ projectId, layerId, branch }: {
   </RegionMapWorkspace>
 }
 
-function SavedElevationMap({ projectId, layer, source, branch, matches, backTo, backLabel }: {
+function SavedElevationMap({ projectId, layer, source, branch, matches, browserWorld, backTo, backLabel }: {
   projectId: string
   layer: ProjectLayer
   source: ElevationSource
   branch: string | null
   matches?: ReturnType<typeof matchingBrowserRegionResults>
+  browserWorld?: true
   backTo: string
   backLabel: string
 }) {
@@ -121,6 +123,7 @@ function SavedElevationMap({ projectId, layer, source, branch, matches, backTo, 
       downloadLabel={settings ? map('packs.compute.download') : undefined} exporting={exporter.exporting}
       failed={exporter.failed} onDownload={(_, format) => exporter.download(layer.name, null, format, {
         projection: window.projection, center_lat: window.centerLat, center_lon: window.centerLon, radius_km: window.radiusKm,
+        ...(source.location?.climateResult && { climate_result: source.location.climateResult }),
         extent_km: { x: span, y: window.extentKmY }, sea_level_m: sea, pixel_size_m: span * 1000 / selected.width,
         ...(settings && { seed: settings.recipe.seed, processing_mode: settings.recipe.method,
           ...(settings.conditioning && { conditioning: settings.conditioning.climate ? 'climate' : 'elevation_only', td_grid: settings.conditioning }),
@@ -141,6 +144,7 @@ function SavedElevationMap({ projectId, layer, source, branch, matches, backTo, 
     </details>}
     {activeTemporary && <SaveProjectResult result={activeTemporary} target={{ worldId: projectId, sourceId: source.id, branch }} />}
     {canRefine && <TerrainCompute browser={{ raster: sourceRaster.data ?? null, spanKm: span, seaLevel: sea,
+      worldSource: browserWorld && source.location ? { world: projectId, window, browserWorld, ...source.location } : undefined,
       sourceRowSpacingKm: sourceStepKm, onResult: (result) => { setTemporary(result); setUseTemporary(true); setCompare(false) } }} />}
   </>}>
     {selected ? <PackMap window={window} base={conditions.layer ? conditions.preview : preview}

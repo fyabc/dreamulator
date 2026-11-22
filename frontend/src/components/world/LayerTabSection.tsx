@@ -33,6 +33,7 @@ export default function LayerTabSection({
   tab,
   derived,
   documents,
+  input = false,
 }: {
   worldName: string
   tab: string
@@ -40,6 +41,7 @@ export default function LayerTabSection({
   derived: ReactNode
   /** Authored setting documents (LayerDocuments) — the primary content. */
   documents: ReactNode
+  input?: boolean
 }) {
   const { t } = useTranslation('worlds')
   const [derivedOpen, setDerivedOpen] = useState(() => readStoredOpen(worldName, tab))
@@ -70,10 +72,10 @@ export default function LayerTabSection({
               ▸
             </span>
             <span className="text-sm font-semibold text-gray-400 uppercase tracking-wide group-hover:text-gray-200 transition-colors">
-              {t('detail.derivedData')}
+              {t(input ? 'detail.inputData' : 'detail.derivedData')}
             </span>
             <span className="text-xs text-gray-600 normal-case tracking-normal">
-              {t('detail.derivedDataHint')}
+              {t(input ? 'detail.inputDataHint' : 'detail.derivedDataHint')}
             </span>
           </button>
           {derivedOpen && (

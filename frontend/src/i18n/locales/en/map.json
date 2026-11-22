@@ -703,10 +703,11 @@
       "browserTitle": "Generate refined terrain (browser experiment)",
       "browserHint": "First model download: ~1.14 GB",
       "conditions": {
-        "loading": "Preparing TD inputs from the published world…",
+        "loading": "Preparing TD inputs for this region…",
         "climate": "Using published elevation and climate. TD grid: {{size}} × {{size}}.",
+        "browserClimate": "Using this world's original elevation and saved climate trial. TD grid: {{size}} × {{size}}.",
         "elevation": "No matching climate data; using elevation only. TD grid: {{size}} × {{size}}.",
-        "failed": "The published TD inputs could not be read. Refinement cannot start.",
+        "failed": "The selected TD inputs could not be read. Refinement cannot start.",
         "retry": "Retry loading inputs"
       },
       "modelCache": {

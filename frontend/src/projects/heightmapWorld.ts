@@ -1,9 +1,13 @@
 import { GRID_H, GRID_W, MODEL_JANUARY_INDEX, EARTH_PARAMS, isTemperatureParams, type PlanetParams } from '../playground/temperatureDraft'
 import type { KernelResult } from '../playground/temperature.worker'
 import { readElevationPng, type ElevationRaster } from '../viewers/packs/elevationRaster'
-import { maxSourceBytes } from './elevationProject'
+import { hasProjectHeightmap, maxSourceBytes, type LocalProject } from './elevationProject'
+import type { SavedClimateTrial } from '../api/climateTrials'
+import type { MapResultMetadata } from '../api/resultContract'
+import type { BrowserEbmSource } from '../playground/browserEbm'
 import { isCreationWorldId, jsonBlob as json, readCreationSnapshot, sha256, writeCreationSnapshot,
   type CreationSnapshot } from './creationSnapshot'
+import { worldLayers } from './worldLayers'
 
 export const heightmapCreationPath = 'browser-creation.json'
 export const defaultHeightmapCells = 18_432
@@ -34,7 +38,50 @@ export type HeightmapWorld = {
   heightmap: HeightmapInput
   temperature?: SavedTemperature
 }
-export const heightmapMapPath = (id: string) => `/worlds/${encodeURIComponent(id)}/map/${heightmapPlanet}?creation=1`
+export const heightmapMapPath = (id: string) => `/worlds/${encodeURIComponent(id)}/map/${heightmapPlanet}`
+
+export function latestHeightmapClimate(project: LocalProject): SavedClimateTrial | undefined {
+  let latest: SavedClimateTrial | undefined
+  for (const { metadata } of project.climateTrials ?? []) {
+    if (metadata.planet !== heightmapPlanet || metadata.branch !== null || !metadata.surface.browser_heightmap) continue
+    if (!latest || Date.parse(metadata.saved_at) > Date.parse(latest.saved_at)) latest = metadata
+  }
+  return latest
+}
+
+export function canDefaultToHeightmapClimate(planet: string | undefined, search: URLSearchParams) {
+  return (!planet || planet === heightmapPlanet) && !search.get('branch') && !search.has('draft')
+    && !search.has('climateResult') && search.get('trial') !== 'climate' && search.get('creation') !== '1'
+}
+
+export function defaultHeightmapClimateSearch(project: LocalProject, search: URLSearchParams) {
+  if (project.published || !hasProjectHeightmap(project)) return null
+  const latest = latestHeightmapClimate(project)
+  if (!latest) return null
+  const next = new URLSearchParams(search)
+  next.set('climateResult', latest.id)
+  return next
+}
+
+export function heightmapMapMetadata(world: HeightmapWorld): MapResultMetadata {
+  const { params, heightmap: { raster } } = world
+  const resolution = [raster.width, raster.height]
+  return { planet_id: heightmapPlanet, projection: 'equirectangular', width: raster.width, height: raster.height,
+    elevation_min_m: params.elevMinM, elevation_max_m: params.elevMaxM, sea_level_m: params.seaLevelM,
+    voronoi_seed: null, voronoi_num_cells: 0, elevation_import: { source_resolution: resolution,
+      output_resolution: resolution, was_resampled: false }, format_version: '3',
+    time: { reference_year_days: 365.25, reference_month_days: 365.25 / 12 }, browser_heightmap: true }
+}
+
+export function heightmapEbmSource({ params, heightmap, seed, meshCells }: HeightmapWorld): BrowserEbmSource {
+  const forcing = { axial_tilt_deg: params.tiltDeg, rotation_period_days: params.rotationDays,
+    albedo: params.albedo, greenhouse_warming_k: params.greenhouseK }
+  return { cells: meshCells, forcing, mesh: { image: heightmap.original, name: heightmap.filename, sha256: heightmap.sha256, mapping: mapping(params) },
+    config: { seed, num_nodes: meshCells, elevation_source: 'imported', stellar_luminosity_sol: params.luminosity,
+      orbital_distance_au: params.distanceAu, orbital_period_days: params.yearDays, variable_lapse_rate: params.variableLapse,
+      axial_tilt_deg: params.tiltDeg, rotation_period_days: params.rotationDays, albedo: params.albedo,
+      greenhouse_warming_K: params.greenhouseK } }
+}
 
 export async function readHeightmapInput(blob: Blob, name: string): Promise<HeightmapInput> {
   if (!blob.size || blob.size > maxSourceBytes) throw new Error('Unsupported heightmap file size')
@@ -46,7 +93,7 @@ export async function readHeightmapInput(blob: Blob, name: string): Promise<Heig
 }
 
 function mapping(params: PlanetParams) {
-  return { mode: 'range', min_m: params.elevMinM, max_m: params.elevMaxM, sea_level_m: params.seaLevelM }
+  return { mode: 'range' as const, min_m: params.elevMinM, max_m: params.elevMaxM, sea_level_m: params.seaLevelM }
 }
 
 export function isHeightmapParams(params: unknown): params is PlanetParams {
@@ -121,7 +168,7 @@ async function worldFiles(world: HeightmapWorld) {
   put('world.yaml', {
     metadata: { name: id, description: title, created, modified: created, dreamulator_version: __APP_VERSION__, tags: ['browser-heightmap'] },
     seed: { seed }, planet_ids: [heightmapPlanet],
-    layers: Object.fromEntries(['physics', 'chemistry', 'astronomy', 'geological', 'climate', 'ecology', 'civilization']
+    layers: Object.fromEntries(worldLayers
       .map(layer => [layer, { engine: layer, configured: ['astronomy', 'geological'].includes(layer) }])),
   })
   put('layers/astronomy/input/stellar.yaml', {

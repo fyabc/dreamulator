@@ -10,13 +10,14 @@ const SavedClimateLab = lazy(() => import('../../playground/SavedClimateLab'))
 export const trialPanelId = 'map-climate-trial'
 export const trialButtonId = 'map-climate-trial-button'
 
-export function MapTemperatureTrial({ open, onClose, search, onPreview, onResult, onShow }: {
+export function MapTemperatureTrial({ open, onClose, search, onPreview, onResult, onShow, onSavedError }: {
   open: boolean
   onClose: () => void
   search: URLSearchParams
   onPreview: (preview: TemperaturePreview | null) => void
   onResult: (result: ClimateTrialResult) => void
   onShow: () => void
+  onSavedError: () => void
 }) {
   const { t } = useTranslation('playground')
   const [previewMode, setPreviewMode] = useState(false)
@@ -49,7 +50,7 @@ export function MapTemperatureTrial({ open, onClose, search, onPreview, onResult
             </button>}
             <TemperatureLab search={search} map={{ onPreview, onShowPreview: onShow }} />
           </>
-            : saved ? <SavedClimateLab search={search} onResult={onResult} onShow={onShow} />
+            : saved ? <SavedClimateLab search={search} onResult={onResult} onShow={onShow} onError={onSavedError} />
             : <EbmClimateLab search={search} open={open} onResult={onResult} onShow={onShow}
                 onPreviewMode={browser ? () => setPreviewMode(true) : undefined} />}
         </Suspense>

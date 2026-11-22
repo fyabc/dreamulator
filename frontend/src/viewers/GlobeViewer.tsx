@@ -843,7 +843,7 @@ export default function GlobeViewer({
 
   return (
     <div ref={viewerRef} className="w-full h-full relative">
-      <TransitionPrompt progress={progress} label={resolvedLabel} />
+      {onTransition && <TransitionPrompt progress={progress} label={resolvedLabel} />}
       <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-500">{t('viewer.loadingGlobe')}</div>}>
         <Canvas
           camera={{ position: [0, 0, GLOBE_OVERVIEW_DISTANCE], fov: 40 }}

@@ -3,11 +3,15 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { SavedBrowserEbm, SavedClimateTrial } from '../api/climateTrials'
 import { EARTH_PARAMS, GRID_H, GRID_W } from '../playground/temperatureDraft'
 import { elevationPng } from '../viewers/packs/elevationRaster'
 import { readBrowserParameters, writeBrowserParameters } from './worldParameters'
-import { exportHeightmapWorld, heightmapGrid, importHeightmapWorld, readHeightmapInput, savedTemperature,
+import { exportWorldData, importWorldData } from './worldDataArchive'
+import { canDefaultToHeightmapClimate, defaultHeightmapClimateSearch, exportHeightmapWorld, heightmapGrid,
+  heightmapMapMetadata, heightmapPlanet, importHeightmapWorld, readHeightmapInput, savedTemperature,
   temperatureInputFingerprint, type HeightmapWorld } from './heightmapWorld'
+import { readBrowserWorldOverview } from './browserWorldOverview'
 
 async function fixture(real?: string): Promise<HeightmapWorld> {
   const blob = real ? new Blob([Uint8Array.from(await readFile(real))]) : await elevationPng({ width: 4, height: 2,
@@ -23,6 +27,59 @@ async function fixture(real?: string): Promise<HeightmapWorld> {
 }
 
 describe('heightmap world snapshots', () => {
+  it('reads authored astronomy and geology settings separately from derived data', async () => {
+    const overview = await readBrowserWorldOverview(await exportHeightmapWorld(await fixture()))
+    expect(overview.inputs).toEqual(['astronomy', 'geological'])
+    expect(overview.stellarSystem?.stars[0]).toMatchObject({ id: 'star_primary', luminosity_sol: 1.05 })
+    expect(overview.stellarSystem?.orbits[0]).toMatchObject({ body_id: heightmapPlanet, parent_id: 'star_primary' })
+    expect(overview.planets[0]).toMatchObject({ id: heightmapPlanet, mass: 1, radius: 1 })
+  })
+
+  it('opens the newest matching saved climate while preserving map settings', async () => {
+    const world = await fixture()
+    const blob = new Blob()
+    const trial = (id: string, day: string, options: Partial<SavedClimateTrial> = {}): SavedBrowserEbm => ({
+      metadata: { id, format: 1, solver: 'ebm', planet: heightmapPlanet, branch: null,
+        saved_at: `2026-11-${day}T00:00:00Z`, cells: 320, elapsed_seconds: 1,
+        inputs: { solver_version: '1', mesh_sha256: '', config_sha256: '', radius_km: 6371,
+          forcing: { axial_tilt_deg: 23.44, albedo: 0.3, rotation_period_days: 1, greenhouse_warming_k: 33 } },
+        surface: heightmapMapMetadata(world), ...options },
+      assets: { geometry: blob, fields: blob, monthly: blob, yearly: blob, elevation: blob },
+    })
+    const project = { id: world.id, name: world.title, updatedAt: 0, layers: [], creationSnapshot: blob,
+      climateTrials: [trial('old', '20'), trial('branch', '24', { branch: 'other' }),
+        trial('new', '21'), trial('other-planet', '23', { planet: 'planet_other' })] }
+    const search = new URLSearchParams('window=24.1,121.45,150&detail=downscaled')
+    const result = defaultHeightmapClimateSearch(project, search)
+    expect(result?.get('climateResult')).toBe('new')
+    expect(result?.get('window')).toBe(search.get('window'))
+    expect(result?.get('detail')).toBe('downscaled')
+    expect(search.has('climateResult')).toBe(false)
+    expect(defaultHeightmapClimateSearch({ ...project, climateTrials: [] }, search)).toBeNull()
+    expect(defaultHeightmapClimateSearch({ ...project, published: true }, search)).toBeNull()
+    expect(defaultHeightmapClimateSearch({ ...project, creationKind: 'starter' }, search)).toBeNull()
+  })
+
+  it('does not override explicit results, new trials, drafts or other map scopes', () => {
+    expect(canDefaultToHeightmapClimate(undefined, new URLSearchParams())).toBe(true)
+    expect(canDefaultToHeightmapClimate(heightmapPlanet, new URLSearchParams())).toBe(true)
+    expect(canDefaultToHeightmapClimate('planet_other', new URLSearchParams())).toBe(false)
+    for (const query of ['climateResult=older', 'trial=climate', 'draft=other', 'branch=other', 'creation=1']) {
+      expect(canDefaultToHeightmapClimate(heightmapPlanet, new URLSearchParams(query))).toBe(false)
+    }
+  })
+
+  it('keeps the original heightmap and formal inputs in the browser data backup', async () => {
+    const world = await fixture()
+    const archive = exportWorldData({ id: world.id, name: world.title, updatedAt: 0, layers: [],
+      creationSnapshot: await exportHeightmapWorld(world) })
+    const backup = await importWorldData(archive)
+    const restored = await importHeightmapWorld(backup.creationSnapshot!)
+    expect(restored.meshCells).toBe(world.meshCells)
+    expect(restored.params).toEqual(world.params)
+    expect(restored.heightmap.sha256).toBe(world.heightmap.sha256)
+  })
+
   it('changes formal parameters without changing the saved browser experiment or original image', async () => {
     const world = await fixture()
     const archive = await exportHeightmapWorld(world)

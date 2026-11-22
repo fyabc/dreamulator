@@ -17,7 +17,7 @@ type LayerBase = { id: string; name: string; width: number; height: number; data
 export type ElevationSource = LayerBase & {
   kind: 'elevation-source'
   frame: ElevationFrame
-  location?: { planet: string; branch: string | null }
+  location?: { planet: string; branch: string | null; climateResult?: string }
   original?: { name: string; data: Blob }
 }
 export type ElevationResult = LayerBase & {
@@ -40,7 +40,8 @@ export function elevationSource(layers: ProjectLayer[], layer: ProjectLayer): El
 export function projectBytes(project: LocalProject) {
   return project.layers.reduce((size, layer) => size + layer.data.size + (layer.kind === 'elevation-source' ? layer.original?.data.size ?? 0 : 0), 0)
     + (project.temperatureDrafts?.reduce((size, draft) => size + draft.grid.size, 0) ?? 0) + (project.creationSnapshot?.size ?? 0)
-    + (project.climateTrials?.reduce((size, trial) => size + browserClimateAssets.reduce((total, key) => total + trial.assets[key].size, 0), 0) ?? 0)
+    + (project.climateTrials?.reduce((size, trial) => size + (trial.assets.terrain?.size ?? 0) +
+      browserClimateAssets.reduce((total, key) => total + trial.assets[key].size, 0), 0) ?? 0)
 }
 
 function encodeRaster(raster: ElevationRaster) {
@@ -159,7 +160,11 @@ export async function readElevationLayers(entries: unknown[], data: (entry: Reco
       if (entry.location !== undefined) {
         const location = entry.location
         if (!record(location) || !name(location.planet) || (location.branch !== null && !name(location.branch))) throw new Error('Invalid layer location')
-        layer.location = { planet: location.planet, branch: location.branch }
+        if (location.climateResult !== undefined && !id(location.climateResult)) {
+          throw new Error('Invalid regional climate source')
+        }
+        layer.location = { planet: location.planet, branch: location.branch,
+          ...(location.climateResult && { climateResult: location.climateResult }) }
       }
       if (entry.original !== undefined) {
         const original = entry.original

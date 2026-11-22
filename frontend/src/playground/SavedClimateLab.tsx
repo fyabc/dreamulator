@@ -5,10 +5,11 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import type { ClimateTrialResult } from '../api/climateTrials'
 
-export default function SavedClimateLab({ search, onResult, onShow }: {
+export default function SavedClimateLab({ search, onResult, onShow, onError }: {
   search: URLSearchParams
   onResult: (result: ClimateTrialResult) => void
   onShow: () => void
+  onError: () => void
 }) {
   const { t, i18n } = useTranslation('playground')
   const [locationSearch] = useSearchParams()
@@ -22,6 +23,9 @@ export default function SavedClimateLab({ search, onResult, onShow }: {
     staleTime: Infinity, gcTime: 0, retry: false,
   })
   const reported = useRef<ClimateTrialResult | null>(null)
+  useEffect(() => {
+    if (query.isError) onError()
+  }, [query.isError, onError])
   useEffect(() => {
     if (!query.data || reported.current === query.data) return
     reported.current = query.data

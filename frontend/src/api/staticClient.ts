@@ -17,6 +17,7 @@ import type { WorldParameters, WorldParameterUpdate } from './worldParameters'
 import type { ParameterDefaults } from '../projects/worldParameters'
 import type { ClimateTrialForcing } from './climateTrials'
 import type { BrowserEbmSource } from '../playground/browserEbm'
+import type { HeightmapWorld } from '../projects/heightmapWorld'
 import type { SkyBackground, SkyCulture, SkyQuery } from '../viewers/sky/types'
 
 interface DocumentMeta {
@@ -43,7 +44,40 @@ const astronomyScope = (name: string, branch?: string | null) =>
 // conditional request per file; unchanged large meshes answer 304.
 const FETCH_INIT: RequestInit = { cache: 'no-cache' }
 
-async function browserEbmSource(world: string, planet: string, branch: string | null, signal?: AbortSignal) {
+const pendingHeightmaps = new Map<string, Promise<HeightmapWorld | null>>()
+
+async function browserProject(id: string) {
+  const { getProject } = await import('../projects/projectStore')
+  return typeof indexedDB === 'undefined' ? null : getProject(id).then(project => project?.published ? null : project)
+}
+
+function browserHeightmap(id: string) {
+  const pending = pendingHeightmaps.get(id)
+  if (pending) return pending
+  const load = browserProject(id).then(async project => {
+    if (!project?.creationSnapshot || project.creationKind === 'starter') return null
+    return (await import('../projects/heightmapWorld')).importHeightmapWorld(project.creationSnapshot)
+  }).finally(() => pendingHeightmaps.delete(id))
+  pendingHeightmaps.set(id, load)
+  return load
+}
+
+async function browserEbmSource(world: string, planet: string, branch: string | null, signal?: AbortSignal): Promise<BrowserEbmSource> {
+  if (typeof Worker === 'undefined' || typeof WebAssembly === 'undefined' || typeof DecompressionStream === 'undefined') {
+    throw new Error('browser_incompatible')
+  }
+  const project = await browserProject(world)
+  if (project) {
+    const { heightmapPlanet, heightmapEbmSource } = await import('../projects/heightmapWorld')
+    const input = !branch && planet === heightmapPlanet ? await browserHeightmap(world) : null
+    signal?.throwIfAborted()
+    if (!input) throw new Error('browser_unavailable')
+    if (input.meshCells > 20_000) throw new Error('browser_grid_limit')
+    const parameters = await staticApi.getWorldParameters(world, branch)
+    const planetSettings = parameters.planet
+    return heightmapEbmSource(planetSettings ? { ...input, params: { ...input.params,
+      rotationDays: planetSettings.rotation_period_days, albedo: planetSettings.albedo } } : input)
+  }
   const scope = `/worlds/${encodeURIComponent(world)}${branch ? `/branches/${encodeURIComponent(branch)}` : ''}`
   const directory = `${DATA_BASE}${scope}/maps/${encodeURIComponent(planet)}/`
   const response = await fetch(`${directory}climate_trial.json`, { ...FETCH_INIT, signal })
@@ -51,14 +85,11 @@ async function browserEbmSource(world: string, planet: string, branch: string | 
     throw new Error('browser_unavailable')
   }
   if (!response.ok) throw new Error('browser_source')
-  const data = await response.json() as { version: number } & (BrowserEbmSource | { reason: string })
+  const data = await response.json() as { version: number } & ((BrowserEbmSource & { mesh: string }) | { reason: string })
   if (data.version !== 1) throw new Error('browser_unavailable')
   if ('reason' in data) throw new Error(data.reason)
   if (!['cvt_mesh.msgpack.gz', 'climate_trial_mesh.bin'].includes(data.mesh) || !data.config ||
       !data.forcing || !Number.isInteger(data.cells) || data.cells < 1) throw new Error('browser_source')
-  if (typeof Worker === 'undefined' || typeof WebAssembly === 'undefined' || typeof DecompressionStream === 'undefined') {
-    throw new Error('browser_incompatible')
-  }
   return { ...data, mesh: new URL(`${directory}${data.mesh}`, document.baseURI).href }
 }
 
@@ -257,12 +288,7 @@ export const staticApi = {
     const { id, title } = await readStarterSnapshot(snapshot)
     return saveCreationWorld(id, title, archive, 'starter')
   },
-  async getHeightmapWorld(id: string) {
-    const { getProject } = await import('../projects/projectStore')
-    const project = await getProject(id)
-    const archive = project?.creationKind !== 'starter' ? project?.creationSnapshot : undefined
-    return archive ? (await import('../projects/heightmapWorld')).importHeightmapWorld(archive) : null
-  },
+  getHeightmapWorld: browserHeightmap,
   // World operations (read-only)
   listWorlds: () => fetchStaticJson<string[]>('/worlds.json'),
 
@@ -297,9 +323,9 @@ export const staticApi = {
     return saveBrowserEbm(id, { world, planet, branch }, async () => {
       const [meta, elevation] = await Promise.all([staticApi.getMapMeta(world, planet, branch), staticApi.getElevationBlob(world, planet, branch)])
       const { planet_id, projection, width, height, elevation_min_m, elevation_max_m, sea_level_m,
-        voronoi_seed, voronoi_num_cells, pipeline_version, elevation_import } = meta
+        voronoi_seed, voronoi_num_cells, pipeline_version, elevation_import, browser_heightmap } = meta
       return [{ planet_id, projection, width, height, elevation_min_m, elevation_max_m, sea_level_m,
-        voronoi_seed, voronoi_num_cells, pipeline_version, elevation_import }, elevation]
+        voronoi_seed, voronoi_num_cells, pipeline_version, elevation_import, browser_heightmap }, elevation]
     })
   },
   saveClimateTrialBranch: async (): Promise<never> => notAvailable('saveClimateTrialBranch'),
@@ -329,8 +355,8 @@ export const staticApi = {
   cancelRegionRefinement: async () => notAvailable('cancelRegionRefinement'),
 
   // Data access (branch-aware: fetches from branches/{branch}/ when branch is set)
-  getStellarSystem: (name: string, branch?: string | null) =>
-    branch
+  getStellarSystem: async (name: string, branch?: string | null) =>
+    await browserProject(name) ? { bodies: [] } : branch
       ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/stellar.json`)
       : fetchStaticJson<any>(`/worlds/${name}/stellar.json`),
 
@@ -339,8 +365,15 @@ export const staticApi = {
       ? fetchStaticJson<any>(`/worlds/${name}/branches/${branch}/habitable_zones.json`)
       : fetchStaticJson<any>(`/worlds/${name}/habitable_zones.json`),
 
-  getPlanets: (name: string, branch?: string | null) =>
-    fetchStaticJson<any[]>(`${astronomyScope(name, branch)}/planets.json`, () => []),
+  getPlanets: async (name: string, branch?: string | null) => {
+    if (await browserProject(name)) {
+      const world = await browserHeightmap(name)
+      if (!world || branch) return []
+      const { heightmapPlanet } = await import('../projects/heightmapWorld')
+      return [{ id: heightmapPlanet, name: world.title, radius: 1, axial_tilt_deg: world.params.tiltDeg }]
+    }
+    return fetchStaticJson<any[]>(`${astronomyScope(name, branch)}/planets.json`, () => [])
+  },
 
   getSystemCatalog: (name: string, branch?: string | null) =>
     fetchStaticJson<SystemCatalog>(`${astronomyScope(name, branch)}/system_catalog.json`),
@@ -359,8 +392,8 @@ export const staticApi = {
     fetchStaticJson<SkyCulture | null>(`${astronomyScope(name, branch)}/sky_culture.json`, () => null),
 
   // Branches
-  listBranches: (name: string) =>
-    fetchStaticJson<any[]>(`/worlds/${name}/branches.json`),
+  listBranches: async (name: string) =>
+    await browserProject(name) ? [] : fetchStaticJson<any[]>(`/worlds/${name}/branches.json`),
 
 
   // Legacy civilization documents (delegate to generic layer-documents)
@@ -453,6 +486,9 @@ export const staticApi = {
   // ---- Map read operations (branch-aware with root fallback) ----
 
   listMapPlanets: async (name: string, branch?: string | null): Promise<string[]> => {
+    const project = await browserProject(name)
+    if (project) return project.creationSnapshot && project.creationKind !== 'starter' && !branch
+      ? [(await import('../projects/heightmapWorld')).heightmapPlanet] : []
     // The exported index includes inherited planets in the API's branch-first order.
     const result = await fetchBranchAwareJson<string[]>(
       name,
@@ -464,6 +500,12 @@ export const staticApi = {
   },
 
   getMapMeta: async (name: string, planetId: string, branch?: string | null) => {
+    if (await browserProject(name)) {
+      const { heightmapPlanet, heightmapMapMetadata } = await import('../projects/heightmapWorld')
+      const world = !branch && planetId === heightmapPlanet ? await browserHeightmap(name) : null
+      if (!world) throw new Error(`No browser map metadata for ${planetId}`)
+      return heightmapMapMetadata(world)
+    }
     const result = await fetchBranchAwareJson<MapResultMetadata>(
       name,
       branch,
@@ -475,6 +517,12 @@ export const staticApi = {
   },
 
   getElevationBlob: async (name: string, planetId: string, branch?: string | null) => {
+    if (await browserProject(name)) {
+      const { heightmapPlanet } = await import('../projects/heightmapWorld')
+      const world = !branch && planetId === heightmapPlanet ? await browserHeightmap(name) : null
+      if (!world) throw new Error(`No browser elevation data for ${planetId}`)
+      return world.heightmap.original
+    }
     const result = await fetchBranchAwareBlob(
       name,
       branch,
@@ -485,7 +533,8 @@ export const staticApi = {
     return result
   },
 
-  getTerrainSource: (world: string, planet: string, branch: string | null, signal: AbortSignal) => {
+  getTerrainSource: async (world: string, planet: string, branch: string | null, signal: AbortSignal) => {
+    if (await browserProject(world)) return null
     const scope = branch ? `/branches/${encodeURIComponent(branch)}` : ''
     return fetchStaticBlob(`/worlds/${encodeURIComponent(world)}${scope}/maps/${encodeURIComponent(planet)}/td-source.msgpack`, signal)
   },
@@ -494,6 +543,7 @@ export const staticApi = {
     fetchStaticBlob(`/worlds/${encodeURIComponent(world)}/td-elevation/${encodeURIComponent(digest)}.bin.gz`, signal),
 
   getVoronoi: async (name: string, planetId: string, branch?: string | null) => {
+    if (await browserProject(name)) return null
     // Prefer the CVT mesh (current format, same as backend API)
     const cvtData = await fetchBranchAwareMesh(name, branch, planetId)
     if (cvtData !== null) {
@@ -549,6 +599,7 @@ export const staticApi = {
   },
 
   getCvtMesh: async (name: string, planetId: string, branch?: string | null) => {
+    if (await browserProject(name)) return null
     const { mark } = await import('../utils/perf')
     mark('mesh-fetch-start')
     try {
@@ -565,6 +616,7 @@ export const staticApi = {
     planetId: string,
     branch?: string | null,
   ): Promise<MonthlyClimateData | null> => {
+    if (await browserProject(name)) return null
     const blob = await fetchBranchAwareBlob(
       name,
       branch,
@@ -580,6 +632,7 @@ export const staticApi = {
     planetId: string,
     branch?: string | null,
   ): Promise<YearlyClimateData | null> => {
+    if (await browserProject(name)) return null
     const blob = await fetchBranchAwareBlob(
       name,
       branch,
@@ -591,6 +644,7 @@ export const staticApi = {
   },
 
   getPlates: async (name: string, planetId: string, branch?: string | null) => {
+    if (await browserProject(name)) return []
     const result = await fetchBranchAwareJson<{ plates?: any[] }>(
       name,
       branch,
