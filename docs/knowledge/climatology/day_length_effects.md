@@ -85,7 +85,7 @@ $$\text{zcctot} = 0.245 + 0.125 \ln(P_\text{conv} \cdot \text{zrfac}), \qquad
 的云量直接与地球观测比较时必须记住这一项。分层云量（`cloud_high_frac` 一类）同样带这个依赖，
 所以它在世界内部自洽，但不能跨世界当同一口径的量。
 
-干预脚本在 `private/experiments/cloud-solarday-20261104/`，诊断补丁走
+干预脚本另存，不随仓库分发；诊断补丁走
 `dreamulator.gcm.fortran_patches` 的独立构建缓存，不进产品。
 
 ## 4. 同步卫星特有的光照：巨行星的食与巨行星辐射

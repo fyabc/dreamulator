@@ -4,7 +4,7 @@
 > 以及无界面运行（`-b`）时的坑。天空/行星渲染的具体做法见
 > [`blender_sky_rendering.md`](blender_sky_rendering.md)；区域地形链见
 > `docs/design/pipelines/region-pack.md`。
-> 本机实测：Blender 5.2.2 LTS，Windows 11。
+> 实测环境：Blender 5.2.2 LTS，Windows 11。
 
 ## 1. 调用方式
 

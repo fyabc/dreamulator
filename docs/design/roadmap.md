@@ -1,12 +1,11 @@
 # 开发路线图
 
-> 最后更新：2026-11-06（v1.2.0 合版发布：nacrea 气候正典刷新为 20 分钟积分步长的 GCM——网格地表口径
-> 全球均温 13.5 °C、陆地年降水约 1040 mm，Köppen A/B/C/D/E 群占陆地 40.0/21.1/11.0/2.2/25.7%；
-> 画布覆冰按新气候重算（v7，冰缘塑性锥度），天气包换代（4 h × 2250 帧），热带气旋正典改为每个当地年
-> 约 7 个，Miami NPP 折碳修复；服务器批 47 提交合入。全球画布链 S2 外存水文与 S3 区域裁窗见
-> [canvas-chain.md](pipelines/canvas-chain.md)。v1.1.0 发版内容：程序化云纹理 `map globe`、
-> 区域包查看页 `/packs`、2D 地图收敛为等距圆柱单投影、nacrea 轨道集合收尾与两档正典、
-> earth 板块运动 PB2002 欧拉极修正。详情见 CHANGELOG）
+> 最后更新：2026-11-22（v1.3.0 合版发布：浏览器端新建世界（地球高程示例、上传高度图或模板）
+> 与完整气候试算、统一的世界导航、Earth 观测与模型 Köppen 分离、文明地图领土数据；
+> 静态导出按内容去重分支地图，完整站点约 800 MB，低于 GitHub Pages 的 1 GB 上限。
+> Nacrea 根世界重建五个可构建层，`gcm-t42-712` 按固定气候输入重算并保留科学冻结；
+> 全球画布链 S2 外存水文与 S3 区域裁窗见 [canvas-chain.md](pipelines/canvas-chain.md)。
+> v1.2.0 发版内容：20 分钟步长气候正典、画布覆冰 v7、新天气包与热带气旋修复。详情见 CHANGELOG）
 > 长期愿景与设计哲学见 [vision.md](proposals/vision.md)；竞品分析见 [competitor-analysis.md](competitor-analysis.md)；
 > 地形和前端可参考 [Heightcraft](competitor-analysis.md#424-heightcraft-的高程图超分辨率)与 [web-exoplasim-qol](web-gcm-and-frontend.md#6-web-exoplasim-qol-的增强与边界)的调研，不改变现有优先级；
 > 文明层详细设计见 [civilization-layer.md](proposals/civilization-layer.md)；
@@ -15,7 +14,7 @@
 
 ---
 
-## 一、当前状态快照（v1.2.0）
+## 一、当前状态快照（v1.3.0）
 
 | 维度 | 状态 |
 |------|------|
@@ -26,7 +25,7 @@
 | 样板世界 | nacrea：200k 节点（~51 km/cell）、~72% 海洋；气候正典 = 分支 `gcm-t42-712`（20 分钟步长 GCM，712 ppm CO₂）：全球均温 13.5 °C、陆地 11.2 °C、陆地年降水约 1040 mm（design-notes 0013） |
 | 网格规模 | 主力分辨率 **200k**；盘上 msgpack.gz + 几何/气候分离存储双文件（−41%），worker 零拷贝 + ETag/304 |
 | 开发数据 | 版本化基础地形包已经实现，包边界与兼容性由[真实地球数据管线](pipelines/earth-real-data.md#11-版本化基础地形包)维护。 |
-| 未发布（main） | 无——v1.2.0 已含 20 分钟步长气候正典、画布覆冰 v7、新天气包与热带气旋修复，数据随 `worlds-data` release 发布 |
+| 未发布（main） | 无——v1.3.0 已含浏览器建世界与气候试算、统一世界导航、静态站地图去重与文明地图数据，数据随 `worlds-data` release 发布 |
 
 ---
 
@@ -388,9 +387,7 @@
     同理，所以与地球观测对比时必须带上这一项。机制与量级已登记
     [日长效应 §3.1](../knowledge/climatology/day_length_effects.md)，实践提醒在
     [ExoPlaSim 用法 §7](../usage/exoplasim-gcm.md)。
-    脚本与数据在 `private/experiments/cloud-timestep-20261103/`、
-    `private/experiments/cloud-solarday-20261104/` 与
-    `private/experiments/cloud-extrapolation-20261104/`。
+    复现脚本与数据另存，不随仓库分发。
     顺带的独立结论：web-exoplasim 在 20 与 45 分钟之间的洋面云量变化是 +3.5 个百分点，与本机的
     +3.97 基本一致，所以**它忠实复现了 ExoPlaSim 的步长敏感性**；两者在同一步长下仍差的约 5.6 个
     百分点，大部分来自浏览器默认开着臭氧（见技术债 53），扣除后只剩约 2 个百分点可能属于重写本身。
@@ -408,7 +405,7 @@
     **顺带解释了浏览器的云量差**：web-exoplasim 那几次跑都开着臭氧。本机在 20 分钟步长下臭氧使云量降
     4.5 个百分点；若这一效应在 45 分钟下大致可加，则本机 45 分钟开臭氧约为 56.1%，与浏览器同步长的
     54.0% 只差约 2 个百分点，原先约 6.6 个百分点的差距大部分来自臭氧开关而不是重写本身。
-    脚本与数据在 `private/gcm/runs/ozone-round1-20261104/`。
+    复现脚本与数据另存，不随仓库分发。
 
 54. **S2 河网外存化已完成。** 实现与内存约束由[画布链 §3.4](pipelines/canvas-chain.md#34-汇流)维护，
     world-west 的完整回归结果见 [CHANGELOG](../../CHANGELOG.md) 的未发布条目。

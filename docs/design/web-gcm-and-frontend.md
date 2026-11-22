@@ -60,8 +60,7 @@ RTX 2070 SUPER、Chrome 155。
 
 ### 2.1 本机参照臂的强扩展曲线（2026-11-03 实测）
 
-每档跑一个模式年，输入、namelist 与正典 `cold_712` 完全一致，顺序执行以免互相抢核，脚本在
-`private/gcm/runs/scaling-20261103/sweep.sh`。墙钟取各次 `manifest.json` 的 `wall_seconds`。
+每档跑一个模式年，输入、namelist 与正典 `cold_712` 完全一致，顺序执行以免互相抢核，复现脚本另存，不随仓库分发。墙钟取各次 `manifest.json` 的 `wall_seconds`。
 每步按每模式年 11,849 步换算。各档实际生效的进程数由 `MOST_DIAG` 里的 CPU 行数核对过，与请求一致；
 七档各输出 12 条月度记录，一个模式年后的全球温度在 −9.66 到 −9.67 °C 之间，所以墙钟可比。
 
@@ -163,8 +162,7 @@ NCEP 观测确认的。若 GCM 改为自研，它会与 EBM 共享同一套关�
 ## 4 作者实跑与本机正典的逐项对比（2026-11-03）
 
 作者在 GPU 路径上用本库导出的 nacrea 地形跑了 35 个模式年，下载的快照是
-`exports/web-gcm/exoplasim-t42-layers10-year0035-month07.ckpt`，解析脚本在
-`private/experiments/web-exoplasim-20261103/read_checkpoint.py`。
+`exports/web-gcm/exoplasim-t42-layers10-year0035-month07.ckpt`；快照解析脚本另存，不随仓库分发。
 
 快照格式是魔数行、4 字节小端 JSON 长度、JSON 头、4 字节空档，然后一整块二进制，头里的 `offset`
 相对这块的起点。少算那 4 字节空档会让每个字段混进前一个字段的最后一格，校验办法是看字段本身该
@@ -307,7 +305,7 @@ koppenpasta 一律用 30 天的月。Nacrea 的年长 99.7 天，于是它的「
 
 - **不抄代码**：GPL-2.0 与本库许可不兼容，且本库的引擎是诊断式 DAG 而非时间积分模式，架构
   不同。借鉴限于方法、数字与界面思路。
-- **不把它当参照臂**：本库已有自己的 ExoPlaSim 参照臂（`private/gcm`），口径与正典绑定；再引
+- **不把它当参照臂**：本库已有自己的 ExoPlaSim 参照臂（运行目录另存，不随仓库分发），口径与正典绑定；再引
   入一个浏览器实现只会多一个需要对齐的对象。
 - **它的重写忠实度仍在建立中**：8 个 `verify-*` 脚本说明作者在认真做这件事，但那是他们的
   验证，不是我们的。若将来要引用它的数字，必须自己复核。
@@ -348,5 +346,5 @@ Dreamulator 的正式模拟使用不规则球面网格，不直接移植对方�
 - 仓库与许可：`github.com/ryoung48/web-exoplasim`（GPL-2.0）
 - 它的性能计划：`plans/web-gcm-performance.md`、`plans/gcm-speed.md`
 - 它的实现文档：`docs/climate/exoplasim-webgpu.md`、`exoplasim-wasm.md`、`custom-terrain.md`
-- 本机参照臂实测：`private/gcm/runs/t42r/*/manifest.json`
+- 参照臂实测记录另存，不随仓库分发
 - 本库的 ExoPlaSim 用法与踩坑：[usage/exoplasim-gcm.md](../usage/exoplasim-gcm.md)

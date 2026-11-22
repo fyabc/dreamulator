@@ -2,7 +2,7 @@
 
 > 适用对象：用 `blender -b -P` 无界面重建「地表仰望行星」「行星盘面」「星空」这类
 > 天文镜头的脚本。本文只记录与具体世界无关的工程知识与踩坑，不绑定某一集的分镜。
-> 本机实测环境：Blender 5.2.2 LTS、Cycles、RTX 3060 Laptop 6 GB、Windows 11。
+> 实测环境：Blender 5.2.2 LTS、Cycles、RTX 3060 Laptop 6 GB、Windows 11。
 > 通用的区域地形渲染链见 `docs/design/pipelines/region-pack.md` 与
 > `scripts/media/blender/region_still.py`；本文补充的是天空、行星盘面与相机运动。
 

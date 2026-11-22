@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.3.0] — 2026-11-22
 
 - 河深研究加入曼宁宽浅河道估算，使用独立河段坡度和已接受的估算河宽；在相同的 20 个标定断面和 20 个留出断面上，水深中位绝对相对误差为 30.2%，90% 的估计落在实测值的一半至两倍内，粗估检验通过。资料对照表记录坡度下限和未确认站点，正式地形尚未雕刻。
 
@@ -104,6 +104,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 缩湖取同高程格子改用稳定排序，结果不再依赖排序实现。
 
 ### Changed
+
+- 静态导出按内容去重分支地图。与根世界逐字节相同的文件不再复制进分支目录，改由分支目录的 `maps/shared.json` 清单指引客户端直接读取根世界的同名文件，因此不会产生 404 请求。浏览器气候试算从分支目录直接读取合并网格，该网格、观测 Köppen 栅格和试算清单仍然保留在分支目录。导出数据由约 1.15 GB 降到约 719 MB，完整站点约 800 MB，低于 GitHub Pages 的 1 GB 上限。网格 gzip 头部改用固定时间戳，相同网格写出相同字节。
 
 - 共享冰面与水文的小批来源、守恒、分块消费和量化诊断已获作者验收。三个独立基岩样本的冰量账本相对残差不超过 3.61×10⁻¹⁰，三种水文组合的河线、流量和情相逐值一致。厚冰窗口的米级量化使 77.1% 的水平与垂直相邻像素同高，两圈长边份额为零；同一算法读取未量化冰面时，长边份额为 52.5%，按河段长度加权的下坡方向误差由 15.53° 降至 7.44°。后续修复需让亚米级地表贯穿水文输入、填洼和边界缓存，完整冰体与跨画布接缝继续分项验收。
 

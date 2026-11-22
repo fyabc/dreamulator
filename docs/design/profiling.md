@@ -171,7 +171,7 @@ SVG 用浏览器打开即可交互式浏览；speedscope 适合长构建（>5 mi
 - **"ocean GMRES 为什么超线性？"** → 按时间线分段：海盆切分 vs 独立求解 vs 汇合
 - **"改动前后对比"** → 生成两张火焰图，肉眼对比函数条宽度
 
-> py-spy 是 Windows 原生支持的 Python 采样 profiler（不依赖 `perf`），本机 AMD 核显环境可用。
+> py-spy 是 Windows 原生支持的 Python 采样 profiler（不依赖 `perf`），在没有 `perf` 的 Windows 环境可用。
 
 ---
 

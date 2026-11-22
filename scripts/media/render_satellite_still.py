@@ -48,7 +48,7 @@ def main() -> None:
         raise SystemExit(
             f"{export_dir} has no meta.json; run\n"
             "  uv run dreamulator map globe nacrea "
-            "--config private/video/satellite/cloud_trio_final.yaml "
+            "--config <画布配置>.yaml "
             "-o exports/globe/nacrea\n"
             "first."
         )

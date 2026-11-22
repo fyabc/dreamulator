@@ -45,7 +45,7 @@ dreamulator/
 ├── packages/
 │   └── conlang/                 # 独立子包：人造语言工具（自有文档与路线图）
 ├── .github/workflows/           # GitHub Actions（GitHub Pages 自动部署）
-├── private/                     # 私有内容（plans、chats、私有世界数据，git 排除或独立管理）
+├── <私有工作区>/                # 作者私有的计划与实验数据，git 排除，不随仓库分发
 └── tests/                       # Python 测试
 ```
 
