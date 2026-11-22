@@ -74,7 +74,7 @@ export default function RegionWindowPanel({
         setExpanded(false)
         expandButton.current?.focus()
       }}>
-        <button ref={expandButton} type="button" className={`${buttonClass} min-h-10 lg:min-h-9 ${window ? '!border-neon-cyan/50 !text-neon-cyan' : ''}`}
+        <button ref={expandButton} type="button" className={`${buttonClass} min-h-10 font-medium lg:min-h-9 ${window ? '!border-neon-cyan/60 !text-neon-cyan' : '!border-neon-cyan/35 !text-neon-cyan/90'}`}
           data-tutorial-anchor="region"
           aria-expanded={expanded} aria-controls={expanded ? formId : undefined}
           title={window ? t('regionWindow.summary', { ...window }) : t('regionWindow.hint.toggle')}
