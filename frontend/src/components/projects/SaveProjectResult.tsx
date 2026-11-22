@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { makeElevationResult, makeElevationSource, type ElevationFrame } from '../../projects/elevationProject'
 import { projectRegionPath, projectsKey, publishedWorld, updateProject } from '../../projects/projectStore'
+import { tutorialMilestone } from '../../tutorial/tutorialProgress'
 import type { BrowserTerrainResult } from '../../viewers/packs/TerrainCompute'
 import type { ElevationRaster } from '../../viewers/packs/elevationRaster'
 
@@ -28,14 +29,19 @@ export default function SaveProjectResult({ target, result }: { target: Target; 
       return { ...world, layers: input ? [...world.layers, input, output] : [...world.layers, output] }
     }, initial)
     return output.id
-  }, onSuccess: () => queryClient.invalidateQueries({ queryKey: projectsKey }) })
+  }, onSuccess: () => {
+    void queryClient.invalidateQueries({ queryKey: projectsKey })
+    if ('planet' in target && target.browserWorld) {
+      tutorialMilestone({ type: 'regionResult', world: target.worldId, planet: target.planet, branch: target.branch })
+    }
+  } })
 
   if (save.isSuccess && save.variables === result) return <p role="status">
     {t('saved')} <Link className={projectButton} to={projectRegionPath(target.worldId, save.data, target.branch)}>{t('openSaved')}</Link>
   </p>
   return <div className="space-y-2 border-t border-space-border pt-2">
     <p role="status">{t('unsaved')}</p>
-    <button type="button" className={projectButton} onClick={() => save.mutate(result)}
+    <button type="button" className={projectButton} data-tutorial-anchor="browserSave" onClick={() => save.mutate(result)}
       disabled={save.isPending}>{t(save.isPending ? 'saving' : 'save')}</button>
     {save.isError && <p role="alert" className="text-red-300">{t('saveFailed')}</p>}
   </div>

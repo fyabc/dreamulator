@@ -59,6 +59,7 @@ export default function BrowserWorldBuildPanel({ project, visible }: { project: 
             queryClient.invalidateQueries({ queryKey: savedClimateKey(project.id) }),
             queryClient.invalidateQueries({ queryKey: worldParametersKey(project.id, null) }),
           ])
+          tutorialMilestone({ type: 'built', world: project.id })
           setPhase('done')
           return result
         }
@@ -91,7 +92,7 @@ export default function BrowserWorldBuildPanel({ project, visible }: { project: 
         controller.current?.abort()
       }}>{t('action.cancel')}</button>}
       <button type="button" disabled={!hasMap || build.isPending || grid.isPending} className={buildPrimaryAction}
-        title={t('browserBuild.scope')}
+        data-tutorial-anchor="browserBuild" title={t('browserBuild.scope')}
         onClick={() => build.mutate()}>{t(build.isError ? 'build.retry' : 'action.buildWorld')}</button>
     </>}>
     {!hasMap && <p className="text-sm text-gray-400">{t('browserBuild.noHeightmap')}</p>}

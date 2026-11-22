@@ -145,7 +145,6 @@ export default function MapViewerPage() {
       : 'atlas-workbench flex flex-col'}>
       {!cleanMode && (
       <MapWorkbenchToolbar title={currentPlanetName ?? selectedPlanet ?? t('title.mapFallback')} view="map"
-        backAnchor={meta?.browser_heightmap ? 'browserView' : undefined}
         backTo={`/worlds/${worldName}${backSearch.size ? `?${backSearch}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/globe/${selectedPlanet}${globeQS}` : undefined}
         regionControls={selectedPlanet && (elevation || cvtMesh) ? (

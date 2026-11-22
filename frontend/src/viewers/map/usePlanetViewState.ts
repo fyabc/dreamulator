@@ -25,6 +25,7 @@ import type { ImportElevationResult } from '../../components/map/ImportElevation
 import type { ImportedState } from '../../api/elevationImport'
 import type { TemperatureOrigin } from '../../playground/temperatureDraft'
 import { saveLastWorld } from '../../utils/lastWorld'
+import { tutorialMilestone } from '../../tutorial/tutorialProgress'
 import { initialLayerState, activeMainLayerId, inspectionLayerId } from '../../components/map/layerStateInit'
 import type { LayerState, MapLayerDetail } from '../../components/map/MapLayerPanel'
 import { decodePngToFloat32 } from './utils/imageCodec'
@@ -191,7 +192,8 @@ export function usePlanetViewState(
   const handleMonthlyModeChange = useCallback((monthly: boolean) => {
     if (setTrialTime) setTrialTime({ monthly, month: monthlyMonth })
     else setOfficialMonthlyMode(monthly)
-  }, [setTrialTime, monthlyMonth])
+    if (monthly && worldName) tutorialMilestone({ type: 'monthly', world: worldName })
+  }, [setTrialTime, monthlyMonth, worldName])
   const selectMonth = useCallback((index: number) => {
     if (setTrialTime) setTrialTime({ monthly: true, month: index })
     else {

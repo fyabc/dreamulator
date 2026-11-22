@@ -289,7 +289,7 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
   }
 
   return <details className="rounded border border-space-border p-2" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary className="cursor-pointer font-medium text-neon-cyan">{t('browserTitle')}</summary>
+    <summary data-tutorial-anchor="browserRefine" className="cursor-pointer font-medium text-neon-cyan">{t('browserTitle')}</summary>
     <div className="mt-2 space-y-2">
       {plan && (source && conditions.isError ? <div className="space-y-1">
         <p role="alert" className="text-red-300">{t('conditions.failed')}</p>
@@ -347,7 +347,8 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
         {!busy && recipe && <p>{t('browserHint')}</p>}
         {!busy && recipe && gpu !== undefined && gpu?.kind !== 'hardware' && <p>{t('requiresHardware')}</p>}
         <div className="flex flex-wrap gap-2">
-          <button type="button" className={button} disabled={busy || clearCache.isPending || !canRun} onClick={() => void run()}>{t('run')}</button>
+          <button type="button" className={button} data-tutorial-anchor="browserRefineRun"
+            disabled={busy || clearCache.isPending || !canRun} onClick={() => void run()}>{t('run')}</button>
           {busy && <button type="button" className={button} disabled={state.kind === 'cancelling'} onClick={cancel}>{t('cancel')}</button>}
         </div>
         {(busy || state.kind === 'error') && <BrowserProgress state={state} />}

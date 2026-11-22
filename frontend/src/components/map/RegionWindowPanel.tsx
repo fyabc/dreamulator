@@ -8,6 +8,7 @@ import {
 import type { LonLat } from '../../viewers/map/utils/mapCoords'
 import type { GlobeScale } from '../../viewers/map/utils/globeScale'
 import MapHelpLink from './MapHelpLink'
+import { tutorialMilestone } from '../../tutorial/tutorialProgress'
 import type { MapMode } from '../../viewers/map/useTemperatureTrialPreview'
 
 const buttonClass = 'atlas-tool-button'
@@ -77,7 +78,10 @@ export default function RegionWindowPanel({
           data-tutorial-anchor="region"
           aria-expanded={expanded} aria-controls={expanded ? formId : undefined}
           title={window ? t('regionWindow.summary', { ...window }) : t('regionWindow.hint.toggle')}
-          onClick={() => setExpanded((open) => !open)}>{t('regionWindow.title')}</button>
+          onClick={() => setExpanded((open) => {
+            if (!open) tutorialMilestone({ type: 'regionOpened', world })
+            return !open
+          })}>{t('regionWindow.title')}</button>
         {expanded && <div id={formId} className="absolute inset-x-0 top-full z-10 max-h-[55dvh] space-y-2 overflow-y-auto overscroll-contain border border-space-border bg-space-panel p-3 shadow-lg lg:left-auto lg:mt-2 lg:w-[28rem] lg:rounded-lg">
           <div className="flex items-center justify-between gap-2">
             <span className="font-medium text-gray-200">{window ? t('regionWindow.summary', { ...window }) : t('regionWindow.title')}</span>

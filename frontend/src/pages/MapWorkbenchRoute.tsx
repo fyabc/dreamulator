@@ -12,6 +12,7 @@ import type { TemperatureOrigin } from '../playground/temperatureDraft'
 import { canDefaultToHeightmapClimate, defaultHeightmapClimateSearch, heightmapPlanet } from '../projects/heightmapWorld'
 import { getProject, projectKey, worldOverviewPath } from '../projects/projectStore'
 import { useTemperatureTrialPreview, type ClimateTrialTime, type MapMode, type MapTemperatureTrialSession } from '../viewers/map/useTemperatureTrialPreview'
+import { tutorialMilestone } from '../tutorial/tutorialProgress'
 
 const TemperatureLab = lazy(() => import('../playground/TemperatureLab'))
 
@@ -116,6 +117,7 @@ function TemperatureTrialSession({ world, planet, branch, draft, saved, clean, i
     panelTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setVisited(true)
     setOpen(true)
+    if (world) tutorialMilestone({ type: 'labOpened', world })
   }
   const closePanel = () => {
     setOpen(false)

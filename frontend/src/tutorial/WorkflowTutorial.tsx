@@ -99,18 +99,22 @@ function ActiveTutorial({ progress }: { progress: TutorialProgress }) {
   </aside>, document.body)
 
   const name = anchorKeys && guide.anchors.find(anchor => anchor === layout.name) || progress.step
-  const message = progress.flow === 'browser' && name === 'configure' ? 'configureBrowser' : name
+  const message = progress.flow === 'browser' && name === 'configure' ? 'configureBrowser'
+    : progress.flow === 'browser' && name === 'build' ? 'browserBuild'
+      : progress.flow === 'browser' && name === 'backup' ? 'browserBackup'
+        : progress.flow === 'browser' && name === 'refine' ? 'browserRefineRun' : name
   const done = progress.step === 'done'
   const anchored = !!anchorKeys && layout.visible && name === layout.name
   return createPortal(<aside ref={panel} aria-label={t('label')} className="workflow-guide"
     style={anchored ? { left: layout.left, top: layout.top, right: 'auto', bottom: 'auto' } : undefined}>
     <div className="workflow-guide-heading">
       <strong>{t(done ? 'complete' : `chapters.${progress.flow}.${guide.chapter}`)}</strong>
-      {!done && <span>{t('chapterCount', { chapter: guide.chapter, total: progress.flow === 'local' ? 4 : 2 })}</span>}
+      {!done && <span>{t('chapterCount', { chapter: guide.chapter, total: 4 })}</span>}
     </div>
     <p aria-live="polite" aria-atomic="true">{t(guide.active ? `hint.${message}` : `return.${progress.step === 'backup' ? 'backup' : 'default'}`)}</p>
     <div className="workflow-guide-actions">
-      {!guide.active && <Link className="workflow-guide-action" to={guide.to}>{t(progress.step === 'backup' ? 'openOverview' : 'openStep')}</Link>}
+      {!guide.active && <Link className="workflow-guide-action" to={guide.to}>{t(progress.step === 'backup'
+        ? progress.flow === 'browser' ? 'openData' : 'openOverview' : 'openStep')}</Link>}
       {!!anchorKeys && layout.offscreen && name === layout.name && <button type="button" className="workflow-guide-action"
         onClick={() => locateTarget(target.current)}>{t('locate')}</button>}
       {!done && <button type="button" onClick={toggle}>{t('skipHint')}</button>}
