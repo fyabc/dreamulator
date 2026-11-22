@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import json
-import resource
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+if sys.platform != "win32":
+    # Windows has no resource limits; the POSIX job runner caps RSS itself.
+    import resource
 
 
 def main(request: Path) -> None:
     work = json.loads(request.read_text(encoding="utf-8"))
     root = request.parent
     output = root / "pack"
-    resource.setrlimit(resource.RLIMIT_DATA, (work["limit"], work["limit"]))
+    if sys.platform != "win32":
+        resource.setrlimit(resource.RLIMIT_DATA, (work["limit"], work["limit"]))
     if work["pack"] is not None:
         shutil.copytree(Path(work["pack"]) / "input", output / "input")
     else:

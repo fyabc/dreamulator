@@ -195,7 +195,12 @@ class RegionJobs:
             finally:
                 if process.poll() is None:
                     with suppress(ProcessLookupError):
-                        os.killpg(process.pid, signal.SIGKILL)
+                        if sys.platform == "win32":
+                            # Windows has no process groups here; kill the
+                            # worker itself (it runs one refinement only).
+                            process.kill()
+                        else:
+                            os.killpg(process.pid, signal.SIGKILL)
 
     def _read_stage(self, job: RegionJob, path: Path) -> None:
         if path.is_file():
