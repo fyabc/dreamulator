@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import itertools
 import logging
+import sys
 from collections import defaultdict
 from typing import Any
 
@@ -117,7 +118,7 @@ def lloyd_relaxation_step(points: np.ndarray) -> np.ndarray:
 
     # Stage 1.4: vectorized region centroids (was a per-region Python loop
     # with small numpy gathers — 8 × 100k iterations on nacrea).
-    region_lens = np.fromiter((len(r) for r in regions), dtype=np.int64, count=n)
+    region_lens = np.fromiter((len(r) for r in regions), dtype=np.intp, count=n)
     bad = region_lens == 0
     if not bad.all():
         bad |= np.fromiter(((-1 in r) for r in regions), dtype=bool, count=n)
@@ -129,7 +130,7 @@ def lloyd_relaxation_step(points: np.ndarray) -> np.ndarray:
         cell_of_flat = np.repeat(good_ids, counts)
         flat_idx = np.fromiter(
             itertools.chain.from_iterable(regions[i] for i in good_ids),
-            dtype=np.int64,
+            dtype=np.intp,
             count=int(counts.sum()),
         )
         sums = np.stack(
@@ -168,6 +169,7 @@ def lloyd_relaxation(
             BarColumn(),
             TextColumn("[dim]{task.completed}/{task.total}[/dim]"),
             transient=True,
+            disable=sys.platform in ("emscripten", "wasi"),
         )
         _task = _prog.add_task("", total=iterations)
         _prog.start()
@@ -315,7 +317,7 @@ def _build_cells(
     # Stage 1.4: vectorized spherical polygon areas via a flat triangle-fan
     # table across all cells (was a per-cell _spherical_polygon_area call
     # with an inner per-triangle numpy-scalar loop).
-    region_lens = np.fromiter((len(r) for r in regions), dtype=np.int64, count=n)
+    region_lens = np.fromiter((len(r) for r in regions), dtype=np.intp, count=n)
     bad = region_lens == 0
     if not bad.all():
         bad |= np.fromiter(((-1 in r) for r in regions), dtype=bool, count=n)
@@ -330,8 +332,8 @@ def _build_cells(
             for k in range(1, len(r) - 1):
                 tri_owner.append(i)
                 tri_idx.extend((r[0], r[k], r[k + 1]))
-        owner = np.asarray(tri_owner, dtype=np.int64)
-        tv = np.asarray(tri_idx, dtype=np.int64).reshape(-1, 3)
+        owner = np.asarray(tri_owner, dtype=np.intp)
+        tv = np.asarray(tri_idx, dtype=np.intp).reshape(-1, 3)
         v0 = sv.vertices[tv[:, 0]]
         v1 = sv.vertices[tv[:, 1]]
         v2 = sv.vertices[tv[:, 2]]
