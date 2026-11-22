@@ -46,6 +46,7 @@
     "snapshot": "Download the world backup. It includes settings, layers, branches and saved region packs.",
     "browserMap": "Open the global map to inspect your imported elevation.",
     "browserView": "Inspect the heightmap, then return to World data to make a backup.",
+    "browserDataTab": "Open World data, then download the world backup.",
     "browserBackup": "Download the world backup. You can import it from the world list in another browser.",
     "done": "The download has started. Your work stays where you saved it. Keep exploring, or restart the tutorial from Help."
   }

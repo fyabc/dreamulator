@@ -49,6 +49,13 @@ describe('workflow tutorial', () => {
     const view = observeTutorialRoute(map, mapPath, '')
     expect(observeTutorialRoute(map, mapPath, '?creation=1')).toEqual(view)
     expect(view.step).toBe('browserView')
+    // The map step anchors the back arrow; after returning to the world page
+    // the guide must point at the data tab, not fall back to the dock.
+    expect(guideForRoute(view, mapPath, '')).toMatchObject({ active: true, anchors: ['browserView'] })
+    expect(guideForRoute(view, overviewPath, '')).toMatchObject({
+      active: true, to: `${overviewPath}?tab=data`, anchors: ['browserDataTab'],
+    })
+    expect(guideForRoute(view, overviewPath, '?tab=astronomy').anchors).toEqual(['browserDataTab'])
     const backup = observeTutorialRoute(view, overviewPath, '?tab=data')
     expect(guideForRoute(backup, overviewPath, '?tab=data')).toMatchObject({ active: true, chapter: 2, anchors: ['browserBackup'] })
     expect(markMilestone(backup, { type: 'backup', world: 'other' })).toBe(backup)

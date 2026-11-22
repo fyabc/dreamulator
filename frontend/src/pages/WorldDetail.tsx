@@ -301,7 +301,8 @@ export default function WorldDetail() {
               {(offlineData ? ['data'] as const : availableTabs).map((tab) => (
                 <button
                   key={tab}
-                  data-tutorial-anchor={tab === 'parameters' ? 'parameters' : undefined}
+                  data-tutorial-anchor={tab === 'parameters' ? 'parameters'
+                    : tab === 'data' && localWorld ? 'browserDataTab' : undefined}
                   aria-current={activeTab === tab ? 'page' : undefined}
                   onClick={() => setActiveTabAndPersist(tab)}
                   className={`px-3 sm:px-4 py-2 font-medium transition-colors border-b-2 whitespace-nowrap shrink-0 ${

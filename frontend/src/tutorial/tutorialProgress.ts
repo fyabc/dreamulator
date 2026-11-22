@@ -109,7 +109,14 @@ export function guideForRoute(progress: TutorialProgress, pathname: string, sear
       anchors: ['regionResult', 'refining', 'refineRun', 'refine', 'regionTools'], chapter: 3 }
     case 'backup': return { active: buildVisible, to: world, anchors: ['snapshot'], chapter: 4 }
     case 'browserMap': return { active: route.detail && !route.branch, to: world, anchors: ['browserMap'], chapter: 2 }
-    case 'browserView': return { active: (route.creation || route.map) && !route.branch, to: map, anchors: ['browserView'], chapter: 2 }
+    case 'browserView':
+      // On the map the back arrow leads home; on the world page the next
+      // action is opening the data tab, so anchor that tab instead of
+      // falling back to the "return to the current step" dock.
+      if (route.detail && route.query.get('tab') !== 'data') {
+        return { active: true, to: data, anchors: ['browserDataTab'], chapter: 2 }
+      }
+      return { active: (route.creation || route.map) && !route.branch, to: map, anchors: ['browserView'], chapter: 2 }
     case 'browserBackup': return { active: route.detail && route.query.get('tab') === 'data', to: data, anchors: ['browserBackup'], chapter: 2 }
     case 'done': return { active: true, to: world, anchors: [], chapter: progress.flow === 'browser' ? 2 : 4 }
   }
