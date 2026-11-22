@@ -37,7 +37,7 @@ export default function QuickLayerSwitch({ state, onChange, available, disabled 
       return <button key={id} type="button" disabled={!enabled} aria-pressed={current}
         title={t(`help:layer.${id}.label`)}
         onClick={() => select(id)}
-        className={`min-h-9 rounded px-2 text-xs transition-colors disabled:opacity-40 ${current
+        className={`min-h-9 rounded px-2.5 text-sm transition-colors disabled:opacity-40 ${current
           ? 'bg-space-surface font-semibold text-neon-cyan' : 'text-gray-300 hover:bg-space-surface'}`}>
         {t(`workbench.quick.${id}`)}
       </button>

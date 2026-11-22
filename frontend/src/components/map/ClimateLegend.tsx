@@ -72,7 +72,7 @@ export default function ClimateLegend({
       <button type="button" data-testid="climate-legend" aria-label={t('legend.colorScale', { layer: name })}
         aria-describedby={helpId} onClick={() => setHelpOpen(value => !value)} onBlur={() => setHelpOpen(false)}
         onKeyDown={event => { if (event.key === 'Escape') { setHelpOpen(false); event.currentTarget.blur() } }}
-        className={`flex ${inline ? 'min-h-6 px-2 py-0' : 'min-h-9 px-2.5 py-1'} max-w-full items-center gap-2 rounded-md border border-space-border bg-space-panel text-[11px] tabular-nums text-gray-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-neon-cyan`}>
+        className={`flex ${inline ? 'min-h-6 px-2 py-0' : 'min-h-9 px-2.5 py-1'} max-w-full items-center gap-2 rounded-md border border-space-border bg-space-panel text-xs tabular-nums text-gray-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-neon-cyan`}>
         <span className="whitespace-nowrap">{clamped && scale.min !== 0 ? '≤ ' : ''}{format.format(scale.min)}</span>
         <span aria-hidden="true" className="h-2 w-20 min-w-8 rounded sm:w-28" style={{ background: scaleGradient(scale.stops) }} />
         <span className="whitespace-nowrap">{clamped ? '≥ ' : ''}{format.format(scale.max)} {scale.unit}</span>

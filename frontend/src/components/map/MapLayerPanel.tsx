@@ -312,7 +312,7 @@ export function MapLayerTree<Id extends string>({ state, onChange, available, te
       <div className="flex overflow-hidden rounded-md border border-space-border" role="group" aria-label={t('panel.layerType')}>
         {(['main', 'overlays'] as const).map(type => <button key={type} type="button"
           aria-pressed={section === type} onClick={() => setSection(type)}
-          className={`flex-1 px-2 py-1.5 text-[11px] first:border-r first:border-space-border focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-neon-cyan ${section === type ? 'bg-neon-cyan/15 text-gray-100' : 'text-gray-400 hover:text-gray-100'}`}>
+          className={`flex-1 px-2 py-1.5 text-xs first:border-r first:border-space-border focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-neon-cyan ${section === type ? 'bg-neon-cyan/15 text-gray-100' : 'text-gray-400 hover:text-gray-100'}`}>
           {t(type === 'main' ? 'panel.mainLayers' : 'panel.overlayLayers')}
         </button>)}
       </div>
@@ -323,7 +323,7 @@ export function MapLayerTree<Id extends string>({ state, onChange, available, te
           {(detail.observed && !detail.available ? [false] : [false, true]).map(downscaled => <button key={String(downscaled)} type="button"
             aria-pressed={detail.downscaled === downscaled} disabled={downscaled && !detail.available}
             onClick={() => detail.onChange(downscaled)}
-            className={`flex-1 px-2 py-1.5 text-[11px] first:rounded-l-md first:border-r first:border-space-border last:rounded-r-md focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-neon-cyan disabled:opacity-45 ${detail.downscaled === downscaled ? 'bg-neon-cyan/15 text-gray-100' : 'text-gray-400 hover:text-gray-100'}`}>
+            className={`flex-1 px-2 py-1.5 text-xs first:rounded-l-md first:border-r first:border-space-border last:rounded-r-md focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-neon-cyan disabled:opacity-45 ${detail.downscaled === downscaled ? 'bg-neon-cyan/15 text-gray-100' : 'text-gray-400 hover:text-gray-100'}`}>
             {t(detail.observed ? (downscaled ? 'panel.observedRaster' : 'panel.observedGrid') : (downscaled ? 'panel.downscaled' : 'panel.modelGrid'))}
           </button>)}
         </div>
@@ -348,7 +348,7 @@ export function MapLayerTree<Id extends string>({ state, onChange, available, te
       {section === 'overlays' && onParticleModeChange && (
         <div className="flex items-center justify-between gap-2 pb-2 border-b border-space-border">
           <div className="min-w-0 cursor-help" title={t('panel.particlesHint')}>
-            <span className="text-xs text-gray-300">{t('panel.particles')}</span>
+            <span className="text-sm text-gray-300">{t('panel.particles')}</span>
           </div>
           <button
             type="button"
@@ -401,7 +401,7 @@ export function MapLayerTree<Id extends string>({ state, onChange, available, te
               <button
                 type="button"
                 onClick={() => toggleCollapse(g.id)}
-                className="flex-1 text-left text-xs text-gray-300 hover:text-white"
+                className="flex-1 text-left text-sm text-gray-300 hover:text-white"
               >
                 {t(g.label)}
               </button>
@@ -472,7 +472,7 @@ export function MapLayerTree<Id extends string>({ state, onChange, available, te
                       >
                         {visible ? <EyeOpen /> : <EyeClosed />}
                       </button>
-                      <span className={`shrink-0 text-[11px] ${visible ? 'text-gray-300' : 'text-gray-500'}`}>
+                      <span className={`shrink-0 text-xs ${visible ? 'text-gray-300' : 'text-gray-500'}`}>
                         {t(l.label)}
                       </span>
                       {monthBadge(l, !visible)}
