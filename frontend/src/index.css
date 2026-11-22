@@ -141,19 +141,23 @@ body {
 .atlas-world-shell { --atlas-context-height: 2.25rem; }
 .atlas-workbench { height: calc(100dvh - 3.5rem - var(--atlas-context-height, 0rem)); min-height: 23rem; isolation: isolate; }
 .atlas-system-workspace { min-height: calc(100dvh - 3.5rem - var(--atlas-context-height, 0rem)); }
-.atlas-tool-button {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  gap: .375rem;
-  padding: .3rem .65rem;
-  border: 1px solid theme('colors.space.border');
-  border-radius: .3rem;
-  background: theme('colors.space.surface');
-  color: #dce6e4;
-  line-height: 1.25;
-  white-space: nowrap;
+@layer components {
+  /* Keep this in the components layer so utilities such as `hidden` and
+     `lg:inline-flex` can override the display value. */
+  .atlas-tool-button {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    gap: .375rem;
+    padding: .3rem .65rem;
+    border: 1px solid theme('colors.space.border');
+    border-radius: .3rem;
+    background: theme('colors.space.surface');
+    color: #dce6e4;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
 }
 .atlas-tool-button:hover { border-color: #76948e; color: theme('colors.neon.cyan'); }
 summary.atlas-tool-button::-webkit-details-marker { display: none; }

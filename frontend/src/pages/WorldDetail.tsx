@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
 import { lazy, Suspense } from 'react'
+import useIsDesktop from '../hooks/useIsDesktop'
 import { useTranslation } from 'react-i18next'
 import { formatRadius, formatMass } from '../viewers/utils/scale'
 import NarratorPanel from '../components/NarratorPanel'
@@ -90,6 +91,7 @@ function renderNarrative(text: string) {
 export default function WorldDetail() {
   const { worldName } = useParams<{ worldName: string }>()
   const { t, i18n } = useTranslation('worlds')
+  const desktopLayout = useIsDesktop()
   const staticMode = isStaticMode()
   const browserWorld = useQuery({ queryKey: projectKey(worldName ?? ''), queryFn: () => getProject(worldName!),
     enabled: staticMode && !!worldName, retry: false })
@@ -281,20 +283,24 @@ export default function WorldDetail() {
                 className="atlas-tool-button text-sm">{t('creation.starter.importHeightmap')}</Link>}
             </div>
 
-            {!staticMode && world && (
-              <WorldBuildPanel
-                key={JSON.stringify([worldName, selectedBranch])}
-                world={worldName}
-                branch={selectedBranch}
-                readOnly={!selectedBranch && (worldName === 'earth' || world.reference_anchor === true)}
-                visible={showBuild}
-                hasMap={!!firstMappedPlanet}
-              />
-            )}
+            {!desktopLayout ? (showBuild && <p role="status" className="mb-4 rounded border border-space-border p-3 text-sm text-gray-400">
+              {t('browserBuild.mobileUnavailable')}
+            </p>) : <>
+              {!staticMode && world && (
+                <WorldBuildPanel
+                  key={JSON.stringify([worldName, selectedBranch])}
+                  world={worldName}
+                  branch={selectedBranch}
+                  readOnly={!selectedBranch && (worldName === 'earth' || world.reference_anchor === true)}
+                  visible={showBuild}
+                  hasMap={!!firstMappedPlanet}
+                />
+              )}
 
-            {localWorld && <Suspense fallback={null}>
-              <BrowserWorldBuildPanel key={localWorld.id} project={localWorld} visible={showBuild} />
-            </Suspense>}
+              {localWorld && <Suspense fallback={null}>
+                <BrowserWorldBuildPanel key={localWorld.id} project={localWorld} visible={showBuild} />
+              </Suspense>}
+            </>}
 
             {/* Tabs — horizontally scrollable on mobile */}
             <div className="flex gap-1 sm:gap-2 mb-4 sm:mb-6 border-b border-space-border overflow-x-auto">

@@ -207,6 +207,7 @@
     "climate": { "solver": "Solver" }
   },
   "browserBuild": {
+    "mobileUnavailable": "World builds and terrain refinement need a desktop GPU and memory. Please use a computer; existing worlds remain browsable on a phone.",
     "scope": "Build the global grid and EBM climate in this browser. Later layers are not generated.",
     "checkHelp": "Check the base settings and source files saved in this browser without starting a build.",
     "noSettings": "This world has no saved base settings.",

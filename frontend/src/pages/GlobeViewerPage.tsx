@@ -12,6 +12,7 @@
 
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import useIsDesktop from '../hooks/useIsDesktop'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import * as THREE from 'three'
@@ -62,6 +63,7 @@ export default function GlobeViewerPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { t } = useTranslation('map')
+  const desktopLayout = useIsDesktop()
   const randomTip = useMemo(() => getRandomTip(t), [t])
 
   const trial = useMapTemperatureTrial()
@@ -143,6 +145,7 @@ export default function GlobeViewerPage() {
     koppenTexture,
     uccTexture,
     flipHorizontal: false,
+    lowMemory: !desktopLayout,
     ...(trialTerrain && {
       elevation: trialTerrain.elevation, width: GRID_W, height: GRID_H,
       terrainSource: 'raster', meshWidth: GRID_W, meshHeight: GRID_H,
@@ -424,7 +427,7 @@ export default function GlobeViewerPage() {
                   </div>
                 </div>
             ) : (
-              <GlobeViewer
+              !desktopLayout && <GlobeViewer
                 texture={displayTexture}
                 renderComposite={renderComposite}
                 onTransition={meta?.browser_heightmap ? undefined : handleTransition}
@@ -581,7 +584,7 @@ export default function GlobeViewerPage() {
               </div>
             </div>
           ) : (
-            <GlobeViewer
+            desktopLayout && <GlobeViewer
               texture={displayTexture}
               renderComposite={renderComposite}
               onTransition={handleTransition}

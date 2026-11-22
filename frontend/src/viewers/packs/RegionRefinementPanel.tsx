@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import useIsDesktop from '../../hooks/useIsDesktop'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { tutorialMilestone } from '../../tutorial/tutorialProgress'
@@ -21,6 +22,7 @@ const maxRiverThreshold = 2 ** 31 - 1
 
 export default function RegionRefinementPanel({ source, resultUrl, globalReturn }: Props) {
   const { t } = useTranslation('map')
+  const desktopLayout = useIsDesktop()
   const methodHelp = useId()
   const queryClient = useQueryClient()
   const key = `dreamulator-refinement:${JSON.stringify(source)}`
@@ -66,6 +68,10 @@ export default function RegionRefinementPanel({ source, resultUrl, globalReturn 
   const defaultWavelength = effectiveNativeKm === null ? null : effectiveNativeKm * 4
   const detail = cancel.error ?? start.error ?? plan.error
   const job = query.data
+
+  if (!desktopLayout) return <p role="status" className="rounded border border-space-border p-2 text-xs text-gray-400">
+    {t('packs.compute.mobileUnavailable')}
+  </p>
 
   return <details open={open} className="rounded border border-space-border p-2 text-xs text-gray-400"
     onToggle={(event) => setOpen(event.currentTarget.open)}>

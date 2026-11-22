@@ -700,6 +700,7 @@
       "adopted": "细化高程"
     },
     "compute": {
+      "mobileUnavailable": "地形细化需要电脑端的显卡与内存，请在电脑上操作。手机上仍可查看地图、区域范围和高程。",
       "title": "计算设备",
       "browserConnection": "WebGPU 连接",
       "localConnection": "本地连接",

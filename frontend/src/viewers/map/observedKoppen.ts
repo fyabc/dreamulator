@@ -26,15 +26,23 @@ export async function readObservedKoppen(blob: Blob): Promise<ObservedKoppenRast
   return { width: packet.width, height: packet.height, classes: packet.classes, pixels: packet.pixels }
 }
 
-export function observedKoppenPixels({ width, height, classes, pixels }: ObservedKoppenRaster): Uint8Array {
+export function observedKoppenPixels({ width, height, classes, pixels }: ObservedKoppenRaster,
+  maxWidth = width): Uint8Array {
   const noData = Number.parseInt(KOPPEN_COLORS.Ocean.slice(1), 16)
   const palette = classes.map(code => KOPPEN_COLORS[code] ? Number.parseInt(KOPPEN_COLORS[code].slice(1), 16) : noData)
-  const rgba = new Uint8Array(width * height * 4)
-  for (let row = 0; row < height; row++) {
-    const src = row * width
-    const dst = (height - 1 - row) * width * 4
-    for (let column = 0; column < width; column++) {
-      const color = palette[pixels[src + column]] ?? noData
+  // Phones cap the raster width (2048): an uncapped 4320×2160 texture can exceed
+  // the device's max texture size and leave the map canvas black.
+  const scale = Math.min(1, maxWidth > 0 ? maxWidth / width : 1)
+  const outWidth = Math.max(1, Math.round(width * scale))
+  const outHeight = Math.max(1, Math.round(height * scale))
+  const rgba = new Uint8Array(outWidth * outHeight * 4)
+  for (let row = 0; row < outHeight; row++) {
+    const sourceRow = Math.min(height - 1, Math.floor((row + 0.5) * height / outHeight))
+    const src = sourceRow * width
+    const dst = (outHeight - 1 - row) * outWidth * 4
+    for (let column = 0; column < outWidth; column++) {
+      const sourceColumn = Math.min(width - 1, Math.floor((column + 0.5) * width / outWidth))
+      const color = palette[pixels[src + sourceColumn]] ?? noData
       const index = dst + column * 4
       rgba[index] = color >> 16
       rgba[index + 1] = color >> 8

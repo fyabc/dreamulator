@@ -69,6 +69,8 @@ interface MapViewerProps {
   /** Fired once the first frame with the baked terrain has been presented;
    *  the page keeps its loading placeholder up until then. */
   onReady?: () => void
+  /** Phone layout: skip idle pre-bakes that would hold extra 8 MB textures. */
+  lowMemory?: boolean
   hoveredCell: number | null
   selectedCells: Set<number>
   regionBoundary?: readonly LonLat[] | null
@@ -134,6 +136,7 @@ export default function MapViewer({
   onCellClick,
   onClearSelection,
   onReady,
+  lowMemory = false,
   hoveredCell,
   selectedCells,
   regionBoundary,
@@ -221,8 +224,14 @@ export default function MapViewer({
     }
   }, [voronoiCells])
 
-  // Cell-ID map
-  const meshSize = meshTextureDimensions(metadata)
+  // Cell-ID map and layer bakes.  On phones both are capped at 2048 px wide
+  // (same cap as usePlanetViewState) so the base textures, overlay textures and
+  // cell-ID map share one memory budget instead of exceeding the GPU.
+  const meshSize = useMemo(() => {
+    const size = meshTextureDimensions(metadata)
+    if (!lowMemory || size.width <= 2048 || size.width <= 0) return size
+    return { width: 2048, height: Math.max(1, Math.round(size.height * 2048 / size.width)) }
+  }, [metadata, lowMemory])
   const cellIdMap = useCellIdMap({ cvtMesh, ...meshSize })
 
   // Loading indicator (useEffect avoids rAF in render body, enables cleanup)
@@ -287,7 +296,7 @@ export default function MapViewer({
     scalarThematic, koppenTexture,
     uccTexture,
     flipHorizontal: false,  // PlaneGeometry, not SphereGeometry
-    sunLonRad, sunDecRad, dayNight: dayNightNum,
+    sunLonRad, sunDecRad, dayNight: dayNightNum, lowMemory,
     ...(trialTerrain && {
       elevation: trialTerrain.elevation, width: GRID_W, height: GRID_H,
       terrainSource: 'raster', meshWidth: GRID_W, meshHeight: GRID_H,
@@ -306,7 +315,7 @@ export default function MapViewer({
   // temperature/precipitation selection then costs only one composite pass.
   const warmedRef = useRef(false)
   useEffect(() => {
-    if (warmedRef.current || !cvtMesh || !cellIdMap) return
+    if (lowMemory || warmedRef.current || !cvtMesh || !cellIdMap) return
     const run = () => {
       if (warmedRef.current) return
       const renderer = rendererRef.current
@@ -321,7 +330,7 @@ export default function MapViewer({
       if (idle !== undefined) window.cancelIdleCallback(idle)
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [cvtMesh, cellIdMap])
+  }, [cvtMesh, cellIdMap, lowMemory])
 
   const useGPU = gpuMaterial !== null
 
@@ -584,6 +593,93 @@ export default function MapViewer({
      onCursorMove, onCellHover, kdTree, terrainSource, voronoiCells],
   )
 
+  // --- Touch: single-finger pan + two-finger pinch zoom ---
+  // The desktop handlers above only cover mouse input; without these the
+  // browser scrolls/zooms the whole page when a finger drags on the canvas.
+  const touchRef = useRef<{
+    mode: 'pan' | 'pinch'
+    startX: number
+    startY: number
+    startCenter: { lon: number; lat: number }
+    startZoom: number
+    startDistance: number
+    moved: boolean
+  } | null>(null)
+  const suppressClickRef = useRef(false)
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const rect = containerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    suppressClickRef.current = false
+    if (e.touches.length >= 2) {
+      const [a, b] = [e.touches[0], e.touches[1]]
+      touchRef.current = {
+        mode: 'pinch', startX: 0, startY: 0,
+        startCenter: { ...mapCenterRef.current }, startZoom: zoomRef.current,
+        startDistance: Math.max(1, Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)),
+        moved: true,
+      }
+      return
+    }
+    const touch = e.touches[0]
+    touchRef.current = {
+      mode: 'pan',
+      startX: touch.clientX - rect.left, startY: touch.clientY - rect.top,
+      startCenter: { ...mapCenterRef.current }, startZoom: zoomRef.current,
+      startDistance: 0, moved: false,
+    }
+  }, [])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    const touch = touchRef.current
+    if (!touch) return
+    const rect = containerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    if (touch.mode === 'pinch' && e.touches.length >= 2) {
+      const [a, b] = [e.touches[0], e.touches[1]]
+      const distance = Math.max(1, Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY))
+      const nextZoom = Math.max(1, Math.min(MAX_ZOOM, touch.startZoom * distance / touch.startDistance))
+      syncZoom(nextZoom)
+      const margin = 90 / nextZoom
+      syncMapCenter({
+        lon: mapCenterRef.current.lon,
+        lat: Math.max(-90 + margin, Math.min(90 - margin, mapCenterRef.current.lat)),
+      })
+      return
+    }
+    if (e.touches.length !== 1) return
+    const point = e.touches[0]
+    const dx = (point.clientX - rect.left) - touch.startX
+    const dy = (point.clientY - rect.top) - touch.startY
+    if (Math.hypot(dx, dy) > 6) {
+      touch.moved = true
+      suppressClickRef.current = true
+    }
+    const next = applyDrag({ mapCenter: touch.startCenter, zoom: touch.startZoom }, { dx, dy }, vp)
+    const margin = 90 / touch.startZoom
+    syncMapCenter({
+      lon: next.mapCenter.lon,
+      lat: Math.max(-90 + margin, Math.min(90 - margin, next.mapCenter.lat)),
+    })
+  }, [syncMapCenter, syncZoom, vp])
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 0) {
+      touchRef.current = null
+      return
+    }
+    // One finger lifted after a pinch: continue as a pan with the remaining one.
+    const rect = containerRef.current?.getBoundingClientRect()
+    if (!rect) { touchRef.current = null; return }
+    const point = e.touches[0]
+    touchRef.current = {
+      mode: 'pan',
+      startX: point.clientX - rect.left, startY: point.clientY - rect.top,
+      startCenter: { ...mapCenterRef.current }, startZoom: zoomRef.current,
+      startDistance: 0, moved: true,
+    }
+  }, [])
+
   // --- Zoom ---
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
@@ -599,6 +695,7 @@ export default function MapViewer({
   // Ctrl+click (single) → toggle cell without replacing other selections.
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
+      if (suppressClickRef.current) { suppressClickRef.current = false; return }
       const ctrl = e.ctrlKey || e.metaKey
       const isTouch = (e.nativeEvent as PointerEvent)?.pointerType === 'touch' ||
         (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
@@ -691,8 +788,12 @@ export default function MapViewer({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full overflow-hidden bg-[#0a0a1a] rounded-lg select-none"
+      className="relative w-full h-full overflow-hidden bg-[#0a0a1a] rounded-lg select-none touch-none"
       style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
       onMouseMove={handleMouseMove}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}

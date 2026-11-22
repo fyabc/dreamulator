@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import useIsDesktop from '../../hooks/useIsDesktop'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
@@ -49,6 +50,7 @@ interface BrowserInput {
 
 export default function TerrainCompute({ browser, children }: { browser?: BrowserInput; children?: ReactNode }) {
   const { t } = useTranslation('map', { keyPrefix: 'packs.compute' })
+  const desktopLayout = useIsDesktop()
   const staticMode = isStaticMode()
   const local = useQuery({ queryKey: ['region-compute-device'], queryFn: api.getRegionDevice,
     enabled: !staticMode, retry: false, staleTime: 5 * 60 * 1000 })
@@ -77,7 +79,11 @@ export default function TerrainCompute({ browser, children }: { browser?: Browse
       </div>
       {staticMode && deviceHelpOpen && <p className="mt-1 leading-relaxed">{t('deviceHelp')}</p>}
     </div>
-    {staticMode ? browser && <BrowserRefinement gpu={gpu} input={browser} /> : children}
+    {staticMode
+      ? browser && (desktopLayout
+        ? <BrowserRefinement gpu={gpu} input={browser} />
+        : <p role="status" className="rounded border border-space-border p-2">{t('mobileUnavailable')}</p>)
+      : children}
   </section>
 }
 

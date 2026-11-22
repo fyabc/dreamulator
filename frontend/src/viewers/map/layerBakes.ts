@@ -147,6 +147,9 @@ export interface BakeInputs {
   flipHorizontal: boolean       // column flip (SphereGeometry UV convention)
   cvtMesh: CVTMesh | null | undefined
   cellIdMap: CellIdMap | null | undefined
+  /** Phone layout: skip the full-resolution coastline texture (it is another
+   *  4096×2048 RGBA allocation and the device budget is already tight). */
+  lowMemory?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +206,8 @@ function sameBakeInputs(a: BakeInputs, b: BakeInputs): boolean {
     a.elevMaxM === b.elevMaxM &&
     a.waterDepthFactor === b.waterDepthFactor &&
     a.flipHorizontal === b.flipHorizontal &&
-    a.cvtMesh === b.cvtMesh
+    a.cvtMesh === b.cvtMesh &&
+    Boolean(a.lowMemory) === Boolean(b.lowMemory)
   )
 }
 
@@ -833,7 +837,7 @@ function bakeBase(inp: BakeInputs, raster: boolean): { textures: BaseTextures; p
     coastWidth = meshWidth
     coastHeight = meshHeight
     mergeCoast = coastBuf
-    if (inp.elevation.length === inp.width * inp.height && inp.width > meshWidth) {
+    if (!inp.lowMemory && inp.elevation.length === inp.width * inp.height && inp.width > meshWidth) {
       // Mesh colours stay per-cell, but the coastline reads the elevation
       // raster: a cell-boundary mask is one cell wide and reads as dashes.
       coastBuf = bakeRasterCoastMask(inp)

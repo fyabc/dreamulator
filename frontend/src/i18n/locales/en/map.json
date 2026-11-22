@@ -701,6 +701,7 @@
       "adopted": "Refined elevation"
     },
     "compute": {
+      "mobileUnavailable": "Terrain refinement needs a desktop GPU and memory. Please use a computer; the map, region window and elevation remain viewable on a phone.",
       "title": "Compute device",
       "browserConnection": "WebGPU connection",
       "localConnection": "Local connection",

@@ -159,6 +159,8 @@ interface UseGPUTerrainOptions {
   sunDecRad?: number
   /** 1 = enable day/night overlay, 0 = off. */
   dayNight?: number
+  /** Phone layout: smaller textures and no full-resolution coastline bake. */
+  lowMemory?: boolean
 }
 
 /** Internal composite state (one per bake/size). */
@@ -232,6 +234,7 @@ export default function useGPUTerrain({
   sunLonRad = 0,
   sunDecRad = 0,
   dayNight = 0,
+  lowMemory = false,
 }: UseGPUTerrainOptions): GPUTerrainResult {
   // --- Bake per-layer textures (DATA-driven only; opacity-independent) ---
   const needed = useMemo(() => neededOverlays(layers), [layers])
@@ -240,9 +243,10 @@ export default function useGPUTerrain({
     return getLayerTextures({
       elevation, width, height, seaLevel, elevMinM, elevMaxM,
       waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight,
+      lowMemory,
     }, needed)
   }, [elevation, width, height, seaLevel, elevMinM, elevMaxM, waterDepthFactor, flipHorizontal,
-      cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight, needed])
+      cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight, needed, lowMemory])
 
   const overrideWidth = Math.max(scalarThematic?.texture.image.width ?? 0, koppenTexture?.image.width ?? 0)
   const overrideHeight = Math.max(scalarThematic?.texture.image.height ?? 0, koppenTexture?.image.height ?? 0)
@@ -474,13 +478,14 @@ export default function useGPUTerrain({
     const textures = getLayerTextures({
       elevation, width, height, seaLevel, elevMinM, elevMaxM,
       waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight,
+      lowMemory,
     }, new Set<OverlayName>(['temperature', 'precipitation']))
     for (const name of ['temperature', 'precipitation'] as const) {
       const texture = textures[name]
       if (((texture.image as { width?: number } | undefined)?.width ?? 0) > 1) renderer.initTexture(texture)
     }
   }, [elevation, width, height, seaLevel, elevMinM, elevMaxM, waterDepthFactor, flipHorizontal,
-      cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight])
+      cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight, lowMemory])
 
   /** The texture consumers (3D globe) should sample: the FBO
    *  composite while substantive overlays (Köppen, plates, biomes, etc.) are

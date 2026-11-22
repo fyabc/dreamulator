@@ -16,6 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import useIsDesktop from '../../hooks/useIsDesktop'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -386,7 +387,16 @@ export function usePlanetViewState(
     [cvtMesh, voronoi],
   )
 
-  const meshTextureSize = meshTextureDimensions(meta)
+  // Phones get half-resolution map textures: 4096×2048 RGBA per layer (terrain,
+  // land/sea, coastline, composite target…) exhausts shared GPU memory and can
+  // lose the WebGL context.  Browsing at 2048 is visually fine on a phone.
+  const desktopLayout = useIsDesktop()
+  const meshTextureSize = useMemo(() => {
+    const size = meshTextureDimensions(meta)
+    if (desktopLayout || size.width <= 2048 || size.width <= 0) return size
+    const scale = 2048 / size.width
+    return { width: 2048, height: Math.max(1, Math.round(size.height * scale)) }
+  }, [meta, desktopLayout])
   const cellIdMap = useCellIdMap({ cvtMesh: cvtMesh ?? null, ...meshTextureSize })
   const hasMesh = Boolean(cvtMesh?.cells.length)
   const terrainSource = terrainSourceFor(meta, hasMesh, !!elevation, searchParams.get('terrain'))
@@ -419,7 +429,8 @@ export function usePlanetViewState(
     formalMeta?.pipeline_version === 'etopo1-import'
   const koppenProduct = koppenProductFor(formalMeta?.koppen, legacyObservation, !!ebm)
   const observedRaster = koppenActive && koppenProduct.source === 'observed' && koppenProduct.raster
-  const observedKoppen = useObservedKoppen(worldName, selectedPlanet, selectedBranch, observedRaster && observedDetail)
+  const observedKoppen = useObservedKoppen(worldName, selectedPlanet, selectedBranch, observedRaster && observedDetail,
+    desktopLayout ? undefined : 2048)
   const { texture: scalarThematic, data: monthlyData, loading: monthlyLoading, displayingMonthly } = useMonthlyClimate({
     worldName, planetId: selectedPlanet, branch: selectedBranch, month: monthlyMonth,
     trialData: ebm?.result.monthly,

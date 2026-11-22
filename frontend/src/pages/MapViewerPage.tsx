@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import useIsDesktop from '../hooks/useIsDesktop'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import ImportElevationButton from '../components/map/ImportElevationButton'
@@ -69,6 +70,7 @@ export default function MapViewerPage() {
   } = vs
   const display = useMapDisplayLayers(trial, layerState, setLayerState, cvtMesh, monthlyData, Boolean(uccTexture))
   const elevationReady = Boolean(elevation && elevationDims.w > 0)
+  const desktopLayout = useIsDesktop()
   const [mapPainted, setMapPainted] = useState(false)
   useEffect(() => {
     if (!elevationReady) setMapPainted(false)
@@ -270,7 +272,7 @@ export default function MapViewerPage() {
             {elevationReady ? (
               <>
                 <div className="relative flex-1 min-h-0">
-                  <MapViewer
+                  {!desktopLayout && <MapViewer
                     metadata={meta ?? null}
                     elevation={elevation}
                     terrainSource={terrainSource}
@@ -304,7 +306,8 @@ export default function MapViewerPage() {
                     showGraticule={!cleanMode}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
-                  />
+                    lowMemory
+                  />}
                   {legend()}
                   {!mapPainted && (
                     <div className="absolute inset-0 z-20 flex bg-[#0a0a1a]">
@@ -378,7 +381,7 @@ export default function MapViewerPage() {
             {elevationReady ? (
               <>
                 <div className="flex-1 min-h-0 relative">
-                  <MapViewer
+                  {desktopLayout && <MapViewer
                     metadata={meta ?? null}
                     elevation={elevation}
                     terrainSource={terrainSource}
@@ -412,7 +415,7 @@ export default function MapViewerPage() {
                     showGraticule={!cleanMode}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
-                  />
+                  />}
 
                   {/* Recording control — float in the map view's bottom-right
                       corner.  Fully hidden in clean mode (zero UI while

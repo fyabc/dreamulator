@@ -68,7 +68,7 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
       <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 lg:col-start-3 lg:gap-2">
         {panelControls}
         {trialPanel && <button id={trialPanel.buttonId} type="button" onClick={trialPanel.onToggle}
-          className="atlas-tool-button text-sm font-medium !border-neon-cyan/30 !text-neon-cyan/90 aria-expanded:!border-neon-cyan/60 aria-expanded:!text-neon-cyan"
+          className="atlas-tool-button hidden text-sm font-medium !border-neon-cyan/30 !text-neon-cyan/90 aria-expanded:!border-neon-cyan/60 aria-expanded:!text-neon-cyan lg:inline-flex"
           data-tutorial-anchor="lab" aria-label={trialLabel} title={trialLabel}
           aria-expanded={trialPanel.open} aria-controls={trialPanel.id}>
           <AtlasIcon name="flask" className="size-4" /> <span className="hidden lg:inline">{trialLabel}</span>
