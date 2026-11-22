@@ -163,7 +163,7 @@ export default function MapViewerPage() {
     monthIndex={monthlyMonth} onMonthlyModeChange={handleMonthlyModeChange}
     detail={layerDetail(display.available, display.state.layers.temperature > 0 && Boolean(trial.preview))}
     particleMode={particleMode} onParticleModeChange={setParticleMode} />
-  const legend = !cleanMode && <ClimateLegend layer={activeMainLayerId(display.state)} mesh={cvtMesh}
+  const legend = (inline = false) => !cleanMode && <ClimateLegend inline={inline} layer={activeMainLayerId(display.state)} mesh={cvtMesh}
     displayingMonthly={displayingMonthly} monthlyMode={monthlyMode} monthlyData={monthlyData} monthlyLoading={monthlyLoading}
     monthIndex={monthlyMonth} yearlyData={yearlyData} meta={meta}
     preview={trialActive ? trial.preview : null} />
@@ -300,7 +300,7 @@ export default function MapViewerPage() {
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
-                  {legend}
+                  {legend()}
                 </div>
                 {!cleanMode && (
                   <MobileCellCard
@@ -401,7 +401,6 @@ export default function MapViewerPage() {
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
                   />
-                  {legend}
 
                   {/* Recording control — float in the map view's bottom-right
                       corner.  Fully hidden in clean mode (zero UI while
@@ -427,7 +426,7 @@ export default function MapViewerPage() {
                   )}
                 </div>
                 {!cleanMode && (
-                  <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={trialActive ? null : hoveredCellData} trial={trial.preview} />
+                  <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={trialActive ? null : hoveredCellData} trial={trial.preview} legend={legend(true)} />
                 )}
               </>
             ) : (

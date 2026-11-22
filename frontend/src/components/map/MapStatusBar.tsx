@@ -5,6 +5,7 @@
  * Otherwise shows a placeholder prompt.
  */
 
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { CursorInfo } from './MapViewer'
 import type { VoronoiCell } from '../../viewers/map/types'
@@ -22,6 +23,8 @@ interface MapStatusBarProps {
   /** Currently hovered Voronoi cell (from cvtMesh) for geological info. */
   hoveredCell: VoronoiCell | null
   trial?: TemperaturePreview | null
+  /** Compact colour-scale legend rendered in the bar. */
+  legend?: ReactNode
 }
 
 export default function MapStatusBar({
@@ -29,6 +32,7 @@ export default function MapStatusBar({
   zoom,
   hoveredCell,
   trial,
+  legend,
 }: MapStatusBarProps) {
   const { t } = useTranslation('map')
 
@@ -39,6 +43,7 @@ export default function MapStatusBar({
   if (!cursor) {
     return (
       <div className="flex items-center gap-4 px-3 py-1.5 bg-space-panel/80 border-t border-space-border text-xs text-gray-500 font-mono">
+        {legend && <>{legend}<span className="text-gray-700">|</span></>}
         <span>{t('status.hoverPrompt')}</span>
         <span className="ml-auto text-gray-600">{t('field.zoom')} {zoom.toFixed(1)}x</span>
       </div>
@@ -47,6 +52,7 @@ export default function MapStatusBar({
 
   return (
     <div className="flex items-center gap-3 px-3 py-1.5 bg-space-panel/80 border-t border-space-border text-xs text-gray-400 font-mono">
+      {legend && <>{legend}<span className="text-gray-700">|</span></>}
       <span>
         {t('field.longitude')} {cursor.lon.toFixed(2)}°
       </span>

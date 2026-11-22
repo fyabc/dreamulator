@@ -297,7 +297,7 @@ export default function GlobeViewerPage() {
     monthIndex={monthlyMonth} onMonthlyModeChange={handleMonthlyModeChange}
     detail={layerDetail(display.available, display.state.layers.temperature > 0 && Boolean(trial.preview))}
     particleMode={particleMode} onParticleModeChange={setParticleMode} />
-  const legend = !cleanMode && displayTexture && <ClimateLegend layer={activeMainLayerId(display.state)} mesh={cvtMesh}
+  const legend = (inline = false) => !cleanMode && displayTexture && <ClimateLegend inline={inline} layer={activeMainLayerId(display.state)} mesh={cvtMesh}
     displayingMonthly={displayingMonthly} monthlyMode={monthlyMode} monthlyData={monthlyData} monthlyLoading={monthlyLoading}
     monthIndex={monthlyMonth} yearlyData={yearlyData} meta={meta}
     preview={trialActive ? trial.preview : null} />
@@ -507,7 +507,7 @@ export default function GlobeViewerPage() {
               deviation
             />
             </>}
-            {legend}
+            {legend()}
           </div>
           {!cleanMode && (
             <MobileCellCard
@@ -664,7 +664,6 @@ export default function GlobeViewerPage() {
             deviation
           />
           </>}
-          {legend}
 
           {/* Recording controls — float in the globe view's bottom-right corner
               (the view area has spare room; the top bar is already crowded).
@@ -694,7 +693,7 @@ export default function GlobeViewerPage() {
           )}
         </div>
         {!cleanMode && (
-          <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={trialActive ? null : hoveredCellData} trial={trial.preview} />
+          <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={trialActive ? null : hoveredCellData} trial={trial.preview} legend={legend(true)} />
         )}
       </div>
 

@@ -24,7 +24,8 @@ interface ClimateLegendProps {
 
 export default function ClimateLegend({
   layer, mesh, displayingMonthly, monthlyMode, monthlyLoading, monthlyData, monthIndex, yearlyData, meta, preview,
-}: ClimateLegendProps) {
+  inline = false,
+}: ClimateLegendProps & { inline?: boolean }) {
   const { t, i18n } = useTranslation(['map', 'help'])
   const helpId = useId()
   const [helpOpen, setHelpOpen] = useState(false)
@@ -67,17 +68,17 @@ export default function ClimateLegend({
   const clamped = layer !== 'terrain' && layer !== 'habitable' && layer !== 'agriculture' && layer !== 'npp'
 
   return (
-    <div className="group absolute left-3 top-3 z-30 max-w-[calc(100%-1.5rem)]">
+    <div className={inline ? 'relative z-30 max-w-full' : 'group absolute left-3 top-3 z-30 max-w-[calc(100%-1.5rem)]'}>
       <button type="button" data-testid="climate-legend" aria-label={t('legend.colorScale', { layer: name })}
         aria-describedby={helpId} onClick={() => setHelpOpen(value => !value)} onBlur={() => setHelpOpen(false)}
         onKeyDown={event => { if (event.key === 'Escape') { setHelpOpen(false); event.currentTarget.blur() } }}
-        className="flex min-h-9 max-w-full items-center gap-2 rounded-md border border-space-border bg-space-panel px-2.5 py-1 text-[11px] tabular-nums text-gray-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-neon-cyan">
+        className={`flex ${inline ? 'min-h-6 px-2 py-0' : 'min-h-9 px-2.5 py-1'} max-w-full items-center gap-2 rounded-md border border-space-border bg-space-panel text-[11px] tabular-nums text-gray-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-neon-cyan`}>
         <span className="whitespace-nowrap">{clamped && scale.min !== 0 ? '≤ ' : ''}{format.format(scale.min)}</span>
         <span aria-hidden="true" className="h-2 w-20 min-w-8 rounded sm:w-28" style={{ background: scaleGradient(scale.stops) }} />
         <span className="whitespace-nowrap">{clamped ? '≥ ' : ''}{format.format(scale.max)} {scale.unit}</span>
       </button>
       <span id={helpId} role="tooltip"
-        className={`${helpOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'} pointer-events-none absolute left-0 top-full mt-1 w-max max-w-[min(16rem,80vw)] rounded border border-space-border bg-space-panel px-2.5 py-1.5 text-xs text-gray-200`}>
+        className={`${helpOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'} pointer-events-none absolute left-0 ${inline ? 'bottom-full mb-1' : 'top-full mt-1'} w-max max-w-[min(16rem,80vw)] rounded border border-space-border bg-space-panel px-2.5 py-1.5 text-xs text-gray-200`}>
         {help}
       </span>
     </div>
