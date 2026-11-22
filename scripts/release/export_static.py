@@ -237,6 +237,11 @@ def _export_layer_data(world_dir: Path, branch: str | None = None) -> dict:
         catalog = load_yaml(derived_dir / "system_catalog.yaml")
         if catalog:
             result["system_catalog"] = catalog
+            result["sky_background"] = load_yaml(derived_dir / "sky_background.yaml")
+            civilization = resolver.get_derived_dir("civilization")
+            result["sky_culture"] = (
+                load_yaml(civilization / "sky_culture.yaml") if civilization is not None else None
+            )
 
     # 3. Planets
     planets_data = resolver.load_layer_yaml("geological", "planets.yaml")

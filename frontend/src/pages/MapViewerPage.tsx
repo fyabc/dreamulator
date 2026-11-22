@@ -14,7 +14,6 @@ import { useTranslation } from 'react-i18next'
 import ImportElevationButton from '../components/map/ImportElevationButton'
 import TerrainSourceSelect from '../components/map/TerrainSourceSelect'
 import GeographyRasterButton from '../components/map/GeographyRasterButton'
-import BranchSelector from '../components/BranchSelector'
 import MapViewer from '../components/map/MapViewer'
 import MapLayerPanel from '../components/map/MapLayerPanel'
 import { activeMainLayerId } from '../components/map/layerStateInit'
@@ -49,7 +48,7 @@ export default function MapViewerPage() {
   const trialActive = trial.mode === 'trial' && !trial.ebm
   const vs = usePlanetViewState(worldName, routePlanetId, 'map', trialActive, trial.ebm)
   const {
-    selectedBranch, setSelectedBranch,
+    selectedBranch,
     cleanMode, setCleanMode,
     layerState, setLayerState, activeMainLayer,
     monthlyMode, handleMonthlyModeChange, selectMonth, displayingMonthly, downscale, setDownscale,
@@ -57,7 +56,7 @@ export default function MapViewerPage() {
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
     selectedPlanet, mapPlanets, meta, bodyByName, currentPlanetName, planetRadiusM,
-    worldPlanetsError, platesError,
+    worldPlanetsError, platesError, metaError, elevError, cvtMeshError,
     elevation, cvtMesh, voronoiCells, awaitingBuild, terrainSource, setTerrainSource,
     scalarThematic, koppenDownscale, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, hoveredCell, handleCellHover, selectedCells,
@@ -190,12 +189,6 @@ export default function MapViewerPage() {
           }
         />
 
-        <BranchSelector
-          compact
-          worldName={worldName}
-          selectedBranch={selectedBranch}
-          onSelect={setSelectedBranch}
-        />
         {!!mapPlanets?.length && <MapBodySelector planets={mapPlanets} selected={selectedPlanet}
           nameOf={id => bodyByName.get(id)?.name ?? id} onSelect={id => {
             const qs = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
@@ -208,7 +201,7 @@ export default function MapViewerPage() {
         <AwaitingBuildBanner world={worldName} branch={selectedBranch} />
       )}
       {/* Error banner */}
-      {worldPlanetsError && (
+      {(metaError || elevError || cvtMeshError || worldPlanetsError) && (
         <div className="bg-red-900/20 border-b border-red-700/30 px-4 py-2 text-sm text-red-300 text-center">
           {t('label.dataLoadFailed')}
         </div>

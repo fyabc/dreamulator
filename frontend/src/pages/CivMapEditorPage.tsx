@@ -9,6 +9,8 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import AtlasIcon from '../components/AtlasIcon'
+import WorldContext from '../components/world/WorldContext'
+import { useWorldScope } from '../components/world/useWorldScope'
 import CivLeafletMap from '../components/civmap/CivLeafletMap'
 import { geoJsonAreaKm2, formatArea } from '../components/civmap/areaUtils'
 import type {
@@ -53,6 +55,7 @@ export default function CivMapEditorPage() {
 
   const world = worldName || ''
   const branch = branchName || null
+  const scope = useWorldScope()
   const staticMode = isStaticMode()
   const editScope = JSON.stringify([world, branch])
 
@@ -426,8 +429,8 @@ export default function CivMapEditorPage() {
             <AtlasIcon name="back" />
           </Link>
           <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold sm:text-lg">{t('title.editorTitle', { world })}</h1>
-            {(branch || staticMode) && <p className="truncate text-xs text-slate-400">{[branch, staticMode ? t('title.readonly') : null].filter(Boolean).join(' · ')}</p>}
+            <h1 className="truncate text-base font-semibold sm:text-lg">{t('title.editorTitle')}</h1>
+            {scope && <WorldContext scope={scope} />}
           </div>
           {!staticMode && <button type="button" role="switch" aria-checked={!editingUnlocked} aria-label={t('action.lockEditing')}
             className={`${actionClass} ml-auto shrink-0 ${editingUnlocked ? 'border-neon-cyan/40 text-neon-cyan' : ''}`}

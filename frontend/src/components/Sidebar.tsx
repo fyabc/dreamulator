@@ -7,13 +7,15 @@ import LanguageSwitcher from './LanguageSwitcher'
 import { useDevModeStore } from '../stores/devModeStore'
 import { useExperimentalStore } from '../stores/experimentalStore'
 import { isStaticMode } from '../api/mode'
-import { useQuery } from '@tanstack/react-query'
-import { getProject, projectKey, worldDataPath } from '../projects/projectStore'
+import { worldDataPath, worldOverviewPath } from '../projects/projectStore'
+import { hasProjectHeightmap } from '../projects/elevationProject'
 import { heightmapMapPath } from '../projects/heightmapWorld'
+import type { WorldScope } from './world/useWorldScope'
 
 interface SidebarProps {
   open: boolean
   collapsed: boolean
+  scope: WorldScope | null
   onClose: () => void
   onToggleCollapse: () => void
 }
@@ -23,6 +25,7 @@ interface NavigationItem {
   label: string
   icon: AtlasIconName
   matchMap?: boolean
+  tab?: string
 }
 
 interface SidebarHint {
@@ -35,6 +38,7 @@ interface SidebarHint {
 export default function Sidebar({
   open,
   collapsed,
+  scope,
   onClose,
   onToggleCollapse,
 }: SidebarProps) {
@@ -67,44 +71,32 @@ export default function Sidebar({
   const experimental = useExperimentalStore((s) => s.experimental)
   const setExperimental = useExperimentalStore((s) => s.setExperimental)
 
-  // Extract world name from path if we're in a world context
-  const worldMatch = location.pathname.match(/^\/worlds\/([^/]+)/)
-  const currentWorld = worldMatch ? worldMatch[1] : null
-  const browserWorld = useQuery({ queryKey: projectKey(currentWorld ?? ''), queryFn: () => getProject(currentWorld!),
-    enabled: isStaticMode() && !!currentWorld, retry: false })
-
   const navItems: NavigationItem[] = [
     { path: '/', label: t('nav.home'), icon: 'home' },
     { path: '/worlds', label: t('nav.worlds'), icon: 'globe' },
     { path: '/new-world', label: t('worlds:action.newWorld'), icon: 'import' },
   ]
   const utilityItems: NavigationItem[] = [
-    // Region pack QA page — local packs only, hidden in the static build.
-    ...(isStaticMode() ? [] : [{ path: '/packs', label: t('nav.packs'), icon: 'frame' as const }]),
     { path: '/help', label: t('nav.help'), icon: 'help' },
   ]
 
   // World-specific nav items (shown when viewing a world)
   // Carry search params (e.g. ?branch=xxx) to preserve branch selection
-  const search = location.search
-  const overviewSearch = new URLSearchParams()
-  const branch = new URLSearchParams(search).get('branch')
-  if (branch) overviewSearch.set('branch', branch)
-  const worldNavItems: NavigationItem[] = currentWorld && browserWorld.data && !browserWorld.data.published
-    ? [{ path: worldDataPath(currentWorld), label: t('worlds:worldData.title'), icon: 'folder' },
-      ...(browserWorld.data.creationSnapshot && browserWorld.data.creationKind !== 'starter'
-        ? [{ path: heightmapMapPath(currentWorld), label: t('nav.map'), icon: 'globe' as const }] : [])]
-    : currentWorld
-    ? [
-        { path: `/worlds/${currentWorld}${branch ? `?${overviewSearch}` : ''}`, label: t('nav.overview'), icon: 'overview' },
-        { path: `/worlds/${currentWorld}/globe${search}`, label: t('nav.map'), icon: 'globe', matchMap: true },
-        { path: `/worlds/${currentWorld}/viewer3d${search}`, label: t('nav.viewer3d'), icon: 'orbit' },
-        // API-only view (parameterized engine query) — hidden in static mode.
-        ...(isStaticMode()
-          ? []
-          : [{ path: `/worlds/${currentWorld}/sky${search}`, label: t('nav.sky'), icon: 'stars' as const }]),
-      ]
-    : []
+  const search = new URLSearchParams(location.search)
+  const detailTab = search.get('tab') ?? 'overview'
+  const branchQuery = scope?.branch ? `?${new URLSearchParams({ branch: scope.branch })}` : ''
+  const worldPath = scope ? worldOverviewPath(scope.id) : ''
+  const worldNavItems: NavigationItem[] = scope ? [
+    { path: `${worldPath}${branchQuery}`, label: t('nav.overview'), icon: 'overview', tab: scope.browserWorld ? 'overview' : undefined },
+    ...(!scope.browserWorld || hasProjectHeightmap(scope.browserWorld) ? [{
+      path: scope.browserWorld ? heightmapMapPath(scope.id) : `${worldPath}/globe${branchQuery}`,
+      label: t('nav.map'), icon: 'globe' as const, matchMap: true,
+    }] : []),
+    ...(scope.browserWorld
+      ? [{ path: worldDataPath(scope.id), label: t('worlds:worldData.title'), icon: 'folder' as const, tab: 'data' }]
+      : [{ path: `${worldPath}/viewer3d${branchQuery}`, label: t('nav.viewer3d'), icon: 'system' as const },
+        { path: `${worldPath}/sky${branchQuery}`, label: t('nav.sky'), icon: 'stars' as const }]),
+  ] : []
 
   const revealHint = (label: string, anchor: HTMLElement) => {
     if (!collapsed) return
@@ -114,7 +106,7 @@ export default function Sidebar({
 
   const renderNavLinks = (items: NavigationItem[]) => items.map((item) => {
     const path = item.path.split('?')[0]
-    const isActive = location.pathname === path || (item.matchMap
+    const isActive = (location.pathname === path && (!item.tab || item.tab === detailTab)) || (item.matchMap
       && /\/worlds\/[^/]+\/(?:globe|map)(?:\/|$)/.test(location.pathname))
     return (
       <Link
@@ -185,13 +177,14 @@ export default function Sidebar({
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto" onScroll={() => setHint(null)}>
         {renderNavLinks(navItems)}
         {/* World-specific nav items */}
-        {worldNavItems.length > 0 && (
-          <>
-            <div className="mt-3 border-t border-space-border pt-3">
-              <span className={`text-xs text-gray-600 uppercase tracking-wide ${collapsed ? 'md:sr-only' : ''}`}>{currentWorld}</span>
+        {scope && (
+          <div role="group" aria-label={t('context.navigation', { world: scope.name })}
+            className="mt-3 space-y-1 border-t border-space-border pt-3">
+            <div className={`px-2 pb-1 text-xs font-semibold text-slate-300 ${collapsed ? 'md:hidden' : ''}`}>
+              <p className="truncate" title={scope.name}>{scope.name}</p>
             </div>
             {renderNavLinks(worldNavItems)}
-          </>
+          </div>
         )}
         <div className="mt-3 space-y-1 border-t border-space-border pt-3">
           {renderNavLinks(utilityItems)}

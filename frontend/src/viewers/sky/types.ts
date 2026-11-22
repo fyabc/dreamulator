@@ -148,3 +148,12 @@ export interface SkyCultureEntry {
 export interface SkyCulture {
   cultures: SkyCultureEntry[]
 }
+export interface SkyQuery {
+  from?: string | null
+  lat?: number
+  lon?: number
+  at?: number
+  targets?: string[] | null
+  includeEvents?: boolean
+  branch?: string | null
+}

@@ -30,7 +30,7 @@ from dreamulator.build_jobs import (
     local_compute_slot,
 )
 from dreamulator.engine.ephemeris import sky_ephemeris
-from dreamulator.guard.facts import load_entities
+from dreamulator.models.catalog import load_entities
 from dreamulator.world_manager import STARTER_TEMPLATES, WorldManager
 from dreamulator.world_parameters import (
     WorldGridUpdate,

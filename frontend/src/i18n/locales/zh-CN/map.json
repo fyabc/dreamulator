@@ -507,6 +507,7 @@
     "generatingTexture": "生成纹理中...",
     "dataLoadFailed": "部分数据加载失败，请检查网络连接或切换分支重试。",
     "awaitingBuild": "这张地图还没有构建：地图显示的是保存的高程栅格。板块、气候、生态等结果要在构建世界之后才会出现。",
+    "referenceElevationOnly": "当前只能查看地球参照世界的原始高程。观测图层可用后会显示在地图中，无需构建基础世界。",
     "layerSettings": "图层设置",
     "switchTo2D": "切换到 2D 地图视图（等距圆柱投影）",
     "switchToStellar": "切换到恒星系 3D 视图（行星轨道、宜居带）",

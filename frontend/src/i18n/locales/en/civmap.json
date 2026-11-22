@@ -1,7 +1,7 @@
 {
   "title": {
     "toolbar": "Toolbar",
-    "editorTitle": "Civ Map — {{world}}",
+    "editorTitle": "Civ Map",
     "readonly": "Read-only",
     "editLocked": "Editing locked",
     "editing": "Editing enabled",

@@ -20,7 +20,7 @@
 ## 2. 查询
 
 入口是 `sky_ephemeris(entities, observer_id, lat_deg, lon_deg, at_days, targets, include_events)`。
-`entities` 是天文层 `system_catalog.yaml` 经 `guard.facts.load_entities` 展平后的实体表，`orbits:` 段的完整精度根数须已合并。
+`entities` 是天文层 `system_catalog.yaml` 经 `models.catalog.load_entities` 展平后的实体表。该函数会合并 `orbits:` 段的全精度轨道根数。
 `at_days` 是距 catalog 历元的天数；`targets` 为 `None` 时报告观测者以外的全部实体，顺序与 catalog 相同。
 `stellar.yaml` 可为当前恒星系声明 `reference_epoch`，其中 `label` 命名第 0 天，`julian_date` 可记录
 儒略日数值及时间尺度。派生目录将该字段提供给天球视图，不参与轨道传播。Nacrea 的 J0 是正典轨道快照，
@@ -72,7 +72,7 @@ uv run dreamulator sky nacrea --at 61.979 --targets planet_aegis,satellite_caden
 | `GET /api/worlds/{world}/sky/background` | 天文层派生的背景天球。 | 同样按文件修改时间与大小校验。 |
 | `GET /api/worlds/{world}/sky/culture` | 文明层派生的星空文化，消费规则见[文明管线第 6 节](civilization-pipeline.md)。 | 同上。 |
 
-三个端点最多各缓存 8 个 (世界, 分支) 组合。天空查询的输出随时刻与观测点参数化，静态导出不提供这些端点，静态站显示提示面板。
+三个端点最多各缓存 8 个世界和分支组合。静态站导出天体目录、背景天球和星空文化，不预生成随观测点和时刻变化的星历。浏览器工作线程加载与本机端点相同的 `sky_ephemeris` 和 `load_entities`，首次使用时从站点加载 Python 运行时。两种站点共用观测设置、投影和交互，播放时都跳过升落搜索，停下后再计算完整结果。
 
 ## 4. 背景天球
 

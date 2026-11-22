@@ -17,6 +17,7 @@ import type { WorldParameters, WorldParameterUpdate } from './worldParameters'
 import type { ParameterDefaults } from '../projects/worldParameters'
 import type { ClimateTrialForcing } from './climateTrials'
 import type { BrowserEbmSource } from '../playground/browserEbm'
+import type { SkyBackground, SkyCulture, SkyQuery } from '../viewers/sky/types'
 
 interface DocumentMeta {
   filename: string
@@ -31,6 +32,8 @@ interface DocumentMeta {
 // Vite replaces BASE_URL at build time with the configured base path
 // e.g. '/' for local preview, '/dreamulator/' for GitHub Pages
 const DATA_BASE = `${import.meta.env.BASE_URL}data`
+const astronomyScope = (name: string, branch?: string | null) =>
+  `/worlds/${encodeURIComponent(name)}${branch ? `/branches/${encodeURIComponent(branch)}` : ''}`
 
 // Data URLs are NOT content-hashed, so use conditional revalidation
 // (cache: 'no-cache') instead of trusting the browser cache: GitHub Pages
@@ -337,14 +340,23 @@ export const staticApi = {
       : fetchStaticJson<any>(`/worlds/${name}/habitable_zones.json`),
 
   getPlanets: (name: string, branch?: string | null) =>
-    branch
-      ? fetchStaticJson<any[]>(`/worlds/${name}/branches/${branch}/planets.json`)
-      : fetchStaticJson<any[]>(`/worlds/${name}/planets.json`),
+    fetchStaticJson<any[]>(`${astronomyScope(name, branch)}/planets.json`, () => []),
 
   getSystemCatalog: (name: string, branch?: string | null) =>
-    branch
-      ? fetchStaticJson<SystemCatalog>(`/worlds/${name}/branches/${branch}/system_catalog.json`)
-      : fetchStaticJson<SystemCatalog>(`/worlds/${name}/system_catalog.json`),
+    fetchStaticJson<SystemCatalog>(`${astronomyScope(name, branch)}/system_catalog.json`),
+
+  getSky: async (name: string, query: SkyQuery, signal?: AbortSignal) => {
+    const { runBrowserSky } = await import('../viewers/sky/browserSky')
+    return runBrowserSky({ query,
+      runtime: new URL(`${import.meta.env.BASE_URL}${__PLAYGROUND_RUNTIME_PATH__}`, document.baseURI).href,
+      solver: new URL(`${DATA_BASE}/climate_solver.zip`, document.baseURI).href,
+      catalog: new URL(`${DATA_BASE}${astronomyScope(name, query.branch)}/system_catalog.json`, document.baseURI).href,
+    }, signal)
+  },
+  getSkyBackground: (name: string, branch?: string | null) =>
+    fetchStaticJson<SkyBackground | null>(`${astronomyScope(name, branch)}/sky_background.json`, () => null),
+  getSkyCulture: (name: string, branch?: string | null) =>
+    fetchStaticJson<SkyCulture | null>(`${astronomyScope(name, branch)}/sky_culture.json`, () => null),
 
   // Branches
   listBranches: (name: string) =>

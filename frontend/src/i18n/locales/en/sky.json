@@ -2,7 +2,6 @@
   "title": {
     "sky": "Sky View"
   },
-  "staticModeHint": "The sky view calculates what is visible from a given location and time. Open this view in the local app to run those calculations.",
   "mode": {
     "pan": "Look",
     "disc": "All-sky"

@@ -6,7 +6,6 @@ import { lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatRadius, formatMass } from '../viewers/utils/scale'
 import NarratorPanel from '../components/NarratorPanel'
-import BranchSelector from '../components/BranchSelector'
 import LayerDocuments from '../components/LayerDocuments'
 import CivMapEntry from '../components/civmap/CivMapEntry'
 import LayerTabSection from '../components/world/LayerTabSection'
@@ -125,14 +124,6 @@ export default function WorldDetail() {
 
   // Branch and tab persisted in URL search params (?branch=ERE-if&tab=civilization)
   const selectedBranch = searchParams.get('branch') || null
-  const setSelectedBranch = (branch: string | null) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (branch) next.set('branch', branch)
-      else next.delete('branch')
-      return next
-    }, { replace: true })
-  }
 
   // Sync activeTab to URL
   const setActiveTabAndPersist = (tab: TabType) => {
@@ -253,14 +244,6 @@ export default function WorldDetail() {
                 </span>
               )}
             </div>
-
-            {!localWorld && !offlineData && <div className="mb-4">
-              <BranchSelector
-                worldName={worldName!}
-                selectedBranch={selectedBranch}
-                onSelect={setSelectedBranch}
-              />
-            </div>}
 
             {!staticMode && world && (
               <WorldBuildPanel

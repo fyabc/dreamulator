@@ -138,7 +138,9 @@ body {
 .atlas-home-footer a { display: inline-flex; align-items: center; min-height: 2.75rem; }
 .atlas-home-footer a:hover { text-decoration: underline; }
 
-.atlas-workbench { height: calc(100dvh - 3.5rem); min-height: 23rem; isolation: isolate; }
+.atlas-world-shell { --atlas-context-height: 2.25rem; }
+.atlas-workbench { height: calc(100dvh - 3.5rem - var(--atlas-context-height, 0rem)); min-height: 23rem; isolation: isolate; }
+.atlas-system-workspace { min-height: calc(100dvh - 3.5rem - var(--atlas-context-height, 0rem)); }
 .atlas-tool-button {
   display: inline-flex;
   flex-shrink: 0;
@@ -159,7 +161,8 @@ summary.atlas-tool-button::-webkit-details-marker { display: none; }
 .atlas-region-field { image-rendering: pixelated; }
 
 @media (min-width: 768px) {
-  .atlas-workbench { height: 100dvh; }
+  .atlas-workbench { height: calc(100dvh - var(--atlas-context-height, 0rem)); }
+  .atlas-system-workspace { min-height: calc(100dvh - var(--atlas-context-height, 0rem)); }
 }
 
 @media (max-width: 960px) {

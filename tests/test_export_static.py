@@ -248,12 +248,16 @@ def test_export_layer_data_keeps_the_resolved_catalog_epoch(
         branch / "layers" / "astronomy" / "derived" / "system_catalog.yaml",
         {**SAMPLE_CATALOG, "reference_epoch": branch_epoch},
     )
+    background = {"frame": "ecliptic", "stars": []}
+    _write_yaml(world / "layers" / "astronomy" / "derived" / "sky_background.yaml", background)
 
-    assert "reference_epoch" not in export_static._export_layer_data(world)["system_catalog"]
-    assert (
-        export_static._export_layer_data(world, "new-epoch")["system_catalog"]["reference_epoch"]
-        == branch_epoch
-    )
+    base = export_static._export_layer_data(world)
+    assert "reference_epoch" not in base["system_catalog"]
+    assert base["sky_background"] == background
+    assert base["sky_culture"] is None
+    resolved = export_static._export_layer_data(world, "new-epoch")
+    assert resolved["system_catalog"]["reference_epoch"] == branch_epoch
+    assert resolved["sky_background"] is None
 
 
 def test_export_map_data_branch_overlay_without_elevation(

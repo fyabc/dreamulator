@@ -18,7 +18,7 @@ import i18n from '../i18n'
 import type { CVTMesh, CVTVertex, CVTRegion, VoronoiCell } from '../viewers/map/types'
 import type { PackHeightSource, PackMeta, PackSummary, ProbeResult, RegionDevice, RegionRefinementJob,
   RegionRefinementPlan, RegionRefinementSource, RiverData } from '../viewers/packs/types'
-import type { SkyBackground, SkyCulture, SkyEphemerisResult } from '../viewers/sky/types'
+import type { SkyBackground, SkyCulture, SkyEphemerisResult, SkyQuery } from '../viewers/sky/types'
 import type { StarterSettings } from '../projects/starterWorld'
 
 const base = import.meta.env.BASE_URL
@@ -764,21 +764,11 @@ const readApi = {
   cancelRegionRefinement: (id: string) => isStaticMode() ? staticApi.cancelRegionRefinement()
     : fetchJson<RegionRefinementJob>(`/region-refinement/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
 
-  // ---- Sky ephemeris (observer's sky) — API-only: the output is
-  // parameterized (observer × lat × lon × time), so it has no static mirror
-  // (same posture as packs); the page guards static mode.
-
-  getSky: (name: string, params: {
-    from?: string | null
-    lat?: number
-    lon?: number
-    at?: number
-    targets?: string[] | null
-    includeEvents?: boolean
-    branch?: string | null
-  }) =>
-    fetchJson<SkyEphemerisResult>(
+  getSky: (name: string, params: SkyQuery, signal?: AbortSignal) => isStaticMode()
+    ? staticApi.getSky(name, params, signal)
+    : fetchJson<SkyEphemerisResult>(
       `/worlds/${encodeURIComponent(name)}/sky?${skyQueryString(params)}`,
+      { signal },
     ),
 
   getSkyBackground,
@@ -787,15 +777,7 @@ const readApi = {
 }
 
 /** Build the sky endpoint query string (exported for the fast-path fetch). */
-export function skyQueryString(params: {
-  from?: string | null
-  lat?: number
-  lon?: number
-  at?: number
-  targets?: string[] | null
-  includeEvents?: boolean
-  branch?: string | null
-}): string {
+export function skyQueryString(params: SkyQuery): string {
   const q = new URLSearchParams()
   if (params.from) q.set('from', params.from)
   if (params.lat !== undefined) q.set('lat', String(params.lat))
@@ -812,7 +794,8 @@ export function skyQueryString(params: {
 /** The static universe setting (neighbour stars / DSOs / band / event hooks).
  *  Time- and observer-independent: fetched once per world+branch and rotated
  *  into the observer frame client-side, so look-around stays fetch-free. */
-async function getSkyBackground(name: string, branch?: string | null): Promise<SkyBackground> {
+async function getSkyBackground(name: string, branch?: string | null): Promise<SkyBackground | null> {
+  if (isStaticMode()) return staticApi.getSkyBackground(name, branch)
   const qs = branch ? `?branch=${encodeURIComponent(branch)}` : ''
   const response = await fetch(`${API_BASE}/worlds/${encodeURIComponent(name)}/sky/background${qs}`)
   if (!response.ok) {
@@ -825,7 +808,8 @@ async function getSkyBackground(name: string, branch?: string | null): Promise<S
 /** The civilization layer's star lore (asterism figures + per-star culture
  *  names).  Static per world+branch like the background; the client joins it
  *  against the background catalogue by id — positions are never duplicated. */
-async function getSkyCulture(name: string, branch?: string | null): Promise<SkyCulture> {
+async function getSkyCulture(name: string, branch?: string | null): Promise<SkyCulture | null> {
+  if (isStaticMode()) return staticApi.getSkyCulture(name, branch)
   const qs = branch ? `?branch=${encodeURIComponent(branch)}` : ''
   const response = await fetch(`${API_BASE}/worlds/${encodeURIComponent(name)}/sky/culture${qs}`)
   if (!response.ok) {
@@ -840,6 +824,7 @@ export async function fetchSkyFast(
   params: Parameters<typeof api.getSky>[1],
   signal?: AbortSignal,
 ): Promise<SkyEphemerisResult> {
+  if (isStaticMode()) return staticApi.getSky(name, { ...params, includeEvents: false }, signal)
   const response = await fetch(
     `${API_BASE}/worlds/${encodeURIComponent(name)}/sky?${skyQueryString({ ...params, includeEvents: false })}`,
     { signal, headers: { 'Content-Type': 'application/json' } },

@@ -507,6 +507,7 @@
     "generatingTexture": "Generating texture...",
     "dataLoadFailed": "Some data failed to load. Check your connection or switch branches.",
     "awaitingBuild": "This map has not been built yet: the view shows the stored heightmap. Plates, climate, ecology and other results appear after the world is built.",
+    "referenceElevationOnly": "Only the original elevation is available for the Earth reference world. Observed layers appear when available; the base world does not need to be built.",
     "layerSettings": "Layer Settings",
     "switchTo2D": "Switch to 2D map view",
     "switchToStellar": "Switch to stellar system 3D view",

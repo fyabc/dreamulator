@@ -330,9 +330,10 @@ uv run dreamulator branch create myworld pangea --at geological
 # 分支上改 terrain_config.yaml / geography.yaml 后构建
 uv run dreamulator build myworld --branch pangea
 
-# 前端切换分支下拉菜单对比查看
 uv run dreamulator serve --open
 ```
+
+打开地图后，可以在页面顶部用「分支」切换并比较结果。切换时会保留地图视图，但不会载入另一分支的试算或细化成果。
 
 **典型分支策略**：
 

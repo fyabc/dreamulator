@@ -16,7 +16,6 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import * as THREE from 'three'
 import GlobeViewer, { type GlobeVertex, type GlobeRegion, type GlobeRegionFlight } from '../viewers/GlobeViewer'
-import BranchSelector from '../components/BranchSelector'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapLayerPanel from '../components/map/MapLayerPanel'
 import { activeMainLayerId } from '../components/map/layerStateInit'
@@ -67,7 +66,7 @@ export default function GlobeViewerPage() {
   const trialActive = trial.mode === 'trial' && !trial.ebm
   const vs = usePlanetViewState(worldName, planetId, 'globe', trialActive, trial.ebm)
   const {
-    selectedBranch, setSelectedBranch,
+    selectedBranch,
     cleanMode, setCleanMode,
     layerState, setLayerState, activeMainLayer,
     monthlyMode, handleMonthlyModeChange, selectMonth, displayingMonthly, downscale, setDownscale,
@@ -338,7 +337,6 @@ export default function GlobeViewerPage() {
           }
         />
 
-        <BranchSelector compact worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} />
         {!!mapPlanets?.length && <MapBodySelector planets={mapPlanets} selected={selectedPlanet}
           nameOf={id => bodyByName.get(id)?.name ?? id} onSelect={id => {
             const next = new URLSearchParams(searchParams)
@@ -369,7 +367,7 @@ export default function GlobeViewerPage() {
       {awaitingBuild && !cleanMode && (
         <AwaitingBuildBanner world={worldName} branch={selectedBranch} />
       )}
-      {(metaError || elevError || (cvtMeshError && !awaitingBuild)) && (
+      {(metaError || elevError || cvtMeshError) && (
         <div className="bg-red-900/20 border-b border-red-700/30 px-4 py-2 text-sm text-red-300 text-center">
           {t('label.dataLoadFailed')}
         </div>

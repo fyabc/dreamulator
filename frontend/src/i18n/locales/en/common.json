@@ -9,11 +9,20 @@
     "help": "Help",
     "overview": "Overview",
     "map": "Map",
-    "viewer3d": "3D View",
+    "viewer3d": "Stellar system",
     "packs": "Regional maps",
     "playground": "Climate lab",
     "sky": "Sky view",
     "import": "Import map"
+  },
+  "context": {
+    "label": "Current world and branch",
+    "world": "World",
+    "branch": "Branch",
+    "switchWorld": "Switch world",
+    "switchBranch": "Switch branch",
+    "base": "Base world",
+    "navigation": "Pages for {{world}}"
   },
   "action": {
     "skipToContent": "Skip to main content",

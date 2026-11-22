@@ -28,6 +28,10 @@ export type ElevationResult = LayerBase & {
 export type ProjectLayer = ElevationSource | ElevationResult
 export type LocalProject = { id: string; name: string; updatedAt: number; layers: ProjectLayer[]; published?: true; temperatureDrafts?: TemperatureDraft[]; climateTrials?: SavedBrowserEbm[]; creationSnapshot?: Blob; creationKind?: 'starter' }
 
+export function hasProjectHeightmap(project: LocalProject) {
+  return !!project.creationSnapshot && project.creationKind !== 'starter'
+}
+
 export function elevationSource(layers: ProjectLayer[], layer: ProjectLayer): ElevationSource | undefined {
   return layer.kind === 'elevation-source' ? layer :
     layers.find((input): input is ElevationSource => input.kind === 'elevation-source' && input.id === layer.sourceId)

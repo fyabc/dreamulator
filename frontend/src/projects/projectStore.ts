@@ -5,8 +5,9 @@ import type { SavedBrowserEbm } from '../api/climateTrials'
 const storeName = 'projects'
 export const projectsKey = ['browser-projects'] as const
 export const projectKey = (id: string) => [...projectsKey, id]
+export const worldOverviewPath = (id: string) => `/worlds/${encodeURIComponent(id)}`
 export const worldDataPath = (id: string, branch?: string | null) =>
-  `/worlds/${encodeURIComponent(id)}?tab=data${branch ? `&branch=${encodeURIComponent(branch)}` : ''}`
+  `${worldOverviewPath(id)}?tab=data${branch ? `&branch=${encodeURIComponent(branch)}` : ''}`
 
 export function projectRegionPath(id: string, layerId: string, branch?: string | null) {
   const search = new URLSearchParams({ project: id, layer: layerId })

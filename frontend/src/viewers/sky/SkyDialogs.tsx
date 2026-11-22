@@ -6,7 +6,6 @@
 
 import { useTranslation } from 'react-i18next'
 
-import BranchSelector from '../../components/BranchSelector'
 import SkyLegend from './SkyLegend'
 import type { GridToggles } from './skyGrids'
 
@@ -26,9 +25,6 @@ export interface SkyObserverDialogProps {
   lon: number
   onLat: (value: number) => void
   onLon: (value: number) => void
-  worldName: string
-  branch: string | null
-  onSelectBranch: (branch: string | null) => void
   spinSource?: string | null
   solarDayDays: number | null
 }
@@ -41,9 +37,6 @@ export function SkyObserverDialog({
   lon,
   onLat,
   onLon,
-  worldName,
-  branch,
-  onSelectBranch,
   spinSource,
   solarDayDays,
 }: SkyObserverDialogProps) {
@@ -89,7 +82,6 @@ export function SkyObserverDialog({
           />
         </label>
       </div>
-      <BranchSelector worldName={worldName} selectedBranch={branch} onSelect={onSelectBranch} compact />
       {(spinSource || solarDayDays !== null) && (
         <div className="text-[10px] text-gray-600 space-y-0.5 pt-1 border-t border-space-border">
           {spinSource && (

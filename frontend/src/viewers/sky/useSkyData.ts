@@ -34,14 +34,14 @@ export function useSkyData(params: SkyDataParams): SkyDataState {
 
   const query = useQuery({
     queryKey: ['sky', worldName, observerId, branch, lat, lon, atCommitted],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       api.getSky(worldName, {
         from: observerId ?? undefined,
         lat,
         lon,
         at: atCommitted,
         branch,
-      }),
+      }, signal),
     enabled: !!worldName && !!observerId,
     retry: false,
     staleTime: 5 * 60_000,

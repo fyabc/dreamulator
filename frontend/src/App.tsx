@@ -67,13 +67,12 @@ function App() {
               <Route path="worlds/:worldName/globe/:planetId?" element={<GlobeViewerPage />} />
             </Route>
             <Route path="worlds/:worldName/viewer3d" element={<StellarSystemViewerPage />} />
-            {staticMode && <Route path="worlds/:worldName/sky/:bodyId?" element={<SkyViewerPage />} />}
             <Route path="packs" element={<PackViewerPage />} />
             <Route path="playground" element={<PlaygroundPage />} />
             <Route path="help" element={<HelpPage />} />
           </Route>
           {/* Full-page workspaces (no Layout wrapper) */}
-          {!staticMode && <Route path="worlds/:worldName/sky/:bodyId?" element={<SkyViewerPage />} />}
+          <Route path="worlds/:worldName/sky/:bodyId?" element={<SkyViewerPage />} />
           <Route path="worlds/:worldName/civmap" element={<CivMapEditorPage />} />
           <Route path="worlds/:worldName/civmap/:branchName" element={<CivMapEditorPage />} />
         </Routes>

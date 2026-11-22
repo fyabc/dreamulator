@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from dreamulator.models.catalog import load_entities
 from dreamulator.models.layers import Layer
 from dreamulator.resolver import LayerResolver
 
@@ -39,23 +40,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 __all__ = ["build_fact_context", "load_entities"]
-
-# body 顶层保留键（不参与拍平，避免被 physical/orbit/derived 覆盖）。
-_BODY_IDENTITY_KEYS = (
-    "id",
-    "name",
-    "body_type",
-    "parent_id",
-    "in_planets_yaml",
-    "magnetic_field_strength_ut",
-    "description",
-)
-
-# 拍平到实体顶层的子块（纯标量键，与顶层无冲突）。
-_FLAT_SECTIONS = ("physical", "orbit", "derived")
-
-# 作为嵌套子系统保留的子块（含嵌套映射，如 composition / crust_composition）。
-_NESTED_SECTIONS = ("atmosphere", "hydrosphere", "lithosphere")
 
 
 def _read_yaml(path: Path) -> dict[str, Any] | None:
@@ -67,56 +51,6 @@ def _read_yaml(path: Path) -> dict[str, Any] | None:
         logger.warning("Failed to read fact context file %s: %s", path, exc)
         return None
     return data if isinstance(data, dict) else None
-
-
-def _flatten_body(body: dict[str, Any]) -> dict[str, Any]:
-    """Flatten a system_catalog body entry into an entity attribute mapping.
-
-    ``physical`` / ``orbit`` / ``derived`` are promoted to the top level so
-    ``entities.<id>.axial_tilt_deg`` / ``.solar_day_days`` / ``.period_days``
-    address naturally; ``atmosphere`` / ``hydrosphere`` / ``lithosphere`` stay
-    nested (they carry nested ``composition`` / ``crust_composition`` maps).
-    """
-    entity: dict[str, Any] = {k: body[k] for k in _BODY_IDENTITY_KEYS if k in body}
-    for section in _FLAT_SECTIONS:
-        sub = body.get(section)
-        if isinstance(sub, dict):
-            entity.update(sub)
-    for section in _NESTED_SECTIONS:
-        sub = body.get(section)
-        if isinstance(sub, dict):
-            entity[section] = sub
-    entity["is_satellite"] = entity.get("body_type") == "natural_satellite"
-    return entity
-
-
-def load_entities(catalog: dict[str, Any]) -> dict[str, Any]:
-    """Key celestial bodies by stable ID (stars as-is, bodies flattened).
-
-    A body's ``orbits:`` entry merges over the flattened body: the top-level
-    list is the authoritative element store (full-precision ``a``/``e``/``i``
-    plus the node / periapsis / epoch anomaly that the ``bodies.orbit`` block
-    does not carry — that block only renders rounded display values), so
-    consumers such as the ephemeris propagate from the same numbers the input
-    declared instead of a second, lossy copy.
-    """
-    orbits = {
-        str(entry["body_id"]): entry
-        for entry in catalog.get("orbits") or []
-        if isinstance(entry, dict) and entry.get("body_id") is not None
-    }
-    entities: dict[str, Any] = {}
-    for star in catalog.get("stars") or []:
-        if isinstance(star, dict) and star.get("id") is not None:
-            entities[str(star["id"])] = star
-    for body in catalog.get("bodies") or []:
-        if isinstance(body, dict) and body.get("id") is not None:
-            entity = _flatten_body(body)
-            elements = orbits.get(str(body["id"]))
-            if elements is not None:
-                entity.update({k: v for k, v in elements.items() if k != "body_id"})
-            entities[str(body["id"])] = entity
-    return entities
 
 
 def _load_aggregates(resolver: LayerResolver) -> dict[str, Any]:

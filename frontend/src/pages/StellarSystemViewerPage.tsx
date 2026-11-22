@@ -23,7 +23,6 @@ import {
   type SystemCatalog,
 } from '../api/catalogAdapter'
 import StellarSystemViewer from '../viewers/StellarSystemViewer'
-import BranchSelector from '../components/BranchSelector'
 import AtlasIcon from '../components/AtlasIcon'
 import { useCelestialName } from '../i18n/celestialNames'
 import { decodePngToFloat32, generatePlanetTexture } from '../viewers/map/utils/imageCodec'
@@ -43,15 +42,6 @@ export default function StellarSystemViewerPage() {
   const [detailsBodyId, setDetailsBodyId] = useState<string | null>(null)
   const detailsButton = useRef<HTMLButtonElement>(null)
   const [focusRequest, setFocusRequest] = useState<{ id: string; mode: StellarFocusMode; nonce: number } | null>(null)
-
-  const setSelectedBranch = (branch: string | null) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (branch) next.set('branch', branch)
-      else next.delete('branch')
-      return next
-    }, { replace: true })
-  }
 
   const selectBody = useCallback((id: string | null, openDetails = false) => {
     setDetailsBodyId(openDetails ? id : null)
@@ -264,7 +254,7 @@ export default function StellarSystemViewerPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col md:min-h-dvh">
+    <div className="atlas-system-workspace flex flex-col">
       <header className="space-y-2 border-b border-space-border bg-space-bg px-3 py-2 sm:px-5 sm:py-3">
         <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -275,7 +265,6 @@ export default function StellarSystemViewerPage() {
             <h1 className="text-lg font-semibold tracking-tight text-gray-100 sm:text-xl">{t('stellar.title')}</h1>
           </div>
           <div className="flex min-w-0 items-end gap-2">
-            <BranchSelector worldName={worldName} selectedBranch={selectedBranch} onSelect={setSelectedBranch} compact />
             <Link to="/help#stellar-viewer" className={`${actionClass} shrink-0`}>
               <AtlasIcon name="help" className="size-4" />{t('stellar.help')}
             </Link>

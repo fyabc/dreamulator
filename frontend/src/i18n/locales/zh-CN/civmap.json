@@ -1,7 +1,7 @@
 {
   "title": {
     "toolbar": "工具栏",
-    "editorTitle": "文明地图 — {{world}}",
+    "editorTitle": "文明地图",
     "readonly": "只读",
     "editLocked": "编辑已锁定",
     "editing": "编辑中",

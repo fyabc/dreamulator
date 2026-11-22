@@ -4,9 +4,12 @@ import { Link, Outlet } from 'react-router-dom'
 import AtlasIcon from './AtlasIcon'
 import Sidebar from './Sidebar'
 import WorkflowTutorial from '../tutorial/WorkflowTutorial'
+import WorldContext from './world/WorldContext'
+import { useWorldScope } from './world/useWorldScope'
 
 export default function Layout() {
   const { t } = useTranslation()
+  const scope = useWorldScope()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const main = useRef<HTMLElement>(null)
   const menu = useRef<HTMLButtonElement>(null)
@@ -55,11 +58,12 @@ export default function Layout() {
       <Sidebar
         open={sidebarOpen}
         collapsed={sidebarCollapsed}
+        scope={scope}
         onClose={closeSidebar}
         onToggleCollapse={toggleCollapse}
       />
 
-      <div className="flex flex-col flex-1 min-w-0">
+      <div className={`${scope ? 'atlas-world-shell' : ''} flex flex-col flex-1 min-w-0`}>
         {/* Top bar — mobile only. Desktop: sidebar collapse is self-contained. */}
         <header className="md:hidden flex h-14 shrink-0 items-center gap-2 px-3 bg-space-panel border-b border-space-border sticky top-0 z-20">
           <button
@@ -77,6 +81,10 @@ export default function Layout() {
             <AtlasIcon name="orbit" className="size-5 text-neon-cyan" /> Dreamulator
           </Link>
         </header>
+
+        {scope && <div className="sticky top-14 z-20 flex h-9 shrink-0 items-center border-b border-space-border bg-space-panel px-3 sm:px-5 md:top-0">
+          <WorldContext scope={scope} />
+        </div>}
 
         <main id="main-content" ref={main} tabIndex={-1} className="flex-1 overflow-auto relative">
           <Outlet />

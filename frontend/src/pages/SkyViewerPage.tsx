@@ -3,8 +3,6 @@
  *  appear on pointer activity and fade when idle. State lives
  *  in URL search params (?from=&lat=&lon=&at=&branch=&mode=&look=&fov=&grids=&panels=,
  *  replace writes); the instant commits on gesture end, look/fov the same.
- *  API-only by design (parameterized engine query): static mode renders a
- *  hint panel (packs precedent).
  */
 
 import { Suspense, useEffect, useMemo, useRef, useState, type FocusEvent, type PointerEvent } from 'react'
@@ -13,8 +11,9 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '../api/client'
-import { isStaticMode } from '../api/mode'
 import AtlasIcon from '../components/AtlasIcon'
+import WorldContext from '../components/world/WorldContext'
+import { useWorldScope } from '../components/world/useWorldScope'
 import { useCelestialName } from '../i18n/celestialNames'
 import SkyChart from '../viewers/sky/SkyChart'
 import SkyInspector from '../viewers/sky/SkyInspector'
@@ -66,7 +65,7 @@ export default function SkyViewerPage() {
   const celestialName = useCelestialName(worldName)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const staticMode = isStaticMode()
+  const scope = useWorldScope()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   /** Selected universe-setting object (authored star / DSO) — a namespace
    *  disjoint from body ids; the two selections are mutually exclusive. */
@@ -107,7 +106,7 @@ export default function SkyViewerPage() {
   const catalogQuery = useQuery({
     queryKey: ['system-catalog', worldName, branch],
     queryFn: () => api.getSystemCatalog(worldName!, branch),
-    enabled: !!worldName && !staticMode,
+    enabled: !!worldName,
     retry: false,
   })
   const catalog: SkyCatalog | undefined = catalogQuery.data
@@ -118,7 +117,7 @@ export default function SkyViewerPage() {
   const backgroundQuery = useQuery({
     queryKey: ['sky-background', worldName, branch],
     queryFn: () => api.getSkyBackground(worldName!, branch),
-    enabled: !!worldName && !staticMode,
+    enabled: !!worldName,
     retry: false,
     staleTime: Infinity,
   })
@@ -132,7 +131,7 @@ export default function SkyViewerPage() {
   const cultureQuery = useQuery({
     queryKey: ['sky-culture', worldName, branch],
     queryFn: () => api.getSkyCulture(worldName!, branch),
-    enabled: !!worldName && !staticMode,
+    enabled: !!worldName,
     retry: false,
     staleTime: Infinity,
   })
@@ -150,7 +149,7 @@ export default function SkyViewerPage() {
   const time = useSkyTime()
   const data = useSkyData({
     worldName: worldName ?? '',
-    observerId: staticMode ? null : observerId,
+    observerId,
     branch,
     lat,
     lon,
@@ -204,10 +203,10 @@ export default function SkyViewerPage() {
 
   const selectBody = (id: string) => {
     setBgId(null)
-    navigate(`/worlds/${worldName}/sky/${id}${window.location.search}`, { replace: true })
+    navigate({ pathname: `/worlds/${encodeURIComponent(worldName ?? '')}/sky/${encodeURIComponent(id)}`, search: searchParams.toString() }, { replace: true })
   }
   const deselectBody = () => {
-    navigate(`/worlds/${worldName}/sky${window.location.search}`, { replace: true })
+    navigate({ pathname: `/worlds/${encodeURIComponent(worldName ?? '')}/sky`, search: searchParams.toString() }, { replace: true })
   }
   /** Selecting a universe-setting object clears any body selection (and vice
    *  versa via selectBody) — one info panel, two namespaces. */
@@ -264,19 +263,6 @@ export default function SkyViewerPage() {
       ?? bgId)
   const safeLook = clampLook(look)
   const helpTarget = { pathname: '/help', hash: '#sky-viewer' }
-
-  // All hooks above; the static-mode guard renders after them (packs pattern).
-  if (staticMode) {
-    return (
-      <section className="mx-auto max-w-lg space-y-3 px-6 py-16">
-        <h1 className="text-2xl font-semibold text-gray-100">{t('title.sky')}</h1>
-        <p className="text-sm leading-relaxed text-slate-300">{t('staticModeHint')}</p>
-        <Link to={helpTarget} className="inline-flex min-h-11 items-center gap-2 text-sm text-neon-cyan hover:underline">
-          <AtlasIcon name="help" className="size-4" /> {t('ui.guide')}
-        </Link>
-      </section>
-    )
-  }
 
   const chromeClass = `transition-opacity duration-300 motion-reduce:transition-none ${
     controlsHidden ? 'invisible' : controlsVisible ? 'opacity-100' : 'opacity-0'
@@ -373,6 +359,7 @@ export default function SkyViewerPage() {
                 <h1 className="truncate font-semibold text-slate-100" title={observerName ?? undefined}>
                   {observerName ? t('ui.observingFrom', { observer: observerName }) : t('title.sky')}
                 </h1>
+                {scope && <WorldContext scope={scope} className="pointer-events-auto" />}
                 <div className="flex flex-wrap items-baseline gap-x-3 text-slate-300">
                   <span className="whitespace-nowrap tabular-nums" title={`${t('observer.lat')}, ${t('observer.lon')}`}>
                     {lat.toFixed(2)}°, {lon.toFixed(2)}°
@@ -430,9 +417,6 @@ export default function SkyViewerPage() {
                   lon={lon}
                   onLat={(value) => Number.isFinite(value) && setParam('lat', String(value))}
                   onLon={(value) => Number.isFinite(value) && setParam('lon', String(value))}
-                  worldName={worldName ?? ''}
-                  branch={branch}
-                  onSelectBranch={(value) => setParam('branch', value)}
                   spinSource={data.display?.spin_source ?? null}
                   solarDayDays={solarDay}
                 />}

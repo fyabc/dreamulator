@@ -9,11 +9,20 @@
     "help": "帮助",
     "overview": "概览",
     "map": "地图",
-    "viewer3d": "3D 视图",
+    "viewer3d": "恒星系",
     "packs": "区域地图",
     "playground": "气候实验台",
     "sky": "天球视图",
     "import": "导入地图"
+  },
+  "context": {
+    "label": "当前世界与分支",
+    "world": "世界",
+    "branch": "分支",
+    "switchWorld": "切换世界",
+    "switchBranch": "切换分支",
+    "base": "基础世界",
+    "navigation": "{{world}} 的页面"
   },
   "action": {
     "skipToContent": "跳到主要内容",

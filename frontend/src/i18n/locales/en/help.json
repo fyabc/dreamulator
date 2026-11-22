@@ -392,7 +392,7 @@
       "entries": [
         {
           "title": "Open a regional map",
-          "content": "Open **View region** from a global selection to see the original terrain cropped from the global heightmap. On the local site, use **Regional data source** at the top of the map to open saved results for the same region. Switching does not rerun refinement or change the global map. You can browse all local regional maps from the sidebar. Those files are not published to the static site."
+          "content": "Open **View region** from a global selection to see the original terrain cropped from the global heightmap. The current world and branch stay visible at the top even when the sidebar is collapsed. On the local site, use **Regional data source** to open saved results for the same region. Switching does not rerun refinement or change the global map. You can also open saved regions from the world's **World data** page."
         },
         {
           "title": "Browse and change the display",

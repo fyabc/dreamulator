@@ -49,7 +49,6 @@ type ImportMessage = { ok: boolean; text: string; temperatureOrigin?: Temperatur
 export interface PlanetViewState {
   // --- URL-derived posture (shared across 2D↔3D navigation) ---
   selectedBranch: string | null
-  setSelectedBranch: (branch: string | null) => void
   cleanMode: boolean
   setCleanMode: (v: boolean) => void
 
@@ -152,18 +151,6 @@ export function usePlanetViewState(
 
   // --- Branch (?branch=) — derived from the URL so browser back/forward works ---
   const selectedBranch = searchParams.get('branch') || null
-  const setSelectedBranch = (branch: string | null) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (branch) next.set('branch', branch)
-      else next.delete('branch')
-      if (branch !== selectedBranch) {
-        next.delete('draft')
-        next.delete('climateResult')
-      }
-      return next
-    }, { replace: true })
-  }
 
   // --- Clean view (?clean=1): hide every piece of UI for recording ---
   const cleanMode = searchParams.get('clean') === '1'
@@ -357,10 +344,11 @@ export function usePlanetViewState(
   })
 
   // CVT mesh data for polygon rendering + cell lookups
+  const meshNotBuilt = formalMeta?.voronoi_num_cells === 0
   const { data: officialMesh, isError: officialMeshError } = useQuery({
     queryKey: ['cvtMesh', worldName, selectedPlanet, selectedBranch],
     queryFn: () => api.getCvtMesh(worldName!, selectedPlanet, selectedBranch),
-    enabled: useOfficialMap && !!worldName && !!selectedPlanet,
+    enabled: useOfficialMap && !!worldName && !!selectedPlanet && !!formalMeta && !meshNotBuilt,
     retry: false,
   })
   const platesError = useOfficialMap && officialPlatesError
@@ -566,7 +554,7 @@ export function usePlanetViewState(
   }, [worldName, selectedPlanet, selectedBranch, location.pathname, location.search])
 
   return {
-    selectedBranch, setSelectedBranch,
+    selectedBranch,
     cleanMode, setCleanMode,
     layerState, setLayerState, activeMainLayer, activeColorMode,
     monthlyMode, handleMonthlyModeChange, selectMonth, displayingMonthly, downscale, setDownscale,
@@ -574,7 +562,7 @@ export function usePlanetViewState(
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination,
     selectedPlanet, mapPlanets, meta, metaError, elevError, cvtMeshError,
-    awaitingBuild: !!elevation && !!meta && cvtMeshError,
+    awaitingBuild: !ebm && useOfficialMap && !!elevation && meshNotBuilt,
     bodyByName, currentPlanetName, planetRadiusM, axialTiltDeg,
     worldPlanetsError, platesError,
     elevation, elevationDims, terrainSource, setTerrainSource, meshTextureSize,
