@@ -26,6 +26,7 @@ import MapMinimap from '../components/map/MapMinimap'
 import SunControl from '../components/map/SunControl'
 import { MapTimeControl } from '../components/map/TimeControl'
 import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
+import MapDataLoading from '../components/map/MapDataLoading'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
 import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
 import { trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
@@ -64,6 +65,9 @@ export default function MapViewerPage() {
     importMsg, setImportMsg, handleImported,
   } = vs
   const display = useMapDisplayLayers(trial, layerState, setLayerState, cvtMesh, monthlyData, Boolean(uccTexture))
+  const elevationReady = Boolean(elevation && elevationDims.w > 0)
+  const loadingMessage = elevError ? t('label.noMapData')
+    : elevation && elevationDims.w === 0 ? t('label.decodingHeightmap') : t('label.mapDataLoading')
 
   // Stable empty set — clean mode suppresses hover/selection highlights without
   // changing cell-picking state underneath.
@@ -227,7 +231,7 @@ export default function MapViewerPage() {
         <div className="flex flex-col flex-1 min-w-0 lg:hidden">
           {/* Map area — full width */}
           <div className="flex-1 flex flex-col min-h-0">
-            {elevation ? (
+            {elevationReady ? (
               <>
                 <div className="relative flex-1 min-h-0">
                   <MapViewer
@@ -278,18 +282,7 @@ export default function MapViewerPage() {
                 )}
               </>
             ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="text-center text-gray-400">
-                  <div className="relative inline-block w-16 h-16 mb-3">
-                    <div className="absolute inset-0 rounded-full border border-gray-600 animate-ping opacity-30" />
-                    <div className="absolute inset-0 rounded-full border border-neon-cyan/40 animate-pulse" />
-                    <div className="absolute inset-3 rounded-full bg-neon-cyan/10 flex items-center justify-center">
-                      <div className="w-2 h-2 rounded-full bg-neon-cyan/60 animate-pulse" />
-                    </div>
-                  </div>
-                  <div className="text-sm">{t('label.mapDataLoading')}</div>
-                </div>
-              </div>
+              <MapDataLoading message={loadingMessage} />
             )}
           </div>
 
@@ -339,7 +332,7 @@ export default function MapViewerPage() {
 
           {/* Center: map viewer */}
           <div className="flex-1 flex flex-col min-w-0">
-            {elevation ? (
+            {elevationReady ? (
               <>
                 <div className="flex-1 min-h-0 relative">
                   <MapViewer
@@ -403,18 +396,7 @@ export default function MapViewerPage() {
                 )}
               </>
             ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="text-center text-gray-400">
-                  <div className="relative inline-block w-16 h-16 mb-3">
-                    <div className="absolute inset-0 rounded-full border border-gray-600 animate-ping opacity-30" />
-                    <div className="absolute inset-0 rounded-full border border-neon-cyan/40 animate-pulse" />
-                    <div className="absolute inset-3 rounded-full bg-neon-cyan/10 flex items-center justify-center">
-                      <div className="w-2 h-2 rounded-full bg-neon-cyan/60 animate-pulse" />
-                    </div>
-                  </div>
-                  <div className="text-sm">{t('label.mapDataLoading')}</div>
-                </div>
-              </div>
+              <MapDataLoading message={loadingMessage} />
             )}
           </div>
 

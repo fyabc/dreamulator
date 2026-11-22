@@ -17,6 +17,7 @@ import * as THREE from 'three'
 import { WebGLRenderer } from 'three'
 import useCellIdMap from '../../viewers/map/useCellIdMap'
 import useGPUTerrain from '../../viewers/map/useGPUTerrain'
+import { useTranslation } from 'react-i18next'
 import type { TrialTerrain } from '../../playground/temperaturePreview'
 import { GRID_H, GRID_W } from '../../playground/temperatureDraft'
 import useRafCoalesced from '../../viewers/map/useRafCoalesced'
@@ -197,6 +198,7 @@ export default function MapViewer({
   const cellIdMap = useCellIdMap({ cvtMesh, ...meshSize })
 
   // Loading indicator (useEffect avoids rAF in render body, enables cleanup)
+  const { t } = useTranslation('map')
   const [isRendering, setIsRendering] = useState(false)
   useEffect(() => {
     setIsRendering(true)
@@ -657,7 +659,7 @@ export default function MapViewer({
 
       {isRendering && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0a0a1a]/70">
-          <div className="text-gray-400 text-sm animate-pulse">rendering...</div>
+          <div className="text-gray-400 text-sm animate-pulse">{t('label.generatingTexture')}</div>
         </div>
       )}
 

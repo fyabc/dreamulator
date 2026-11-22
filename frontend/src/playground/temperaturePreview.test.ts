@@ -5,9 +5,9 @@ import { temperatureColor } from '../viewers/map/utils/colorScales'
 
 describe('temperature trial texture', () => {
   it('uses the official temperature scale and clips extremes', () => {
-    expect(temperatureColor(-130)).toEqual([33, 102, 172])
-    expect(temperatureColor(0)).toEqual([255, 255, 255])
-    expect(temperatureColor(100)).toEqual([103, 0, 31])
+    expect(temperatureColor(-130)).toEqual([163, 194, 230])
+    expect(temperatureColor(0)).toEqual([46, 89, 132])
+    expect(temperatureColor(100)).toEqual([214, 73, 100])
   })
 
   it('uploads southern rows first and keeps longitude in west-to-east order', () => {

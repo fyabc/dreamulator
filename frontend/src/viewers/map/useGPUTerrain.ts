@@ -24,7 +24,7 @@
  * framebuffer without racing over one flag.
  */
 
-import { useMemo, useEffect, useCallback } from 'react'
+import { useMemo, useEffect, useCallback, useRef } from 'react'
 import type { TerrainSource } from './elevationSource'
 import * as THREE from 'three'
 import type { ColorMode } from './types'
@@ -229,6 +229,11 @@ export default function useGPUTerrain({
     target.texture.wrapS = THREE.RepeatWrapping
     target.texture.wrapT = THREE.ClampToEdgeWrapping
     target.texture.flipY = false
+    // The composite target is much larger than the canvas. Without mipmaps a
+    // one-pixel coastline is sampled sparsely when the map is zoomed out and
+    // reads as a dashed line.
+    target.texture.generateMipmaps = true
+    target.texture.minFilter = THREE.LinearMipmapLinearFilter
     // Composite target stores sRGB (matches the sRGB source DataTextures) so the
     // PBR downstream decodes it symmetrically with the pre-baked texture path.
     target.texture.colorSpace = THREE.SRGBColorSpace
@@ -356,7 +361,9 @@ export default function useGPUTerrain({
     d.u_directBase.value = coastOpacity > 0 ? baked.terrainWithCoastlines : baked.terrainThematic
     // Minification: NearestFilter when cell layers are visible (crisp cell edges
     // when zoomed out), LinearFilter for smooth terrain-only view.
-    composite.target.texture.minFilter = overlayActive ? THREE.NearestFilter : THREE.LinearFilter
+    // Keep mipmap filtering: the target is much larger than the canvas and a
+    // Nearest/Linear minification drops the one-pixel coastline into dashes.
+    composite.target.texture.minFilter = THREE.LinearMipmapLinearFilter
     composite.target.texture.magFilter = activeThematic === koppenTexture ? THREE.NearestFilter : THREE.LinearFilter
   }, [composite, baked, layers, overlayActive, coastOpacity, scalarThematic, koppenTexture, uccTexture])
 
@@ -374,9 +381,19 @@ export default function useGPUTerrain({
   // directly and this is a no-op. No shared dirty flag: GlobeViewerPage keeps
   // mobile+desktop canvases mounted (two GL contexts), and a single flag cleared
   // by one would leave the other's framebuffer stale.
+  const lastComposite = useRef<{
+    target: THREE.WebGLRenderTarget; layers: typeof layers; scalar: typeof scalarThematic
+    koppen: typeof koppenTexture; ucc: typeof uccTexture
+  } | null>(null)
   const renderComposite = useCallback(
     (renderer: THREE.WebGLRenderer) => {
       if (!composite || !overlayActive) return
+      const previous = lastComposite.current
+      if (previous && previous.target === composite.target && previous.layers === layers &&
+        previous.scalar === scalarThematic && previous.koppen === koppenTexture && previous.ucc === uccTexture) {
+        return
+      }
+      lastComposite.current = { target: composite.target, layers, scalar: scalarThematic, koppen: koppenTexture, ucc: uccTexture }
       // The composite pass is just layer blending, not a final render.  Disable
       // tone mapping so the composite blends the raw layer colours unchanged;
       // colour space is handled symmetrically by the sRGB target + sRGB sources.
@@ -390,7 +407,7 @@ export default function useGPUTerrain({
       renderer.toneMapping = prevTM
       renderer.toneMappingExposure = prevExp
     },
-    [composite, overlayActive],
+    [composite, overlayActive, layers, scalarThematic, koppenTexture, uccTexture],
   )
 
   /** The texture consumers (3D globe) should sample: the FBO

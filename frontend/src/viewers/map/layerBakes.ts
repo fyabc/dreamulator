@@ -230,6 +230,9 @@ function flipBuffer(buf: Uint8Array, width: number, height: number, flipHorizont
 interface MakeTextureOpts {
   /** Minification filter. Default NearestFilter — no mipmaps, crisp when zoomed out. */
   nearestMin?: boolean
+  /** Build mipmaps for thin overlays (coastlines): without them a one-pixel
+   *  line is sampled sparsely at full-map zoom and reads as a dashed edge. */
+  mipmaps?: boolean
   /** Magnification filter. Default LinearFilter — smooth interpolation when zoomed in,
    *  eliminating the "pixel block" look at high zoom.  Set true only for categorical
    *  data (cell boundaries, plates) where crisp edges are more important. */
@@ -248,7 +251,9 @@ export function makeTexture(
   const tex = new THREE.DataTexture(buf as unknown as BufferSource, width, height, THREE.RGBAFormat)
   tex.wrapS = THREE.ClampToEdgeWrapping
   tex.wrapT = THREE.ClampToEdgeWrapping
-  tex.minFilter = opts?.nearestMin === false ? THREE.LinearFilter : THREE.NearestFilter
+  tex.minFilter = opts?.mipmaps ? THREE.LinearMipmapLinearFilter
+    : opts?.nearestMin === false ? THREE.LinearFilter : THREE.NearestFilter
+  tex.generateMipmaps = !!opts?.mipmaps
   tex.magFilter = opts?.nearestMag ? THREE.NearestFilter : THREE.LinearFilter
   // The baked RGB bytes are sRGB-encoded colour (not linear).  Marking them
   // sRGB lets the 3D globe's PBR (MeshStandardMaterial + ACES) decode them to
@@ -564,6 +569,66 @@ function bakeRasterTerrain(inp: BakeInputs): { terrain: Uint8Array; landsea: Uin
   }
 }
 
+/** Land mask straight from the elevation raster (height above sea level). */
+function rasterLandMask(inp: BakeInputs): Uint8Array {
+  const { elevation, width, height, elevMinM, elevMaxM, seaLevel } = inp
+  const span = elevMaxM - elevMinM
+  const land = new Uint8Array(width * height)
+  for (let i = 0; i < land.length; i++) land[i] = elevMinM + elevation[i] * span > seaLevel ? 1 : 0
+  return land
+}
+
+/** Full-resolution coastline from the elevation raster: land pixels with an
+ *  ocean neighbour (longitude wraps). Finer and continuous where a mesh's
+ *  cell-boundary mask is only one cell wide. */
+function bakeRasterCoastMask(inp: BakeInputs): Uint8Array {
+  const { width, height, flipHorizontal } = inp
+  const land = rasterLandMask(inp)
+  const coast = new Uint8Array(width * height * 4)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x
+      if (!land[i]) continue
+      const left = y * width + ((x - 1 + width) % width)
+      const right = y * width + ((x + 1) % width)
+      const edge = !land[left] || !land[right] || (y > 0 && !land[i - width]) ||
+        (y < height - 1 && !land[i + width])
+      if (edge) {
+        coast[i * 4] = 20; coast[i * 4 + 1] = 20; coast[i * 4 + 2] = 20; coast[i * 4 + 3] = 255
+      }
+    }
+  }
+  return flipBuffer(coast, width, height, flipHorizontal)
+}
+
+/** Any-hit downsample of a coastline mask (keeps the line continuous when a
+ *  high-resolution raster is merged into a coarser mesh texture). */
+function downsampleCoast(mask: Uint8Array, width: number, height: number,
+  targetWidth: number, targetHeight: number): Uint8Array {
+  const out = new Uint8Array(targetWidth * targetHeight * 4)
+  const stepX = width / targetWidth
+  const stepY = height / targetHeight
+  for (let y = 0; y < targetHeight; y++) {
+    const y0 = Math.floor(y * stepY)
+    const y1 = Math.min(height - 1, Math.ceil((y + 1) * stepY) - 1)
+    for (let x = 0; x < targetWidth; x++) {
+      const x0 = Math.floor(x * stepX)
+      const x1 = Math.min(width - 1, Math.ceil((x + 1) * stepX) - 1)
+      let hit = false
+      for (let sy = y0; sy <= y1 && !hit; sy++) {
+        for (let sx = x0; sx <= x1; sx++) {
+          if (mask[(sy * width + sx) * 4 + 3]) { hit = true; break }
+        }
+      }
+      if (hit) {
+        const i = (y * targetWidth + x) * 4
+        out[i] = 20; out[i + 1] = 20; out[i + 2] = 20; out[i + 3] = 255
+      }
+    }
+  }
+  return out
+}
+
 function bakeCellLayer(
   colors: Map<number, [number, number, number]>,
   width: number,
@@ -730,12 +795,22 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     kw = width; kh = height
   }
   let terrainWidth = kw, terrainHeight = kh
+  let coastWidth = kw, coastHeight = kh
+  let mergeCoastBuf = coastlinesBuf
   if (useRaster && inp.elevation.length === inp.width * inp.height && inp.width > 0) {
     const raster = bakeRasterTerrain(inp)
     terrainThemBuf = raster.terrain
     landseaThemBuf = raster.landsea
     coastlinesBuf = raster.coast
     terrainWidth = inp.width; terrainHeight = inp.height
+    coastWidth = inp.width; coastHeight = inp.height
+    mergeCoastBuf = raster.coast
+  } else if (inp.elevation.length === inp.width * inp.height && inp.width > kw) {
+    // Mesh colours stay per-cell, but the coastline reads the elevation raster:
+    // a cell-boundary mask is one cell wide and reads as dashes when zoomed out.
+    coastlinesBuf = bakeRasterCoastMask(inp)
+    coastWidth = inp.width; coastHeight = inp.height
+    mergeCoastBuf = downsampleCoast(coastlinesBuf, inp.width, inp.height, kw, kh)
   }
 
   // Merge terrain + feature layers → self-contained textures for the 3D globe
@@ -766,7 +841,7 @@ function bakeAll(inp: BakeInputs): LayerTextures {
     return out
   }
 
-  const terrainWithCoastBuf = mergeFeature(terrainThemBuf, coastlinesBuf, 1.0)
+  const terrainWithCoastBuf = mergeFeature(terrainThemBuf, mergeCoastBuf, 1.0)
 
   // Texture filter policy:
   // - Continuous data (terrain, NPP): magFilter=LinearFilter → smooth when zoomed in
@@ -775,12 +850,12 @@ function bakeAll(inp: BakeInputs): LayerTextures {
   // - All textures: minFilter=NearestFilter (no mipmaps needed; crisp when zoomed out)
   return {
     terrainThematic: makeTexture(terrainThemBuf, terrainWidth, terrainHeight),
-    terrainWithCoastlines: makeTexture(terrainWithCoastBuf, terrainWidth, terrainHeight),
+    terrainWithCoastlines: makeTexture(terrainWithCoastBuf, terrainWidth, terrainHeight, { mipmaps: true }),
     landseaThematic: makeTexture(landseaThemBuf, terrainWidth, terrainHeight, { nearestMag: true }),
     koppen: makeTexture(koppenBuf, kw, kh, { nearestMag: true }),
     plates: makeTexture(platesBuf, kw, kh, { nearestMag: true }),
     boundaries: makeTexture(boundariesBuf, kw, kh, { nearestMag: true }),
-    coastlines: makeTexture(coastlinesBuf, terrainWidth, terrainHeight, { nearestMag: true }),
+    coastlines: makeTexture(coastlinesBuf, coastWidth, coastHeight, { nearestMag: true }),
     biomes: makeTexture(biomesBuf, kw, kh, { nearestMag: true }),
     npp: makeTexture(nppBuf, kw, kh),
     domesticable: makeTexture(domesticableBuf, kw, kh, { nearestMag: true }),
