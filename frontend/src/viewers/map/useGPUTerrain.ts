@@ -181,6 +181,8 @@ export interface GPUTerrainResult {
   /** Composite pass — call once per frame before the main render. No-op while
    *  no overlay layer is active; safe to call from multiple canvases. */
   renderComposite: (renderer: THREE.WebGLRenderer) => void
+  /** Idle-time pre-bake + GPU upload of the common overlays. */
+  warmOverlays: (renderer: THREE.WebGLRenderer) => void
 }
 
 /** Overlay textures needed for the currently visible layers. */
@@ -244,13 +246,23 @@ export default function useGPUTerrain({
 
   const overrideWidth = Math.max(scalarThematic?.texture.image.width ?? 0, koppenTexture?.image.width ?? 0)
   const overrideHeight = Math.max(scalarThematic?.texture.image.height ?? 0, koppenTexture?.image.height ?? 0)
+  const bakedWidth = baked?.terrainThematic.image.width ?? 0
+  const bakedHeight = baked?.terrainThematic.image.height ?? 0
+  const hasBaked = baked !== null
+  // Latest baked textures for initialization only.  Layer switches replace the
+  // baked object on every switch; depending on it here would recreate the
+  // 4096×2048 render target and both materials each time (hundreds of ms).
+  // Re-creation is keyed on the data size instead; the layer effect below
+  // pushes new textures into the stable uniforms.
+  const bakedRef = useRef<LayerTextures | null>(baked)
+  bakedRef.current = baked
 
-  // --- Composite target + materials (one per bake/size) ---
+  // --- Composite target + materials (one per target size) ---
   const composite = useMemo<CompositeState | null>(() => {
-    if (!baked) return null
+    const b = bakedRef.current
+    if (!hasBaked || !b || !bakedWidth || !bakedHeight) return null
 
-    const { width: textureWidth, height: textureHeight } = baked.terrainThematic.image
-    const target = new THREE.WebGLRenderTarget(Math.max(textureWidth, overrideWidth), Math.max(textureHeight, overrideHeight), {
+    const target = new THREE.WebGLRenderTarget(Math.max(bakedWidth, overrideWidth), Math.max(bakedHeight, overrideHeight), {
       depthBuffer: false,
       stencilBuffer: false,
     })
@@ -270,20 +282,14 @@ export default function useGPUTerrain({
       vertexShader,
       fragmentShader: compositeFragmentShader,
       uniforms: {
-        u_thematic: { value: baked.terrainThematic },
-        u_fill: { value: baked.plates },
-        u_feature: { value: baked.boundaries },
-        u_coastlines: { value: baked.coastlines },
+        u_thematic: { value: b.terrainThematic },
+        u_fill: { value: b.plates },
+        u_feature: { value: b.boundaries },
+        u_coastlines: { value: b.coastlines },
         u_thematicOp: { value: layers.terrain ?? 1 },
         u_fillOp: { value: layers.plates ?? 0 },
         u_featureOp: { value: layers.boundaries ?? 0 },
         u_coastlinesOp: { value: layers.coastlines ?? 1 },
-        _terrainThematic: { value: baked.terrainThematic },
-        _landseaThematic: { value: baked.landseaThematic },
-        _koppen: { value: baked.koppen },
-        _biomes: { value: baked.biomes },
-        _npp: { value: baked.npp },
-        _domesticable: { value: baked.domesticable },
       },
       depthTest: false,
       depthWrite: false,
@@ -299,7 +305,7 @@ export default function useGPUTerrain({
       fragmentShader: displayFragmentShader,
       uniforms: {
         u_colorMap: { value: target.texture },
-        u_directBase: { value: baked.terrainThematic },
+        u_directBase: { value: b.terrainWithCoastlines },
         u_useComposite: { value: 0 },
         u_sunLonRad: { value: sunLonRad },
         u_sunDecRad: { value: sunDecRad },
@@ -310,7 +316,7 @@ export default function useGPUTerrain({
 
     return { target, compMat, displayMat, scene, camera, quad }
     // Sun intentionally excluded from deps: updated via the effect below.
-  }, [baked, overrideWidth, overrideHeight])
+  }, [hasBaked, bakedWidth, bakedHeight, overrideWidth, overrideHeight])
 
   // --- Layer-derived state (recomputed on every opacity/base change) ---
   // needsFboForGlobe: substantive overlays that require the FBO composite.
@@ -391,6 +397,9 @@ export default function useGPUTerrain({
     }
     u.u_thematic.value = activeThematic
     u.u_thematicOp.value = thematicOp
+    u.u_fill.value = baked.plates
+    u.u_feature.value = baked.boundaries
+    u.u_coastlines.value = baked.coastlines
     u.u_fillOp.value = layers.plates ?? 0
     u.u_featureOp.value = layers.boundaries ?? 0
     u.u_coastlinesOp.value = coastOpacity
@@ -427,7 +436,11 @@ export default function useGPUTerrain({
   } | null>(null)
   const renderComposite = useCallback(
     (renderer: THREE.WebGLRenderer) => {
-      if (!composite || !overlayActive) return
+      if (!composite) return
+      // Warm-up: render the pass once at mount so its shader compiles (and the
+      // target allocates) while the map is still loading, not on the first
+      // layer switch.
+      if (!overlayActive && lastComposite.current !== null) return
       const previous = lastComposite.current
       if (previous && previous.target === composite.target && previous.baked === baked &&
         previous.layers === layers && previous.scalar === scalarThematic &&
@@ -453,6 +466,22 @@ export default function useGPUTerrain({
     [composite, overlayActive, baked, layers, scalarThematic, koppenTexture, uccTexture],
   )
 
+  /** Pre-bake and upload the home-row overlays during idle so their first
+   *  selection costs only a composite, not a cell scan plus a 32 MB texture
+   *  upload.  Call from a requestIdleCallback with the page's renderer. */
+  const warmOverlays = useCallback((renderer: THREE.WebGLRenderer) => {
+    if (!elevation || width <= 0 || height <= 0) return
+    const textures = getLayerTextures({
+      elevation, width, height, seaLevel, elevMinM, elevMaxM,
+      waterDepthFactor, flipHorizontal, cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight,
+    }, new Set<OverlayName>(['temperature', 'precipitation']))
+    for (const name of ['temperature', 'precipitation'] as const) {
+      const texture = textures[name]
+      if (((texture.image as { width?: number } | undefined)?.width ?? 0) > 1) renderer.initTexture(texture)
+    }
+  }, [elevation, width, height, seaLevel, elevMinM, elevMaxM, waterDepthFactor, flipHorizontal,
+      cvtMesh, cellIdMap, terrainSource, meshWidth, meshHeight])
+
   /** The texture consumers (3D globe) should sample: the FBO
    *  composite while substantive overlays (Köppen, plates, biomes, etc.) are
    *  active, otherwise a pre-baked texture incorporating the coastline feature
@@ -468,5 +497,5 @@ export default function useGPUTerrain({
         ? baked.terrainWithCoastlines
         : baked.terrainThematic
 
-  return { material: composite?.displayMat ?? null, texture, renderComposite }
+  return { material: composite?.displayMat ?? null, texture, renderComposite, warmOverlays }
 }

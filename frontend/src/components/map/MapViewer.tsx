@@ -17,8 +17,8 @@ import * as THREE from 'three'
 import { WebGLRenderer } from 'three'
 import useCellIdMap from '../../viewers/map/useCellIdMap'
 import useGPUTerrain from '../../viewers/map/useGPUTerrain'
-import { mark } from '../../utils/perf'
 import { useTranslation } from 'react-i18next'
+import { mark } from '../../utils/perf'
 import type { TrialTerrain } from '../../playground/temperaturePreview'
 import { GRID_H, GRID_W } from '../../playground/temperatureDraft'
 import useRafCoalesced from '../../viewers/map/useRafCoalesced'
@@ -63,6 +63,9 @@ interface MapViewerProps {
   onCursorMove?: (info: CursorInfo | null) => void
   onCellHover?: (cellId: number | null) => void
   onCellClick?: (cellId: number, ctrlKey: boolean) => void
+  /** Right-click clears the pinned selection (easier than double-clicking the
+   *  same cell again when the map is zoomed out). */
+  onClearSelection?: () => void
   hoveredCell: number | null
   selectedCells: Set<number>
   regionBoundary?: readonly LonLat[] | null
@@ -126,6 +129,7 @@ export default function MapViewer({
   onCursorMove,
   onCellHover,
   onCellClick,
+  onClearSelection,
   hoveredCell,
   selectedCells,
   regionBoundary,
@@ -224,7 +228,7 @@ export default function MapViewer({
     setIsRendering(true)
     const rafId = requestAnimationFrame(() => setIsRendering(false))
     return () => cancelAnimationFrame(rafId)
-  }, [layers, cellIdMap])
+  }, [cellIdMap])
 
   // Drag state
   const [isDragging, setIsDragging] = useState(false)
@@ -264,7 +268,7 @@ export default function MapViewer({
   // pass (and any data-driven re-bake) runs at most once per animation frame.
   const renderLayers = useRafCoalesced(layers)
 
-  const { material: gpuMaterial, renderComposite: gpuRenderComposite } = useGPUTerrain({
+  const { material: gpuMaterial, renderComposite: gpuRenderComposite, warmOverlays: gpuWarmOverlays } = useGPUTerrain({
     elevation, width: mapW, height: mapH, seaLevel,
     terrainSource, meshWidth: meshSize.width, meshHeight: meshSize.height,
     elevMinM: elevMin, elevMaxM: elevMax,
@@ -283,7 +287,30 @@ export default function MapViewer({
 
   // Ref so the (stable) rAF render loop always sees the current callback.
   const gpuCompositeRef = useRef(gpuRenderComposite)
+  const gpuWarmRef = useRef(gpuWarmOverlays)
   gpuCompositeRef.current = gpuRenderComposite
+  gpuWarmRef.current = gpuWarmOverlays
+
+  // Pre-bake and upload the common overlays while the page is idle: the first
+  // temperature/precipitation selection then costs only one composite pass.
+  const warmedRef = useRef(false)
+  useEffect(() => {
+    if (warmedRef.current || !cvtMesh || !cellIdMap) return
+    const run = () => {
+      if (warmedRef.current) return
+      const renderer = rendererRef.current
+      if (!renderer) return
+      warmedRef.current = true
+      gpuWarmRef.current(renderer)
+    }
+    const idle = typeof window.requestIdleCallback === 'function'
+      ? window.requestIdleCallback(run, { timeout: 4000 }) : undefined
+    const timer = idle === undefined ? window.setTimeout(run, 2000) : undefined
+    return () => {
+      if (idle !== undefined) window.cancelIdleCallback(idle)
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [cvtMesh, cellIdMap])
 
   const useGPU = gpuMaterial !== null
 
@@ -616,6 +643,17 @@ export default function MapViewer({
     [kdTree, unproject, onCellClick],
   )
 
+  /** Right-click clears the selection.  The browser menu is suppressed only
+   *  when there is a selection, so right-click elsewhere still behaves
+   *  normally. */
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!onClearSelection) return
+    if (e.currentTarget === e.target || (e.target as HTMLElement).tagName === 'CANVAS') {
+      e.preventDefault()
+      onClearSelection()
+    }
+  }, [onClearSelection])
+
   // --- Callback effect ---
   useEffect(() => {
     onZoomChange?.(zoom)
@@ -646,6 +684,7 @@ export default function MapViewer({
       onMouseUp={handleMouseUp}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
+      onContextMenu={handleContextMenu}
       onMouseLeave={handleMouseLeave}
     >
       <canvas ref={canvasRef} className="absolute inset-0" style={{ background: '#0a0a1a' }} />

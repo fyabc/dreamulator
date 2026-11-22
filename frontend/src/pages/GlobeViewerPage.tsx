@@ -400,7 +400,7 @@ export default function GlobeViewerPage() {
         {/* === Mobile layout (visible only < md) === */}
         <div className="flex flex-col min-h-0 lg:hidden absolute inset-0">
           <div className="flex-1 flex flex-col min-h-0">
-            <div className="flex-1 min-h-0 relative">
+            <div className="flex-1 min-h-0 relative" onContextMenu={(e) => { e.preventDefault(); clearSelection() }}>
               {!displayTexture ? (
                 <div className="absolute inset-0 flex items-center justify-center z-20">
                   <div className="text-center text-gray-400">
@@ -557,7 +557,7 @@ export default function GlobeViewerPage() {
 
       {/* Centre: globe */}
       <div className="flex-1 flex flex-col min-w-0">
-        <div className="flex-1 min-h-0 relative">
+        <div className="flex-1 min-h-0 relative" onContextMenu={(e) => { e.preventDefault(); clearSelection() }}>
           {!displayTexture ? (
             <div className="absolute inset-0 flex items-center justify-center z-20">
               <div className="text-center text-gray-400">

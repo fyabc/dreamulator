@@ -279,6 +279,7 @@ export default function MapViewerPage() {
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
                     onCellClick={selectCell}
+                    onClearSelection={clearSelection}
                     hoveredCell={cleanMode ? null : hoveredCell}
                     selectedCells={cleanMode ? emptySelection : selectedCells}
                     regionBoundary={cleanMode ? null : regionBoundary}
@@ -380,6 +381,7 @@ export default function MapViewerPage() {
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
                     onCellClick={selectCell}
+                    onClearSelection={clearSelection}
                     hoveredCell={cleanMode ? null : hoveredCell}
                     selectedCells={cleanMode ? emptySelection : selectedCells}
                     regionBoundary={cleanMode ? null : regionBoundary}

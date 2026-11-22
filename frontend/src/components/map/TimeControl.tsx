@@ -1,4 +1,4 @@
-import { memo, useId, useMemo, useState } from 'react'
+import { memo, useEffect, useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { MonthlyClimateData } from '../../api/monthlyClimate'
 import type { TemperaturePreview } from '../../playground/temperaturePreview'
@@ -94,6 +94,27 @@ function TimeControl({ monthlyMode, onMonthlyModeChange, monthIndex, onSelectMon
   )
 }
 
+/** Monthly means are deterministic per (monthly data, mesh, layer) but cost
+ * a full cells × 12-month scan (~80 ms).  The page renders two TimeControls
+ * (desktop panel and mobile drawer) and every layer switch asks again, so keep
+ * the last few results shared across instances. */
+const meansCache: {
+  monthly: MonthlyClimateData
+  mesh: CVTMesh
+  layer: MonthlyLayer
+  means: readonly number[] | undefined
+}[] = []
+
+function cachedMonthlyMeans(layer: MonthlyLayer, monthly: MonthlyClimateData,
+  mesh: CVTMesh): readonly number[] | undefined {
+  const hit = meansCache.find(e => e.monthly === monthly && e.mesh === mesh && e.layer === layer)
+  if (hit) return hit.means
+  const means = officialMonthlyMeans(layer, monthly, mesh.cells)
+  meansCache.unshift({ monthly, mesh, layer, means })
+  if (meansCache.length > 6) meansCache.pop()
+  return means
+}
+
 export const MapTimeControl = memo(function MapTimeControl({ trialMode, preview, mesh, layer, monthlyData, cell, ...official }:
   Omit<TimeControlProps, 'climateAvailable' | 'series' | 'hideModeToggleOnDesktop'> & {
     trialMode: boolean; preview: TemperaturePreview | null; mesh: CVTMesh | null
@@ -104,10 +125,31 @@ export const MapTimeControl = memo(function MapTimeControl({ trialMode, preview,
   const { t } = useTranslation('map')
   const monthlyLayer = isMonthlyLayer(layer) ? layer : null
   const means = useMemo(() => !trialMode && monthlyData && mesh && monthlyLayer
-    ? officialMonthlyMeans(monthlyLayer, monthlyData, mesh.cells) : undefined, [trialMode, monthlyData, mesh, monthlyLayer])
+    ? cachedMonthlyMeans(monthlyLayer, monthlyData, mesh) : undefined, [trialMode, monthlyData, mesh, monthlyLayer])
   const cellValues = useMemo(() => !trialMode && monthlyData && mesh && monthlyLayer && cell
     ? cellMonthlySeries(monthlyLayer, monthlyData, mesh.cells, cell) : undefined,
   [trialMode, monthlyData, mesh, monthlyLayer, cell])
+  // Pre-compute the two quick-switch layers' means during idle so the first
+  // selection does not pay the cells × months scan on the click.
+  useEffect(() => {
+    if (trialMode || !monthlyData || !mesh) return
+    let cancelled = false
+    const layers: MonthlyLayer[] = ['temperature', 'precipitation']
+    let index = 0
+    const step = () => {
+      if (cancelled || index >= layers.length) return
+      cachedMonthlyMeans(layers[index++], monthlyData, mesh)
+      schedule()
+    }
+    const schedule = () => {
+      if (cancelled) return
+      if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(step, { timeout: 4000 })
+      else window.setTimeout(step, 1200)
+    }
+    schedule()
+    return () => { cancelled = true }
+  }, [trialMode, monthlyData, mesh])
+
   if (trialMode) return <TrialTimeControl preview={preview} layer={layer} />
   const values = cellValues ?? means
   const scope = cellValues ? 'cell' as const : 'layer' as const

@@ -712,6 +712,10 @@ function GlobeScene({
           movement over the recorded globe draws no highlight polygons) */}
       <mesh
         onPointerMove={interactive ? (e: any) => {
+          // Skip hit-testing while a button is held: this is an OrbitControls
+          // rotation/zoom, and updating the hovered cell per pointermove would
+          // re-render the whole page every frame during the drag.
+          if ((e.nativeEvent as PointerEvent | undefined)?.buttons) return
           // Use UV coordinates to match the texture's equirectangular mapping.
           // This ensures the hovered cell matches the displayed koppen/terrain color.
           const uv = e.uv as { x: number; y: number } | undefined

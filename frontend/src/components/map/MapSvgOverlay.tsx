@@ -112,8 +112,10 @@ export default function MapSvgOverlay({
           stroke="rgba(255,255,255,0.16)" strokeWidth={1} />,
       )
     }
-    // Longitude lines (constant lon, sample lat)
-    for (let lon = -180 + STEP; lon < 180; lon += STEP) {
+    // Longitude lines (constant lon, sample lat).  Both ±180° are included:
+    // the map wraps horizontally, so the antimeridian falls inside the
+    // viewport whenever the user pans past it and must read as a grid line.
+    for (let lon = -180; lon <= 180; lon += STEP) {
       const pts: string[] = []
       for (let lat = -90; lat <= 90; lat += SAMPLE) {
         const p = project(lon, lat)
