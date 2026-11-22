@@ -372,6 +372,41 @@ def get_climate_monthly(
     return _file_response(request, monthly_file, "application/x-msgpack")
 
 
+@router.get("/{world_name}/maps/{planet_id}/td-source")
+def get_td_source(world_name: str, planet_id: str, branch: str | None = None) -> Response:
+    from ..map.td_world_source import terrain_source
+
+    manager = _get_map_manager(world_name, branch)
+    try:
+        packet, _retained = terrain_source(manager, planet_id)
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return Response(
+        packet, media_type="application/x-msgpack", headers={"Cache-Control": "no-store"}
+    )
+
+
+@router.get("/{world_name}/maps/{planet_id}/td-native-elevation/{digest}")
+def get_td_native_elevation(
+    world_name: str, planet_id: str, digest: str, branch: str | None = None
+) -> Response:
+    from ..map.elevation_input import world_elevation_source
+    from ..map.td_world_source import native_terrain_key, write_native_terrain
+
+    manager = _get_map_manager(world_name, branch)
+    try:
+        retained = world_elevation_source(manager.world_dir, branch, planet_id)
+        if retained is None or native_terrain_key(retained[0]) != digest:
+            raise HTTPException(status_code=404, detail="Native TD source is unavailable")
+        output = BytesIO()
+        write_native_terrain(output, retained)
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return Response(
+        output.getvalue(), media_type="application/gzip", headers={"Cache-Control": "no-store"}
+    )
+
+
 @router.get("/{world_name}/maps/{planet_id}/climate-yearly")
 def get_climate_yearly(
     world_name: str,

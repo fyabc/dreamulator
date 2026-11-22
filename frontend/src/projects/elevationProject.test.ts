@@ -41,6 +41,20 @@ describe('portable elevation projects', () => {
     await expect(importProject(exportProject({ ...project, layers: project.layers.slice(1) }))).rejects.toThrow('Invalid result settings')
   })
 
+  it('preserves recorded TD grids in both archives and rejects malformed fields', async () => {
+    const project = exampleProject()
+    const [source, result] = project.layers
+    if (result.kind !== 'elevation-result') throw new Error('Missing test result')
+    const conditioning = { version: 'region-td-grid-v1' as const, size: 2, elevation_m: [-4.25, 1.125, 5, 7.75],
+      climate: { temperature_mean_c: [-10, 2, 6, 8], temperature_std_c: [8, 9, 10, 3],
+        precipitation_total_mm: [400, 1000, 150, 100], precipitation_cv_pct: [0, 14, 75, 2] } }
+    const saved = { ...project, layers: [source, { ...result, settings: { ...result.settings, conditioning } }] }
+    expect((await importProject(exportProject(saved))).layers[1]).toMatchObject({ settings: { conditioning } })
+    expect((await importWorldData(exportWorldData(saved))).layers[1]).toMatchObject({ settings: { conditioning } })
+    conditioning.climate.precipitation_cv_pct[1] = -1
+    await expect(importProject(exportProject(saved))).rejects.toThrow('Invalid result settings')
+  })
+
   it('rejects non-finite elevations and preserves linked inputs when deleting a result', async () => {
     const project = exampleProject()
     const [source, result] = project.layers

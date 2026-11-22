@@ -4,6 +4,7 @@ import { sampleCoarseTile, type CoarseInferenceProgress, type CoarseSchedule } f
 import { type ElevationRaster, resizeElevation } from './elevationRaster'
 import { openTerrainModelCache, saveTerrainModel } from './terrainModelCache'
 import { blendTerrain } from './terrainBlend'
+import { prepareTerrainConditions, type TerrainConditionGrid } from './terrainConditions'
 import { defaultTerrainSeed, type TerrainRecipe } from './terrainRecommendation'
 import { yieldTerrainTask } from './terrainScheduling'
 import { coarseArea, coarseStride, conditioningPadding, decoderInputArea, decoderSize, decoderStride,
@@ -108,24 +109,34 @@ export async function checkedAsset(base: URL, name: string, hash: string, signal
   return { data, reusable }
 }
 
-export function coarseCondition(raster: ElevationRaster, tile: Tile, sea: number, manifest: Pick<Manifest, 'means' | 'stds' | 'snr'>,
+export function coarseCondition({ elevation, climate }: TerrainConditionGrid, tile: Tile, sea: number, manifest: Pick<Manifest, 'means' | 'stds' | 'snr'>,
   seed = defaultTerrainSeed) {
   const top = tile.row * coarseStride
   const left = tile.col * coarseStride
   const area = tileSize * tileSize
   const noise = terrainNoise(seed, top, left, tileSize, 5)
   const channels = [0, 2, 3, 4, 5]
-  const factors = manifest.snr.map((snr) => [round(Math.cos(Math.atan(snr))), round(Math.sin(Math.atan(snr)))])
+  const climatePlanes = climate && [climate.temperature_mean_c, climate.temperature_std_c,
+    climate.precipitation_total_mm, climate.precipitation_cv_pct]
+  const means = Float32Array.from(manifest.means)
+  const stds = Float32Array.from(manifest.stds)
+  const factors = manifest.snr.map((snr) => {
+    const angle = round(Math.atan(round(snr)))
+    return [round(Math.cos(angle)), round(Math.sin(angle))]
+  })
   return noise.map((value, index) => {
     const channel = Math.floor(index / area)
     const reference = channels[channel]
     const [signalFactor, noiseFactor] = factors[channel]
-    if (channel !== 0) return noiseFactor * value
-    const row = Math.max(0, Math.min(raster.height - 1, top + Math.floor(index / tileSize) - conditioningPadding))
-    const col = Math.max(0, Math.min(raster.width - 1, left + index % tileSize - conditioningPadding))
-    const metres = round(raster.values[row * raster.width + col] - sea)
-    const scaled = round(Math.sign(metres) * Math.sqrt(Math.abs(metres)))
-    return round(round(round(scaled - manifest.means[reference]) / manifest.stds[reference]) * signalFactor) + round(noiseFactor * value)
+    const climatePlane = climatePlanes?.[channel - 1]
+    if (channel !== 0 && !climatePlane) return noiseFactor * value
+    const row = Math.max(0, Math.min(elevation.height - 1, top + Math.floor(index % area / tileSize) - conditioningPadding))
+    const col = Math.max(0, Math.min(elevation.width - 1, left + index % tileSize - conditioningPadding))
+    const cell = row * elevation.width + col
+    const metres = round(elevation.values[cell] - (climate ? 0 : sea))
+    const scaled = climatePlane ? round(climatePlane[cell] * (channel === 2 ? 100 : 1)) :
+      round(Math.sign(metres) * Math.sqrt(Math.abs(metres)))
+    return round(round(round(scaled - means[reference]) / stds[reference]) * signalFactor) + round(noiseFactor * value)
   })
 }
 
@@ -207,12 +218,14 @@ export async function refineTerrain(
   base: URL, hash: string, device: WebGpuDevice, input: ElevationRaster, spanKm: number, sea: number,
   recipe: TerrainRecipe, signal: AbortSignal, progress: (progress: TerrainProgress) => void,
   onDeviceLost?: (message: string) => void,
+  conditioning?: TerrainConditionGrid,
 ): Promise<ElevationRaster> {
   if (running) throw new Error('TD is already running')
   running = true
   try {
     const { seed, residualGain } = recipe
     const plan = makeTerrainPlan(spanKm)
+    const conditions = conditioning ?? prepareTerrainConditions(input, spanKm)
     progress({ phase: 'manifest' })
     const cache = await openTerrainModelCache()
     const { data: manifestData } = await checkedAsset(base, 'manifest.json', hash, signal, undefined, cache)
@@ -267,13 +280,12 @@ export async function refineTerrain(
         }, reportTiles)
       } finally { await session.release() }
     }
-    const source = resizeElevation(input, plan.inputSize, plan.inputSize)
     const coarse = await stage('coarse', async (session, step, reportInference) => {
       const tiles = new Map<string, Float32Array>()
       for (const tile of plan.coarse) {
         const initial = terrainNoise(seed + 1, tile.row * coarseStride, tile.col * coarseStride, tileSize, 6)
           .map((value) => value * manifest.sigmaMax)
-        const condition = coarseCondition(source, tile, sea, manifest, seed)
+        const condition = coarseCondition(conditions, tile, sea, manifest, seed)
         const values = await sampleCoarseTile(ort.Tensor, session, manifest, condition, initial, signal, reportInference)
         const area = tileSize * tileSize
         for (let index = 0; index < values.length; index++) {
@@ -332,7 +344,7 @@ export async function refineTerrain(
     progress({ phase: 'finalize' })
     await yieldTerrainTask(signal)
     const low = stitchTiles(latent, plan.low, tileSize, latentStride, 5)
-    const donor = restoreElevation(residual, low.subarray(low.length * 4 / 5).map((value) => round(value * 38.6) - 31.4), plan.padded, plan.size, sea)
+    const donor = restoreElevation(residual, low.subarray(low.length * 4 / 5).map((value) => round(value * 38.6) - 31.4), plan.padded, plan.size, conditions.climate ? 0 : sea)
     if (recipe.method !== 'blend') return donor
     progress({ phase: 'blend' })
     return await blendTerrain(input, donor, spanKm / plan.size, recipe.preserveKm, sea, () => yieldTerrainTask(signal))

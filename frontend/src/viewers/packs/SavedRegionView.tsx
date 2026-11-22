@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { isStaticMode } from '../../api/mode'
 import RegionElevationDownload from '../../components/map/RegionElevationDownload'
 import SaveProjectResult, { projectButton } from '../../components/projects/SaveProjectResult'
 import { elevationSource, openProjectRaster, type ElevationSource, type ProjectLayer } from '../../projects/elevationProject'
-import { getProject, projectKey, worldDataPath } from '../../projects/projectStore'
+import { getProject, projectKey, projectRegionPath, worldDataPath } from '../../projects/projectStore'
 import { downloadBlob } from '../../utils/downloadBlob'
 import type { LonLat } from '../map/utils/mapCoords'
 import PackMap from './PackMap'
@@ -13,9 +14,12 @@ import PackStatusBar from './PackStatusBar'
 import ProbePanel from './ProbePanel'
 import RegionMapWorkspace from './RegionMapWorkspace'
 import RegionLayerPanel from './RegionLayerPanel'
+import { RegionDataSourceSelect } from './RegionResultSelector'
+import { currentBrowserRefinement, matchingBrowserRegionResults } from './browserRegionResults'
 import { useRegionContext } from './useRegionContext'
 import TerrainCompute, { type BrowserTerrainResult } from './TerrainCompute'
 import { useElevationPreview } from './useElevationPreview'
+import { useBrowserRegionConditions } from './useBrowserRegionConditions'
 import { useRegionElevation, type ElevationInput } from './useRegionElevation'
 
 const focusReturn = (node: HTMLAnchorElement | null) => node?.focus({ preventScroll: true })
@@ -34,7 +38,8 @@ export default function SavedRegionView({ projectId, layerId, branch }: {
   const backTo = projectId ? worldDataPath(projectId, branch) : '/worlds'
   const backLabel = projectId ? t('backToData') : map('packs.entry.openWorlds')
 
-  if (layer && source) return <SavedElevationMap projectId={projectId} layer={layer} source={source} branch={branch}
+  const matches = source?.location ? matchingBrowserRegionResults(project.data, source.location, source.frame.window) : undefined
+  if (layer && source) return <SavedElevationMap projectId={projectId} layer={layer} source={source} branch={branch} matches={matches}
     backTo={backTo} backLabel={backLabel} />
 
   return <RegionMapWorkspace backTo={backTo} backLabel={backLabel} backRef={focusReturn}>
@@ -43,17 +48,20 @@ export default function SavedRegionView({ projectId, layerId, branch }: {
   </RegionMapWorkspace>
 }
 
-function SavedElevationMap({ projectId, layer, source, branch, backTo, backLabel }: {
+function SavedElevationMap({ projectId, layer, source, branch, matches, backTo, backLabel }: {
   projectId: string
   layer: ProjectLayer
   source: ElevationSource
   branch: string | null
+  matches?: ReturnType<typeof matchingBrowserRegionResults>
   backTo: string
   backLabel: string
 }) {
   const { t } = useTranslation('worlds', { keyPrefix: 'worldData' })
   const { t: map } = useTranslation('map')
+  const navigate = useNavigate()
   const [temporary, setTemporary] = useState<BrowserTerrainResult | null>(null)
+  const [useTemporary, setUseTemporary] = useState(false)
   const [compare, setCompare] = useState(false)
   const [hover, setHover] = useState<LonLat | null>(null)
   const [pin, setPin] = useState<LonLat | null>(null)
@@ -64,22 +72,39 @@ function SavedElevationMap({ projectId, layer, source, branch, backTo, backLabel
     retry: false, staleTime: Infinity, gcTime: 0 })
   const result = useQuery({ queryKey: ['project-raster', projectId, layer.id], queryFn: () => openProjectRaster(layer),
     enabled: layer.kind === 'elevation-result', retry: false, staleTime: Infinity, gcTime: 0 })
-  const selected = temporary?.raster ?? (layer.kind === 'elevation-result' ? result.data : sourceRaster.data)
+  const activeTemporary = useTemporary ? temporary : null
+  const selected = activeTemporary?.raster ?? (layer.kind === 'elevation-result' ? result.data : sourceRaster.data)
   const displayed = (compare ? sourceRaster.data : selected) ?? null
   const preview = useElevationPreview(displayed, min, max, sea)
   const context = useRegionContext(source.location ? { world: projectId, ...source.location } : null, window, { min, max, sea })
   const input = useMemo<ElevationInput | null>(() => selected ? { kind: 'project-raster', raster: selected } : null, [selected])
   const exporter = useRegionElevation(input)
-  const settings = temporary ?? (layer.kind === 'elevation-result' ? layer.settings : null)
+  const settings = activeTemporary ?? (layer.kind === 'elevation-result' ? layer.settings : null)
+  const conditions = useBrowserRegionConditions(settings?.conditioning)
 
   const unreadable = sourceRaster.isError || result.isError
   const canRefine = layer.kind === 'elevation-source' && isStaticMode()
+  const choices = matches?.map(({ layer }) => ({ name: layer.id, label: layer.name }))
+  if (temporary) choices?.unshift({ name: currentBrowserRefinement, label: map('packs.results.currentBrowser') })
   return <RegionMapWorkspace backTo={backTo} backLabel={backLabel} backRef={focusReturn} subtitle={layer.name}
+    sourceControl={choices && <RegionDataSourceSelect results={choices}
+      current={activeTemporary ? currentBrowserRefinement : layer.kind === 'elevation-result' ? layer.id : ''} onChange={id => {
+        if (id === currentBrowserRefinement || (!id && layer.id === source.id)) {
+          setUseTemporary(Boolean(id))
+          setCompare(false)
+        } else {
+          navigate(projectRegionPath(projectId, id || source.id, source.location?.branch))
+        }
+      }} />}
     status={<PackStatusBar hover={hover} window={window} />}
     inspector={<ProbePanel point={pin ?? hover} window={window} original={sourceRaster.data}
-      refined={settings ? selected : undefined} showingOriginal={compare || displayed === sourceRaster.data} />}
+      refined={settings ? selected : undefined} showingOriginal={compare || displayed === sourceRaster.data}
+      fields={conditions.fields} active={conditions.active} source={conditions.conditionSource?.source} />}
     onClearPoint={pin ? () => setPin(null) : undefined}
-    layers={<RegionLayerPanel notice="elevationOnly" graticule={{ opacity: graticule, onChange: setGraticule }}
+    layers={<RegionLayerPanel notice={settings ? settings.conditioning ? settings.conditioning.climate ? undefined : 'elevationOnly' : 'missingGrid' : undefined}
+      availableBase={conditions.available} value={conditions.active} onSelect={conditions.setSelected}
+      conditions={conditions.conditionSource} rasterSize={conditions.raster && `${conditions.raster.width} × ${conditions.raster.height}`}
+      graticule={{ opacity: graticule, onChange: setGraticule }}
       compare={settings ? { original: compare, onChange: setCompare } : undefined} />}
     canRefine={canRefine} regionTools={<>
     <div className="space-y-1">
@@ -98,6 +123,7 @@ function SavedElevationMap({ projectId, layer, source, branch, backTo, backLabel
         projection: window.projection, center_lat: window.centerLat, center_lon: window.centerLon, radius_km: window.radiusKm,
         extent_km: { x: span, y: window.extentKmY }, sea_level_m: sea, pixel_size_m: span * 1000 / selected.width,
         ...(settings && { seed: settings.recipe.seed, processing_mode: settings.recipe.method,
+          ...(settings.conditioning && { conditioning: settings.conditioning.climate ? 'climate' : 'elevation_only', td_grid: settings.conditioning }),
           model_manifest_sha256: settings.manifestSha256, source_native_spacing_km: settings.nativeSpacingKm,
           decoder_residual_gain: settings.recipe.residualGain,
           ...(settings.recipe.method === 'blend' && { preserve_wavelength_km: settings.recipe.preserveKm }) }),
@@ -113,11 +139,12 @@ function SavedElevationMap({ projectId, layer, source, branch, backTo, backLabel
         <dt>{t('modelVersion')}</dt><dd className="break-all font-mono" title={settings.manifestSha256}>{settings.manifestSha256.slice(0, 12)}</dd>
       </dl>
     </details>}
-    {temporary && <SaveProjectResult result={temporary} target={{ worldId: projectId, sourceId: source.id, branch }} />}
+    {activeTemporary && <SaveProjectResult result={activeTemporary} target={{ worldId: projectId, sourceId: source.id, branch }} />}
     {canRefine && <TerrainCompute browser={{ raster: sourceRaster.data ?? null, spanKm: span, seaLevel: sea,
-      sourceRowSpacingKm: sourceStepKm, onResult: (result) => { setTemporary(result); setCompare(false) } }} />}
+      sourceRowSpacingKm: sourceStepKm, onResult: (result) => { setTemporary(result); setUseTemporary(true); setCompare(false) } }} />}
   </>}>
-    {selected ? <PackMap window={window} base={preview} context={context} rivers={null} graticuleOpacity={graticule}
+    {selected ? <PackMap window={window} base={conditions.layer ? conditions.preview : preview}
+      loading={!!conditions.layer && !conditions.preview} context={context} rivers={null} graticuleOpacity={graticule}
       pin={pin} onHover={setHover} onLockPoint={setPin} />
       : <p role={unreadable ? 'alert' : 'status'} className="absolute inset-0 grid place-content-center p-4 text-center text-sm text-gray-400">
         {unreadable ? t('unreadable') : map('packs.loadingBase')}

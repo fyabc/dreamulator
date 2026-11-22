@@ -593,6 +593,8 @@
     "results": {
       "label": "Regional data source",
       "original": "Original elevation (global crop)",
+      "currentBrowser": "Current refinement (browser)",
+      "unreadable": "Could not read the saved regional map on this browser.",
       "saved": "Saved regional map",
       "redraw": "TD redraw",
       "blend": "TD blended refinement",
@@ -627,8 +629,8 @@
       "precipitation": "Annual precipitation",
       "precipitationCv": "Monthly precipitation coefficient of variation",
       "runoff": "Annual runoff depth",
-      "elevationOnly": "Browser refinement uses elevation only. Climate layers are not used.",
-      "missingGrid": "This result has no recorded TD input grid. Only verifiable regional source fields are shown.",
+      "elevationOnly": "This refinement used elevation only.",
+      "missingGrid": "This result has no recorded TD input grid.",
       "unavailable": "This raster could not be read or verified.",
       "readError": "Could not load",
       "hint": {
@@ -698,6 +700,13 @@
       "cpu": "CPU",
       "browserTitle": "Generate refined terrain (browser experiment)",
       "browserHint": "First model download: ~1.14 GB",
+      "conditions": {
+        "loading": "Preparing TD inputs from the published world…",
+        "climate": "Using published elevation and climate. TD grid: {{size}} × {{size}}.",
+        "elevation": "No matching climate data; using elevation only. TD grid: {{size}} × {{size}}.",
+        "failed": "The published TD inputs could not be read. Refinement cannot start.",
+        "retry": "Retry loading inputs"
+      },
       "modelCache": {
         "title": "Model management",
         "size": "Model cache on disk: {{size}}",

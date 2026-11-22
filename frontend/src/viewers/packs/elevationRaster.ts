@@ -128,7 +128,7 @@ export function readElevationNpy(buffer: ArrayBuffer): ElevationRaster {
   return { width, height, values }
 }
 
-function interpolate({ values, width, height }: ElevationRaster, col: number, row: number, wrap = false) {
+export function interpolate({ values, width, height }: Omit<ElevationRaster, 'values'> & { values: Float32Array | Float64Array }, col: number, row: number, wrap = false) {
   const boundedRow = Math.max(0, Math.min(height - 1, row))
   const boundedCol = wrap ? ((col % width) + width) % width : Math.max(0, Math.min(width - 1, col))
   const left = Math.floor(boundedCol)

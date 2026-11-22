@@ -8,6 +8,7 @@ client rejects startBuildJob and getBuildJob instead of requesting stale job fil
 Engine step timings and counters are part of the same non-exported snapshots.
 Local region packs, numeric elevations, and recorded TD conditions are not exported.
 The browser extracts static regional heightmaps from the published global PNGs.
+Published worlds also ship their scientific TD inputs, independently of local results.
 Local refinement plans, job settings, and the compute device require the local
 runtime and are not exported. The browser sets parameters and runs WebGPU independently.
 Full world snapshots include private inputs and local build outputs. This exporter
@@ -349,6 +350,12 @@ def _export_map_data(
     Returns:
         List of planet IDs that have map data.
     """
+    from dreamulator.map.td_world_source import (
+        native_terrain_key,
+        terrain_source,
+        write_native_terrain,
+    )
+
     manager = MapManager(world_dir, branch)
     root_manager = MapManager(world_dir)
     planets_with_maps = manager.list_planets_with_maps()
@@ -389,6 +396,28 @@ def _export_map_data(
         monthly_msgpack = _inherit("climate_monthly.msgpack")
         if monthly_msgpack is not None:
             planet_out.joinpath("climate_monthly.msgpack").write_bytes(monthly_msgpack.read_bytes())
+
+        try:
+            td_packet, retained = terrain_source(manager, planet_id)
+            if retained is not None:
+                world_out = maps_out_dir.parents[2] if branch else maps_out_dir.parent
+                native_name = f"{native_terrain_key(retained[0])}.bin.gz"
+                native_file = world_out / "td-elevation" / native_name
+                if not native_file.is_file():
+                    native_file.parent.mkdir(parents=True, exist_ok=True)
+                    temp = native_file.with_suffix(".tmp")
+                    try:
+                        with temp.open("wb") as stream:
+                            write_native_terrain(stream, retained)
+                        temp.replace(native_file)
+                    finally:
+                        temp.unlink(missing_ok=True)
+        except (OSError, ValueError) as error:
+            scope = f"{world_dir.name}/{branch}/{planet_id}"
+            print(f"\n  WARNING: TD inputs unavailable for {scope}: {error}")
+            (planet_out / "td-source.msgpack").unlink(missing_ok=True)
+        else:
+            (planet_out / "td-source.msgpack").write_bytes(td_packet)
 
         # Copy yearly climate descriptors (UCC-01), if present.
         yearly_msgpack = _inherit("climate_yearly.msgpack")

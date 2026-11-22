@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
 import { isStaticMode } from '../../api/mode'
 import type { ElevationRaster } from './elevationRaster'
+import type { PackWindow } from './packCoords'
+import { prepareTerrainConditions, snapshotTerrainConditions, type TerrainConditionSnapshot } from './terrainConditions'
 import { getWebGpuDevice, type WebGpuDevice } from './webGpuDevice'
 import type { TerrainProgress, TerrainStage } from './terrainRefinement'
 import { defaultEnhancedGain, defaultTerrainSeed, enhancedTerrainGain, maxEnhancedGain, maxTerrainSeed, minEnhancedGain,
@@ -31,6 +33,7 @@ export interface BrowserTerrainResult {
   nativeSpacingKm: number | null
   recommendation: TerrainMethod | null
   recipe: TerrainRecipe
+  conditioning?: TerrainConditionSnapshot
 }
 
 interface BrowserInput {
@@ -39,6 +42,7 @@ interface BrowserInput {
   sourceRowSpacingKm: number | null
   nativeEstimateKm?: number | null
   seaLevel: number
+  worldSource?: { world: string; planet: string; branch: string | null; window: PackWindow }
   onResult: (result: BrowserTerrainResult) => void
 }
 
@@ -189,9 +193,17 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
   const [seed, setSeed] = useState('')
   const [gain, setGain] = useState('')
   const [wavelength, setWavelength] = useState('')
+  const [open, setOpen] = useState(false)
   const busy = state.kind === 'running' || state.kind === 'cancelling'
   const plan = useMemo(() => supportsTerrainSpan(input.spanKm) ? makeTerrainPlan(input.spanKm) : null, [input.spanKm])
   const configured = modelUrl && modelHash && /^[a-f0-9]{64}$/.test(modelHash) && loadRefinement
+  const source = input.worldSource
+  const conditions = useQuery({ queryKey: ['world-terrain-conditions', source], enabled: !!source && open && !!plan, retry: false,
+    staleTime: 60_000, queryFn: async ({ signal }) => {
+      if (!source) return null
+      const { loadWorldTerrainConditions } = await import('./loadWorldTerrainConditions')
+      return loadWorldTerrainConditions(source.world, source.planet, source.branch, source.window, signal)
+    } })
   const cache = useQuery({ queryKey: modelCacheKey, queryFn: readTerrainModelCacheBytes,
     enabled: modelManagerOpen && !busy, staleTime: 0, retry: false })
   const clearCache = useMutation({ mutationFn: clearTerrainModelCache,
@@ -206,7 +218,8 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
   const defaultWavelength = nativeSpacingKm === null ? null : nativeSpacingKm * 4
   const invalidWavelength = wavelength !== '' && (nativeTerrainSpacing(wavelength) ?? 0) < minimumWavelength
   const recipe = plan ? terrainRecipe(method, nativeSpacingKm, outputKm, { seed, gain, wavelength }) : null
-  const canRun = !invalidSpacing && !!recipe && !!input.raster && gpu?.kind === 'hardware'
+  const canRun = !invalidSpacing && !!recipe && !!input.raster && gpu?.kind === 'hardware' &&
+    (!source || (conditions.isSuccess && !conditions.isFetching))
   useEffect(() => () => {
     controller.current?.abort()
     controller.current = null
@@ -231,7 +244,8 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
       }
       const { runTerrainRefinement } = await loadRefinement()
       task.signal.throwIfAborted()
-      const job = { base: base.href, hash: modelHash, raster: input.raster, spanKm: input.spanKm, sea: input.seaLevel, recipe }
+      const conditioning = conditions.data ?? prepareTerrainConditions(input.raster, input.spanKm)
+      const job = { base: base.href, hash: modelHash, raster: input.raster, spanKm: input.spanKm, sea: input.seaLevel, recipe, conditioning }
       const result = await runTerrainRefinement(job, gpu, task.signal, (progress) => {
         if (controller.current !== task || task.signal.aborted) return
         if (progress.phase !== latest.phase || progress.stage !== latest.stage) phaseStartedAt = performance.now()
@@ -245,7 +259,8 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
         setState({ kind: 'running', progress, startedAt, phaseStartedAt, cacheUnavailable, coarseTiming })
       })
       if (controller.current === task && !task.signal.aborted) {
-        input.onResult({ raster: result, manifestSha256: modelHash, nativeSpacingKm, recommendation: recommendation?.method ?? null, recipe })
+        input.onResult({ raster: result, manifestSha256: modelHash, nativeSpacingKm, recommendation: recommendation?.method ?? null,
+          recipe, conditioning: snapshotTerrainConditions(conditioning) })
         setState({ kind: 'completed', elapsed: performance.now() - startedAt, cacheUnavailable, coarseTiming })
       }
     } catch (error) {
@@ -273,9 +288,14 @@ function BrowserRefinement({ gpu, input }: { gpu: WebGpuDevice | null | undefine
     if (window.confirm(t('modelCache.confirm'))) clearCache.mutate()
   }
 
-  return <details className="rounded border border-space-border p-2">
+  return <details className="rounded border border-space-border p-2" onToggle={event => setOpen(event.currentTarget.open)}>
     <summary className="cursor-pointer font-medium text-neon-cyan">{t('browserTitle')}</summary>
     <div className="mt-2 space-y-2">
+      {plan && (source && conditions.isError ? <div className="space-y-1">
+        <p role="alert" className="text-red-300">{t('conditions.failed')}</p>
+        <button type="button" className={button} onClick={() => void conditions.refetch()}>{t('conditions.retry')}</button>
+      </div> : <p role="status">{t(source && (conditions.isPending || conditions.isFetching) ? 'conditions.loading'
+        : conditions.data ? 'conditions.climate' : 'conditions.elevation', { size: plan.inputSize })}</p>)}
       {!configured ? <p>{t('notPublished')}</p> : <>
         {!plan && <p>{t('windowLimit', { min: minTerrainSpanKm, max: maxTerrainSpanKm })}</p>}
         {plan && !busy && <>

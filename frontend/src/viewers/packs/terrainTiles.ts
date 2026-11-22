@@ -1,3 +1,5 @@
+import { terrainConditionSide } from './terrainConditions'
+
 export interface Rect {
   top: number
   left: number
@@ -7,7 +9,6 @@ export interface Rect {
 
 export const minTerrainSpanKm = 45
 export const maxTerrainSpanKm = 184
-const conditionKm = 23
 const pixelsPerCell = 256
 export const conditioningPadding = 64
 export const latentScale = 8
@@ -58,7 +59,7 @@ export function supportsTerrainSpan(spanKm: number) {
 
 export function makeTerrainPlan(spanKm: number) {
   if (!supportsTerrainSpan(spanKm)) throw new Error('TD window out of range')
-  const inputSize = Math.round(spanKm / conditionKm)
+  const inputSize = terrainConditionSide(spanKm)
   const size = inputSize * pixelsPerCell
   const origin = conditioningPadding * pixelsPerCell
   const padded = square(origin - synthesisPadding, origin - synthesisPadding, size + 2 * synthesisPadding)

@@ -1,5 +1,6 @@
 import type { ElevationRaster } from '../viewers/packs/elevationRaster'
 import type { BrowserTerrainResult } from '../viewers/packs/TerrainCompute'
+import { validTerrainConditionSnapshot } from '../viewers/packs/terrainConditions'
 import type { PackWindow } from '../viewers/packs/packCoords'
 import { supportsTerrainSpan } from '../viewers/packs/terrainTiles'
 import { terrainRecipe } from '../viewers/packs/terrainRecommendation'
@@ -92,7 +93,8 @@ function validSettings(value: unknown, source: ElevationSource, width: number): 
     (method === 'blend' && !number(preserveKm))) return false
   const actual = terrainRecipe(method, nativeSpacingKm, source.frame.window.extentKmX / width,
     { seed: String(seed), gain: String(residualGain), wavelength: method === 'blend' ? String(preserveKm) : '' })
-  return actual !== null && actual.residualGain === residualGain
+  return actual !== null && actual.residualGain === residualGain && (value.conditioning === undefined ||
+    validTerrainConditionSnapshot(value.conditioning, source.frame.window.extentKmX))
 }
 
 const projectType = 'dreamulator-project'

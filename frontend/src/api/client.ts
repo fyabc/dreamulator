@@ -327,8 +327,8 @@ export function narrateWorldStream(
 // ---------------------------------------------------------------------------
 
 /** Fetch a binary blob from the API. */
-async function fetchBlob(url: string): Promise<Blob> {
-  const response = await fetch(`${API_BASE}${url}`)
+async function fetchBlob(url: string, signal?: AbortSignal): Promise<Blob> {
+  const response = await fetch(`${API_BASE}${url}`, { signal })
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
     throw new Error(error.detail || `HTTP ${response.status}`)
@@ -624,6 +624,14 @@ const readApi = {
       : fetchBlob(
           `/worlds/${name}/maps/${planetId}/elevation${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
+
+  getTerrainSource: (world: string, planet: string, branch: string | null, signal: AbortSignal) =>
+    isStaticMode() ? staticApi.getTerrainSource(world, planet, branch, signal) : fetchBlob(
+      `/worlds/${encodeURIComponent(world)}/maps/${encodeURIComponent(planet)}/td-source${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`, signal),
+
+  getTerrainNativeElevation: (world: string, planet: string, branch: string | null, digest: string, signal: AbortSignal) =>
+    isStaticMode() ? staticApi.getTerrainNativeElevation(world, digest, signal) : fetchBlob(
+      `/worlds/${encodeURIComponent(world)}/maps/${encodeURIComponent(planet)}/td-native-elevation/${encodeURIComponent(digest)}${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`, signal),
 
   getVoronoi: (name: string, planetId: string, branch?: string | null) =>
     isStaticMode()

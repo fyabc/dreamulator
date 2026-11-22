@@ -593,6 +593,8 @@
     "results": {
       "label": "区域数据来源",
       "original": "原始高程（全球截取）",
+      "currentBrowser": "本次细化（浏览器）",
+      "unreadable": "无法读取此浏览器中保存的区域地图。",
       "saved": "已保存的区域地图",
       "redraw": "TD 重绘",
       "blend": "TD 混合细化",
@@ -627,8 +629,8 @@
       "precipitation": "年降水",
       "precipitationCv": "月降水变异系数",
       "runoff": "年径流深度",
-      "elevationOnly": "浏览器细化仅使用高程约束，不使用气候图层。",
-      "missingGrid": "这份成果未保存 TD 条件网格。这里只显示可核验的区域源数据。",
+      "elevationOnly": "这次细化仅使用高程约束。",
+      "missingGrid": "这份成果未保存 TD 条件网格。",
       "unavailable": "无法读取或核验此栅格。",
       "readError": "读取失败",
       "hint": {
@@ -697,6 +699,13 @@
       "cpu": "CPU",
       "browserTitle": "生成细化地形（浏览器实验）",
       "browserHint": "首次下载模型：约 1.14 GB",
+      "conditions": {
+        "loading": "正在准备正式世界的 TD 条件…",
+        "climate": "使用正式高程和气候。TD 条件网格：{{size}} × {{size}}。",
+        "elevation": "没有可用的配套气候，仅使用高程。TD 条件网格：{{size}} × {{size}}。",
+        "failed": "无法读取正式世界的 TD 条件，暂不能运行。",
+        "retry": "重新读取条件"
+      },
       "modelCache": {
         "title": "模型管理",
         "size": "模型缓存占用：{{size}}",

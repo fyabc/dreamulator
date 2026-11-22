@@ -16,7 +16,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from dreamulator.api_routes import maps as maps_module
-from dreamulator.map.export import save_cvt_mesh, write_engine_climate_yearly
+from dreamulator.map.export import (
+    save_cvt_mesh,
+    write_climate_monthly_scientific,
+    write_engine_climate_yearly,
+)
 from dreamulator.map.models import CVTMesh, VoronoiCell, map_metadata_result
 from dreamulator.result_contract import FORMAT_VERSION, REFERENCE_YEAR_DAYS
 from dreamulator.world_manager import WorldManager
@@ -154,6 +158,7 @@ def test_real_climate_files_match_api_and_static(
         "precipitation": p.astype("<f4").tobytes(),
     }
     (root_map / "climate_monthly.msgpack").write_bytes(msgpack.packb(monthly))
+    write_climate_monthly_scientific(root_map, t, p)
     if branch:
         write_yaml(
             world / "branches" / branch / "branch.yaml", {"name": branch, "fork_layer": "climate"}
@@ -179,6 +184,23 @@ def test_real_climate_files_match_api_and_static(
     assert exporter._export_map_data(world, output, branch) == [planet]
     query = f"?branch={branch}" if branch else ""
     base = f"/api/worlds/probe/maps/{planet}"
+    td_source = client.get(base + "/td-source" + query)
+    assert td_source.status_code == 200
+    assert td_source.content == (output / planet / "td-source.msgpack").read_bytes()
+    conditions = msgpack.unpackb(td_source.content, raw=False)
+    if branch:
+        assert conditions is None
+    else:
+        assert conditions["version"] == 1 and conditions["cells"] == 3
+        assert conditions["native"] is None
+        np.testing.assert_allclose(
+            np.frombuffer(conditions["fields"]["temperature_mean_c"], dtype="<f8"),
+            t.astype(np.float32).astype(np.float64).mean(axis=1),
+        )
+        with (root_map / "climate_monthly.msgpack").open("ab") as stream:
+            stream.write(b"stale")
+        assert client.get(base + "/td-source").status_code == 422
+        (root_map / "climate_monthly.msgpack").write_bytes(msgpack.packb(monthly))
     api_meta = client.get(base + "/meta" + query)
     assert api_meta.status_code == 200
     static_meta = json.loads((output / planet / "meta.json").read_text(encoding="utf-8"))

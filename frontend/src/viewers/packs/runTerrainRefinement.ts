@@ -39,5 +39,5 @@ export async function runTerrainRefinement(job: TerrainJob, gpu: WebGpuDevice, s
   if (result) return result
   const { refineTerrain } = await import('./terrainRefinement')
   signal.throwIfAborted()
-  return refineTerrain(new URL(job.base), job.hash, gpu, job.raster, job.spanKm, job.sea, job.recipe, signal, report)
+  return refineTerrain(new URL(job.base), job.hash, gpu, job.raster, job.spanKm, job.sea, job.recipe, signal, report, undefined, job.conditioning)
 }

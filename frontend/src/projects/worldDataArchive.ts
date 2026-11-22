@@ -7,7 +7,7 @@ import { restoreBrowserEbm } from '../playground/savedBrowserEbm'
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 const blockSize = 512
-const maxMetadata = 8 * 1024
+const maxMetadata = 16 * 1024
 const worldId = /^[a-zA-Z0-9_-]{1,100}$/
 const layerId = /^[a-f0-9-]{36}$/
 const archivePath = /^[a-zA-Z0-9_./-]{1,100}$/

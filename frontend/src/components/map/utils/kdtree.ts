@@ -20,7 +20,7 @@
 const NO_NODE = -1
 
 export class KDTree3D {
-  private pts: Float32Array // 3n: x, y, z per point
+  private pts: Float32Array | Float64Array // 3n: x, y, z per point
   private ids: Int32Array // cell ID per point
   private left: Int32Array // node links (point i owns node i)
   private right: Int32Array
@@ -40,9 +40,9 @@ export class KDTree3D {
    * Build a KD-tree from an array of 3D points.
    * @param points Array of [x, y, z, id] tuples
    */
-  constructor(points: Array<[number, number, number, number]>) {
+  constructor(points: Array<[number, number, number, number]>, doublePrecision = false) {
     const n = points.length
-    this.pts = new Float32Array(n * 3)
+    this.pts = doublePrecision ? new Float64Array(n * 3) : new Float32Array(n * 3)
     this.ids = new Int32Array(n)
     this.left = new Int32Array(n)
     this.right = new Int32Array(n)

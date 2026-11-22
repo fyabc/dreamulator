@@ -68,8 +68,8 @@ async function fetchStaticJson<T>(path: string, onMissing?: () => T): Promise<T>
   return response.json() as Promise<T>
 }
 
-async function fetchStaticBlob(path: string): Promise<Blob> {
-  const response = await fetch(`${DATA_BASE}${path}`, FETCH_INIT)
+async function fetchStaticBlob(path: string, signal?: AbortSignal): Promise<Blob> {
+  const response = await fetch(`${DATA_BASE}${path}`, { ...FETCH_INIT, signal })
   if (!response.ok) {
     throw new Error(`Static data not found: ${path} (HTTP ${response.status})`)
   }
@@ -472,6 +472,14 @@ export const staticApi = {
     if (result === null) throw new Error(`No static elevation data for ${planetId}`)
     return result
   },
+
+  getTerrainSource: (world: string, planet: string, branch: string | null, signal: AbortSignal) => {
+    const scope = branch ? `/branches/${encodeURIComponent(branch)}` : ''
+    return fetchStaticBlob(`/worlds/${encodeURIComponent(world)}${scope}/maps/${encodeURIComponent(planet)}/td-source.msgpack`, signal)
+  },
+
+  getTerrainNativeElevation: (world: string, digest: string, signal: AbortSignal) =>
+    fetchStaticBlob(`/worlds/${encodeURIComponent(world)}/td-elevation/${encodeURIComponent(digest)}.bin.gz`, signal),
 
   getVoronoi: async (name: string, planetId: string, branch?: string | null) => {
     // Prefer the CVT mesh (current format, same as backend API)
