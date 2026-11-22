@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'rea
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../api/client'
+import AtlasIcon from '../../components/AtlasIcon'
 import { isStaticMode } from '../../api/mode'
 import type { ElevationRaster } from './elevationRaster'
 import type { WorldTerrainSelection } from './loadWorldTerrainConditions'
@@ -52,6 +53,7 @@ export default function TerrainCompute({ browser, children }: { browser?: Browse
   const local = useQuery({ queryKey: ['region-compute-device'], queryFn: api.getRegionDevice,
     enabled: !staticMode, retry: false, staleTime: 5 * 60 * 1000 })
   const [gpu, setGpu] = useState<WebGpuDevice | null>()
+  const [deviceHelpOpen, setDeviceHelpOpen] = useState(false)
   useEffect(() => {
     if (!staticMode) return
     let mounted = true
@@ -67,7 +69,13 @@ export default function TerrainCompute({ browser, children }: { browser?: Browse
   return <section aria-label={t('title')} className="space-y-2 text-xs text-gray-400">
     <div className="rounded border border-space-border bg-space-surface p-2">
       <p className="font-medium text-gray-200">{t('title')}</p>
-      <p role="status" className="mt-1 break-words">{label} · {name}{kind && ` (${kind})`}</p>
+      <div className="mt-1 flex items-start justify-between gap-2">
+        <p role="status" className="break-words">{label} · {name}{kind && ` (${kind})`}</p>
+        {staticMode && <button type="button" className="shrink-0 rounded p-1 text-gray-400 hover:text-neon-cyan"
+          aria-label={t('deviceHelpTitle')} title={t('deviceHelpTitle')} aria-expanded={deviceHelpOpen}
+          onClick={() => setDeviceHelpOpen(open => !open)}><AtlasIcon name="help" className="size-3.5" /></button>}
+      </div>
+      {staticMode && deviceHelpOpen && <p className="mt-1 leading-relaxed">{t('deviceHelp')}</p>}
     </div>
     {staticMode ? browser && <BrowserRefinement gpu={gpu} input={browser} /> : children}
   </section>

@@ -706,6 +706,8 @@
       "cpu": "CPU",
       "browserTitle": "生成细化地形（浏览器实验）",
       "browserHint": "首次下载模型：约 1.14 GB",
+      "deviceHelpTitle": "为什么识别到的不是独立显卡？",
+      "deviceHelp": "WebGPU 只提供“高性能”偏好提示，网页无法枚举或指定具体显卡。Chrome 在 Windows 双显卡笔记本上常默认使用集成显卡，目前没有可靠的浏览器参数可以强制切换。需要独显时，请在 Windows「设置 → 系统 → 屏幕 → 显卡」中为浏览器选择“高性能”，然后完全退出并重启浏览器。驱动过旧也会被浏览器忽略，请保持显卡驱动更新。",
       "conditions": {
         "loading": "正在准备当前区域的 TD 条件…",
         "climate": "使用正式高程和气候。TD 条件网格：{{size}} × {{size}}。",

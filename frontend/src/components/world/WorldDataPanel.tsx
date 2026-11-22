@@ -11,6 +11,13 @@ import { deleteProject, getProject, projectKey, projectRegionPath, projectsKey, 
 import { downloadWorldBackup, readWorldBackup } from '../../projects/worldDataArchive'
 import SavedClimateTrials from './SavedClimateTrials'
 import { tutorialMilestone } from '../../tutorial/tutorialProgress'
+import { clearTerrainModelCache, readTerrainModelCacheBytes } from '../../viewers/packs/terrainModelCache'
+
+function formatModelCacheSize(bytes: number, language: string) {
+  const [unit, divisor] = bytes >= 1e9 ? ['gigabyte', 1e9] as const : ['megabyte', 1e6] as const
+  return new Intl.NumberFormat(language, { style: 'unit', unit, unitDisplay: 'short', maximumFractionDigits: 2 })
+    .format(bytes / divisor)
+}
 
 export default function WorldDataPanel({ id, published, publishedAvailable }: {
   id: string
@@ -34,6 +41,10 @@ export default function WorldDataPanel({ id, published, publishedAvailable }: {
     if (!backup.published || backup.id !== id) throw new Error('Backup belongs to another world')
     await restoreWorld(backup)
   }, onSuccess: () => queryClient.invalidateQueries({ queryKey: projectsKey }) })
+  const modelCache = useQuery({ queryKey: ['terrain-model-cache'], queryFn: readTerrainModelCacheBytes,
+    enabled: staticMode, staleTime: 0, retry: false })
+  const clearModels = useMutation({ mutationFn: clearTerrainModelCache,
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['terrain-model-cache'] }) })
   const erase = useMutation({ mutationFn: () => deleteProject(id), onSuccess: async () => {
     if (!published) navigate('/worlds')
     setExportError(false)
@@ -147,6 +158,20 @@ export default function WorldDataPanel({ id, published, publishedAvailable }: {
       {restore.isSuccess && <p role="status" className="text-green-300">{t('restoredHere')}</p>}
       {!staticMode && <p className="max-w-2xl leading-relaxed text-gray-400">{t('serverSnapshotHelp')}</p>}
     </section>
+
+    {staticMode && <section aria-labelledby="model-cache-heading" className="space-y-2 border-t border-space-border pt-4 text-sm">
+      <h2 id="model-cache-heading" className="font-semibold text-gray-200">{t('modelCache')}</h2>
+      <p className="max-w-2xl leading-relaxed text-gray-400">{t('modelCacheHelp')}</p>
+      <p role="status">{modelCache.isPending ? t('modelCacheChecking')
+        : modelCache.isError ? t('modelCacheUnavailable')
+          : (modelCache.data ?? 0) === 0 ? t('modelCacheEmpty')
+            : t('modelCacheSize', { size: formatModelCacheSize(modelCache.data ?? 0, i18n.language) })}</p>
+      <button type="button" className="min-h-11 rounded border border-space-border px-3 text-red-300 hover:border-red-300 disabled:opacity-50"
+        disabled={!modelCache.data || modelCache.isError || clearModels.isPending}
+        onClick={() => { if (window.confirm(t('confirmModelCache'))) clearModels.mutate() }}>{t('clearModelCache')}</button>
+      {clearModels.isSuccess && <p role="status" className="text-green-300">{t('modelCacheCleared')}</p>}
+      {clearModels.isError && <p role="alert" className="text-red-300">{t('deleteFailed')}</p>}
+    </section>}
 
     {(!published || hasLocalData) && <details className="space-y-3 border-t border-space-border pt-2 text-sm">
       <summary className="min-h-11 cursor-pointer content-center font-medium text-gray-300">{t('manageStorage')}</summary>

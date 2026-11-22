@@ -40,7 +40,7 @@
     "refine": "Expand Generate refined terrain and check the input and output scales.",
     "browserRefine": "Expand Generate refined terrain and check the input and output scales.",
     "refineRun": "Choose redraw or blend, check the scale, then start refinement. The first run may need to prepare the model.",
-    "browserRefineRun": "Check the refinement method and scale, then select Run. This needs a WebGPU browser; the first run downloads the terrain model and only the selected region is processed.",
+    "browserRefineRun": "Check the refinement method and scale, then select Start refinement. This needs a WebGPU browser; the first run downloads the terrain model and only the selected region is processed.",
     "browserSave": "When refinement finishes, select Save result to store it back in the world.",
     "refining": "The terrain tools show progress and let you cancel. On success, the result is saved as a region pack.",
     "regionResult": "The region pack is saved. Open the result to compare the original and refined terrain.",
