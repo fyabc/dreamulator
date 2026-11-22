@@ -193,7 +193,8 @@ export function MapLayerTree<Id extends string>({ state, onChange, available, te
             l.group === g.id &&
             (!l.devOnly || devMode) &&
             (!l.experimentalOnly || experimental) &&
-            (!l.earthOnly || isEarth),
+            (!l.earthOnly || isEarth) &&
+            (!available || available.has(l.id)),
         )
         return {
           ...g,
@@ -201,7 +202,7 @@ export function MapLayerTree<Id extends string>({ state, onChange, available, te
           toggleMembers: members.filter((l) => !isRadioKind(l)),
         }
       }).filter((g) => g.radioMembers.length > 0 || g.toggleMembers.length > 0),
-    [catalog, groupCatalog, devMode, experimental, isEarth],
+    [catalog, groupCatalog, devMode, experimental, isEarth, available],
   )
 
   const opacityOf = useCallback(
