@@ -73,6 +73,16 @@ def fake_donor(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def export(pack: Path, fields: Path, **kwargs: object) -> int:
         fields.mkdir(parents=True)
+        # The real TD driver converts ``fields/`` into ``cond/*.tif``; the
+        # refined product hashes those tiffs, so the fake run writes them.
+        import tifffile
+
+        from dreamulator.map.region_conditions import TD_CONDITION_FILES
+
+        cond = pack / "refine-tmp" / "cond"
+        cond.mkdir(parents=True)
+        for stem in TD_CONDITION_FILES.values():
+            tifffile.imwrite(cond / f"{stem}.tif", np.full((2, 2), 1.0, dtype=np.float32))
         return 2
 
     def convert(args: list[str], **kwargs: object) -> None:

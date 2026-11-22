@@ -334,10 +334,60 @@ def _export_browser_solver(root: Path, output: Path) -> None:
             archive.write(path, path.relative_to(source))
 
 
+def _same_bytes(path_a: Path, path_b: Path) -> bool:
+    """True when both files exist and hold identical bytes."""
+    try:
+        if path_a.stat().st_size != path_b.stat().st_size:
+            return False
+        return path_a.read_bytes() == path_b.read_bytes()
+    except OSError:
+        return False
+
+
+def _write_map_copy(src: Path, dest: Path, root_dest: Path | None) -> bool:
+    """Copy a map file, omitting it when it duplicates the root world's copy.
+
+    Branch map directories only carry files that differ from the root world:
+    an identical copy is pure weight against the 1 GB Pages limit.  The
+    omitted paths are listed in the branch's ``maps/shared.json`` so the
+    static client reads the root file directly instead of provoking a 404.
+    ``root_dest`` is None for root exports and for callers with no root
+    output to compare against.  Returns whether the file was omitted.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if root_dest is not None and _same_bytes(src, root_dest):
+        dest.unlink(missing_ok=True)
+        return True
+    dest.write_bytes(src.read_bytes())
+    return False
+
+
+def _write_map_bytes(data: bytes, dest: Path, root_dest: Path | None) -> bool:
+    """Write generated map bytes unless they equal the root world's copy.
+
+    Returns whether the file was omitted (see :func:`_write_map_copy`).
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if root_dest is not None and root_dest.is_file() and root_dest.read_bytes() == data:
+        dest.unlink(missing_ok=True)
+        return True
+    dest.write_bytes(data)
+    return False
+
+
+def _drop_duplicate(dest: Path, root_dest: Path | None) -> bool:
+    """Remove *dest* when it equals the root world's file; return whether it did."""
+    if root_dest is not None and _same_bytes(dest, root_dest):
+        dest.unlink()
+        return True
+    return False
+
+
 def _export_map_data(
     world_dir: Path,
     maps_out_dir: Path,
     branch: str | None = None,
+    root_maps_out: Path | None = None,
 ) -> list[str]:
     """Export map data for a world or branch.
 
@@ -349,12 +399,19 @@ def _export_map_data(
 
     MapManager supplies the same complete, branch-first planet list as the API.
     Each branch export includes inherited planets and fills missing overlay
-    files from root, so reading it does not depend on the host's 404 semantics.
+    files from root; files whose bytes equal the root export are omitted so
+    the branch directory only carries real differences.  The static client
+    resolves a missing branch file by falling back to the root path, which
+    serves the identical bytes.  ``cvt_mesh.msgpack.gz``, the observed Köppen
+    raster and the browser-trial files always stay in the branch directory:
+    the browser climate trial loads its mesh straight from that directory.
 
     Args:
         world_dir: Path to the world root directory.
         maps_out_dir: Output directory for map data.
         branch: Branch name (None for root world).
+        root_maps_out: Root world's export directory, used to detect
+            duplicates.  None disables deduplication.
 
     Returns:
         List of planet IDs that have map data.
@@ -368,6 +425,10 @@ def _export_map_data(
     manager = MapManager(world_dir, branch)
     root_manager = MapManager(world_dir)
     planets_with_maps = manager.list_planets_with_maps()
+    # Branch files omitted because they equal the root copy, as
+    # ``<planet>/<filename>``.  Written to maps/shared.json so the static
+    # client fetches the root file directly (no 404 round trip).
+    shared_files: list[str] = []
 
     for planet_id in planets_with_maps:
         planet_dir = manager._map_input_dir(planet_id)
@@ -376,6 +437,9 @@ def _export_map_data(
 
         planet_out = maps_out_dir / planet_id
         planet_out.mkdir(parents=True, exist_ok=True)
+        root_planet_out = (
+            root_maps_out / planet_id if branch is not None and root_maps_out is not None else None
+        )
 
         root_planet_dir = root_manager._map_input_dir(planet_id) if branch is not None else None
         sources = [planet_dir]
@@ -407,13 +471,21 @@ def _export_map_data(
 
         # Copy elevation PNG (binary), with root inheritance for overlays.
         elevation_src = _inherit("elevation.png")
-        if elevation_src is not None:
-            planet_out.joinpath("elevation.png").write_bytes(elevation_src.read_bytes())
+        if elevation_src is not None and _write_map_copy(
+            elevation_src,
+            planet_out / "elevation.png",
+            root_planet_out / "elevation.png" if root_planet_out is not None else None,
+        ):
+            shared_files.append(f"{planet_id}/elevation.png")
 
         # Copy monthly climate MessagePack (Phase 4 monthly display), if present.
         monthly_msgpack = _inherit("climate_monthly.msgpack")
-        if monthly_msgpack is not None:
-            planet_out.joinpath("climate_monthly.msgpack").write_bytes(monthly_msgpack.read_bytes())
+        if monthly_msgpack is not None and _write_map_copy(
+            monthly_msgpack,
+            planet_out / "climate_monthly.msgpack",
+            root_planet_out / "climate_monthly.msgpack" if root_planet_out is not None else None,
+        ):
+            shared_files.append(f"{planet_id}/climate_monthly.msgpack")
 
         try:
             td_packet, retained = terrain_source(manager, planet_id)
@@ -435,12 +507,21 @@ def _export_map_data(
             print(f"\n  WARNING: TD inputs unavailable for {scope}: {error}")
             (planet_out / "td-source.msgpack").unlink(missing_ok=True)
         else:
-            (planet_out / "td-source.msgpack").write_bytes(td_packet)
+            if _write_map_bytes(
+                td_packet,
+                planet_out / "td-source.msgpack",
+                root_planet_out / "td-source.msgpack" if root_planet_out is not None else None,
+            ):
+                shared_files.append(f"{planet_id}/td-source.msgpack")
 
         # Copy yearly climate descriptors (UCC-01), if present.
         yearly_msgpack = _inherit("climate_yearly.msgpack")
-        if yearly_msgpack is not None:
-            planet_out.joinpath("climate_yearly.msgpack").write_bytes(yearly_msgpack.read_bytes())
+        if yearly_msgpack is not None and _write_map_copy(
+            yearly_msgpack,
+            planet_out / "climate_yearly.msgpack",
+            root_planet_out / "climate_yearly.msgpack" if root_planet_out is not None else None,
+        ):
+            shared_files.append(f"{planet_id}/climate_yearly.msgpack")
 
         # Export map metadata (map.yaml → meta.json) + result-contract metadata
         # (format_version + time convention, CONTRACT-01).
@@ -450,8 +531,14 @@ def _export_map_data(
             if meta:
                 meta = map_metadata_result(meta)
                 meta["koppen"] = koppen
-                with planet_out.joinpath("meta.json").open("w", encoding="utf-8") as f:
-                    json.dump(meta, f, ensure_ascii=False, separators=(",", ":"), default=str)
+                if _write_map_bytes(
+                    json.dumps(meta, ensure_ascii=False, separators=(",", ":"), default=str).encode(
+                        "utf-8"
+                    ),
+                    planet_out / "meta.json",
+                    root_planet_out / "meta.json" if root_planet_out is not None else None,
+                ):
+                    shared_files.append(f"{planet_id}/meta.json")
 
         # Export JSON map files (voronoi, plates, features).
         # Each is read-validated-rewritten to catch LFS pointers or corrupt
@@ -463,6 +550,8 @@ def _export_map_data(
         # Legacy gzip-JSON meshes convert once here, so static exports and
         # the dev API converge on one wire format.
         from dreamulator.map.export import (
+            FIELDS_FILENAME,
+            GEOMETRY_FILENAME,
             MESH_FILENAME,
             find_mesh_file,
             load_cvt_mesh,
@@ -480,6 +569,13 @@ def _export_map_data(
                 save_cvt_mesh(planet_out / MESH_FILENAME, mesh)
                 displayed_cells = mesh["num_cells"]
                 del mesh
+                if root_planet_out is not None:
+                    # The combined mesh stays (the browser trial reads it from
+                    # this directory); the split pair is a transport twin and
+                    # can fall back to root when identical.
+                    for split_name in (GEOMETRY_FILENAME, FIELDS_FILENAME):
+                        if _drop_duplicate(planet_out / split_name, root_planet_out / split_name):
+                            shared_files.append(f"{planet_id}/{split_name}")
             except Exception:
                 print(
                     f"\n  WARNING: {mesh_src} is not a loadable mesh "
@@ -498,8 +594,12 @@ def _export_map_data(
                     f"\n  WARNING: {src_path} is not valid JSON (possible LFS pointer) — skipping",
                 )
                 continue
-            with planet_out.joinpath(filename).open("w", encoding="utf-8") as dst:
-                json.dump(data, dst, ensure_ascii=False, separators=(",", ":"))
+            if _write_map_bytes(
+                json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+                planet_out / filename,
+                root_planet_out / filename if root_planet_out is not None else None,
+            ):
+                shared_files.append(f"{planet_id}/{filename}")
 
         # Write placeholders for optional files the frontend may request
         # (avoids 404 console noise — same philosophy as _write_branch_defaults).
@@ -519,6 +619,11 @@ def _export_map_data(
     maps_out_dir.mkdir(parents=True, exist_ok=True)
     with maps_out_dir.joinpath("maps.json").open("w", encoding="utf-8") as f:
         json.dump(planets_with_maps, f, ensure_ascii=False)
+
+    # Only branches deduplicate; root has nothing to point at.
+    if branch is not None:
+        with maps_out_dir.joinpath("shared.json").open("w", encoding="utf-8") as f:
+            json.dump(sorted(shared_files), f, ensure_ascii=False)
 
     return planets_with_maps
 
@@ -773,7 +878,7 @@ def main() -> None:
                 # Export branch-specific map data
                 branch_maps_out = branch_out_dir / "maps"
                 branch_map_planets = _export_map_data(
-                    world_dir, branch_maps_out, branch=branch_name
+                    world_dir, branch_maps_out, branch=branch_name, root_maps_out=maps_out_dir
                 )
                 if branch_data or branch_map_planets:
                     branch_count += 1

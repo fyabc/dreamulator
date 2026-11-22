@@ -197,7 +197,7 @@ def test_conditioning_only_serves_recorded_source_and_grid(
         td_revision="model-version",
         cache_contract={
             "input_meta_sha256": file_sha256(input_path),
-            "inputs": {str(source_path.relative_to(pack_dir)): file_sha256(source_path)},
+            "inputs": {source_path.relative_to(pack_dir).as_posix(): file_sha256(source_path)},
         },
     )
     refined_path.write_text(json.dumps(refined), encoding="utf-8")

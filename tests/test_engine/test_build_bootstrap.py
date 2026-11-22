@@ -158,7 +158,13 @@ class TestAstronomyBootstrap:
             branch="cl-fork",
             on_progress=events.append,
         )
-        assert [(event.engine, event.state) for event in events if event.bootstrap] == [
+        # Stage boundaries only: the step observer also reports RUNNING events
+        # (each carries a ``step``) for nested progress.
+        assert [
+            (event.engine, event.state)
+            for event in events
+            if event.bootstrap and event.step is None
+        ] == [
             ("astronomy", StageState.RUNNING),
             ("astronomy", StageState.SUCCEEDED),
         ]

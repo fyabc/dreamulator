@@ -19,6 +19,12 @@ export default defineConfig(({ mode, isPreview }) => {
     // GitHub Pages serves at /<repo-name>/ — set via VITE_BASE_PATH or default to '/'
     base,
 
+    // The app routes through HashRouter, so it needs no HTML fallback for
+    // unknown paths.  Returning 404 (instead of index.html) keeps `vite
+    // preview` faithful to GitHub Pages, where the static client's
+    // branch→root map fallback depends on a missing file answering 404.
+    appType: 'mpa',
+
     plugins: [react(), !isPreview && mode !== 'test' && playgroundRuntime(env.VITE_STATIC_MODE === 'true')],
     worker: { format: 'es' },
 

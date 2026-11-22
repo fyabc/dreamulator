@@ -767,11 +767,17 @@ def save_mesh_split(mesh_dir: Path, mesh_obj: dict[str, Any]) -> None:
     mesh_dir.mkdir(parents=True, exist_ok=True)
     (mesh_dir / GEOMETRY_FILENAME).write_bytes(
         gzip.compress(
-            msgpack.packb(geometry_obj, use_bin_type=True), compresslevel=_SPLIT_GZIP_LEVEL
+            msgpack.packb(geometry_obj, use_bin_type=True),
+            compresslevel=_SPLIT_GZIP_LEVEL,
+            mtime=0,
         )
     )
     (mesh_dir / FIELDS_FILENAME).write_bytes(
-        gzip.compress(msgpack.packb(fields_obj, use_bin_type=True), compresslevel=_SPLIT_GZIP_LEVEL)
+        gzip.compress(
+            msgpack.packb(fields_obj, use_bin_type=True),
+            compresslevel=_SPLIT_GZIP_LEVEL,
+            mtime=0,
+        )
     )
 
 
@@ -891,8 +897,15 @@ def save_cvt_mesh(path: Path, mesh: CVTMeshLike, *, backup_existing: bool = Fals
         previous = path if path.exists() else path.with_name(LEGACY_MESH_FILENAME)
         if previous.exists():
             shutil.copy2(previous, path.with_name(MESH_FILENAME + ".prev"))
+    # mtime=0 keeps the gzip header deterministic: the same mesh always writes
+    # the same bytes, so byte-comparing two worlds' copies is meaningful (the
+    # static export skips branch copies identical to root).
     path.write_bytes(
-        gzip.compress(msgpack.packb(obj, use_bin_type=True), compresslevel=_MESH_GZIP_LEVEL)
+        gzip.compress(
+            msgpack.packb(obj, use_bin_type=True),
+            compresslevel=_MESH_GZIP_LEVEL,
+            mtime=0,
+        )
     )
     legacy = path.with_name(LEGACY_MESH_FILENAME)
     if legacy.exists():

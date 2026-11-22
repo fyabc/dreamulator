@@ -111,6 +111,45 @@ async function fetchStaticBlob(path: string, signal?: AbortSignal): Promise<Blob
 }
 
 /**
+ * Branch files the export omitted because they duplicate the root world.
+ *
+ * The exporter writes ``branches/<branch>/maps/shared.json`` listing those
+ * paths (relative to ``maps/``); fetching the root file directly avoids a
+ * 404 round trip for every inherited map product.  Cached per world+branch.
+ */
+const sharedMapFiles = new Map<string, Promise<Set<string>>>()
+
+function sharedBranchFiles(name: string, branch: string): Promise<Set<string>> {
+  const key = `${name}::${branch}`
+  const cached = sharedMapFiles.get(key)
+  if (cached) return cached
+  const pending = fetch(
+    `${DATA_BASE}/worlds/${encodeURIComponent(name)}/branches/${encodeURIComponent(branch)}/maps/shared.json`,
+    FETCH_INIT,
+  )
+    .then(async response => {
+      if (!response.ok) return new Set<string>()
+      const list: unknown = await response.json()
+      return new Set(
+        Array.isArray(list) ? list.filter((item): item is string => typeof item === 'string') : [],
+      )
+    })
+    .catch(() => new Set<string>())
+  sharedMapFiles.set(key, pending)
+  return pending
+}
+
+async function branchFileIsShared(
+  name: string,
+  branch: string,
+  branchPath: string,
+): Promise<boolean> {
+  const prefix = '/maps/'
+  if (!branchPath.startsWith(prefix)) return false
+  return (await sharedBranchFiles(name, branch)).has(branchPath.slice(prefix.length))
+}
+
+/**
  * Try fetching JSON from the branch path first, then fall back to root.
  * Returns null if neither path has the data.
  */
@@ -120,7 +159,7 @@ async function fetchBranchAwareJson<T>(
   branchPath: string,
   rootPath: string,
 ): Promise<T | null> {
-  if (branch) {
+  if (branch && !(await branchFileIsShared(name, branch, branchPath))) {
     try {
       return await fetchStaticJson<T>(`/worlds/${name}/branches/${branch}${branchPath}`)
     } catch {
@@ -140,7 +179,7 @@ async function fetchBranchAwareBlob(
   branchPath: string,
   rootPath: string,
 ): Promise<Blob | null> {
-  if (branch) {
+  if (branch && !(await branchFileIsShared(name, branch, branchPath))) {
     try {
       return await fetchStaticBlob(`/worlds/${name}/branches/${branch}${branchPath}`)
     } catch {
@@ -540,8 +579,13 @@ export const staticApi = {
 
   getTerrainSource: async (world: string, planet: string, branch: string | null, signal: AbortSignal) => {
     if (await browserProject(world)) return null
-    const scope = branch ? `/branches/${encodeURIComponent(branch)}` : ''
-    return fetchStaticBlob(`/worlds/${encodeURIComponent(world)}${scope}/maps/${encodeURIComponent(planet)}/td-source.msgpack`, signal)
+    // Branch directories omit a TD packet identical to root (same terrain and
+    // monthly climate), so resolve it like the other branch map files.
+    const path = `/maps/${encodeURIComponent(planet)}/td-source.msgpack`
+    const result = await fetchBranchAwareBlob(world, branch, path, path)
+    if (result === null) throw new Error(`No static TD source for ${planet}`)
+    signal.throwIfAborted()
+    return result
   },
 
   getTerrainNativeElevation: (world: string, digest: string, signal: AbortSignal) =>

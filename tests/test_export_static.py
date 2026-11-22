@@ -288,13 +288,17 @@ def test_export_map_data_branch_overlay_without_elevation(
     assert _json.loads((out / "maps.json").read_text(encoding="utf-8")) == ["planet_x"]
 
 
-def test_export_map_data_branch_overlay_inherits_root_files(
+def test_export_map_data_branch_omits_files_identical_to_root(
     export_static: Any, tmp_path: Path
 ) -> None:
-    """Per-file branch inheritance: files the overlay lacks are filled from
-    the root world's maps dir so the static export is self-contained (host
-    404 semantics are not reliable — vite preview answers missing files
-    with 200 HTML).  The branch's own files always win."""
+    """Branch map output keeps only files that differ from the root export.
+
+    The static client resolves a missing branch file by fetching the root
+    path, which serves the identical bytes; copying every root file into
+    each branch doubled the Pages payload.  The combined mesh and the
+    browser-trial manifest stay in the branch directory because the browser
+    climate trial loads the mesh straight from it.
+    """
     world = tmp_path / "test-world"
     _build_world(world)
     root_maps = world / "maps" / "planet_x"
@@ -303,26 +307,50 @@ def test_export_map_data_branch_overlay_inherits_root_files(
     (root_maps / "climate_monthly.msgpack").write_bytes(b"root-monthly")
     (root_maps / "climate_yearly.msgpack").write_bytes(b"root-yearly")
     _write(root_maps / "plates.json", '{"plates": [{"id": "root-plate"}]}')
+    mesh = {"num_cells": 0, "cells": [], "vertices": [], "regions": [], "seed": 0}
+    save_cvt_mesh(root_maps / MESH_FILENAME, mesh)
     branch_maps = world / "branches" / "gcm" / "maps" / "planet_x"
     _write_yaml(world / "branches" / "gcm" / "branch.yaml", {"name": "gcm"})
     branch_maps.mkdir(parents=True)
     (branch_maps / "climate_monthly.msgpack").write_bytes(b"gcm-monthly")
+    # The build copies the inherited mesh into the branch directory, so the
+    # branch's map metadata matches root and its split pair is identical.
+    save_cvt_mesh(branch_maps / MESH_FILENAME, mesh)
 
-    out = tmp_path / "out" / "maps"
-    planets = export_static._export_map_data(world, out, branch="gcm")
+    root_out = tmp_path / "out" / "maps"
+    assert export_static._export_map_data(world, root_out, branch=None) == ["planet_x"]
+    branch_out = tmp_path / "out" / "branches" / "gcm" / "maps"
+    assert export_static._export_map_data(
+        world, branch_out, branch="gcm", root_maps_out=root_out
+    ) == ["planet_x"]
 
-    assert planets == ["planet_x"]
-    planet_out = out / "planet_x"
-    # Branch's own climate wins; everything else is filled from root.
+    planet_out = branch_out / "planet_x"
+    # The branch's own climate wins and is written.
     assert (planet_out / "climate_monthly.msgpack").read_bytes() == b"gcm-monthly"
-    assert (planet_out / "climate_yearly.msgpack").read_bytes() == b"root-yearly"
-    assert (planet_out / "elevation.png").read_bytes() == b"root-png"
+    # Identical-to-root files are omitted in favour of the client's fallback.
+    for name in (
+        "elevation.png",
+        "climate_yearly.msgpack",
+        "plates.json",
+        "meta.json",
+        "mesh_geometry.msgpack.gz",
+        "mesh_fields.msgpack.gz",
+    ):
+        assert not (planet_out / name).exists(), name
+    # The combined mesh and trial manifest stay for the browser climate trial.
+    assert (planet_out / MESH_FILENAME).is_file()
+    assert (planet_out / "climate_trial.json").is_file()
     import json as _json
 
-    meta = _json.loads((planet_out / "meta.json").read_text(encoding="utf-8"))
-    assert meta["planet_id"] == "planet_x"
-    plates = _json.loads((planet_out / "plates.json").read_text(encoding="utf-8"))
-    assert plates == {"plates": [{"id": "root-plate"}]}
+    assert _json.loads((branch_out / "maps.json").read_text(encoding="utf-8")) == ["planet_x"]
+    # The omitted paths are declared so the client reads root without a 404.
+    shared = _json.loads((branch_out / "shared.json").read_text(encoding="utf-8"))
+    assert "planet_x/elevation.png" in shared
+    assert "planet_x/climate_yearly.msgpack" in shared
+    assert "planet_x/mesh_geometry.msgpack.gz" in shared
+    assert "planet_x/climate_monthly.msgpack" not in shared
+    assert "planet_x/cvt_mesh.msgpack.gz" not in shared
+    assert "planet_x/climate_trial.json" not in shared
 
 
 def test_export_preserves_observed_koppen_only_with_its_mesh(
