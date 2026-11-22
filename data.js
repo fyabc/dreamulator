@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794945117065,
+  "lastUpdate": 1795359121120,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2360,6 +2360,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00008168165028241179",
             "extra": "mean: 5.041040599996904 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "3f285b44a1b44eb29a910255300a9fcabc71373a",
+          "message": "fix(region): handle POSIX-only process controls on Windows\n\nThe pre-push mypy gate rejected os.killpg and resource.setrlimit against\nthe Windows typeshed. Guard both with sys.platform: Windows kills the\nworker process directly and runs without an RLIMIT cap, which is what\nthe POSIX-only import already implied. Linux behaviour is unchanged.\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-22T22:51:11+08:00",
+          "tree_id": "8d9fd649e8d7a6b0271c107796b951e3dfe6962c",
+          "url": "https://github.com/fyabc/dreamulator/commit/3f285b44a1b44eb29a910255300a9fcabc71373a"
+        },
+        "date": 1795359120447,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.2749149491374419,
+            "unit": "iter/sec",
+            "range": "stddev: 0.14429746944830235",
+            "extra": "mean: 3.637488623799998 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.072329914025265,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05213717288658664",
+            "extra": "mean: 245.55967250000066 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.7516413304038891,
+            "unit": "iter/sec",
+            "range": "stddev: 0.9002761871895351",
+            "extra": "mean: 570.8931290000005 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 656.2254202559087,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00016148869588382498",
+            "extra": "mean: 1.523866600001611 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 167.9217191933209,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00012110642691674953",
+            "extra": "mean: 5.955155799999545 msec\nrounds: 5"
           }
         ]
       }
