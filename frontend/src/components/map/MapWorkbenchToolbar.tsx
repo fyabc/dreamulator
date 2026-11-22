@@ -10,7 +10,7 @@ export const mapLayerDesktopWidth = 'lg:w-56'
 
 type WorkPanelToggle = { id: string; buttonId: string; open: boolean; onToggle: () => void }
 
-export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, backRef, contextControls, switchTo, layerControls, regionControls, trialPanel, panelControls, layersOpen, onToggleLayers, children }: {
+export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, backRef, contextControls, switchTo, layerControls, timeControls, regionControls, trialPanel, panelControls, layersOpen, onToggleLayers, children }: {
   title: string
   subtitle?: string
   view: 'map' | 'globe' | 'region'
@@ -20,6 +20,7 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
   contextControls?: ReactNode
   switchTo?: string
   layerControls?: ReactNode
+  timeControls?: ReactNode
   regionControls?: ReactNode
   trialPanel?: WorkPanelToggle
   panelControls?: ReactNode
@@ -48,6 +49,7 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
       </div>
       {(switchTo || regionControls) && (
         <div className="col-span-2 col-start-1 row-start-2 flex items-center gap-1.5 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:gap-2">
+          {timeControls}
           {layerControls}
           {switchTo && <nav aria-label={t('workbench.views')} className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded border border-space-border bg-space-bg p-0.5">
             {(['map', 'globe'] as const).map((item) => {

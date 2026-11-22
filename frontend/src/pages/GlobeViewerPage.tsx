@@ -29,6 +29,7 @@ import ClimateLegend from '../components/map/ClimateLegend'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
 import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
 import QuickLayerSwitch from '../components/map/QuickLayerSwitch'
+import TimeModeToggle from '../components/map/TimeModeToggle'
 import { trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import { mark } from '../utils/perf'
@@ -312,6 +313,8 @@ export default function GlobeViewerPage() {
           `/worlds/${worldName}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/map/${selectedPlanet}${mapQS}` : undefined}
         contextControls={scope ? <div className="hidden min-w-0 xl:flex"><WorldContext scope={scope} /></div> : undefined}
+        timeControls={!trialActive && <TimeModeToggle monthlyMode={monthlyMode}
+          onChange={handleMonthlyModeChange} />}
         layerControls={<QuickLayerSwitch state={display.state} onChange={display.onChange}
           available={display.available} disabled={trialActive} />}
         regionControls={selectedPlanet && (elevation || cvtMesh) ? (

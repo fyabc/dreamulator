@@ -31,6 +31,7 @@ import { MapTimeControl } from '../components/map/TimeControl'
 import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import MapDataLoading from '../components/map/MapDataLoading'
 import QuickLayerSwitch from '../components/map/QuickLayerSwitch'
+import TimeModeToggle from '../components/map/TimeModeToggle'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
 import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
 import { trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
@@ -182,6 +183,8 @@ export default function MapViewerPage() {
         switchTo={selectedPlanet ? `/worlds/${worldName}/globe/${selectedPlanet}${globeQS}` : undefined}
         panelControls={panelControls}
         contextControls={scope ? <div className="hidden min-w-0 xl:flex"><WorldContext scope={scope} /></div> : undefined}
+        timeControls={!trialActive && <TimeModeToggle monthlyMode={monthlyMode}
+          onChange={handleMonthlyModeChange} />}
         layerControls={<QuickLayerSwitch state={display.state} onChange={display.onChange}
           available={display.available} disabled={trialActive} />}
         regionControls={selectedPlanet && (elevation || cvtMesh) ? (

@@ -14,6 +14,7 @@ interface TimeControlProps {
   onSelectMonth: (index: number) => void
   climateAvailable: boolean
   loading?: boolean
+  hideModeToggle?: boolean
   series?: {
     layer: MonthlyLayer
     means: readonly number[]
@@ -24,7 +25,7 @@ interface TimeControlProps {
   }
 }
 
-function TimeControl({ monthlyMode, onMonthlyModeChange, monthIndex, onSelectMonth, climateAvailable, loading, series }: TimeControlProps) {
+function TimeControl({ monthlyMode, onMonthlyModeChange, monthIndex, onSelectMonth, climateAvailable, loading, series, hideModeToggle = false }: TimeControlProps) {
   const { t } = useTranslation('map')
   const hintId = useId()
   const plot = series?.means.some(Number.isFinite) ? series : undefined
@@ -45,7 +46,7 @@ function TimeControl({ monthlyMode, onMonthlyModeChange, monthIndex, onSelectMon
         <a href="/help#map-time" target="_blank" rel="noreferrer" className="p-0.5 text-gray-500 hover:text-neon-cyan"
           aria-label={t('control.helpButton')} title={t('control.helpButton')}><AtlasIcon name="help" className="size-3.5" /></a>
       </div>
-      <div className="flex rounded-md border border-gray-700 text-[11px]">
+      {!hideModeToggle && <div className="flex rounded-md border border-gray-700 text-[11px]">
         <button type="button" onClick={() => onMonthlyModeChange(false)} aria-pressed={!monthlyMode}
           title={t('time.annualHint')} className={`flex-1 rounded-l-md px-2 py-1 transition-colors ${
             !monthlyMode ? 'bg-neon-cyan/20 text-gray-100' : 'text-gray-400 hover:text-gray-200'}`}>
@@ -57,7 +58,7 @@ function TimeControl({ monthlyMode, onMonthlyModeChange, monthIndex, onSelectMon
             monthlyMode ? 'bg-neon-cyan/20 text-gray-100' : 'text-gray-400 hover:text-gray-200'}`}>
           {t('time.monthly')}
         </button>
-      </div>
+      </div>}
       {loading && !plot && <p role="status" className="text-[11px] text-gray-400">{t('time.loading')}</p>}
       {plot && spec && <div className="space-y-1" data-testid="monthly-layer-chart" data-layer={plot.layer}>
         <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-[11px] text-gray-300">
@@ -94,7 +95,7 @@ function TimeControl({ monthlyMode, onMonthlyModeChange, monthIndex, onSelectMon
 }
 
 export const MapTimeControl = memo(function MapTimeControl({ trialMode, preview, mesh, layer, monthlyData, cell, ...official }:
-  Omit<TimeControlProps, 'climateAvailable' | 'series'> & {
+  Omit<TimeControlProps, 'climateAvailable' | 'series' | 'hideModeToggle'> & {
     trialMode: boolean; preview: TemperaturePreview | null; mesh: CVTMesh | null
     layer: string | null; monthlyData: MonthlyClimateData | null
     /** Hovered or pinned cell: the chart follows it instead of the layer mean. */
@@ -110,7 +111,7 @@ export const MapTimeControl = memo(function MapTimeControl({ trialMode, preview,
   if (trialMode) return <TrialTimeControl preview={preview} layer={layer} />
   const values = cellValues ?? means
   const scope = cellValues ? 'cell' as const : 'layer' as const
-  return <TimeControl {...official} climateAvailable loading={official.loading && monthlyLayer != null} series={values && monthlyLayer ? {
+  return <TimeControl {...official} climateAvailable hideModeToggle loading={official.loading && monthlyLayer != null} series={values && monthlyLayer ? {
     layer: monthlyLayer, means: values, scope, cell: scope === 'cell' && cell ? { lat: cell.lat, lon: cell.lon } : undefined,
     labelAt: index => climateWindowLabel(t, monthlyData, index),
     first: monthlyData?.month0 === 'vernal_equinox' && values.length === 12 ? MODEL_JANUARY_INDEX : 0,
