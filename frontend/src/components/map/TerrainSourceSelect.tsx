@@ -38,7 +38,6 @@ export default function TerrainSourceSelect({ value, onChange, cells, width, hei
         onChange={event => onChange(event.currentTarget.value as TerrainSource)}
         className="min-w-0 rounded border border-space-border bg-space-surface px-2 py-1 text-xs text-gray-300 focus-visible:outline focus-visible:outline-neon-cyan">
         <option value="raster">{t('terrainSource.raster', { width, height })}</option>
-        <option value="gray">{t('terrainSource.gray')}</option>
         {!!cells && <option value="mesh">{t('terrainSource.mesh', { cells: new Intl.NumberFormat(i18n.language).format(cells) })}</option>}
       </select>
       <p id={helpId} role="tooltip" className={`${helpOpen ? 'visible' : 'invisible'} absolute inset-x-0 top-full z-20 rounded-md border border-space-border bg-space-surface px-2.5 py-2 text-xs leading-relaxed text-gray-200 shadow-lg`}>

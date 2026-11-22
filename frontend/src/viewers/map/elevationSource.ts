@@ -1,6 +1,6 @@
 import type { MapMetadata } from './types'
 
-export type TerrainSource = 'raster' | 'gray' | 'mesh'
+export type TerrainSource = 'raster' | 'mesh'
 
 export function hasOriginalTerrain(meta: MapMetadata | undefined) {
   return Boolean(meta?.elevation_import || meta?.pipeline_version === 'etopo1-import')
@@ -10,7 +10,7 @@ export function terrainSourceFor(meta: MapMetadata | undefined, hasMesh: boolean
   requested: string | null): TerrainSource {
   const original = hasRaster && hasOriginalTerrain(meta)
   if (hasMesh && (!original || requested === 'mesh')) return 'mesh'
-  return original && requested === 'gray' ? 'gray' : 'raster'
+  return 'raster'
 }
 
 export function meshTextureDimensions(meta: MapMetadata | null | undefined) {

@@ -540,13 +540,12 @@ function bakeRasterTerrain(inp: BakeInputs): { terrain: Uint8Array; landsea: Uin
     const m = elevMinM + elevation[i] * span
     const isLand = m > seaLevel
     land[i] = isLand ? 1 : 0
-    const gray = Math.round(elevation[i] * 255)
-    const c = inp.terrainSource === 'gray' ? [gray, gray, gray] : color(m, !isLand)
+    const c = color(m, !isLand)
     terrain[i * 4] = c[0]; terrain[i * 4 + 1] = c[1]; terrain[i * 4 + 2] = c[2]; terrain[i * 4 + 3] = 255
     const ls = isLand ? [76, 175, 80] : [21, 101, 192]
     landsea[i * 4] = ls[0]; landsea[i * 4 + 1] = ls[1]; landsea[i * 4 + 2] = ls[2]; landsea[i * 4 + 3] = 255
   }
-  for (let y = 0; inp.terrainSource !== 'gray' && y < height; y++) {
+  for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = y * width + x
       if (!land[i]) continue
@@ -704,7 +703,7 @@ function bakeAll(inp: BakeInputs): LayerTextures {
   let slpBuf: Uint8Array = empty
   let kw = 1, kh = 1
   const hasMesh = cvtMesh && cvtMesh.cells.length > 0 && cellIdMap
-  const useRaster = !hasMesh || inp.terrainSource === 'raster' || inp.terrainSource === 'gray'
+  const useRaster = !hasMesh || inp.terrainSource === 'raster'
   if (cvtMesh && hasMesh) {
     const palettes = buildCellPalettes(cvtMesh, inp.elevMinM, inp.elevMaxM, inp.seaLevel, inp.waterDepthFactor)
     if (!useRaster) {

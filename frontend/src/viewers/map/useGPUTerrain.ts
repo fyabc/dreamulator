@@ -295,7 +295,7 @@ export default function useGPUTerrain({
     (layers.temperatureError ?? 0) > 0 || (layers.precipitationError ?? 0) > 0 ||
     (layers.pressure ?? 0) > 0 || (layers.pressureError ?? 0) > 0 ||
     (layers.slp ?? 0) > 0
-  const coastOpacity = terrainSource === 'gray' ? 0 : (layers.coastlines ?? 1)
+  const coastOpacity = layers.coastlines ?? 1
   const terrainOpacity = layers.terrain ?? 1
   const overlayActive = needsFboForGlobe || (coastOpacity > 0 && coastOpacity < 1) || (terrainOpacity > 0 && terrainOpacity < 1)
 

@@ -19,12 +19,11 @@ interface ClimateLegendProps {
   monthIndex: number
   yearlyData: YearlyClimateData | null
   meta?: MapMetadata
-  grayTerrain?: boolean
   preview?: TemperaturePreview | null
 }
 
 export default function ClimateLegend({
-  layer, mesh, displayingMonthly, monthlyMode, monthlyLoading, monthlyData, monthIndex, yearlyData, meta, grayTerrain, preview,
+  layer, mesh, displayingMonthly, monthlyMode, monthlyLoading, monthlyData, monthIndex, yearlyData, meta, preview,
 }: ClimateLegendProps) {
   const { t, i18n } = useTranslation(['map', 'help'])
   const helpId = useId()
@@ -38,9 +37,7 @@ export default function ClimateLegend({
       const stops = Array.from({ length: 33 }, (_, index) => {
         const value = index / 32
         const elevation = minElev + value * (maxElev - minElev)
-        const shade = Math.round(value * 255)
-        const rgb: [number, number, number] = grayTerrain && !preview ? [shade, shade, shade] : color(elevation, elevation < seaLevel)
-        return { value, color: rgb }
+        return { value, color: color(elevation, elevation < seaLevel) }
       })
       return { min: minElev, max: maxElev, unit: 'm', stops, log: false }
     }
@@ -50,7 +47,7 @@ export default function ClimateLegend({
       scalarValue(layer, cell, seaLevel, values, index * (monthlyData?.months ?? 0) + monthIndex, monthIndex),
     ))) return null
     return scalarScale(layer, displayingMonthly, mesh?.cells, seaLevel)
-  }, [layer, minElev, maxElev, seaLevel, grayTerrain, preview, displayingMonthly, monthlyData, mesh, monthIndex])
+  }, [layer, minElev, maxElev, seaLevel, preview, displayingMonthly, monthlyData, mesh, monthIndex])
 
   if (!scale || !layer) return null
   const windowName = climateWindowLabel(t, monthlyData, monthIndex)

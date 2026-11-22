@@ -276,7 +276,7 @@ export default function GlobeViewerPage() {
     particleMode={particleMode} onParticleModeChange={setParticleMode} />
   const legend = !cleanMode && displayTexture && <ClimateLegend layer={activeMainLayerId(display.state)} mesh={cvtMesh}
     displayingMonthly={displayingMonthly} monthlyMode={monthlyMode} monthlyData={monthlyData} monthlyLoading={monthlyLoading}
-    monthIndex={monthlyMonth} yearlyData={yearlyData} meta={meta} grayTerrain={terrainSource === 'gray'}
+    monthIndex={monthlyMonth} yearlyData={yearlyData} meta={meta}
     preview={trialActive ? trial.preview : null} />
 
   return (

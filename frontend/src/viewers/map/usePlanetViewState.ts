@@ -386,8 +386,9 @@ export function usePlanetViewState(
 
   const meshTextureSize = meshTextureDimensions(meta)
   const cellIdMap = useCellIdMap({ cvtMesh: cvtMesh ?? null, ...meshTextureSize })
-  const terrainSource = terrainSourceFor(meta, !!cvtMesh?.cells.length, !!elevation, searchParams.get('terrain'))
-  const canSelectTerrainSource = originalTerrain && !!elevation
+  const hasMesh = Boolean(cvtMesh?.cells.length)
+  const terrainSource = terrainSourceFor(meta, hasMesh, !!elevation, searchParams.get('terrain'))
+  const canSelectTerrainSource = originalTerrain && !!elevation && hasMesh
   const setTerrainSource = (source: TerrainSource) => setSearchParams((prev) => {
     const next = new URLSearchParams(prev)
     if (source === 'raster') next.delete('terrain')
