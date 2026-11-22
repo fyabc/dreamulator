@@ -29,7 +29,7 @@ import { initialLayerState, activeMainLayerId, inspectionLayerId } from '../../c
 import type { LayerState } from '../../components/map/MapLayerPanel'
 import { decodePngToFloat32 } from './utils/imageCodec'
 import { readElevationPng } from '../packs/elevationRaster'
-import { meshTextureDimensions, terrainSourceFor, type TerrainSource } from './elevationSource'
+import { hasOriginalTerrain, meshTextureDimensions, terrainSourceFor, type TerrainSource } from './elevationSource'
 import { solarDeclinationDeg } from '../utils/solar'
 import useCellIdMap from './useCellIdMap'
 import { useMonthlyClimate } from './useMonthlyClimate'
@@ -101,6 +101,7 @@ export interface PlanetViewState {
   elevationDims: { w: number; h: number }
   terrainSource: TerrainSource
   setTerrainSource: (source: TerrainSource) => void
+  canSelectTerrainSource: boolean
   meshTextureSize: { width: number; height: number }
   cvtMesh: CVTMesh | null
   voronoiCells: VoronoiCell[]
@@ -315,26 +316,27 @@ export function usePlanetViewState(
   // Decode the elevation PNG once per blob — both pages render from the same
   // Float32Array; the 3D texture bake also needs the decoded dimensions.
   const importedElevation = Boolean(meta?.elevation_import)
-  const [decoded, setDecoded] = useState<{ blob: Blob; imported: boolean; data: Float32Array; w: number; h: number } | null>(null)
-  const currentElevation = decoded?.blob === elevationBlob && decoded?.imported === importedElevation ? decoded : null
+  const originalTerrain = hasOriginalTerrain(meta)
+  const [decoded, setDecoded] = useState<{ blob: Blob; original: boolean; data: Float32Array; w: number; h: number } | null>(null)
+  const currentElevation = decoded?.blob === elevationBlob && decoded?.original === originalTerrain ? decoded : null
   const elevation = currentElevation?.data ?? null
   const elevationDims = currentElevation ?? EMPTY_ELEVATION_DIMENSIONS
   useEffect(() => {
     if (!elevationBlob) return
     let cancelled = false
-    const decode = importedElevation
+    const decode = originalTerrain
       ? readElevationPng(elevationBlob, 0, 1).then(({ values, width, height }) => ({ data: values, width, height }))
       : decodePngToFloat32(elevationBlob)
     decode.then(({ data, width, height }) => {
       if (!cancelled) {
-        setDecoded({ blob: elevationBlob, imported: importedElevation, data, w: width, h: height })
+        setDecoded({ blob: elevationBlob, original: originalTerrain, data, w: width, h: height })
       }
     }).catch(() => {
       // Decode failure (e.g. corrupted PNG) → treat as no data
       if (!cancelled) setDecoded(null)
     })
     return () => { cancelled = true }
-  }, [elevationBlob, importedElevation])
+  }, [elevationBlob, originalTerrain])
 
   const { isError: officialPlatesError } = useQuery({
     queryKey: ['plates', worldName, selectedPlanet, selectedBranch],
@@ -374,7 +376,8 @@ export function usePlanetViewState(
 
   const meshTextureSize = meshTextureDimensions(meta)
   const cellIdMap = useCellIdMap({ cvtMesh: cvtMesh ?? null, ...meshTextureSize })
-  const terrainSource = terrainSourceFor(meta, !!cvtMesh?.cells.length, searchParams.get('terrain'))
+  const terrainSource = terrainSourceFor(meta, !!cvtMesh?.cells.length, !!elevation, searchParams.get('terrain'))
+  const canSelectTerrainSource = originalTerrain && !!elevation
   const setTerrainSource = (source: TerrainSource) => setSearchParams((prev) => {
     const next = new URLSearchParams(prev)
     if (source === 'raster') next.delete('terrain')
@@ -565,7 +568,7 @@ export function usePlanetViewState(
     awaitingBuild: !ebm && useOfficialMap && !!elevation && meshNotBuilt,
     bodyByName, currentPlanetName, planetRadiusM, axialTiltDeg,
     worldPlanetsError, platesError,
-    elevation, elevationDims, terrainSource, setTerrainSource, meshTextureSize,
+    elevation, elevationDims, terrainSource, setTerrainSource, canSelectTerrainSource, meshTextureSize,
     cvtMesh: cvtMesh ?? null, voronoiCells, cellIdMap,
     scalarThematic, koppenDownscale, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, hoveredCell, handleCellHover, lastCell, selectedCells,

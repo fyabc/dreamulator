@@ -12,12 +12,22 @@ const meta: MapMetadata = {
 
 describe('global elevation sources', () => {
   it('defaults to the imported heightmap without changing native grid layers', () => {
-    expect(terrainSourceFor(meta, true, null)).toBe('raster')
-    expect(terrainSourceFor(meta, true, 'gray')).toBe('gray')
-    expect(terrainSourceFor(meta, true, 'mesh')).toBe('mesh')
-    expect(terrainSourceFor(meta, false, 'mesh')).toBe('raster')
-    expect(terrainSourceFor({ ...meta, elevation_import: null }, true, null)).toBe('mesh')
+    expect(terrainSourceFor(meta, true, true, null)).toBe('raster')
+    expect(terrainSourceFor(meta, true, true, 'gray')).toBe('gray')
+    expect(terrainSourceFor(meta, true, true, 'mesh')).toBe('mesh')
+    expect(terrainSourceFor(meta, false, true, 'mesh')).toBe('raster')
+    expect(terrainSourceFor(meta, true, false, null)).toBe('mesh')
     expect(meshTextureDimensions(meta)).toEqual({ width: 2048, height: 1024 })
+  })
+
+  it('prefers inherited ETOPO1 terrain without applying that default to replaced branch terrain', () => {
+    const reference = { ...meta, planet_id: 'planet_earth', elevation_import: null, pipeline_version: 'etopo1-import' }
+    expect(terrainSourceFor(reference, true, true, null)).toBe('raster')
+    expect(terrainSourceFor(reference, true, true, 'gray')).toBe('gray')
+    expect(terrainSourceFor(reference, true, true, 'mesh')).toBe('mesh')
+    expect(terrainSourceFor(reference, true, false, 'gray')).toBe('mesh')
+    expect(terrainSourceFor({ ...reference, pipeline_version: undefined }, true, true, null)).toBe('mesh')
+    expect(terrainSourceFor({ ...reference, pipeline_version: 'generated' }, true, true, 'gray')).toBe('mesh')
   })
 
   it('estimates original row spacing only for a native-size imported raster', () => {

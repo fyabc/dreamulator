@@ -297,9 +297,9 @@ export const staticApi = {
     return saveBrowserEbm(id, { world, planet, branch }, async () => {
       const [meta, elevation] = await Promise.all([staticApi.getMapMeta(world, planet, branch), staticApi.getElevationBlob(world, planet, branch)])
       const { planet_id, projection, width, height, elevation_min_m, elevation_max_m, sea_level_m,
-        voronoi_seed, voronoi_num_cells, elevation_import } = meta
+        voronoi_seed, voronoi_num_cells, pipeline_version, elevation_import } = meta
       return [{ planet_id, projection, width, height, elevation_min_m, elevation_max_m, sea_level_m,
-        voronoi_seed, voronoi_num_cells, elevation_import }, elevation]
+        voronoi_seed, voronoi_num_cells, pipeline_version, elevation_import }, elevation]
     })
   },
   saveClimateTrialBranch: async (): Promise<never> => notAvailable('saveClimateTrialBranch'),

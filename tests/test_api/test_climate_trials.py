@@ -98,7 +98,10 @@ def test_branch_trial_matches_formal_ebm_and_saves_independently(
     source_raster = mesh_path.parent / "elevation.png"
     export_elevation_png(np.zeros((64, 128)), source_raster)
     metadata_path = mesh_path.parent / "map.yaml"
-    metadata_path.write_text("planet_id: planet_gaia\nwidth: 128\nheight: 64\n", encoding="utf-8")
+    metadata_path.write_text(
+        "planet_id: planet_gaia\nwidth: 128\nheight: 64\npipeline_version: etopo1-import\n",
+        encoding="utf-8",
+    )
     plates_path = mesh_path.with_name("plates.json")
     plates_path.write_text('{"plates": []}\n', encoding="utf-8")
     branch_maps = world / "branches/pinned/maps/planet_gaia"
@@ -185,6 +188,7 @@ def test_branch_trial_matches_formal_ebm_and_saves_independently(
     assert result["id"] == job_id
     assert result["branch"] == "pinned"
     assert result["surface"]["width"] == 128
+    assert result["surface"]["pipeline_version"] == "etopo1-import"
     assert result["inputs"]["forcing"]["axial_tilt_deg"] == 23.4
     assert result["inputs"]["mesh_sha256"] == hashlib.sha256(before[mesh_path]).hexdigest()
     assert client.post(save_url).json() == result
@@ -215,6 +219,8 @@ def test_branch_trial_matches_formal_ebm_and_saves_independently(
         yaml.safe_load((fork_dir / "branch.yaml").read_text(encoding="utf-8"))["parent"] == "pinned"
     )
     assert (fork_map / "elevation.png").read_bytes() == before[source_raster]
+    fork_metadata = yaml.safe_load((fork_map / "map.yaml").read_text(encoding="utf-8"))
+    assert fork_metadata["pipeline_version"] == "etopo1-import"
     assert (fork_map / "plates.json").read_bytes() == before[plates_path]
     assert (fork_map / "climate_monthly.msgpack").read_bytes() == rerun_monthly
     assert (

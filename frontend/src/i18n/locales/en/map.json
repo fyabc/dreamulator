@@ -20,8 +20,9 @@
   },
   "terrainSource": {
     "label": "Terrain source",
-    "hint": "Imported terrain and grayscale use the same heightmap. The model mesh shows the values used by the simulation. Regional maps always crop from the heightmap.",
-    "raster": "Imported terrain ({{width}} × {{height}})",
+    "help": "About terrain sources",
+    "hint": "Original elevation preserves heightmap detail. Grayscale uses the same data. The model mesh shows the cell elevations used by the engine. This changes the basemap, not downscaling for climate or other thematic layers.",
+    "raster": "Original elevation ({{width}} × {{height}})",
     "gray": "Grayscale heightmap",
     "mesh": "Model mesh ({{cells}} cells)"
   },

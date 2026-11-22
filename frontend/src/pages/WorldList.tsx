@@ -7,6 +7,17 @@ import { listProjects, projectsKey, restoreWorld, worldDataPath } from '../proje
 
 const worldLinkClass = 'text-sm px-3 py-1.5 rounded transition-all bg-space-surface text-gray-300 border space-border hover:border-neon-cyan/30 hover:text-neon-cyan'
 
+function WorldDescription({ id }: { id: string }) {
+  const { data: description } = useQuery({
+    queryKey: ['world', id],
+    queryFn: () => api.getWorld(id),
+    select: world => typeof world?.metadata?.description === 'string' ? world.metadata.description.trim() : '',
+    retry: false,
+  })
+  if (!description || description === id) return null
+  return <p title={description} className="mt-1 truncate text-sm text-gray-400">{description}</p>
+}
+
 export default function WorldList() {
   const { t } = useTranslation('worlds')
   const queryClient = useQueryClient()
@@ -60,6 +71,7 @@ export default function WorldList() {
                     {worldName}
                   </h3>
                 </Link>
+                <WorldDescription id={worldName} />
                 <div className="flex flex-wrap gap-2 mt-4">
                   <Link to={`/worlds/${encodeURIComponent(worldName)}/map`} className={worldLinkClass}>
                     {t('action.openWorldMap')}

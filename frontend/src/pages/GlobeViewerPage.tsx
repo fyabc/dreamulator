@@ -75,7 +75,7 @@ export default function GlobeViewerPage() {
     dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
     selectedPlanet, mapPlanets, meta, metaError, elevError, cvtMeshError, awaitingBuild,
     bodyByName, planetRadiusM,
-    elevation, elevationDims, cvtMesh, voronoiCells, cellIdMap, terrainSource, setTerrainSource, meshTextureSize,
+    elevation, elevationDims, cvtMesh, voronoiCells, cellIdMap, terrainSource, setTerrainSource, canSelectTerrainSource, meshTextureSize,
     scalarThematic, koppenDownscale, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, handleCellHover, selectedCells,
     selectCell, clearSelection,
@@ -312,8 +312,8 @@ export default function GlobeViewerPage() {
           if (trial.open) trial.closePanel()
           setLeftPanelOpen(open => !open)
         }}>
-        {meta?.elevation_import && <TerrainSourceSelect value={terrainSource} onChange={setTerrainSource}
-          width={meta.width} height={meta.height} cells={cvtMesh?.cells.length} />}
+        {!trialActive && canSelectTerrainSource && <TerrainSourceSelect value={terrainSource} onChange={setTerrainSource}
+          width={elevationDims.w} height={elevationDims.h} cells={cvtMesh?.cells.length} />}
         {selectedPlanet && (
           <ImportElevationButton
             worldName={worldName!}

@@ -178,6 +178,9 @@ class MapMetadata(BaseModel):
         ge=0,
         description="Number of Lloyd relaxation iterations for CVT mesh",
     )
+    pipeline_version: str | None = Field(
+        default=None, description="Source pipeline for the map raster"
+    )
     #: Set when the elevation raster was imported from an external tool
     #: (absent for pipeline-generated terrain).
     elevation_import: ElevationImportProvenance | None = None
