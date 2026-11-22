@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from dreamulator.world_manager import WorldManager
 
+from ..map.koppen_product import resolve_koppen_product
 from ..map.manager import MapManager
 
 if TYPE_CHECKING:
@@ -166,11 +167,26 @@ def get_map_meta(
     branch: str | None = None,
 ) -> dict[str, Any]:
     """Get map metadata for a planet."""
-    mgr = _mgr_reading(_get_map_manager(world_name, branch), planet_id, "map.yaml")
-    meta = mgr.get_map_metadata_result(planet_id)
+    mgr = _get_map_manager(world_name, branch)
+    meta = _mgr_reading(mgr, planet_id, "map.yaml").get_map_metadata_result(planet_id)
     if meta is None:
         raise HTTPException(status_code=404, detail=f"No map metadata for '{planet_id}'")
+    meta["koppen"], _ = resolve_koppen_product(_map_dirs_overlay_first(mgr, planet_id))
     return meta
+
+
+@router.get("/{world_name}/maps/{planet_id}/koppen-observed")
+def get_observed_koppen(
+    world_name: str,
+    planet_id: str,
+    request: Request,
+    branch: str | None = None,
+) -> Response:
+    mgr = _get_map_manager(world_name, branch)
+    _, raster = resolve_koppen_product(_map_dirs_overlay_first(mgr, planet_id))
+    if raster is None:
+        raise HTTPException(status_code=404, detail=f"No observed Köppen raster for '{planet_id}'")
+    return _file_response(request, raster, "application/gzip")
 
 
 @router.get("/{world_name}/maps/{planet_id}/elevation")

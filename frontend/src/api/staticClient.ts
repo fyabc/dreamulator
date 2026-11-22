@@ -533,6 +533,11 @@ export const staticApi = {
     return result
   },
 
+  getObservedKoppen: (world: string, planet: string, branch: string | null, signal: AbortSignal) => {
+    const scope = branch ? `/branches/${encodeURIComponent(branch)}` : ''
+    return fetchStaticBlob(`/worlds/${encodeURIComponent(world)}${scope}/maps/${encodeURIComponent(planet)}/koppen-observed.msgpack.gz`, signal)
+  },
+
   getTerrainSource: async (world: string, planet: string, branch: string | null, signal: AbortSignal) => {
     if (await browserProject(world)) return null
     const scope = branch ? `/branches/${encodeURIComponent(branch)}` : ''

@@ -34,6 +34,15 @@ interface LayerState<Id extends string = ColorMode> {
   inspectedLayer?: Id | null
 }
 
+export interface MapLayerDetail {
+  downscaled: boolean
+  available: boolean
+  pending?: boolean
+  failed?: boolean
+  observed?: boolean
+  onChange: (enabled: boolean) => void
+}
+
 interface MapLayerPanelProps<Id extends string = ColorMode> {
   state: LayerState<Id>
   onChange: (state: LayerState<Id>) => void
@@ -47,7 +56,7 @@ interface MapLayerPanelProps<Id extends string = ColorMode> {
   /** Called when a monthly-only layer is selected in annual mode, to
    *  auto-enable monthly mode. */
   onMonthlyModeChange?: (mode: boolean) => void
-  detail?: { downscaled: boolean; available: boolean; pending?: boolean; onChange: (downscaled: boolean) => void }
+  detail?: MapLayerDetail
   /** True for the Earth reference world — gates the earth-only diagnostic
    *  layers (ΔT/ΔP vs observed zonal climatology) which are meaningless on
    *  fictional worlds. */
@@ -309,20 +318,21 @@ export function MapLayerTree<Id extends string>({ state, onChange, available, te
       </div>
       {section === 'main' && mainControls}
       {section === 'main' && detail && <div className="space-y-1.5">
-        <div role="group" aria-label={t('panel.detailTitle')} title={t('panel.detailHint')}
+        <div role="group" aria-label={t('panel.detailTitle')} title={t(detail.observed ? 'panel.observedHint' : 'panel.detailHint')}
           className="flex rounded-md border border-space-border">
-          {[false, true].map(downscaled => <button key={String(downscaled)} type="button"
+          {(detail.observed && !detail.available ? [false] : [false, true]).map(downscaled => <button key={String(downscaled)} type="button"
             aria-pressed={detail.downscaled === downscaled} disabled={downscaled && !detail.available}
             onClick={() => detail.onChange(downscaled)}
             className={`flex-1 px-2 py-1.5 text-[11px] first:rounded-l-md first:border-r first:border-space-border last:rounded-r-md focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-neon-cyan disabled:opacity-45 ${detail.downscaled === downscaled ? 'bg-neon-cyan/15 text-gray-100' : 'text-gray-400 hover:text-gray-100'}`}>
-            {t(downscaled ? 'panel.downscaled' : 'panel.modelGrid')}
+            {t(detail.observed ? (downscaled ? 'panel.observedRaster' : 'panel.observedGrid') : (downscaled ? 'panel.downscaled' : 'panel.modelGrid'))}
           </button>)}
         </div>
-        {detail.downscaled && detail.available && <p role="status" className="text-[10px] text-gray-400">
-          {t(detail.pending ? 'panel.downscaling' : 'panel.downscaledReadout')}
+        {(detail.failed || (detail.downscaled && detail.available)) && <p role="status" className="text-[10px] text-gray-400">
+          {t(detail.observed ? (detail.failed ? 'panel.observedFailed' : detail.pending ? 'panel.observedLoading' : 'panel.observedReadout')
+            : detail.pending ? 'panel.downscaling' : 'panel.downscaledReadout')}
         </p>}
       </div>}
-      {section === 'main' && marineLegend && state.layers['koppen' as Id] > 0 && (!available || available.has('koppen' as Id)) && (
+      {section === 'main' && marineLegend && !(detail?.observed && detail.downscaled && !detail.pending) && state.layers['koppen' as Id] > 0 && (!available || available.has('koppen' as Id)) && (
         <div role="group" aria-label={t('koppen.marineLegend')} title={t('koppen.marineHint')}
           className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-gray-300">
           {Object.entries(marineKoppenBands).map(([code, color]) => (

@@ -108,6 +108,8 @@ mesh（`cvt_mesh.msgpack.gz`）的 per-cell 字段（`koppen_class`/`temperature
 `export._quantize_int16` 同格式，月份按 3 月春分起排序）→ 次要导出
 （`koppen.json`/`temperature.png`/`precipitation.png`/`climate_metadata.json`）。
 
+观测导入还将同一份 Beck 分类保存为 `koppen-observed.msgpack.gz`，保留原始 4320 × 2160 格点和类别编号。若只需为已导入的观测地图补这个文件，可运行 `uv run python scripts/earth/import_earth_climate.py --koppen-raster-only --beck-tif <Beck_KG_V1_present_0p083.tif 的路径>`，无需构建地球主世界或改写网格。发布和静态导出按实际提供网格的结果目录分发该栅格；有独立模型网格的分支不会继承它。前端提供观测网格和原始观测两个显示选项，不使用较粗的 NCEP 和 GPCP 月值重算观测类别。
+
 > 派生字段来源：最热/最冷月 = NCEP 月均 max/min；距岸距离 = `_graph_distance_to_coast`
 > （`water_class` 图 Dijkstra）；风 = NCEP `uwnd/vwnd.mon.ltm.nc` 年均。
 > **风是 sigma 0.995（~40m）近地面风**，比 10m 风系统偏弱 ~2–3 倍（NCEP derived surface
@@ -126,6 +128,29 @@ mesh（`cvt_mesh.msgpack.gz`）的 per-cell 字段（`koppen_class`/`temperature
 > 「root 永不 build」——整条链路零引擎参与，是观测的确定性变换（与 Beck 2018 Köppen
 > 列同属「观测经已声明算法的派生」）；文件内 `data_source: "observation"` +
 > provenance 块声明来源，引擎导出的对应文件标 `"model"`。
+
+### 南极的柯本分类为何随显示模式变化
+
+「高分辨率观测」原样显示 Beck 2018 的 5 角分分类，其中南纬 60° 以南含有 518 个 BWk
+（冷沙漠）像素和 218 个 BSk（冷草原）像素。像素数不代表面积占比。这些斑块已经存在于原始
+分类栅格中，并非地图渲染产生。[Beck 2018 的分类规则（表 2）](https://www.nature.com/articles/sdata2018214/tables/3)
+先判断是否属于 B 类（干旱），只有不满足干旱阈值才考虑 E 类（极地）。因此，即使最暖月均温低于
+0 °C，像素也可能被划为干旱类。类别本身不能说明该处没有冰盖，也不能区分实际的低降水与上游
+温度或降水数据的局地偏差。
+
+「观测网格」先在网格中心采样同一份 Beck 分类，再将 NCEP 再分析数据中最暖月均温低于 0 °C 的陆地单元
+归为 EF（冰盖气候）。因此，两种视图不只是分辨率不同，也采用了不同的冰盖分类口径。比较两张图
+时应注明使用的口径，不应把这些差异当作前端降尺度误差。
+
+### 里海为何会显示陆地柯本类别
+
+Beck 2018 的 5 角分栅格在里海水面上也有分类值。例如，北纬 42.5°、东经 50.0° 的像素是
+BWk，北纬 38.5°、东经 51.5° 的像素是 BSk。「高分辨率观测」保留这些原始类别，不叠加
+Dreamulator 的水体掩膜。这些颜色不是前端把沿岸的类别插值到水面造成的，仅凭分类栅格也无法确定
+上游为何保留这些水面像素。
+
+「观测网格」使用[水掩膜](#23-gshhg-水掩膜import_earth_watermaskpy)将里海格点视为水域，导入时
+标记为 `Ocean`，地图使用 Dreamulator 的水域色阶，而不是 Beck 的陆地分类。
 
 ---
 

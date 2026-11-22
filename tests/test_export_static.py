@@ -18,6 +18,8 @@ import yaml
 
 from dreamulator.civmap.manager import CivMapManager
 from dreamulator.climate_trial import BROWSER_TRIAL_MAX_CELLS, TrialSource
+from dreamulator.map.export import MESH_FILENAME, save_cvt_mesh
+from dreamulator.map.koppen_product import OBSERVED_KOPPEN_FILE
 from dreamulator.map.pipeline_types import TerrainPipelineConfig
 
 if TYPE_CHECKING:
@@ -321,6 +323,41 @@ def test_export_map_data_branch_overlay_inherits_root_files(
     assert meta["planet_id"] == "planet_x"
     plates = _json.loads((planet_out / "plates.json").read_text(encoding="utf-8"))
     assert plates == {"plates": [{"id": "root-plate"}]}
+
+
+def test_export_preserves_observed_koppen_only_with_its_mesh(
+    export_static: Any, tmp_path: Path
+) -> None:
+    world = tmp_path / "test-world"
+    _build_world(world)
+    root_maps = world / "maps" / "planet_x"
+    branch_maps = world / "branches" / "model" / "maps" / "planet_x"
+    _write_yaml(root_maps / "map.yaml", {"planet_id": "planet_x"})
+    _write(root_maps / "climate_metadata.json", '{"koppen_source":"observed"}')
+    (root_maps / "elevation.png").write_bytes(b"root-png")
+    (root_maps / OBSERVED_KOPPEN_FILE).write_bytes(b"observed-class-pixels")
+    _write_yaml(world / "branches" / "model" / "branch.yaml", {"name": "model"})
+    mesh = {"num_cells": 0, "cells": [], "vertices": [], "regions": [], "seed": 0}
+    save_cvt_mesh(root_maps / MESH_FILENAME, mesh)
+
+    out = tmp_path / "out" / "maps"
+    planet_out = out / "planet_x"
+    export_static._export_map_data(world, out, branch="model")
+    assert (planet_out / OBSERVED_KOPPEN_FILE).read_bytes() == b"observed-class-pixels"
+    assert json.loads((planet_out / "meta.json").read_text(encoding="utf-8"))["koppen"] == {
+        "source": "observed",
+        "raster": True,
+    }
+
+    branch_maps.mkdir(parents=True)
+    save_cvt_mesh(branch_maps / MESH_FILENAME, mesh)
+    (branch_maps / "climate_monthly.msgpack").write_bytes(b"model-monthly")
+    export_static._export_map_data(world, out, branch="model")
+    assert not (planet_out / OBSERVED_KOPPEN_FILE).exists()
+    assert json.loads((planet_out / "meta.json").read_text(encoding="utf-8"))["koppen"] == {
+        "source": "model",
+        "same_grid_monthly": True,
+    }
 
 
 def test_export_map_data_root_writes_placeholders(export_static: Any, tmp_path: Path) -> None:

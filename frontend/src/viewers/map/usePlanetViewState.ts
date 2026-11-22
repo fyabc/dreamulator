@@ -26,7 +26,7 @@ import type { ImportedState } from '../../api/elevationImport'
 import type { TemperatureOrigin } from '../../playground/temperatureDraft'
 import { saveLastWorld } from '../../utils/lastWorld'
 import { initialLayerState, activeMainLayerId, inspectionLayerId } from '../../components/map/layerStateInit'
-import type { LayerState } from '../../components/map/MapLayerPanel'
+import type { LayerState, MapLayerDetail } from '../../components/map/MapLayerPanel'
 import { decodePngToFloat32 } from './utils/imageCodec'
 import { readElevationPng } from '../packs/elevationRaster'
 import { hasOriginalTerrain, meshTextureDimensions, terrainSourceFor, type TerrainSource } from './elevationSource'
@@ -35,6 +35,8 @@ import useCellIdMap from './useCellIdMap'
 import { useMonthlyClimate } from './useMonthlyClimate'
 import { isScalarLayer } from './scalarLayers'
 import { useKoppenDownscale } from './useKoppenDownscale'
+import { koppenProductFor } from './observedKoppen'
+import { useObservedKoppen } from './useObservedKoppen'
 import { isMonthlyLayer, monthFromSearch } from '../../components/map/climateTime'
 import { useYearlyClimate } from './useYearlyClimate'
 import { useUccLayer } from './useUccLayer'
@@ -63,8 +65,7 @@ export interface PlanetViewState {
   handleMonthlyModeChange: (mode: boolean) => void
   selectMonth: (index: number) => void
   displayingMonthly: boolean
-  downscale: boolean
-  setDownscale: (enabled: boolean) => void
+  layerDetail: (available: ReadonlySet<ColorMode>, trialTemperature: boolean) => MapLayerDetail | undefined
 
   // --- Particle-flow display for wind / ocean-current layers (?particles=1) ---
   particleMode: boolean
@@ -109,7 +110,7 @@ export interface PlanetViewState {
 
   // --- Monthly/UCC climate products ---
   scalarThematic: ReturnType<typeof useMonthlyClimate>['texture']
-  koppenDownscale: ReturnType<typeof useKoppenDownscale>
+  koppenTexture: ReturnType<typeof useKoppenDownscale>['texture']
   monthlyData: ReturnType<typeof useMonthlyClimate>['data']
   monthlyLoading: boolean
   monthlyMonth: number
@@ -204,6 +205,15 @@ export function usePlanetViewState(
       const next = new URLSearchParams(previous)
       if (enabled) next.set('detail', 'downscaled')
       else next.delete('detail')
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+  const observedDetail = searchParams.get('koppenDetail') === 'observed'
+  const setObservedDetail = useCallback((enabled: boolean) => {
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous)
+      if (enabled) next.set('koppenDetail', 'observed')
+      else next.delete('koppenDetail')
       return next
     }, { replace: true })
   }, [setSearchParams])
@@ -402,6 +412,11 @@ export function usePlanetViewState(
     elevation, width: elevationDims.w, height: elevationDims.h, minM: meta.elevation_min_m, maxM: meta.elevation_max_m, seaLevelM,
   } : null, [importedElevation, elevation, meta, elevationDims, seaLevelM])
   const koppenActive = !trialActive && activeMainLayer === 'koppen'
+  const legacyObservation = worldName === 'earth' && selectedPlanet === 'planet_earth' && !selectedBranch &&
+    formalMeta?.pipeline_version === 'etopo1-import'
+  const koppenProduct = koppenProductFor(formalMeta?.koppen, legacyObservation, !!ebm)
+  const observedRaster = koppenActive && koppenProduct.source === 'observed' && koppenProduct.raster
+  const observedKoppen = useObservedKoppen(worldName, selectedPlanet, selectedBranch, observedRaster && observedDetail)
   const { texture: scalarThematic, data: monthlyData, loading: monthlyLoading, displayingMonthly } = useMonthlyClimate({
     worldName, planetId: selectedPlanet, branch: selectedBranch, month: monthlyMonth,
     trialData: ebm?.result.monthly,
@@ -411,8 +426,23 @@ export function usePlanetViewState(
     cvtMesh: cvtMesh ?? null, cellIdMap,
     ...meshTextureSize, flipHorizontal: false,
   })
-  const koppenDownscale = useKoppenDownscale(koppenActive, downscale, monthlyData, cvtMesh ?? null, cellIdMap,
+  const koppenDownscale = useKoppenDownscale(koppenActive && koppenProduct.source === 'model' && koppenProduct.same_grid_monthly,
+    downscale, monthlyData, cvtMesh ?? null, cellIdMap,
     meshTextureSize.width, meshTextureSize.height, seaLevelM, native)
+  const koppenTexture = observedKoppen.texture ?? koppenDownscale.texture
+  const layerDetail: PlanetViewState['layerDetail'] = (available, trialTemperature) => {
+    if (koppenActive && koppenProduct.source === 'observed') {
+      return available.has('koppen') ? {
+        observed: true, downscaled: observedRaster && observedDetail && !observedKoppen.failed,
+        available: observedRaster, pending: observedKoppen.pending, failed: observedKoppen.failed, onChange: setObservedDetail,
+      } : undefined
+    }
+    return {
+      downscaled: downscale, onChange: setDownscale, pending: koppenDownscale.pending,
+      available: trialActive ? trialTemperature : koppenDownscale.available ||
+        (Boolean(cvtMesh) && isScalarLayer(activeMainLayer) && available.has(activeMainLayer)),
+    }
+  }
   const officialYearly = useYearlyClimate(ebm || !useOfficialMap ? undefined : worldName, selectedPlanet, selectedBranch)
   const yearlyProduct = ebm ? ebm.result.yearly : officialYearly
   const yearlyData = yearlyProduct && cvtMesh && yearlyProduct.numCells === cvtMesh.cells.length ? yearlyProduct : null
@@ -560,7 +590,7 @@ export function usePlanetViewState(
     selectedBranch,
     cleanMode, setCleanMode,
     layerState, setLayerState, activeMainLayer, activeColorMode,
-    monthlyMode, handleMonthlyModeChange, selectMonth, displayingMonthly, downscale, setDownscale,
+    monthlyMode, handleMonthlyModeChange, selectMonth, displayingMonthly, layerDetail,
     particleMode, setParticleMode,
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination,
@@ -570,7 +600,7 @@ export function usePlanetViewState(
     worldPlanetsError, platesError,
     elevation, elevationDims, terrainSource, setTerrainSource, canSelectTerrainSource, meshTextureSize,
     cvtMesh: cvtMesh ?? null, voronoiCells, cellIdMap,
-    scalarThematic, koppenDownscale, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
+    scalarThematic, koppenTexture, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, hoveredCell, handleCellHover, lastCell, selectedCells,
     selectCell, clearSelection,
     selectedCellData, hoveredCellData, inspectorCell, selectedCellObjects,

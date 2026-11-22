@@ -60,6 +60,10 @@ from dreamulator.climate_trial import (  # noqa: E402
     resolve_trial_source,
 )
 from dreamulator.io.loader import load_world  # noqa: E402
+from dreamulator.map.koppen_product import (  # noqa: E402
+    OBSERVED_KOPPEN_FILE,
+    resolve_koppen_product,
+)
 from dreamulator.map.manager import MapManager  # noqa: E402
 from dreamulator.map.models import map_metadata_result, sanitize_nonfinite  # noqa: E402
 from dreamulator.map.pipeline_types import TerrainPipelineConfig  # noqa: E402
@@ -374,6 +378,15 @@ def _export_map_data(
         planet_out.mkdir(parents=True, exist_ok=True)
 
         root_planet_dir = root_manager._map_input_dir(planet_id) if branch is not None else None
+        sources = [planet_dir]
+        if root_planet_dir is not None and root_planet_dir != planet_dir:
+            sources.append(root_planet_dir)
+        koppen, observed_raster = resolve_koppen_product(sources)
+        raster_out = planet_out / OBSERVED_KOPPEN_FILE
+        if observed_raster is None:
+            raster_out.unlink(missing_ok=True)
+        else:
+            shutil.copyfile(observed_raster, raster_out)
 
         def _inherit(
             name: str,
@@ -436,6 +449,7 @@ def _export_map_data(
             meta = load_yaml(map_yaml)
             if meta:
                 meta = map_metadata_result(meta)
+                meta["koppen"] = koppen
                 with planet_out.joinpath("meta.json").open("w", encoding="utf-8") as f:
                     json.dump(meta, f, ensure_ascii=False, separators=(",", ":"), default=str)
 

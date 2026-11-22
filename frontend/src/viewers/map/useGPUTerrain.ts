@@ -356,10 +356,8 @@ export default function useGPUTerrain({
     d.u_directBase.value = coastOpacity > 0 ? baked.terrainWithCoastlines : baked.terrainThematic
     // Minification: NearestFilter when cell layers are visible (crisp cell edges
     // when zoomed out), LinearFilter for smooth terrain-only view.
-    // Magnification: always LinearFilter — smooth interpolation when zoomed in,
-    // eliminating the "pixel block" look at high zoom levels.
     composite.target.texture.minFilter = overlayActive ? THREE.NearestFilter : THREE.LinearFilter
-    composite.target.texture.magFilter = THREE.LinearFilter
+    composite.target.texture.magFilter = activeThematic === koppenTexture ? THREE.NearestFilter : THREE.LinearFilter
   }, [composite, baked, layers, overlayActive, coastOpacity, scalarThematic, koppenTexture, uccTexture])
 
   // --- Sun uniforms on the display material (smooth slider, no re-composite) ---

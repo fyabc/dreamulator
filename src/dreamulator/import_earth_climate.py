@@ -44,12 +44,16 @@ Usage mirrors the other importers::
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import os
 from pathlib import Path
+from tempfile import gettempdir
 from typing import TYPE_CHECKING
 
 import numpy as np
+
+from .map.koppen_product import OBSERVED_KOPPEN_FILE, has_observed_koppen
 
 if TYPE_CHECKING:
     from dreamulator.map.models import CVTMesh, VoronoiCell
@@ -322,6 +326,36 @@ def _load_beck_koppen(path: Path) -> np.ndarray:
     return np.asarray(tifffile.imread(str(path)))
 
 
+def _beck_path() -> Path:
+    return Path(gettempdir()) / "dreamulator_koppen" / "Beck_KG_V1_present_0p083.tif"
+
+
+def _write_beck_raster(output_dir: Path, beck: np.ndarray) -> None:
+    import msgpack
+
+    height, width = beck.shape
+    if (width, height) != (4320, 2160) or beck.dtype != np.uint8 or beck.max() > 30:
+        raise ValueError("Expected the Beck 2018 present-day class raster at 5 arcminutes")
+    product = {
+        "version": 1,
+        "width": width,
+        "height": height,
+        "classes": [_BECK_LEGEND[code] for code in range(31)],
+        "pixels": beck.tobytes(),
+    }
+    target = output_dir / OBSERVED_KOPPEN_FILE
+    temporary = target.with_suffix(".tmp")
+    try:
+        with (
+            temporary.open("wb") as stream,
+            gzip.GzipFile(fileobj=stream, filename="", mode="wb", mtime=0) as compressed,
+        ):
+            compressed.write(msgpack.packb(product, use_bin_type=True))
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def _sample_beck(beck: np.ndarray, lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
     """Sample Beck at cell centers → per-cell class code (int)."""
     h, w = beck.shape
@@ -512,17 +546,18 @@ def _apply_observed_currents(
 # ---------------------------------------------------------------------------
 
 
-def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> None:
+def import_earth_climate(
+    output_dir: Path,
+    *,
+    data_dir: Path | None = None,
+    beck_path: Path | None = None,
+) -> None:
     """Sample real climate onto the mesh and write the climate files."""
     from dreamulator.map.export import find_mesh_file, load_cvt_mesh_model, save_cvt_mesh
 
     project_root = _find_project_root()
     data_dir = data_dir or (project_root / _WORK_DIR / "climatology")
-    beck_path = (
-        Path(__import__("tempfile").gettempdir())
-        / "dreamulator_koppen"
-        / "Beck_KG_V1_present_0p083.tif"
-    )
+    beck_path = beck_path or _beck_path()
 
     mesh_path = find_mesh_file(output_dir)
     if mesh_path is None:
@@ -658,6 +693,7 @@ def import_earth_climate(output_dir: Path, *, data_dir: Path | None = None) -> N
 
     # Secondary exports the frontend ignores but keep for consistency.
     _write_secondary_exports(mesh, output_dir, project_root, currents_source)
+    _write_beck_raster(output_dir, beck)
 
 
 def _write_monthly_msgpack(mesh: CVTMesh, output_dir: Path) -> None:
@@ -741,6 +777,7 @@ def _write_secondary_exports(
     # climate_metadata.json — minimal real-data provenance + ranges.
     meta = {
         "source": "NCEP/NCAR Reanalysis 1 + GPCP v2.3 + Beck et al. (2018)",
+        "koppen_source": "observed",
         "ocean_currents": currents_source,
         "temperature_range_c": [float(temp_grid.min()), float(temp_grid.max())],
         "precipitation_range_mm": [float(precip_grid.min()), float(precip_grid.max())],
@@ -769,9 +806,23 @@ def main() -> None:
         default="data/worlds/earth/maps/planet_earth",
         help="Map output directory (must contain a mesh file)",
     )
+    parser.add_argument("--beck-tif", type=Path, help="Path to Beck_KG_V1_present_0p083.tif")
+    parser.add_argument(
+        "--koppen-raster-only",
+        action="store_true",
+        help="Add the Beck raster to an existing observation map without rewriting its mesh",
+    )
     args = parser.parse_args()
     output_dir = _find_project_root() / args.output_dir
-    import_earth_climate(output_dir)
+    beck_path = args.beck_tif or _beck_path()
+    if beck_path.name != _beck_path().name:
+        parser.error(f"Expected {_beck_path().name}")
+    if args.koppen_raster_only:
+        if not has_observed_koppen(output_dir):
+            parser.error("Raster-only import requires an existing Beck observation map")
+        _write_beck_raster(output_dir, _load_beck_koppen(beck_path))
+        return
+    import_earth_climate(output_dir, beck_path=beck_path)
     print("\nDone! Real Earth climate imported.")
 
 

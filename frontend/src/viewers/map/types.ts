@@ -9,6 +9,8 @@
 
 export type MapProjection = 'equirectangular'
 
+export type KoppenProduct = { source: 'observed'; raster: boolean } | { source: 'model'; same_grid_monthly: boolean }
+
 export interface MapMetadata {
   planet_id: string
   projection: MapProjection
@@ -20,6 +22,7 @@ export interface MapMetadata {
   voronoi_seed: number | null
   voronoi_num_cells: number
   pipeline_version?: string | null
+  koppen?: KoppenProduct
   browser_heightmap?: true
   elevation_import?: {
     source_resolution: number[]

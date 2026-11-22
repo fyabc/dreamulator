@@ -625,6 +625,11 @@ const readApi = {
           `/worlds/${name}/maps/${planetId}/elevation${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`,
         ),
 
+  getObservedKoppen: (world: string, planet: string, branch: string | null, signal: AbortSignal) =>
+    isStaticMode() ? staticApi.getObservedKoppen(world, planet, branch, signal) : fetchBlob(
+      `/worlds/${encodeURIComponent(world)}/maps/${encodeURIComponent(planet)}/koppen-observed${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`, signal,
+    ),
+
   getTerrainSource: (world: string, planet: string, branch: string | null, signal: AbortSignal) =>
     isStaticMode() ? staticApi.getTerrainSource(world, planet, branch, signal) : fetchBlob(
       `/worlds/${encodeURIComponent(world)}/maps/${encodeURIComponent(planet)}/td-source${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`, signal),

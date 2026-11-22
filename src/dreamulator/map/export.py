@@ -1326,6 +1326,7 @@ def export_climate_layers(
     # 4. Climate metadata
     climate_meta = {
         **raster_meta,
+        "koppen_source": "model",
         "koppen_classes": sorted(koppen_counter.keys()),
         "stellar_luminosity_sol": config.stellar_luminosity_sol,
         "orbital_distance_au": config.orbital_distance_au,

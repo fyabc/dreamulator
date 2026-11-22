@@ -17,6 +17,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from dreamulator.api_routes import maps as maps_module
+from dreamulator.map.export import MESH_FILENAME
+from dreamulator.map.koppen_product import OBSERVED_KOPPEN_FILE
 from dreamulator.world_manager import WorldManager
 from tests.test_api.test_world_documents import _write, _write_yaml
 
@@ -70,6 +72,35 @@ def test_branch_meta_falls_back_to_root(client: TestClient) -> None:
     r = client.get(f"{BASE}/meta{BRANCH_Q}")
     assert r.status_code == 200
     assert r.json()["planet_id"] == PLANET
+
+
+def test_koppen_follows_displayed_mesh(client: TestClient, tmp_path: Path) -> None:
+    world = tmp_path / "worlds" / "test-world"
+    root = world / "maps" / PLANET
+    branch = world / "branches" / "gcm-branch" / "maps" / PLANET
+    (root / MESH_FILENAME).touch()
+    _write(
+        root / "climate_metadata.json",
+        '{"source":"NCEP/NCAR Reanalysis 1 + GPCP v2.3 + Beck et al. (2018)"}',
+    )
+    assert client.get(f"{BASE}/meta").json()["koppen"] == {"source": "observed", "raster": False}
+    assert client.get(f"{BASE}/koppen-observed").status_code == 404
+
+    (root / OBSERVED_KOPPEN_FILE).write_bytes(b"observed-class-pixels")
+    assert client.get(f"{BASE}/meta{BRANCH_Q}").json()["koppen"] == {
+        "source": "observed",
+        "raster": True,
+    }
+    assert client.get(f"{BASE}/koppen-observed{BRANCH_Q}").content == b"observed-class-pixels"
+
+    (branch / MESH_FILENAME).touch()
+    assert client.get(f"{BASE}/meta{BRANCH_Q}").json()["koppen"] == {
+        "source": "model",
+        "same_grid_monthly": True,
+    }
+    assert client.get(f"{BASE}/koppen-observed{BRANCH_Q}").status_code == 404
+    (branch / "climate_monthly.msgpack").unlink()
+    assert client.get(f"{BASE}/meta{BRANCH_Q}").json()["koppen"]["same_grid_monthly"] is False
 
 
 def test_branch_elevation_falls_back_to_root(client: TestClient) -> None:

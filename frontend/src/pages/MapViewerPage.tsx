@@ -24,7 +24,6 @@ import ClimateLegend from '../components/map/ClimateLegend'
 import MapStatusBar from '../components/map/MapStatusBar'
 import MapMinimap from '../components/map/MapMinimap'
 import SunControl from '../components/map/SunControl'
-import { canDownscale } from '../viewers/map/climateDownscale'
 import { MapTimeControl } from '../components/map/TimeControl'
 import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
@@ -51,14 +50,14 @@ export default function MapViewerPage() {
     selectedBranch,
     cleanMode, setCleanMode,
     layerState, setLayerState, activeMainLayer,
-    monthlyMode, handleMonthlyModeChange, selectMonth, displayingMonthly, downscale, setDownscale,
+    monthlyMode, handleMonthlyModeChange, selectMonth, displayingMonthly, layerDetail,
     particleMode, setParticleMode,
     sunLongitudeDeg, setSunLongitudeDeg, seasonDeg, setSeasonDeg,
     dayNightEnabled, setDayNightEnabled, solarDeclination, axialTiltDeg,
     selectedPlanet, mapPlanets, meta, bodyByName, currentPlanetName, planetRadiusM,
     worldPlanetsError, platesError, metaError, elevError, cvtMeshError,
     elevation, elevationDims, cvtMesh, voronoiCells, awaitingBuild, terrainSource, setTerrainSource, canSelectTerrainSource,
-    scalarThematic, koppenDownscale, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
+    scalarThematic, koppenTexture, monthlyData, monthlyLoading, monthlyMonth, yearlyData, uccTexture,
     cursor, setCursor, hoveredCell, handleCellHover, selectedCells,
     selectCell, clearSelection,
     hoveredCellData, inspectorCell, selectedCellData, selectedCellObjects,
@@ -129,10 +128,7 @@ export default function MapViewerPage() {
     monthlyMode={trialActive ? typeof trial.preview?.period === 'number' : monthlyMode} monthlyData={trialActive ? null : monthlyData}
     temperaturePeriodLabel={typeof trial.preview?.period === 'number' ? trial.preview.label : undefined}
     monthIndex={monthlyMonth} onMonthlyModeChange={handleMonthlyModeChange}
-    detail={{ downscaled: downscale,
-      onChange: setDownscale, pending: koppenDownscale.pending, available: trialActive
-      ? display.state.layers.temperature > 0 && Boolean(trial.preview)
-      : koppenDownscale.available || (Boolean(cvtMesh) && canDownscale(activeMainLayer) && display.available.has(activeMainLayer)) }}
+    detail={layerDetail(display.available, display.state.layers.temperature > 0 && Boolean(trial.preview))}
     particleMode={particleMode} onParticleModeChange={setParticleMode} />
   const legend = !cleanMode && <ClimateLegend layer={activeMainLayerId(display.state)} mesh={cvtMesh}
     displayingMonthly={displayingMonthly} monthlyMode={monthlyMode} monthlyData={monthlyData} monthlyLoading={monthlyLoading}
@@ -257,7 +253,7 @@ export default function MapViewerPage() {
                     solarDeclinationDeg={solarDeclination}
                     dayNight={dayNightEnabled}
                     scalarThematic={scalarThematic}
-                    koppenTexture={koppenDownscale.texture}
+                    koppenTexture={koppenTexture}
                     uccTexture={uccTexture}
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
@@ -370,7 +366,7 @@ export default function MapViewerPage() {
                     dayNight={dayNightEnabled}
                     scalarThematic={scalarThematic}
                     uccTexture={uccTexture}
-                    koppenTexture={koppenDownscale.texture}
+                    koppenTexture={koppenTexture}
                     monthlyWindEast={monthlyMode ? monthlyData?.windEastMonthly ?? null : null}
                     monthlyWindNorth={monthlyMode ? monthlyData?.windNorthMonthly ?? null : null}
                     month={monthlyMonth}
