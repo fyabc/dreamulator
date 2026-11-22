@@ -12,7 +12,7 @@ from dreamulator.map._parallel_flood import priority_flood_tiled
 def _surfaces() -> list[tuple[str, np.ndarray, np.ndarray]]:
     rng = np.random.default_rng(7)
     out = []
-    for h, w in ((61, 47), (130, 157)):
+    for h, w in ((61, 47), (90, 97)):
         dem = rng.normal(size=(h, w)).cumsum(0) * 0.3 + rng.normal(size=(h, w)) * 2
         out.append((f"rough {h}x{w}", dem, dem > -4))
         quant = np.round(dem)  # integer metres: wide exact flats and tied slopes

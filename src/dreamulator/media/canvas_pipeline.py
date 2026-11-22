@@ -722,10 +722,16 @@ def _stage3_chunk(task: Any) -> tuple[tuple[int, int], dict[str, np.ndarray], st
 
 
 def _start_method() -> str:
-    """fork where available (Linux), else spawn (Windows, macOS default).
+    """spawn by default on every platform.
 
-    ``DREAMULATOR_START_METHOD`` overrides it, so the spawn path can be
-    exercised on Linux too.
+    The pool initializers import numpy/scipy/numba, and once the parent has
+    used GNU OpenMP, ``fork()`` is aborted by libgomp ("Terminating: fork()
+    called from a process already using GNU OpenMP"). Python also warns that
+    forking a multi-threaded process can deadlock. Spawn pays a small startup
+    cost and keeps every platform on the same, safe code path.
+
+    ``DREAMULATOR_START_METHOD`` overrides it for experiments; ``fork`` is
+    only safe when the parent has not initialized OpenMP.
     """
     import multiprocessing as mp
     import os
@@ -736,7 +742,7 @@ def _start_method() -> str:
         if wanted not in methods:
             raise ValueError(f"start method {wanted!r} is not available here ({methods})")
         return wanted
-    return "fork" if "fork" in methods else "spawn"
+    return "spawn"
 
 
 def _map_chunks(

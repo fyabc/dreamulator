@@ -139,6 +139,7 @@ Blender/Gaea/DaVinci 等外部工具链的胶水脚本组（资产约定见
 `docs/design/proposals/blender-render-pipeline.md`：工程与渲染输出入
 主仓库 `exports/`，不入 git；`.blend` 一律由脚本从数据包重建）。
 
+- `starfield.py` 把 HYG 星表（`ra_deg`/`dec_deg`/`vmag`/`ci`）转成渲染用的单位方向、像素半径、发射强度与色板；纯 numpy，不依赖 Blender。使用 `uv run python scripts/media/starfield.py --catalog <hyg.csv> --fov-deg 35`。
 - `region_input_qa.py` 校验区域包的细化输入，并导出原图、TD 高程、水体和月径流对照图。
   使用 `uv run python scripts/media/region_input_qa.py <pack> --output exports/region-inputs/qa`。
 - `ice_reference_small_batch_review.py` 读取独立基岩与两种订温参考的小批覆冰对照，导出原生分块、同位置 46 km 细节图和逐画布冰体积统计。使用 `uv run python scripts/media/ice_reference_small_batch_review.py --inputs <实验目录> --output exports/ice-reference-small-batch/<批次>`；实验输入需要包含冻结基岩、响应数组和来源报告。

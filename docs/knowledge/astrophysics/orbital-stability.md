@@ -118,8 +118,34 @@ Yokoyama 2006）：**顺行 ~0.48 r_H、逆行 ~0.93 r_H**。临界带之下仍�
 | GJ 876 | 行星 2:1 共振链 | 受迫偏心率 e=0.03–0.26 |
 | 土星卫星系 | 多共振 + Cassini 态 | 自转轴随轨道面进动、倾角恒定 |
 
+## 拱线进动时标与采样教训（2026-11-22 标定）
+
+**共振链把拱线进动加速到年/十年尺度。** 近通约（mean-motion resonance）链中，
+一阶偏心率型共振项以 1/e 增强进入 dϖ/dt，量级 (m'/M*)·n/e·O(0.5)，远超经典
+世俗项（¼·n·(m'/M*)·α²·b₃/₂(α)）。nacrea 行星链实测 ϖ_A ≈ −7.0…−7.3°/yr
+（周期 ~50 yr；WHFast dt=P_min/20 与 IAS15 交叉验证，50 kyr 窗、≤1 yr 采样），
+e 另有 ~12 yr 呼吸与百年/2.85 kyr 包络；标定过程与构型出处见
+`data/worlds/nacrea/design-notes/0003-system-formation.md`「行星共振链验证」。
+
+**e 穿零时拱线方向无定义。** 偏心矢量绕原点打转时 ϖ 快速翻绕，「平均进动率」
+不存在：线性世俗理论中金星与地球不满足 Lagrange 条件（e 可降到 0），包络为
+~100 kyr 米兰科维奇尺度（Murray & Dermott 1999；Fitzpatrick 讲义）；nacrea 链的
+Boreal/Glacis 因共振 e 呼吸把 e 压到 ~0.0004，在十年尺度复现同一现象（半长轴
+本身稳定，120 yr 漂移 <0.1%，振荡的是 e 与拱线方向）。年尺度平滑快环行的太阳系
+先例是 Laplace 共振卫星（Io ϖ̇ ≈ 0.74°/d、周期 ~1.3 yr；Peale 1976）。无 MMR 的
+行星 ϖ 平均进动为 kyr 级平滑环行（如 g₆ ≈ 28.24″/yr ≈ 46 kyr）。
+
+**采样间隔必须 ≪ 目标周期，否则解卷绕加假步。** 对 ~50 yr 环行与 ~10 yr 分量，
+200 yr 与 5 yr 采样都混叠，ϖ 解卷绕累积假 ±360° 步，线性拟合出假世俗速率；
+0.5–1 yr 采样加 IAS15 波形目视才定案。快进呈现同理：25 Myr/s 的参考视频里
+0.1 Myr 的 e 循环每视频帧推进约 8 圈，看到的「轨道摆动」是混叠而非真实速率，
+不可照抄进产品速率。
+
 ## 参考
 
+- Murray, C. D., & Dermott, S. F. (1999). *Solar System Dynamics*. Cambridge University Press（ch. 9 世俗摄动与 Lagrange 条件）.
+- Laskar, J., et al. (2004). A long-term numerical solution for the insolation quantities of the Earth. *A&A*, 428, 261.
+- Fitzpatrick, R. *Secular evolution of planetary orbits*（Celestial Mechanics 讲义）. https://farside.ph.utexas.edu/teaching/celestial/Celestial/node91.html
 - Rein, H., & Liu, S.-F. (2012). REBOUND: an open-source multi-purpose N-body code. *A&A*, 537, A128.
 - Rivera, E. J., et al. (2010). The Lick-Carnegie Exoplanet Survey: A Uranus-mass Fourth Planet for GJ 876. *ApJ*, 719, 890.
 - Peale, S. J. (1976). Orbital resonances in the solar system. *ARAA*, 14, 215.

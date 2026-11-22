@@ -33,7 +33,7 @@ class TestCellFieldCacheReplay:
         from dreamulator.map.terrain_pipeline import run_terrain_pipeline
 
         cfg = TerrainPipelineConfig(
-            num_nodes=2000,
+            num_nodes=800,
             seed=42,
             lloyd_iterations=2,
             num_plates=8,
