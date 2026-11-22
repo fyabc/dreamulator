@@ -313,7 +313,7 @@ export function MapLayerTree<Id extends string>({ state, onChange, available, te
       <div className="flex overflow-hidden rounded-md border border-space-border" role="group" aria-label={t('panel.layerType')}>
         {(['main', 'overlays'] as const).map(type => <button key={type} type="button"
           aria-pressed={section === type} onClick={() => setSection(type)}
-          className={`flex-1 px-2 py-1.5 text-xs first:border-r first:border-space-border focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-neon-cyan ${section === type ? 'bg-neon-cyan/15 text-gray-100' : 'text-gray-400 hover:text-gray-100'}`}>
+          className={`flex-1 px-2 py-1.5 text-xs first:border-r first:border-space-border focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-neon-cyan ${section === type ? 'bg-space-surface text-gray-100' : 'text-gray-400 hover:text-gray-100'}`}>
           {t(type === 'main' ? 'panel.mainLayers' : 'panel.overlayLayers')}
         </button>)}
       </div>

@@ -58,7 +58,7 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
               const contents = <>{label} <span className="max-[375px]:sr-only font-mono text-[10px]">{dimension}</span></>
               const classes = 'inline-flex min-h-10 items-center gap-1 rounded px-2 text-xs lg:min-h-9 lg:px-2.5 lg:text-sm'
               return view === item
-                ? <span key={item} aria-current="page" className={`${classes} bg-space-surface font-semibold text-neon-cyan`}>{contents}</span>
+                ? <span key={item} aria-current="page" className={`${classes} bg-space-surface font-semibold text-gray-100 ring-1 ring-inset ring-neon-cyan/30`}>{contents}</span>
                 : <Link key={item} to={switchTo} className={`${classes} text-gray-300 hover:bg-space-surface`}>{contents}</Link>
             })}
           </nav>}
