@@ -8,7 +8,7 @@
 
 架空世界设定工具——从恒星系和物理定律出发，利用各学科知识进行严谨的架空世界推演。
 
-> **在线演示：** https://fyabc.github.io/dreamulator/ （只读静态版本，创建世界、运行引擎、AI 叙述等功能不可用）
+> **在线演示：** https://fyabc.github.io/dreamulator/ 。你可以浏览已发布的世界，也可以在浏览器中创建自己的项目，不会改动发布数据。
 
 ## 特性
 
@@ -35,6 +35,10 @@
 | AI 叙述 | Anthropic SDK (Claude API) |
 
 ## 快速开始
+
+**先在网页里试用。** 点击「新建世界」，可以导入自己的全球高度图、使用地球示例，或从模板开始。如果希望跟着提示操作，可以在首页点击「开始教程」。静态站把你的数据存在当前浏览器里；清理站点数据或更换设备前，请先下载备份。
+
+**需要完整构建时使用本机版。** 本机版可以调整世界参数、构建各层、将气候试算保存为正式分支、细化区域并下载完整世界备份。具体操作和两种版本的区别见[地图工作流](docs/usage/map-workflow.md#从高度图走到完整世界备份)。
 
 ### 环境要求
 
@@ -129,13 +133,13 @@ npm run build
 
 ### 静态站点（GitHub Pages）
 
-静态模式在构建时将所有世界数据预导出为 JSON。生成的站点为只读——创建世界、运行引擎、AI 叙述等功能不可用。
+静态站不需要后端。支持的已发布地图和用户从高度图创建的世界都可以在浏览器运行并保存能量平衡气候试算。想把自建世界的试算用作细化条件时，先打开已保存的试算，再选取区域。地形扩散（TD）细化需要站点配置模型，并使用支持硬件 WebGPU 的浏览器。完整世界构建、正式分支和 AI 叙述需要本机版。模型配置见[静态站的浏览器细化](docs/usage/map-workflow.md#静态站的浏览器细化)。
 
 ```bash
 cd frontend
 
-# 1. 将世界数据导出为静态 JSON
-python ../scripts/release/export_static.py
+# 1. 导出静态站使用的世界数据
+uv run python ../scripts/release/export_static.py
 
 # 2. 以静态模式构建（使用 .env.static 中的 base path）
 npx vite build --mode static
@@ -154,10 +158,10 @@ cd frontend && npm run build:static
 ```bash
 cd frontend
 npm run build:static:local    # 导出全部世界 + 类型检查 + 以 base path '/' 构建
-npm run preview:static        # 在 http://localhost:4173 提供服务
+npm run preview:static        # 在 http://localhost:8026 提供服务
 ```
 
-打开形如 `http://localhost:4173/#/worlds/earth/map?branch=terrain-dev` 的地址验证地图等功能（检查控制台无 404）。快速迭代时只需导出单个世界：在仓库根目录运行 `uv run python scripts/release/export_static.py --worlds earth`。
+打开 `http://localhost:8026/#/worlds/earth/map/planet_earth`，确认地图能加载、所需资源没有返回 404。快速迭代时，可在仓库根目录运行 `uv run python scripts/release/export_static.py --worlds earth`，只导出地球世界。
 
 **GitHub Pages 部署**已通过 GitHub Actions 自动化（`.github/workflows/deploy-pages.yml`）。推送到 `main` 分支后，在仓库设置中启用 Pages（Source: GitHub Actions）即可。
 

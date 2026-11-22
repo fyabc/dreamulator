@@ -8,7 +8,7 @@
 
 A fantasy world building and simulation tool grounded in real science. Starting from stellar systems and physical laws, Dreamulator leverages knowledge across scientific disciplines to rigorously design and simulate fictional worlds.
 
-> **Live Demo:** https://fyabc.github.io/dreamulator/ (read-only static version — world creation, simulation, and AI narration are disabled)
+> **Live Demo:** https://fyabc.github.io/dreamulator/ — Explore published worlds or create a project in your browser without changing the published data.
 
 ## Features
 
@@ -35,6 +35,10 @@ A fantasy world building and simulation tool grounded in real science. Starting 
 | AI narration | Anthropic SDK (Claude API) |
 
 ## Quick Start
+
+**Start in the browser.** Select **New World** to import a global heightmap, use the Earth sample, or start from a template. For a guided walkthrough, choose **Start tutorial** on the home page. The static site keeps your work in your browser, so download a backup before clearing site data or moving to another device.
+
+**Use the local app for a full build.** The local app lets you set world parameters, build the layers, save a climate trial as a branch, refine a region, and back up the entire world. See the [complete map workflow](docs/usage/map-workflow.md#从高度图走到完整世界备份) for the steps and the differences between the two modes.
 
 ### Prerequisites
 
@@ -130,13 +134,13 @@ The frontend supports two deployment modes controlled by the `VITE_STATIC_MODE` 
 
 ### Static site (GitHub Pages)
 
-The static mode pre-exports all world data as JSON at build time. The resulting site is read-only — world creation, simulation, and AI narration are disabled.
+The static site needs no backend. You can run and save an energy-balance climate trial on supported published maps or on a world you created from a heightmap. On your own world, open the saved trial before selecting a region to use that climate for refinement. Terrain Diffusion requires a configured model and a browser with hardware WebGPU support. Full world builds, official branches, and AI narration require the local app. See [browser terrain refinement](docs/usage/map-workflow.md#静态站的浏览器细化) for model setup.
 
 ```bash
 cd frontend
 
-# 1. Export world data to static JSON
-python ../scripts/release/export_static.py
+# 1. Export world data for the static site
+uv run python ../scripts/release/export_static.py
 
 # 2. Build with static mode (uses .env.static for base path)
 npx vite build --mode static
@@ -155,10 +159,10 @@ cd frontend && npm run build:static
 ```bash
 cd frontend
 npm run build:static:local    # export all worlds + typecheck + build with base path '/'
-npm run preview:static        # serves dist/ at http://localhost:4173
+npm run preview:static        # serves dist/ at http://localhost:8026
 ```
 
-Open e.g. `http://localhost:4173/#/worlds/earth/map?branch=terrain-dev` to verify maps and other features (check the console for 404s). For quick iteration, export a single world only: `uv run python scripts/release/export_static.py --worlds earth` (from the repo root).
+Open `http://localhost:8026/#/worlds/earth/map/planet_earth` and check that the map loads without missing assets. For quick iteration, export just one world with `uv run python scripts/release/export_static.py --worlds earth` from the repository root.
 
 **GitHub Pages deployment** is automated via GitHub Actions (`.github/workflows/deploy-pages.yml`). Push to `main` and enable Pages in repository settings (Source: GitHub Actions).
 
