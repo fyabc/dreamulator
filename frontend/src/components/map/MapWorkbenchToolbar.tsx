@@ -10,16 +10,19 @@ export const mapLayerDesktopWidth = 'lg:w-56'
 
 type WorkPanelToggle = { id: string; buttonId: string; open: boolean; onToggle: () => void }
 
-export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, backRef, switchTo, regionControls, trialPanel, layersOpen, onToggleLayers, children }: {
+export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, backRef, contextControls, switchTo, layerControls, regionControls, trialPanel, panelControls, layersOpen, onToggleLayers, children }: {
   title: string
   subtitle?: string
   view: 'map' | 'globe' | 'region'
   backTo: string
   backLabel?: string
   backRef?: Ref<HTMLAnchorElement>
+  contextControls?: ReactNode
   switchTo?: string
+  layerControls?: ReactNode
   regionControls?: ReactNode
   trialPanel?: WorkPanelToggle
+  panelControls?: ReactNode
   layersOpen: boolean
   onToggleLayers?: () => void
   children?: ReactNode
@@ -41,9 +44,11 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
             {subtitle ?? t(view === 'map' ? 'title.viewer' : 'title.globe')}
           </p>}
         </div>
+        {contextControls}
       </div>
       {(switchTo || regionControls) && (
         <div className="col-span-2 col-start-1 row-start-2 flex items-center gap-1.5 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:gap-2">
+          {layerControls}
           {switchTo && <nav aria-label={t('workbench.views')} className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded border border-space-border bg-space-bg p-0.5">
             {(['map', 'globe'] as const).map((item) => {
               const label = t(item === 'map' ? 'workbench.flat' : 'workbench.globe')
@@ -59,6 +64,7 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
         </div>
       )}
       <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 lg:col-start-3 lg:gap-2">
+        {panelControls}
         {trialPanel && <button id={trialPanel.buttonId} type="button" onClick={trialPanel.onToggle}
           className="atlas-tool-button text-sm aria-expanded:border-neon-cyan/50 aria-expanded:text-neon-cyan"
           data-tutorial-anchor="lab" aria-label={trialLabel} title={trialLabel}

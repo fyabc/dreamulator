@@ -12,6 +12,9 @@
     "globe": "Globe",
     "tools": "Map tools",
     "layers": "Layers",
+    "layerPanel": "Layers panel",
+    "inspectorPanel": "Inspector panel",    "quickLayers": "Quick layers",
+    "quick": { "terrain": "Terrain", "temperature": "Temperature", "precipitation": "Precipitation", "koppen": "Köppen" },
     "closeLayers": "Close layers",
     "body": "Body",
     "mode": "Mode",
@@ -521,6 +524,7 @@
     "stellarShort": "Stellar",
     "minimap": "Minimap",
     "cleanMode": "Clean view (hide all UI for video recording; press Esc to exit)",
+    "focus": "Focus",
     "cleanExit": "Exit clean view (Esc)",
     "autoSpin": "Auto rotate (for recording; drag or press N to pause, resumes on release)"
   },

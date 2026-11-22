@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, Outlet } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import AtlasIcon from './AtlasIcon'
 import Sidebar from './Sidebar'
 import WorkflowTutorial from '../tutorial/WorkflowTutorial'
@@ -10,6 +10,8 @@ import { useWorldScope } from './world/useWorldScope'
 export default function Layout() {
   const { t } = useTranslation()
   const scope = useWorldScope()
+  const { pathname } = useLocation()
+  const viewerPage = /^\/worlds\/[^/]+\/(map|globe)(\/|$)/.test(pathname)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const main = useRef<HTMLElement>(null)
   const menu = useRef<HTMLButtonElement>(null)
@@ -82,7 +84,7 @@ export default function Layout() {
           </Link>
         </header>
 
-        {scope && <div className="sticky top-14 z-20 flex h-9 shrink-0 items-center border-b border-space-border bg-space-panel px-3 sm:px-5 md:top-0">
+        {scope && <div className={`sticky top-14 z-20 flex h-9 shrink-0 items-center border-b border-space-border bg-space-panel px-3 sm:px-5 md:top-0 ${viewerPage ? 'xl:hidden' : ''}`}>
           <WorldContext scope={scope} />
         </div>}
 

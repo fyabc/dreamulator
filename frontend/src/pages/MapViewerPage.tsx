@@ -8,13 +8,16 @@
  * (Three.js plane + SVG overlay), the minimap, and the map-specific panels.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import WorldContext from '../components/world/WorldContext'
+import { useWorldScope } from '../components/world/useWorldScope'
 import ImportElevationButton from '../components/map/ImportElevationButton'
 import TerrainSourceSelect from '../components/map/TerrainSourceSelect'
 import GeographyRasterButton from '../components/map/GeographyRasterButton'
 import MapViewer from '../components/map/MapViewer'
+import AtlasIcon from '../components/AtlasIcon'
 import MapLayerPanel from '../components/map/MapLayerPanel'
 import { activeMainLayerId } from '../components/map/layerStateInit'
 import MapCellInspector, { MobileCellCard } from '../components/map/MapCellInspector'
@@ -27,6 +30,7 @@ import SunControl from '../components/map/SunControl'
 import { MapTimeControl } from '../components/map/TimeControl'
 import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import MapDataLoading from '../components/map/MapDataLoading'
+import QuickLayerSwitch from '../components/map/QuickLayerSwitch'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
 import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
 import { trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
@@ -43,6 +47,7 @@ export default function MapViewerPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { t } = useTranslation('map')
+  const scope = useWorldScope()
 
   const trial = useMapTemperatureTrial()
   const trialActive = trial.mode === 'trial' && !trial.ebm
@@ -68,6 +73,30 @@ export default function MapViewerPage() {
   const elevationReady = Boolean(elevation && elevationDims.w > 0)
   const loadingMessage = elevError ? t('label.noMapData')
     : elevation && elevationDims.w === 0 ? t('label.decodingHeightmap') : t('label.mapDataLoading')
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(() =>
+    localStorage.getItem('dreamulator-map-left-panel') === '1')
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(() =>
+    localStorage.getItem('dreamulator-map-right-panel') === '1')
+  useEffect(() => {
+    try { localStorage.setItem('dreamulator-map-left-panel', leftPanelCollapsed ? '1' : '0') } catch { return }
+  }, [leftPanelCollapsed])
+  useEffect(() => {
+    try { localStorage.setItem('dreamulator-map-right-panel', rightPanelCollapsed ? '1' : '0') } catch { return }
+  }, [rightPanelCollapsed])
+  const panelControls = <>
+    <button type="button" className="atlas-tool-button hidden text-sm lg:inline-flex"
+      aria-pressed={!leftPanelCollapsed} title={t('workbench.layerPanel')}
+      onClick={() => setLeftPanelCollapsed((collapsed) => !collapsed)}>
+      <AtlasIcon name="layers" className="size-4" />
+      <span className="hidden xl:inline">{t('workbench.layerPanel')}</span>
+    </button>
+    <button type="button" className="atlas-tool-button hidden text-sm lg:inline-flex"
+      aria-pressed={!rightPanelCollapsed} title={t('workbench.inspectorPanel')}
+      onClick={() => setRightPanelCollapsed((collapsed) => !collapsed)}>
+      <AtlasIcon name="chart" className="size-4" />
+      <span className="hidden xl:inline">{t('workbench.inspectorPanel')}</span>
+    </button>
+  </>
 
   // Stable empty set — clean mode suppresses hover/selection highlights without
   // changing cell-picking state underneath.
@@ -151,6 +180,10 @@ export default function MapViewerPage() {
       <MapWorkbenchToolbar title={currentPlanetName ?? selectedPlanet ?? t('title.mapFallback')} view="map"
         backTo={`/worlds/${worldName}${backSearch.size ? `?${backSearch}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/globe/${selectedPlanet}${globeQS}` : undefined}
+        panelControls={panelControls}
+        contextControls={scope ? <div className="hidden min-w-0 xl:flex"><WorldContext scope={scope} /></div> : undefined}
+        layerControls={<QuickLayerSwitch state={display.state} onChange={display.onChange}
+          available={display.available} disabled={trialActive} />}
         regionControls={selectedPlanet && (elevation || cvtMesh) ? (
           <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
             climateResult={meta?.browser_heightmap && trial.mode === 'trial' ? searchParams.get('climateResult') ?? undefined : undefined}
@@ -310,7 +343,7 @@ export default function MapViewerPage() {
         {/* === Desktop layout (≥ lg, hidden by default) === */}
         <div className="hidden lg:flex flex-1 min-h-0">
           {/* Left panel: layers */}
-          {!cleanMode && (
+          {!cleanMode && !leftPanelCollapsed && (
           <div className="w-56 shrink-0 bg-space-panel border-r border-space-border overflow-y-auto p-3 space-y-4">
             {layers}
             {platesError && selectedPlanet && (
@@ -377,10 +410,12 @@ export default function MapViewerPage() {
                   <div className="absolute bottom-3 right-3 z-30">
                     <button
                       onClick={() => setCleanMode(true)}
-                      className="w-9 h-9 rounded-full flex items-center justify-center text-sm border bg-space-panel/80 text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/40 shadow-lg transition-colors"
+                      className="h-9 rounded-full flex items-center gap-1.5 px-2.5 text-sm border bg-space-panel/80 text-gray-400 border-space-border hover:text-neon-cyan hover:border-neon-cyan/40 shadow-lg transition-colors"
                       title={t('label.cleanMode')}
+                      aria-label={t('label.cleanMode')}
                     >
-                      ⛶
+                      <AtlasIcon name="frame" className="size-4" />
+                      <span className="hidden text-xs xl:inline">{t('label.focus')}</span>
                     </button>
                   </div>
                   )}
@@ -401,7 +436,7 @@ export default function MapViewerPage() {
           </div>
 
           {/* Right panel: cell inspector + minimap */}
-          {!cleanMode && (
+          {!cleanMode && !rightPanelCollapsed && (
           <MapInspectorPane panelRef={element => { if (element) element.inert = trialOpen }}
             className={`flex ${inspectorDesktopPane}`} footer={elevation && (
               <div className="shrink-0 border-t border-space-border p-3">

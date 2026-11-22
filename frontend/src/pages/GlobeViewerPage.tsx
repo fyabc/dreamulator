@@ -13,6 +13,8 @@
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import WorldContext from '../components/world/WorldContext'
+import { useWorldScope } from '../components/world/useWorldScope'
 import { useQuery } from '@tanstack/react-query'
 import * as THREE from 'three'
 import GlobeViewer, { type GlobeVertex, type GlobeRegion, type GlobeRegionFlight } from '../viewers/GlobeViewer'
@@ -26,6 +28,7 @@ import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import ClimateLegend from '../components/map/ClimateLegend'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
 import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
+import QuickLayerSwitch from '../components/map/QuickLayerSwitch'
 import { trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import { mark } from '../utils/perf'
@@ -60,6 +63,7 @@ export default function GlobeViewerPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { t } = useTranslation('map')
+  const scope = useWorldScope()
   const randomTip = useMemo(() => getRandomTip(t), [t])
 
   const trial = useMapTemperatureTrial()
@@ -307,6 +311,9 @@ export default function GlobeViewerPage() {
         backTo={searchParams.has('draft') || (!meta?.browser_heightmap && searchParams.has('climateResult')) ? worldDataPath(worldName, selectedBranch) :
           `/worlds/${worldName}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/map/${selectedPlanet}${mapQS}` : undefined}
+        contextControls={scope ? <div className="hidden min-w-0 xl:flex"><WorldContext scope={scope} /></div> : undefined}
+        layerControls={<QuickLayerSwitch state={display.state} onChange={display.onChange}
+          available={display.available} disabled={trialActive} />}
         regionControls={selectedPlanet && (elevation || cvtMesh) ? (
           <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
             climateResult={meta?.browser_heightmap && trial.mode === 'trial' ? searchParams.get('climateResult') ?? undefined : undefined}
