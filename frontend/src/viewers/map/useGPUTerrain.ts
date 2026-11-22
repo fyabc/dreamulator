@@ -344,6 +344,10 @@ export default function useGPUTerrain({
   }, [composite])
 
   // --- Layer opacities → uniforms (no re-bake) ---
+  // Composite uniforms change independently of the textures; bump a version so
+  // the dirty check in renderComposite notices and re-renders the FBO.  Without
+  // it a layer switch can leave the target holding the previous composite.
+  const uniformVersion = useRef(0)
   useEffect(() => {
     if (!composite || !baked) return
     const u = composite.compMat.uniforms
@@ -376,6 +380,12 @@ export default function useGPUTerrain({
       if ((op ?? 0) > 0) {
         activeThematic = scalarThematic?.layer === layer ? scalarThematic.texture : tex
         thematicOp = op ?? 0
+        // A lazily baked overlay may still be a 1×1 placeholder; keep the
+        // terrain visible instead of compositing onto the dark background.
+        if (((activeThematic.image as { width?: number } | undefined)?.width ?? 0) <= 1) {
+          activeThematic = baked.terrainThematic
+          thematicOp = 1
+        }
         break
       }
     }
@@ -393,6 +403,7 @@ export default function useGPUTerrain({
     // Nearest/Linear minification drops the one-pixel coastline into dashes.
     composite.target.texture.minFilter = THREE.LinearMipmapLinearFilter
     composite.target.texture.magFilter = activeThematic === koppenTexture ? THREE.NearestFilter : THREE.LinearFilter
+    uniformVersion.current++
   }, [composite, baked, layers, overlayActive, coastOpacity, scalarThematic, koppenTexture, uccTexture])
 
   // --- Sun uniforms on the display material (smooth slider, no re-composite) ---
@@ -410,18 +421,22 @@ export default function useGPUTerrain({
   // mobile+desktop canvases mounted (two GL contexts), and a single flag cleared
   // by one would leave the other's framebuffer stale.
   const lastComposite = useRef<{
-    target: THREE.WebGLRenderTarget; layers: typeof layers; scalar: typeof scalarThematic
-    koppen: typeof koppenTexture; ucc: typeof uccTexture
+    target: THREE.WebGLRenderTarget; baked: typeof baked; layers: typeof layers
+    scalar: typeof scalarThematic; koppen: typeof koppenTexture; ucc: typeof uccTexture
+    version: number
   } | null>(null)
   const renderComposite = useCallback(
     (renderer: THREE.WebGLRenderer) => {
       if (!composite || !overlayActive) return
       const previous = lastComposite.current
-      if (previous && previous.target === composite.target && previous.layers === layers &&
-        previous.scalar === scalarThematic && previous.koppen === koppenTexture && previous.ucc === uccTexture) {
+      if (previous && previous.target === composite.target && previous.baked === baked &&
+        previous.layers === layers && previous.scalar === scalarThematic &&
+        previous.koppen === koppenTexture && previous.ucc === uccTexture &&
+        previous.version === uniformVersion.current) {
         return
       }
-      lastComposite.current = { target: composite.target, layers, scalar: scalarThematic, koppen: koppenTexture, ucc: uccTexture }
+      lastComposite.current = { target: composite.target, baked, layers, scalar: scalarThematic,
+        koppen: koppenTexture, ucc: uccTexture, version: uniformVersion.current }
       // The composite pass is just layer blending, not a final render.  Disable
       // tone mapping so the composite blends the raw layer colours unchanged;
       // colour space is handled symmetrically by the sRGB target + sRGB sources.
@@ -435,7 +450,7 @@ export default function useGPUTerrain({
       renderer.toneMapping = prevTM
       renderer.toneMappingExposure = prevExp
     },
-    [composite, overlayActive, layers, scalarThematic, koppenTexture, uccTexture],
+    [composite, overlayActive, baked, layers, scalarThematic, koppenTexture, uccTexture],
   )
 
   /** The texture consumers (3D globe) should sample: the FBO

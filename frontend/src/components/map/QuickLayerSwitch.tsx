@@ -30,7 +30,7 @@ export default function QuickLayerSwitch({ state, onChange, available, disabled 
     onChange({ layers: next, inspectedLayer: id })
   }
   return <nav aria-label={t('workbench.quickLayers')}
-    className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded border border-space-border bg-space-bg p-0.5">
+    className="hidden shrink-0 items-center gap-0.5 whitespace-nowrap rounded border border-space-border bg-space-bg p-0.5 lg:inline-flex">
     {QUICK_LAYERS.map(id => {
       const enabled = !disabled && (!available || available.has(id))
       const current = active === id

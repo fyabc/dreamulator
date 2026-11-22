@@ -11,8 +11,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import WorldContext from '../components/world/WorldContext'
-import { useWorldScope } from '../components/world/useWorldScope'
 import ImportElevationButton from '../components/map/ImportElevationButton'
 import TerrainSourceSelect from '../components/map/TerrainSourceSelect'
 import GeographyRasterButton from '../components/map/GeographyRasterButton'
@@ -48,7 +46,6 @@ export default function MapViewerPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { t } = useTranslation('map')
-  const scope = useWorldScope()
 
   const trial = useMapTemperatureTrial()
   const trialActive = trial.mode === 'trial' && !trial.ebm
@@ -182,7 +179,6 @@ export default function MapViewerPage() {
         backTo={`/worlds/${worldName}${backSearch.size ? `?${backSearch}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/globe/${selectedPlanet}${globeQS}` : undefined}
         panelControls={panelControls}
-        contextControls={scope ? <div className="hidden min-w-0 xl:flex"><WorldContext scope={scope} /></div> : undefined}
         timeControls={!trialActive && <TimeModeToggle monthlyMode={monthlyMode}
           onChange={handleMonthlyModeChange} />}
         layerControls={<QuickLayerSwitch state={display.state} onChange={display.onChange}
@@ -347,7 +343,7 @@ export default function MapViewerPage() {
         <div className="hidden lg:flex flex-1 min-h-0">
           {/* Left panel: layers */}
           {!cleanMode && !leftPanelCollapsed && (
-          <div className="w-56 shrink-0 bg-space-panel border-r border-space-border overflow-y-auto p-3 space-y-4">
+          <div className="w-48 shrink-0 bg-space-panel border-r border-space-border overflow-y-auto p-3 space-y-4">
             {layers}
             {platesError && selectedPlanet && (
               <div className="text-xs text-gray-500 pt-2">

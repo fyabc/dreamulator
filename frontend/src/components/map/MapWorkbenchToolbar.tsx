@@ -40,7 +40,7 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
         <Link ref={backRef} to={backTo} className="inline-flex size-11 shrink-0 items-center justify-center rounded text-gray-300 hover:bg-space-surface"
           aria-label={backText} title={backText}><AtlasIcon name="back" /></Link>
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold text-gray-100" title={title}>{title}</h1>
+          <h1 className="hidden truncate text-lg font-semibold text-gray-100 sm:block" title={title}>{title}</h1>
           {(subtitle || view !== 'region') && <p className="hidden truncate text-xs text-gray-400 lg:block">
             {subtitle ?? t(view === 'map' ? 'title.viewer' : 'title.globe')}
           </p>}

@@ -8,7 +8,7 @@ export default function TimeModeToggle({ monthlyMode, onChange, disabled = false
 }) {
   const { t } = useTranslation('map')
   return <div role="group" aria-label={t('time.title')}
-    className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded border border-space-border bg-space-bg p-0.5">
+    className="hidden shrink-0 items-center gap-0.5 whitespace-nowrap rounded border border-space-border bg-space-bg p-0.5 lg:inline-flex">
     <button type="button" onClick={() => onChange(false)} aria-pressed={!monthlyMode}
       title={t('time.annualHint')}
       className={`min-h-9 rounded px-2.5 text-sm transition-colors ${!monthlyMode

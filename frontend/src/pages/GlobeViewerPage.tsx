@@ -13,8 +13,6 @@
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import WorldContext from '../components/world/WorldContext'
-import { useWorldScope } from '../components/world/useWorldScope'
 import { useQuery } from '@tanstack/react-query'
 import * as THREE from 'three'
 import GlobeViewer, { type GlobeVertex, type GlobeRegion, type GlobeRegionFlight } from '../viewers/GlobeViewer'
@@ -64,7 +62,6 @@ export default function GlobeViewerPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { t } = useTranslation('map')
-  const scope = useWorldScope()
   const randomTip = useMemo(() => getRandomTip(t), [t])
 
   const trial = useMapTemperatureTrial()
@@ -312,7 +309,6 @@ export default function GlobeViewerPage() {
         backTo={searchParams.has('draft') || (!meta?.browser_heightmap && searchParams.has('climateResult')) ? worldDataPath(worldName, selectedBranch) :
           `/worlds/${worldName}${selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/map/${selectedPlanet}${mapQS}` : undefined}
-        contextControls={scope ? <div className="hidden min-w-0 xl:flex"><WorldContext scope={scope} /></div> : undefined}
         timeControls={!trialActive && <TimeModeToggle monthlyMode={monthlyMode}
           onChange={handleMonthlyModeChange} />}
         layerControls={<QuickLayerSwitch state={display.state} onChange={display.onChange}
@@ -545,7 +541,7 @@ export default function GlobeViewerPage() {
         <div className="hidden lg:flex absolute inset-0">
           {/* Left panel: layers */}
           {!cleanMode && (
-          <div className="w-56 shrink-0 bg-space-panel border-r border-space-border overflow-y-auto p-3 space-y-4">
+          <div className="w-48 shrink-0 bg-space-panel border-r border-space-border overflow-y-auto p-3 space-y-4">
             {layers}
             <div className="mt-3 pt-3 border-t border-space-border">
               <SunControl
