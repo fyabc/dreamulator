@@ -3,8 +3,7 @@ metadata:
   # NOTE: the name "earth" is historical — this world is the REAL-WORLD reference
   # anchor: Earth observations plus real Solar-System bodies (Mars / Moon /
   # Venus / Titan) as additional planet_ids, all imported, never built.
-  description: Real-world reference anchor — Earth observation baseline + Solar-System
-    bodies (Mars, Moon, Venus, Titan) as imported reference data.
+  description: 以真实地球的观测资料为基准，并收录火星、月球、金星和泰坦的参考数据。
   dreamulator_version: 0.1.0
   created: '2026-05-29T17:26:20.139700+00:00'
   modified: '2026-09-21T00:00:00+00:00'
