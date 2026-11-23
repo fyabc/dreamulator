@@ -196,11 +196,11 @@
     },
     "clean": {
       "action": "⛶ Clean view",
-      "description": "Hides all UI and scene decoration (panels, status bar, graticule, polar axis), leaving only the map or globe — for video recording. Also reachable via the URL parameter ?clean=1. Exit with Esc or the hover-only top-right button."
+      "description": "Hides all UI and scene decoration (panels, status bar, graticule, polar axis), leaving only the map or globe. Also reachable via the URL parameter ?clean=1. Exit with Esc or the hover-only top-right button."
     },
     "spin": {
-      "action": "↻ Auto rotate (3D)",
-      "description": "Slow continuous orbit of the 3D globe (~120s per revolution) for video recording. Pauses while dragging or during the N-key north-pole fly, resumes on release. Also reachable via ?spin=1; combined with clean view (?clean=1&spin=1) it is the standard recording posture."
+      "action": "Auto rotate (3D)",
+      "description": "Slow continuous orbit of the 3D globe (~120s per revolution). Pauses while dragging or during the N-key north-pole fly, resumes on release. Also reachable via ?spin=1; combined with clean view (?clean=1&spin=1) it is the standard recording posture."
     }
   },
   "concept": {
@@ -352,8 +352,8 @@
           "content": "The left panel controls layer display, a four-slot compositing model:\n\n1. **Base** — terrain shading (fixed)\n2. **Thematic** — Köppen / Whittaker biomes / NPP / domestication (pick one)\n3. **Fill** — plate shading (stacks over thematic)\n4. **Feature** — boundaries, coastlines, current arrows (always on top)\n\nEach layer has independent opacity. With no overlays the base is sampled directly at zero extra cost."
         },
         {
-          "title": "Cell inspector",
-          "content": "The right panel switches by selection:\n\n**0 selected** — shows the hovered cell (coords, elevation, crust, plate, climate); leaving → planet summary\n**1 selected** — locks that cell (no jump back on mouse leave)\n**>1 selected** — multi-select stats (count, area, elevation range/mean, mean temp/precip, dominant Köppen)\n\nSelected cells highlight yellow; hovered cells highlight blue.\n\nThe single-cell「📊 Climate descriptors」group shows the continuous UCC descriptors (time-weighted mean temperature, seasonal range, time below 0°C, reference-year precipitation, aridity index AI, same-period deficit, precipitation concentration), independent of monthly mode; maps without a climate build (including the Earth reference root) show a fallback hint instead."
+          "title": "Cell readings",
+          "content": "The metrics panel switches by selection:\n\n**0 selected** — shows the hovered cell (coords, elevation, crust, plate, climate); leaving → planet summary\n**1 selected** — locks that cell (no jump back on mouse leave)\n**>1 selected** — multi-select stats (count, area, elevation range/mean, mean temp/precip, dominant Köppen)\n\nSelected cells highlight yellow; hovered cells highlight blue.\n\nThe single-cell「📊 Climate descriptors」group shows the continuous UCC descriptors (time-weighted mean temperature, seasonal range, time below 0°C, reference-year precipitation, aridity index AI, same-period deficit, precipitation concentration), independent of monthly mode; maps without a climate build (including the Earth reference root) show a fallback hint instead."
         }
       ]
     },

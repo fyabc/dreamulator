@@ -7,13 +7,17 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { TERRAIN_SCALE, generateLut } from '../../viewers/map/utils/colorScales'
+
+/** Same flat land/sea tones as the map's `landsea` thematic layer. */
+const LAND_RGB: [number, number, number] = [76, 175, 80]
+const SEA_RGB: [number, number, number] = [21, 101, 192]
 
 interface MapMinimapProps {
   elevation: Float32Array | null
   width: number
   height: number
-  seaLevel: number
+  /** Sea level as a fraction of the elevation range (0–1), matching `elevation`. */
+  seaLevelFraction: number
   mapCenter: { lon: number; lat: number }
   zoom: number
   containerWidth: number
@@ -24,7 +28,7 @@ export default function MapMinimap({
   elevation,
   width: mapW,
   height: mapH,
-  seaLevel,
+  seaLevelFraction,
   mapCenter,
   zoom,
   containerWidth: _cw,
@@ -41,7 +45,6 @@ export default function MapMinimap({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const lut = generateLut(TERRAIN_SCALE, 256)
     const imageData = ctx.createImageData(thumbW, thumbH)
 
     for (let ty = 0; ty < thumbH; ty++) {
@@ -49,19 +52,7 @@ export default function MapMinimap({
         const sx = Math.min(mapW - 1, Math.round((tx / thumbW) * mapW))
         const sy = Math.min(mapH - 1, Math.round((ty / thumbH) * mapH))
         const val = elevation[sy * mapW + sx]
-
-        const lutIdx = Math.min(255, Math.round(val * 255))
-        let r = lut[lutIdx * 3 + 0]
-        let g = lut[lutIdx * 3 + 1]
-        let b = lut[lutIdx * 3 + 2]
-
-        if (val < seaLevel) {
-          const depth = (seaLevel - val) / Math.max(seaLevel, 0.001)
-          const factor = 1 - depth * 0.5
-          r = Math.round(r * factor)
-          g = Math.round(g * factor)
-          b = Math.round(b * factor)
-        }
+        const [r, g, b] = val > seaLevelFraction ? LAND_RGB : SEA_RGB
 
         const idx = (ty * thumbW + tx) * 4
         imageData.data[idx] = r
@@ -72,7 +63,7 @@ export default function MapMinimap({
     }
 
     ctx.putImageData(imageData, 0, 0)
-  }, [elevation, mapW, mapH, seaLevel, thumbW, thumbH])
+  }, [elevation, mapW, mapH, seaLevelFraction, thumbW, thumbH])
 
   // Compute viewport rectangle in minimap pixel coordinates
   const getViewportRects = () => {
@@ -130,19 +121,19 @@ export default function MapMinimap({
         width={thumbW}
         height={thumbH}
       >
-        {rects.map((r) => (
-          <rect
-            key={`${r.x}-${r.y}`}
-            x={r.x}
-            y={r.y}
-            width={r.w}
-            height={r.h}
-            fill="rgba(255,255,255,0.1)"
-            stroke="#fff"
-            strokeWidth={1}
-            strokeOpacity={0.7}
-          />
-        ))}
+        {rects.map((r) => {
+          // Inset and halo the frame: at zoom 1 it covers the whole minimap, where
+          // an edge-centred stroke would be clipped and read as "no frame".
+          const inset = 1.5
+          const x = Math.max(0, r.x) + inset
+          const y = Math.max(0, r.y) + inset
+          const w = Math.max(1, r.w - inset * 2)
+          const h = Math.max(1, r.h - inset * 2)
+          return <g key={`${r.x}-${r.y}`}>
+            <rect x={x} y={y} width={w} height={h} fill="none" stroke="#0b0d12" strokeWidth={3} strokeOpacity={0.75} />
+            <rect x={x} y={y} width={w} height={h} fill="none" stroke="#ffffff" strokeWidth={1.5} strokeOpacity={0.95} />
+          </g>
+        })}
       </svg>
     </div>
   )

@@ -8,6 +8,9 @@ import type { WorldScope } from './useWorldScope'
 
 const controlClass = 'min-w-0 w-full truncate rounded border border-space-border bg-space-surface px-1.5 py-0.5 text-slate-100 hover:border-neon-cyan/50 focus-visible:outline focus-visible:outline-neon-cyan'
 
+/** Target for map-level controls portalled into the global world/branch bar. */
+export const WORLD_CONTEXT_CONTROLS_ID = 'world-context-controls'
+
 export default function WorldContext({ scope, className = '' }: {
   scope: WorldScope
   className?: string
@@ -68,5 +71,6 @@ export default function WorldContext({ scope, className = '' }: {
         {[...branchOptions.keys()].map(name => <option key={name} value={name}>{name}</option>)}
       </select> : <span className="truncate text-slate-200">{branchName}</span>}
     </label>
+    <div id={WORLD_CONTEXT_CONTROLS_ID} className="ml-auto flex min-w-0 shrink-0 items-center gap-2" />
   </div>
 }

@@ -13,13 +13,23 @@
     "tools": "地图工具",
     "layers": "图层",
     "layerPanel": "图层面板",
-    "inspectorPanel": "检查器面板",    "quickLayers": "常用图层",
+    "inspectorPanel": "指标面板",    "quickLayers": "常用图层",
     "quick": { "terrain": "地形", "temperature": "温度", "precipitation": "降水", "koppen": "Köppen" },
     "closeLayers": "关闭图层",
     "body": "天体",
-    "mode": "模式",
+    "resultMode": "结果",
     "official": "正式",
-    "trial": "试算"
+    "development": "开发",
+    "officialHint": "显示上一次构建的正式结果。",
+    "developmentHint": "显示气候实验台按当前输入算出的开发结果；不会写入世界。",
+    "developmentSource": "气候开发",
+    "developmentMissing": "尚无开发结果",
+    "collapseLayerPanel": "收起图层面板",
+    "showLayerPanel": "展开图层面板",
+    "collapseInspectorPanel": "收起指标面板",
+    "showInspectorPanel": "展开指标面板",
+    "collapseMinimap": "收起鸟瞰图",
+    "showMinimap": "展开鸟瞰图"
   },
   "terrainSource": {
     "label": "地形来源",
@@ -66,7 +76,8 @@
     "elevation": "海拔:",
     "crust": "地壳:",
     "plate": "板块:",
-    "zoom": "缩放:"
+    "zoom": "缩放:",
+    "resetView": "重置地图视角"
   },
   "crust": {
     "continental": "大陆地壳",
@@ -523,10 +534,10 @@
     "switchToStellar": "切换到恒星系 3D 视图（行星轨道、宜居带）",
     "stellarShort": "恒星系",
     "minimap": "鸟瞰图",
-    "cleanMode": "纯净视图（隐藏全部界面，视频录制用；按 Esc 退出）",
+    "cleanMode": "纯净视图（隐藏全部界面；按 Esc 退出）",
     "focus": "专注",
     "cleanExit": "退出纯净视图（Esc）",
-    "autoSpin": "自动旋转（视频录制用；拖拽或按 N 暂停，松手后恢复）"
+    "autoSpin": "自动旋转（拖拽或按 N 暂停，松手后恢复）"
   },
   "msg": {
     "heightmapImported": "已导入高度图。请刷新页面查看。",

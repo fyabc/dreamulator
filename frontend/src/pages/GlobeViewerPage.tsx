@@ -25,6 +25,10 @@ import { MapTimeControl } from '../components/map/TimeControl'
 import AwaitingBuildBanner from '../components/map/AwaitingBuildBanner'
 import ClimateLegend from '../components/map/ClimateLegend'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
+import AtlasIcon from '../components/AtlasIcon'
+import MapResultModeControl from '../components/map/MapResultModeControl'
+import WorldContextSlot from '../components/map/WorldContextSlot'
+import { isMonthlyLayer } from '../components/map/climateTime'
 import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
 import QuickLayerSwitch from '../components/map/QuickLayerSwitch'
 import TimeModeToggle from '../components/map/TimeModeToggle'
@@ -123,6 +127,7 @@ export default function GlobeViewerPage() {
   const globeProjectRef = useRef<((lon: number, lat: number) => { x: number; y: number; edgeFade: number; zoomScale: number; ex: number; ey: number; nx: number; ny: number } | null) | null>(null)
   const globePointProjectRef = useRef<PointProjector | null>(null)
   const [globeZoom, setGlobeZoom] = useState(1)
+  const [viewResetRevision, setViewResetRevision] = useState(0)
 
   const elevMin = meta?.elevation_min_m ?? -11000
   const elevMax = meta?.elevation_max_m ?? 9000
@@ -257,13 +262,17 @@ export default function GlobeViewerPage() {
   }
 
   const currentPlanet = selectedPlanet ? bodyByName.get(selectedPlanet) : undefined
+  const inspectionLayer = trialActive ? display.trialInspectionLayer : vs.activeColorMode
+  const showTimeControl = trialActive
+    ? Boolean(trial.preview?.periods?.length) && inspectionLayer === 'temperature'
+    : isMonthlyLayer(inspectionLayer) && (Boolean(monthlyData) || monthlyLoading)
   const inspection = <div className="space-y-3">
-    <div className="border-b border-space-border pb-3">
+    {showTimeControl && <div className="border-b border-space-border pb-3">
       <MapTimeControl mesh={cvtMesh} trialMode={trialActive} preview={trial.preview}
-        layer={trialActive ? display.trialInspectionLayer : vs.activeColorMode}
+        layer={inspectionLayer}
         monthlyData={monthlyData} loading={monthlyLoading} monthlyMode={monthlyMode} cell={trialActive ? null : inspectorCell}
         onMonthlyModeChange={handleMonthlyModeChange} monthIndex={monthlyMonth} onSelectMonth={selectMonth} />
-    </div>
+    </div>}
     <MapCellInspector trialMode={trialActive} trial={trial.preview} cursor={cursor}
     cell={inspectorCell} cvtMesh={cvtMesh} planetName={currentPlanet?.name ?? selectedPlanet} selectedCells={selectedCellObjects}
     activeColorMode={trialActive ? display.texture ? 'temperature' : 'terrain' : vs.activeColorMode} monthlyMode={monthlyMode} monthIndex={monthlyMonth}
@@ -284,6 +293,10 @@ export default function GlobeViewerPage() {
     <div className={cleanMode
       ? 'fixed inset-0 z-40 flex flex-col bg-[#030308]'
       : 'atlas-workbench flex flex-col'}>
+      <WorldContextSlot>
+        {trialReady && <MapResultModeControl mode={trial.mode} onChange={trial.selectMode}
+          ready={Boolean(trial.available || trial.ebm)} />}
+      </WorldContextSlot>
       {!cleanMode && (
       <MapWorkbenchToolbar title={currentPlanet?.name ?? selectedPlanet ?? t('title.globe')} view="globe"
         backTo={searchParams.has('draft') || (!meta?.browser_heightmap && searchParams.has('climateResult')) ? worldDataPath(worldName, selectedBranch) :
@@ -297,7 +310,6 @@ export default function GlobeViewerPage() {
           <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
             climateResult={meta?.browser_heightmap && trial.mode === 'trial' ? searchParams.get('climateResult') ?? undefined : undefined}
             branch={selectedBranch} radiusKm={planetRadiusM / 1000}
-            modeControl={trialReady ? { mode: trial.mode, onChange: trial.selectMode } : undefined}
             onMoveToRegion={() => {
               setRegionFlight(null)
               setRegionMoveRevision((revision) => revision + 1)
@@ -413,6 +425,7 @@ export default function GlobeViewerPage() {
                 onCellHover={handleCellHoverLonLat}
                 onCellClick={handleCellClickLonLat}
                 onPickPoint={regionPicking ? pickRegionPoint : undefined}
+                viewResetRevision={viewResetRevision}
                 onHoverOut={() => { handleCellHover(null); setCursor(null) }}
                 onDistanceChange={setGlobeZoom}
                 vertices={globeVertices}
@@ -571,6 +584,7 @@ export default function GlobeViewerPage() {
               onCellHover={handleCellHoverLonLat}
               onCellClick={handleCellClickLonLat}
               onPickPoint={regionPicking ? pickRegionPoint : undefined}
+              viewResetRevision={viewResetRevision}
               onHoverOut={() => { handleCellHover(null); setCursor(null) }}
               onDistanceChange={setGlobeZoom}
               vertices={globeVertices}
@@ -663,7 +677,7 @@ export default function GlobeViewerPage() {
               }`}
               title={t('label.autoSpin')}
             >
-              ↻
+              <AtlasIcon name="spin" className="size-5" />
             </button>
             <button
               onClick={() => setCleanMode(true)}
@@ -676,7 +690,8 @@ export default function GlobeViewerPage() {
           )}
         </div>
         {!cleanMode && (
-          <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={trialActive ? null : hoveredCellData} trial={trial.preview} legend={legend(true)} />
+          <MapStatusBar cursor={cursor} zoom={globeZoom} hoveredCell={trialActive ? null : hoveredCellData} trial={trial.preview}
+            legend={legend(true)} onResetView={() => setViewResetRevision(revision => revision + 1)} />
         )}
       </div>
 

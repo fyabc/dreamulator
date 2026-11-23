@@ -7,6 +7,7 @@
 
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import AtlasIcon from '../AtlasIcon'
 import type { CursorInfo } from './MapViewer'
 import type { VoronoiCell } from '../../viewers/map/types'
 import { sampleTemperature, type TemperaturePreview } from '../../playground/temperaturePreview'
@@ -25,6 +26,8 @@ interface MapStatusBarProps {
   trial?: TemperaturePreview | null
   /** Compact colour-scale legend rendered in the bar. */
   legend?: ReactNode
+  /** Restores the map or globe to its initial centre and zoom. */
+  onResetView?: () => void
 }
 
 export default function MapStatusBar({
@@ -33,6 +36,7 @@ export default function MapStatusBar({
   hoveredCell,
   trial,
   legend,
+  onResetView,
 }: MapStatusBarProps) {
   const { t } = useTranslation('map')
 
@@ -45,7 +49,14 @@ export default function MapStatusBar({
       <div className="flex items-center gap-4 px-3 py-1.5 bg-space-panel/80 border-t border-space-border text-xs text-gray-500 font-mono">
         {legend && <>{legend}<span className="text-gray-700">|</span></>}
         <span>{t('status.hoverPrompt')}</span>
-        <span className="ml-auto text-gray-600">{t('field.zoom')} {zoom.toFixed(1)}x</span>
+        <span className="ml-auto flex items-center gap-1">
+          <span className="text-gray-600">{t('field.zoom')} {zoom.toFixed(1)}x</span>
+          {onResetView && <button type="button" onClick={onResetView}
+            title={t('field.resetView')} aria-label={t('field.resetView')}
+            className="inline-flex size-5 items-center justify-center rounded text-gray-500 hover:bg-space-surface hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan">
+            <AtlasIcon name="undo" className="size-3" />
+          </button>}
+        </span>
       </div>
     )
   }
@@ -87,7 +98,14 @@ export default function MapStatusBar({
         </>
       )}
 
-      <span className="ml-auto text-gray-500">{t('field.zoom')} {zoom.toFixed(1)}x</span>
+      <span className="ml-auto flex items-center gap-1">
+        <span className="text-gray-500">{t('field.zoom')} {zoom.toFixed(1)}x</span>
+        {onResetView && <button type="button" onClick={onResetView}
+          title={t('field.resetView')} aria-label={t('field.resetView')}
+          className="inline-flex size-5 items-center justify-center rounded text-gray-500 hover:bg-space-surface hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan">
+          <AtlasIcon name="undo" className="size-3" />
+        </button>}
+      </span>
     </div>
   )
 }

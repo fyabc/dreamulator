@@ -11,7 +11,8 @@ import { initialLayerState } from '../components/map/layerStateInit'
 import type { TemperatureOrigin } from '../playground/temperatureDraft'
 import { canDefaultToHeightmapClimate, defaultHeightmapClimateSearch, heightmapPlanet } from '../projects/heightmapWorld'
 import { getProject, projectKey, worldOverviewPath } from '../projects/projectStore'
-import { useTemperatureTrialPreview, type ClimateTrialTime, type MapMode, type MapTemperatureTrialSession } from '../viewers/map/useTemperatureTrialPreview'
+import { RESULT_MODE_PARAM, resolveMapMode, resultModeValue, useTemperatureTrialPreview,
+  type ClimateTrialTime, type MapMode, type MapTemperatureTrialSession } from '../viewers/map/useTemperatureTrialPreview'
 import { tutorialMilestone } from '../tutorial/tutorialProgress'
 
 const TemperatureLab = lazy(() => import('../playground/TemperatureLab'))
@@ -75,17 +76,17 @@ function TemperatureTrialSession({ world, planet, branch, draft, saved, clean, i
   initiallyOpen: boolean
 }) {
   const [open, setOpen] = useState(initiallyOpen)
-  const [search] = useSearchParams()
+  const [search, setSearch] = useSearchParams()
   const [visited, setVisited] = useState(initiallyOpen || Boolean(saved))
   const [revision, setRevision] = useState(0)
-  const [modeSelection, setModeSelection] = useState<{ scope: string | null; mode: MapMode } | null>(null)
   const [layerState, setLayerState] = useState(() => trialLayerState(saved ? 'temperature' : null))
   const [ebmResult, setEbmResult] = useState<ClimateTrialResult | null>(null)
   const [trialTime, setTrialTime] = useState<ClimateTrialTime>({ monthly: false, month: 0 })
   const [panelHost] = useState(() => document.createElement('div'))
   const panelTrigger = useRef<HTMLElement | null>(null)
   const scope = world && planet ? JSON.stringify([world, planet, branch, revision]) : null
-  const mode = modeSelection?.scope === scope ? modeSelection.mode : saved ? 'trial' : 'official'
+  // The result source lives in the URL so refresh, share and back/forward keep it.
+  const mode: MapMode = resolveMapMode(search.get(RESULT_MODE_PARAM), saved)
   const input = useMemo(() => {
     const params = new URLSearchParams({ world: world ?? '', planet: planet ?? '' })
     if (branch) params.set('branch', branch)
@@ -95,10 +96,31 @@ function TemperatureTrialSession({ world, planet, branch, draft, saved, clean, i
   }, [world, planet, branch, draft, saved])
   const trial = useTemperatureTrialPreview(scope, mode, search.get('detail') === 'downscaled')
   const { report } = trial
+  const openPanel = useCallback(() => {
+    panelTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setVisited(true)
+    setOpen(true)
+    if (world) tutorialMilestone({ type: 'labOpened', world })
+  }, [world])
+  const closePanel = useCallback(() => {
+    setOpen(false)
+    const trigger = panelTrigger.current
+    if (trigger && trigger !== document.body && trigger.isConnected) trigger.focus({ preventScroll: true })
+    else document.getElementById(trialButtonId)?.focus({ preventScroll: true })
+  }, [])
+  const selectMode = useCallback((next: MapMode) => {
+    setSearch((previous) => {
+      const params = new URLSearchParams(previous)
+      params.set(RESULT_MODE_PARAM, resultModeValue(next))
+      return params
+    })
+    if (next === 'trial' && !trial.available && !ebmResult) openPanel()
+    if (next === 'official') setOpen(false)
+  }, [setSearch, trial.available, ebmResult, openPanel])
   const showTrial = useCallback(() => {
     if (!ebmResult) setLayerState(trialLayerState('temperature'))
-    setModeSelection({ scope, mode: 'trial' })
-  }, [scope, ebmResult])
+    selectMode('trial')
+  }, [ebmResult, selectMode])
   const reportEbmResult = useCallback((result: ClimateTrialResult) => {
     report(null)
     setEbmResult(result)
@@ -113,34 +135,25 @@ function TemperatureTrialSession({ world, planet, branch, draft, saved, clean, i
     else panelHost.remove()
   }, [panelHost])
   const showSavedError = useCallback(() => setOpen(true), [])
-  const openPanel = () => {
-    panelTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    setVisited(true)
-    setOpen(true)
-    if (world) tutorialMilestone({ type: 'labOpened', world })
-  }
-  const closePanel = () => {
-    setOpen(false)
-    const trigger = panelTrigger.current
-    if (trigger && trigger !== document.body && trigger.isConnected) trigger.focus({ preventScroll: true })
-    else document.getElementById(trialButtonId)?.focus({ preventScroll: true })
-  }
   const session: MapTemperatureTrialSession = {
     ...trial, ebm: mode === 'trial' && ebmResult ? {
       result: ebmResult, layers: layerState, setLayers: setLayerState, time: trialTime, setTime: setTrialTime,
     } : null,
     mode, layerState, setLayerState, open: open && !clean, openPanel, closePanel, attachPanel,
-    selectMode: (next) => {
-      setModeSelection({ scope, mode: next })
-      if (next === 'trial' && !trial.available && !ebmResult) openPanel()
-      if (next === 'official') setOpen(false)
-    },
+    selectMode,
     replaceElevation: () => {
       if (draft || saved) return
       setEbmResult(null)
       setTrialTime({ monthly: false, month: 0 })
       setLayerState(trialLayerState(null))
       setRevision(revision => revision + 1)
+      // A replaced elevation invalidates the development result: return to the default.
+      setSearch((previous) => {
+        if (!previous.has(RESULT_MODE_PARAM)) return previous
+        const params = new URLSearchParams(previous)
+        params.delete(RESULT_MODE_PARAM)
+        return params
+      }, { replace: true })
     },
   }
   return <>

@@ -9,6 +9,25 @@ import { climateRasterPixels } from './climateDownscale'
 import { temperatureColor } from './utils/colorScales'
 
 export type MapMode = 'official' | 'trial'
+
+/** URL parameter holding the map's result source (official build or development result). */
+export const RESULT_MODE_PARAM = 'result'
+
+/**
+ * Resolve the map mode from the URL. Without an explicit choice the map keeps
+ * the previous default: a saved climate result opens as a development result,
+ * everything else opens as the official build.
+ */
+export function resolveMapMode(param: string | null, saved: string | null | undefined): MapMode {
+  if (param === 'development') return 'trial'
+  if (param === 'official') return 'official'
+  return saved ? 'trial' : 'official'
+}
+
+/** URL value for a mode (internal trial = development in the UI). */
+export function resultModeValue(mode: MapMode): 'official' | 'development' {
+  return mode === 'trial' ? 'development' : 'official'
+}
 export type ClimateTrialTime = { monthly: boolean; month: number }
 export type EbmMapView = {
   result: ClimateTrialResult

@@ -9,7 +9,6 @@ import type { LonLat } from '../../viewers/map/utils/mapCoords'
 import type { GlobeScale } from '../../viewers/map/utils/globeScale'
 import MapHelpLink from './MapHelpLink'
 import { tutorialMilestone } from '../../tutorial/tutorialProgress'
-import type { MapMode } from '../../viewers/map/useTemperatureTrialPreview'
 
 const buttonClass = 'atlas-tool-button'
 const inputClass = 'w-24 rounded border border-space-border bg-space-surface px-2 py-1 text-gray-200'
@@ -29,12 +28,11 @@ interface RegionWindowPanelProps {
   onRegionScale?: (scale: GlobeScale) => void
   scaleAltitudeKm?: number
   scaleDetail?: 'ready' | 'loading' | 'failed' | 'missing'
-  modeControl?: { mode: MapMode; onChange: (mode: MapMode) => void }
 }
 
 export default function RegionWindowPanel({
   world, planet, branch, climateResult, radiusKm, selectedPoint, pickedPoint, onPickModeChange,
-  onMoveToRegion, onRegionScale, scaleAltitudeKm, scaleDetail, modeControl,
+  onMoveToRegion, onRegionScale, scaleAltitudeKm, scaleDetail,
 }: RegionWindowPanelProps) {
   const { t } = useTranslation('map')
   const [search, setSearch] = useSearchParams()
@@ -69,15 +67,6 @@ export default function RegionWindowPanel({
 
   return (
     <>
-      {modeControl && <label className="inline-flex shrink-0 items-center gap-1 text-xs text-gray-400 lg:gap-1.5">
-        <span className="max-[375px]:sr-only">{t('workbench.mode')}</span>
-        <select value={modeControl.mode}
-          onChange={event => modeControl.onChange(event.target.value === 'trial' ? 'trial' : 'official')}
-          className="min-h-10 rounded border border-space-border bg-space-bg px-1 text-xs text-gray-100 focus-visible:outline focus-visible:outline-neon-cyan lg:min-h-9 lg:px-2">
-          <option value="official">{t('workbench.official')}</option>
-          <option value="trial">{t('workbench.trial')}</option>
-        </select>
-      </label>}
       <div className="shrink-0 text-xs lg:relative" onKeyDown={(event) => {
         if (!expanded || event.key !== 'Escape') return
         event.preventDefault()

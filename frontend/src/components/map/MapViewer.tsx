@@ -72,6 +72,8 @@ interface MapViewerProps {
   onReady?: () => void
   /** Phone layout: skip idle pre-bakes that would hold extra 8 MB textures. */
   lowMemory?: boolean
+  /** Bump to restore the initial centre and zoom. */
+  viewResetRevision?: number
   hoveredCell: number | null
   selectedCells: Set<number>
   regionBoundary?: readonly LonLat[] | null
@@ -139,6 +141,7 @@ export default function MapViewer({
   onClearSelection,
   onReady,
   lowMemory = false,
+  viewResetRevision = 0,
   hoveredCell,
   selectedCells,
   regionBoundary,
@@ -193,6 +196,14 @@ export default function MapViewer({
   useEffect(() => {
     if (regionFocus) syncMapCenter(regionFocus)
   }, [regionFocus, regionMoveRevision, syncMapCenter])
+  // Reset button: return to the initial centre and zoom, like a fresh load.
+  const resetRevisionRef = useRef(0)
+  useEffect(() => {
+    if (resetRevisionRef.current === viewResetRevision) return
+    resetRevisionRef.current = viewResetRevision
+    syncMapCenter(regionFocus ?? { lon: 0, lat: 0 })
+    syncZoom(1)
+  }, [viewResetRevision, regionFocus, syncMapCenter, syncZoom])
 
   // Map dimensions
   const mapW = metadata?.width ?? 2048
@@ -799,7 +810,12 @@ export default function MapViewer({
     const wait = Math.max(0, 120 - (performance.now() - viewLast.current))
     viewTimer.current = window.setTimeout(flush, wait)
   }, [zoom, mapCenter, containerSize, onZoomChange, onViewStateChange])
-  useEffect(() => () => { if (viewTimer.current) window.clearTimeout(viewTimer.current) }, [])
+  useEffect(() => () => {
+    // StrictMode remounts run this cleanup; reset the ref as well, or the next
+    // mount sees a stale timer id and never schedules another view-state flush.
+    if (viewTimer.current) window.clearTimeout(viewTimer.current)
+    viewTimer.current = 0
+  }, [])
 
   // --- Cleanup on leave ---
   const handleMouseLeave = useCallback(() => {

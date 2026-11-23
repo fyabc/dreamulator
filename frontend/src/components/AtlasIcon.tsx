@@ -28,6 +28,7 @@ const paths = {
   more: 'M5 12h.01m6.99 0h.01m6.99 0h.01',
   pause: 'M9 5v14m6-14v14',
   play: 'm9 5 11 7-11 7z',
+  spin: 'M12 6.5a6 6 0 1 0 0 12 6 6 0 0 0 0-12M12 1.5v3M12 20v3M6 12.5a6 3 0 0 0 12 0M18 12.5l-2.3 1.8M18 12.5l1.8 2.3',
 } as const
 
 export type AtlasIconName = keyof typeof paths

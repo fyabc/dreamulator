@@ -10,7 +10,7 @@ export const mapLayerDesktopWidth = 'lg:w-56'
 
 type WorkPanelToggle = { id: string; buttonId: string; open: boolean; onToggle: () => void }
 
-export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, backRef, contextControls, switchTo, layerControls, timeControls, regionControls, trialPanel, panelControls, layersOpen, onToggleLayers, children }: {
+export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, backRef, contextControls, switchTo, layerControls, timeControls, regionControls, trialPanel, layersOpen, onToggleLayers, children }: {
   title: string
   subtitle?: string
   view: 'map' | 'globe' | 'region'
@@ -23,7 +23,6 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
   timeControls?: ReactNode
   regionControls?: ReactNode
   trialPanel?: WorkPanelToggle
-  panelControls?: ReactNode
   layersOpen: boolean
   onToggleLayers?: () => void
   children?: ReactNode
@@ -66,7 +65,6 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
         </div>
       )}
       <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 lg:col-start-3 lg:gap-2">
-        {panelControls}
         {trialPanel && <button id={trialPanel.buttonId} type="button" onClick={trialPanel.onToggle}
           className="atlas-tool-button hidden text-sm font-medium !border-neon-cyan/30 !text-neon-cyan/90 aria-expanded:!border-neon-cyan/60 aria-expanded:!text-neon-cyan lg:inline-flex"
           data-tutorial-anchor="lab" aria-label={trialLabel} title={trialLabel}

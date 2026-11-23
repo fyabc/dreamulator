@@ -13,13 +13,23 @@
     "tools": "Map tools",
     "layers": "Layers",
     "layerPanel": "Layers panel",
-    "inspectorPanel": "Inspector panel",    "quickLayers": "Quick layers",
+    "inspectorPanel": "Metrics panel",    "quickLayers": "Quick layers",
     "quick": { "terrain": "Terrain", "temperature": "Temperature", "precipitation": "Precipitation", "koppen": "Köppen" },
     "closeLayers": "Close layers",
     "body": "Body",
-    "mode": "Mode",
+    "resultMode": "Result",
     "official": "Official",
-    "trial": "Trial"
+    "development": "Development",
+    "officialHint": "Show the official result from the last build.",
+    "developmentHint": "Show the development result computed by the Climate Lab for the current inputs; nothing is written to the world.",
+    "developmentSource": "Climate development",
+    "developmentMissing": "No development result yet",
+    "collapseLayerPanel": "Collapse layers panel",
+    "showLayerPanel": "Show layers panel",
+    "collapseInspectorPanel": "Collapse metrics panel",
+    "showInspectorPanel": "Show metrics panel",
+    "collapseMinimap": "Collapse overview map",
+    "showMinimap": "Show overview map"
   },
   "terrainSource": {
     "label": "Terrain source",
@@ -66,7 +76,8 @@
     "elevation": "Elevation:",
     "crust": "Crust:",
     "plate": "Plate:",
-    "zoom": "Zoom:"
+    "zoom": "Zoom:",
+    "resetView": "Reset map view"
   },
   "crust": {
     "continental": "Continental crust",
@@ -523,10 +534,10 @@
     "switchToStellar": "Switch to stellar system 3D view",
     "stellarShort": "Stellar",
     "minimap": "Minimap",
-    "cleanMode": "Clean view (hide all UI for video recording; press Esc to exit)",
+    "cleanMode": "Clean view (hide all UI; press Esc to exit)",
     "focus": "Focus",
     "cleanExit": "Exit clean view (Esc)",
-    "autoSpin": "Auto rotate (for recording; drag or press N to pause, resumes on release)"
+    "autoSpin": "Auto rotate (drag or press N to pause, resumes on release)"
   },
   "msg": {
     "heightmapImported": "Heightmap imported. Refresh the page to see it.",

@@ -32,9 +32,12 @@ import MapDataLoading from '../components/map/MapDataLoading'
 import QuickLayerSwitch from '../components/map/QuickLayerSwitch'
 import TimeModeToggle from '../components/map/TimeModeToggle'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
+import MapResultModeControl from '../components/map/MapResultModeControl'
+import WorldContextSlot from '../components/map/WorldContextSlot'
 import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
 import { trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
 import { readRegionBoundary, readRegionWindow, REGION_WINDOW_PARAM } from '../viewers/map/regionWindow'
+import { isMonthlyLayer } from '../components/map/climateTime'
 import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
 import { useMapTemperatureTrial } from '../viewers/map/useTemperatureTrialPreview'
 import { useMapDisplayLayers } from '../viewers/map/useMapDisplayLayers'
@@ -87,21 +90,6 @@ export default function MapViewerPage() {
   useEffect(() => {
     try { localStorage.setItem('dreamulator-map-right-panel', rightPanelCollapsed ? '1' : '0') } catch { return }
   }, [rightPanelCollapsed])
-  const panelControls = <>
-    <button type="button" className="atlas-tool-button hidden text-sm lg:inline-flex"
-      aria-pressed={!leftPanelCollapsed} title={t('workbench.layerPanel')}
-      onClick={() => setLeftPanelCollapsed((collapsed) => !collapsed)}>
-      <AtlasIcon name="layers" className="size-4" />
-      <span className="hidden xl:inline">{t('workbench.layerPanel')}</span>
-    </button>
-    <button type="button" className="atlas-tool-button hidden text-sm lg:inline-flex"
-      aria-pressed={!rightPanelCollapsed} title={t('workbench.inspectorPanel')}
-      onClick={() => setRightPanelCollapsed((collapsed) => !collapsed)}>
-      <AtlasIcon name="chart" className="size-4" />
-      <span className="hidden xl:inline">{t('workbench.inspectorPanel')}</span>
-    </button>
-  </>
-
   // Stable empty set — clean mode suppresses hover/selection highlights without
   // changing cell-picking state underneath.
   const emptySelection = useMemo(() => new Set<number>(), [])
@@ -110,6 +98,8 @@ export default function MapViewerPage() {
     [rawWindow, planetRadiusM])
   const regionFocus = useMemo(() => readRegionWindow(rawWindow, planetRadiusM / 1000), [rawWindow, planetRadiusM])
   const [regionMoveRevision, setRegionMoveRevision] = useState(0)
+  const [minimapOpen, setMinimapOpen] = useState(true)
+  const [viewResetRevision, setViewResetRevision] = useState(0)
   const [regionPicking, setRegionPicking] = useState(false)
   const [regionPickedPoint, setRegionPickedPoint] = useState<{ lon: number; lat: number } | null>(null)
 
@@ -151,13 +141,17 @@ export default function MapViewerPage() {
     backSearch.set('tab', 'climate')
     if (selectedPlanet) backSearch.set('planet', selectedPlanet)
   }
+  const inspectionLayer = trialActive ? display.trialInspectionLayer : vs.activeColorMode
+  const showTimeControl = trialActive
+    ? Boolean(trial.preview?.periods?.length) && inspectionLayer === 'temperature'
+    : isMonthlyLayer(inspectionLayer) && (Boolean(monthlyData) || monthlyLoading)
   const inspection = <div className="space-y-3">
-    <div className="border-b border-space-border pb-3">
+    {showTimeControl && <div className="border-b border-space-border pb-3">
       <MapTimeControl mesh={cvtMesh} trialMode={trialActive} preview={trial.preview}
-        layer={trialActive ? display.trialInspectionLayer : vs.activeColorMode}
+        layer={inspectionLayer}
         monthlyData={monthlyData} loading={monthlyLoading} monthlyMode={monthlyMode} cell={trialActive ? null : inspectorCell}
         onMonthlyModeChange={handleMonthlyModeChange} monthIndex={monthlyMonth} onSelectMonth={selectMonth} />
-    </div>
+    </div>}
     <MapCellInspector trialMode={trialActive} trial={trial.preview} cursor={cursor}
     cell={inspectorCell} cvtMesh={cvtMesh} planetName={currentPlanetName} selectedCells={selectedCellObjects}
     activeColorMode={trialActive ? display.texture ? 'temperature' : 'terrain' : vs.activeColorMode} monthlyMode={monthlyMode} monthIndex={monthlyMonth}
@@ -182,11 +176,14 @@ export default function MapViewerPage() {
     <div className={cleanMode
       ? 'fixed inset-0 z-40 flex flex-col bg-[#030308]'
       : 'atlas-workbench flex flex-col'}>
+      <WorldContextSlot>
+        {trialReady && <MapResultModeControl mode={trial.mode} onChange={trial.selectMode}
+          ready={Boolean(trial.available || trial.ebm)} />}
+      </WorldContextSlot>
       {!cleanMode && (
       <MapWorkbenchToolbar title={currentPlanetName ?? selectedPlanet ?? t('title.mapFallback')} view="map"
         backTo={`/worlds/${worldName}${backSearch.size ? `?${backSearch}` : ''}`}
         switchTo={selectedPlanet ? `/worlds/${worldName}/globe/${selectedPlanet}${globeQS}` : undefined}
-        panelControls={panelControls}
         timeControls={!trialActive && <TimeModeToggle monthlyMode={monthlyMode}
           onChange={handleMonthlyModeChange} />}
         layerControls={<QuickLayerSwitch state={display.state} onChange={display.onChange}
@@ -195,7 +192,6 @@ export default function MapViewerPage() {
           <RegionWindowPanel key={selectedPlanet} world={worldName} planet={selectedPlanet}
             climateResult={meta?.browser_heightmap && trial.mode === 'trial' ? searchParams.get('climateResult') ?? undefined : undefined}
             branch={selectedBranch} radiusKm={planetRadiusM / 1000}
-            modeControl={trialReady ? { mode: trial.mode, onChange: trial.selectMode } : undefined}
             onMoveToRegion={() => setRegionMoveRevision((revision) => revision + 1)}
             selectedPoint={selectedCells.size === 1 ? selectedCellData : null}
             pickedPoint={regionPickedPoint}
@@ -311,6 +307,7 @@ export default function MapViewerPage() {
                     showGraticule={!cleanMode}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
+                    viewResetRevision={viewResetRevision}
                     lowMemory
                   />}
                   {legend()}
@@ -362,21 +359,31 @@ export default function MapViewerPage() {
         <div className="hidden lg:flex flex-1 min-h-0">
           {/* Left panel: layers */}
           {!cleanMode && !leftPanelCollapsed && (
-          <div className="w-48 shrink-0 bg-space-panel border-r border-space-border overflow-y-auto p-3 space-y-4">
-            {layers}
-            {platesError && selectedPlanet && (
-              <div className="text-xs text-gray-500 pt-2">
-                {t('msg.noPlateData')}
+          <div className="w-48 shrink-0 bg-space-panel border-r border-space-border overflow-y-auto">
+            <div className="flex items-center gap-1.5 border-b border-space-border px-2">
+              <button type="button" onClick={() => setLeftPanelCollapsed(true)}
+                title={t('workbench.collapseLayerPanel')} aria-label={t('workbench.collapseLayerPanel')}
+                className="inline-flex size-6 items-center justify-center rounded text-gray-400 hover:bg-space-surface hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan">
+                <AtlasIcon name="back" className="size-3.5" />
+              </button>
+              <h2 className="text-xs font-semibold uppercase leading-none tracking-wide text-gray-500">{t('workbench.layerPanel')}</h2>
+            </div>
+            <div className="space-y-4 p-3">
+              {layers}
+              {platesError && selectedPlanet && (
+                <div className="text-xs text-gray-500 pt-2">
+                  {t('msg.noPlateData')}
+                </div>
+              )}
+              <div className="pt-3 border-t border-space-border">
+                <SunControl
+                  sunLongitudeDeg={sunLongitudeDeg}
+                  onLongitudeChange={setSunLongitudeDeg}
+                  seasonDeg={seasonDeg} onSeasonChange={setSeasonDeg} solarDeclination={solarDeclination} axialTiltDeg={axialTiltDeg}
+                  enabled={dayNightEnabled}
+                  onEnabledChange={setDayNightEnabled}
+                />
               </div>
-            )}
-            <div className="pt-3 border-t border-space-border">
-              <SunControl
-                sunLongitudeDeg={sunLongitudeDeg}
-                onLongitudeChange={setSunLongitudeDeg}
-                seasonDeg={seasonDeg} onSeasonChange={setSeasonDeg} solarDeclination={solarDeclination} axialTiltDeg={axialTiltDeg}
-                enabled={dayNightEnabled}
-                onEnabledChange={setDayNightEnabled}
-              />
             </div>
           </div>
           )}
@@ -421,7 +428,27 @@ export default function MapViewerPage() {
                     showGraticule={!cleanMode}
                     onZoomChange={setDisplayZoom}
                     onViewStateChange={setViewState}
+                    viewResetRevision={viewResetRevision}
                   />}
+
+                  {!cleanMode && leftPanelCollapsed && (
+                    <div className="absolute left-2 top-2 z-30">
+                      <button type="button" onClick={() => setLeftPanelCollapsed(false)}
+                        title={t('workbench.showLayerPanel')} aria-label={t('workbench.showLayerPanel')}
+                        className="inline-flex size-8 items-center justify-center rounded border border-space-border bg-space-panel/90 text-gray-300 shadow-lg hover:border-neon-cyan hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan">
+                        <AtlasIcon name="layers" className="size-4" />
+                      </button>
+                    </div>
+                  )}
+                  {!cleanMode && rightPanelCollapsed && (
+                    <div className="absolute right-2 top-2 z-30">
+                      <button type="button" onClick={() => setRightPanelCollapsed(false)}
+                        title={t('workbench.showInspectorPanel')} aria-label={t('workbench.showInspectorPanel')}
+                        className="inline-flex size-8 items-center justify-center rounded border border-space-border bg-space-panel/90 text-gray-300 shadow-lg hover:border-neon-cyan hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan">
+                        <AtlasIcon name="chart" className="size-4" />
+                      </button>
+                    </div>
+                  )}
 
                   {/* Recording control — float in the map view's bottom-right
                       corner.  Fully hidden in clean mode (zero UI while
@@ -443,7 +470,7 @@ export default function MapViewerPage() {
                   {/* Base-map water/land legend — bottom-left, only while the
                       terrain or landsea base map is the active main layer. */}
                   {!cleanMode && (
-                    <MapLegend visible={trialActive ? !display.texture : activeMainLayer === 'terrain' || activeMainLayer === 'landsea'} />
+                    <MapLegend visible={activeMainLayer === 'landsea'} />
                   )}
                   {!mapPainted && (
                     <div className="absolute inset-0 z-20 flex bg-[#0a0a1a]">
@@ -452,7 +479,8 @@ export default function MapViewerPage() {
                   )}
                 </div>
                 {!cleanMode && (
-                  <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={trialActive ? null : hoveredCellData} trial={trial.preview} legend={legend(true)} />
+                  <MapStatusBar cursor={cursor} zoom={displayZoom} hoveredCell={trialActive ? null : hoveredCellData} trial={trial.preview}
+                    legend={legend(true)} onResetView={() => setViewResetRevision(revision => revision + 1)} />
                 )}
               </>
             ) : (
@@ -463,21 +491,36 @@ export default function MapViewerPage() {
           {/* Right panel: cell inspector + minimap */}
           {!cleanMode && !rightPanelCollapsed && (
           <MapInspectorPane panelRef={element => { if (element) element.inert = trialOpen }}
+            title={t('workbench.inspectorPanel')} onCollapse={() => setRightPanelCollapsed(true)}
+            collapseLabel={t('workbench.collapseInspectorPanel')}
             className={`flex ${inspectorDesktopPane}`} footer={elevation && (
-              <div className="shrink-0 border-t border-space-border p-3">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  {t('label.minimap')}
-                </h3>
-                <MapMinimap
-                  elevation={elevation}
-                  width={meta?.width ?? 2048}
-                  height={meta?.height ?? 1024}
-                  seaLevel={meta?.sea_level_m ?? 0.0}
-                  mapCenter={viewState.mapCenter}
-                  zoom={viewState.zoom}
-                  containerWidth={viewState.containerWidth}
-                  containerHeight={viewState.containerHeight}
-                />
+              <div className="shrink-0 border-t border-space-border">
+                <div className="flex items-center justify-between gap-2 px-2">
+                  <h3 className="text-xs font-semibold uppercase leading-none tracking-wide text-gray-500">
+                    {t('label.minimap')}
+                  </h3>
+                  <button type="button" aria-expanded={minimapOpen}
+                    title={t(minimapOpen ? 'workbench.collapseMinimap' : 'workbench.showMinimap')}
+                    aria-label={t(minimapOpen ? 'workbench.collapseMinimap' : 'workbench.showMinimap')}
+                    onClick={() => setMinimapOpen(open => !open)}
+                    className="inline-flex size-6 items-center justify-center rounded text-gray-400 hover:bg-space-surface hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan">
+                    <AtlasIcon name="arrow" className={`size-3.5 transition-transform ${minimapOpen ? 'rotate-90' : '-rotate-90'}`} />
+                  </button>
+                </div>
+                {minimapOpen && <div className="p-3 pt-1">
+                  <MapMinimap
+                    elevation={elevation}
+                    width={meta?.width ?? 2048}
+                    height={meta?.height ?? 1024}
+                    seaLevelFraction={meta && meta.elevation_max_m > meta.elevation_min_m
+                      ? (meta.sea_level_m - meta.elevation_min_m) / (meta.elevation_max_m - meta.elevation_min_m)
+                      : 0}
+                    mapCenter={viewState.mapCenter}
+                    zoom={viewState.zoom}
+                    containerWidth={viewState.containerWidth}
+                    containerHeight={viewState.containerHeight}
+                  />
+                </div>}
               </div>
             )}>
             {inspection}

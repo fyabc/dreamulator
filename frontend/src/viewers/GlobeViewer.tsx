@@ -66,6 +66,8 @@ interface GlobeViewerProps {
   /** Fills a form with the clicked point (region centre); takes precedence over
    *  cell selection while set. A drag that rotates the globe does not pick. */
   onPickPoint?: (lon: number, lat: number) => void
+  /** Bump to restore the default north-up overview camera. */
+  viewResetRevision?: number
   /** Called when the pointer leaves the globe surface. */
   onHoverOut?: () => void
   /** Called with current camera distance (planet radii). */
@@ -341,6 +343,7 @@ interface GlobeSceneProps {
   onCellHover?: (lon: number, lat: number) => void
   onCellClick?: (lon: number, lat: number, ctrlKey: boolean) => void
   onPickPoint?: (lon: number, lat: number) => void
+  viewResetRevision?: number
   onHoverOut?: () => void
   vertices?: GlobeVertex[]
   regions?: GlobeRegion[]
@@ -378,7 +381,7 @@ interface NorthAnimState {
 }
 
 function GlobeScene({
-  texture, renderComposite, distanceRef, onCellHover, onCellClick, onPickPoint, onHoverOut,
+  texture, renderComposite, distanceRef, onCellHover, onCellClick, onPickPoint, viewResetRevision = 0, onHoverOut,
   vertices, regions, hoveredCellId, selectedCellIds, regionBoundary, regionFocus,
   regionMoveRevision, scalePreview = false, regionFlight, regionDetail,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
@@ -687,6 +690,25 @@ function GlobeScene({
     return () => window.removeEventListener('keydown', handler)
   }, [scalePreview])
 
+  // Status-bar reset button: same destination as the N-key shortcut.
+  const resetRevisionRef = useRef(0)
+  useEffect(() => {
+    if (resetRevisionRef.current === viewResetRevision) return
+    resetRevisionRef.current = viewResetRevision
+    const controls = controlsRef.current
+    if (!controls) return
+    const camera = controls.object as THREE.Camera
+    if (scalePreview) {
+      regionFlightRef.current = { startTime: performance.now(), path: globeCameraPath(camera.position, NORTH_VIEW_POS) }
+      return
+    }
+    northAnimRef.current = {
+      startTime: performance.now(),
+      startPos: camera.position.clone(),
+      startTarget: controls.target.clone(),
+    }
+  }, [viewResetRevision, scalePreview])
+
   // Build region lookup: cellId → region
   const regionMap = useMemo(() => {
     const m = new Map<number, GlobeRegion>()
@@ -836,7 +858,7 @@ function TransitionPrompt({ progress, label }: { progress: number; label: string
 
 export default function GlobeViewer({
   texture, renderComposite, onTransition, transitionLabel,
-  onCellHover, onCellClick, onPickPoint, onHoverOut, onDistanceChange,
+  onCellHover, onCellClick, onPickPoint, viewResetRevision, onHoverOut, onDistanceChange,
   vertices, regions, hoveredCellId, selectedCellIds, regionBoundary, regionFocus,
   regionMoveRevision, scalePreview = false, regionFlight, regionDetail,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
@@ -881,6 +903,7 @@ export default function GlobeViewer({
           <GlobeScene
             texture={texture} renderComposite={renderComposite} distanceRef={distanceRef}
             onCellHover={onCellHover} onCellClick={onCellClick} onPickPoint={onPickPoint}
+            viewResetRevision={viewResetRevision}
             onHoverOut={onHoverOut}
             vertices={vertices} regions={regions}
             hoveredCellId={hoveredCellId} selectedCellIds={selectedCellIds}

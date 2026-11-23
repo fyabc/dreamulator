@@ -2,10 +2,19 @@ import { useState, type ReactNode, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 import AtlasIcon, { type AtlasIconName } from '../AtlasIcon'
 
-export function MapInspectorPane({ children, footer, panelRef, labelledBy, className = '' }: {
-  children: ReactNode; footer?: ReactNode; panelRef?: Ref<HTMLElement>; labelledBy?: string; className?: string
+export function MapInspectorPane({ children, footer, panelRef, labelledBy, title, onCollapse, collapseLabel, className = '' }: {
+  children: ReactNode; footer?: ReactNode; panelRef?: Ref<HTMLElement>; labelledBy?: string
+  title?: string; onCollapse?: () => void; collapseLabel?: string; className?: string
 }) {
   return <aside ref={panelRef} aria-label={labelledBy} className={`min-h-0 flex-col ${className}`}>
+    {(title || onCollapse) && <div className="flex shrink-0 items-center justify-between gap-2 border-b border-space-border px-2">
+      {title && <span className="text-xs font-semibold uppercase leading-none tracking-wide text-gray-500">{title}</span>}
+      {onCollapse && <button type="button" onClick={onCollapse}
+        title={collapseLabel} aria-label={collapseLabel}
+        className="inline-flex size-6 items-center justify-center rounded text-gray-400 hover:bg-space-surface hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan">
+        <AtlasIcon name="arrow" className="size-3.5" />
+      </button>}
+    </div>}
     <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
     {footer}
   </aside>
