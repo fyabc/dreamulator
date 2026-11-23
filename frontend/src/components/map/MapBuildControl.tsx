@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api, ApiError } from '../../api/client'
 import { isStaticMode } from '../../api/mode'
 import type { BuildJob, BuildPlan } from '../../api/buildJobs'
+import MapBuildStrip from './MapBuildStrip'
 
 interface Props {
   world: string
@@ -142,27 +143,17 @@ export default function MapBuildControl({ world, branch, onBuilt }: Props) {
   const data: BuildPlan | undefined = plan.data
   if (!data || data.read_only) return null
 
-  const pending = data.start_layer ? data.recompute.length : 0
   const runningLayer = job?.stages.find(stage => stage.state === 'running')?.layer
   const doneStages = job?.stages.filter(stage => stage.state === 'succeeded' || stage.state === 'skipped').length ?? 0
   const totalStages = job?.stages.length ?? 0
   const failure = job?.error || job?.stages.flatMap(stage => stage.errors)[0] ||
     job?.result?.errors[0] || (start.error instanceof Error ? start.error.message : null)
   const label = (name: string) => t(`worlds:layer.${name}`)
-  const chip = active ? t('buildPlan.building') : pending
-    ? t('buildPlan.pending', { count: pending }) : t('buildPlan.fresh')
-  const chipClass = active
-    ? 'border-neon-cyan/40 text-neon-cyan'
-    : pending ? 'border-amber-300/40 text-amber-200' : 'border-space-border text-slate-400'
 
   return (
     <div ref={wrapper} className="relative hidden shrink-0 items-center lg:flex">
-      <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)}
-        title={t('buildPlan.title')}
-        className={`inline-flex items-center gap-1 whitespace-nowrap rounded border bg-space-surface px-1.5 py-0.5 text-xs hover:border-neon-cyan/60 hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan ${chipClass}`}>
-        {chip}
-        <span aria-hidden="true" className="text-[9px]">{open ? '▴' : '▾'}</span>
-      </button>
+      <MapBuildStrip plan={data} job={job ?? null} active={active} open={open}
+        onToggle={() => setOpen(value => !value)} />
       {open && <div className="absolute right-0 top-full z-40 mt-1 w-80 max-w-[calc(100vw-1.5rem)] space-y-2 rounded border border-space-border bg-space-panel p-3 text-xs shadow-xl">
         <p className="font-medium text-gray-200">{t('buildPlan.title')}</p>
         <ul className="space-y-1">
