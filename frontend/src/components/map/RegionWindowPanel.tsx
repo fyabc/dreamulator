@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -21,6 +21,10 @@ interface RegionWindowPanelProps {
   climateResult?: string
   radiusKm: number
   selectedPoint?: LonLat | null
+  /** Point picked by clicking the map while the form is open. */
+  pickedPoint?: LonLat | null
+  /** Tells the page whether a map click should fill the region centre. */
+  onPickModeChange?: (picking: boolean) => void
   onMoveToRegion: () => void
   onRegionScale?: (scale: GlobeScale) => void
   scaleAltitudeKm?: number
@@ -29,7 +33,8 @@ interface RegionWindowPanelProps {
 }
 
 export default function RegionWindowPanel({
-  world, planet, branch, climateResult, radiusKm, selectedPoint, onMoveToRegion, onRegionScale, scaleAltitudeKm, scaleDetail, modeControl,
+  world, planet, branch, climateResult, radiusKm, selectedPoint, pickedPoint, onPickModeChange,
+  onMoveToRegion, onRegionScale, scaleAltitudeKm, scaleDetail, modeControl,
 }: RegionWindowPanelProps) {
   const { t } = useTranslation('map')
   const [search, setSearch] = useSearchParams()
@@ -38,6 +43,11 @@ export default function RegionWindowPanel({
   const window = readRegionWindow(rawWindow, radiusKm)
   const [expanded, setExpanded] = useState(false)
   const formId = useId()
+  useEffect(() => {
+    if (!onPickModeChange) return
+    onPickModeChange(expanded)
+    return () => onPickModeChange(false)
+  }, [expanded, onPickModeChange])
   const expandButton = useRef<HTMLButtonElement>(null)
   const regionParams = new URLSearchParams({ world, planet, radius: String(radiusKm),
     view: location.pathname.split('/')[3] === 'globe' ? 'globe' : 'map' })
@@ -98,7 +108,8 @@ export default function RegionWindowPanel({
             {scaleDetail && <span role="status" className="text-gray-400">{t(`regionWindow.scaleDetail.${scaleDetail}`)}</span>}
           </div>}
           <RegionWindowForm key={rawWindow ?? ''} initial={window} radiusKm={radiusKm}
-            selectedPoint={selectedPoint} onMove={move} />
+            selectedPoint={selectedPoint} pickedPoint={pickedPoint} onMove={move} />
+          {onPickModeChange && <p className="text-gray-500">{t('regionWindow.hint.pick')}</p>}
           {rawWindow && <div className="flex flex-wrap items-center gap-2 border-t border-space-border pt-2">
             {window && <Link data-tutorial-anchor="regionOpen" className={`${buttonClass} font-semibold !text-neon-cyan`} to={`/packs?${regionParams}`} title={t('regionWindow.hint.open')}
               state={{ regionReturn: `${location.pathname}${location.search}` }}>{t('regionWindow.open')}</Link>}
@@ -111,10 +122,11 @@ export default function RegionWindowPanel({
   )
 }
 
-function RegionWindowForm({ initial, radiusKm, selectedPoint, onMove }: {
+function RegionWindowForm({ initial, radiusKm, selectedPoint, pickedPoint, onMove }: {
   initial: RegionWindow | null
   radiusKm: number
   selectedPoint?: LonLat | null
+  pickedPoint?: LonLat | null
   onMove: (window: RegionWindow) => void
 }) {
   const { t } = useTranslation('map')
@@ -122,6 +134,12 @@ function RegionWindowForm({ initial, radiusKm, selectedPoint, onMove }: {
   const [lon, setLon] = useState(initial?.lon.toString() ?? '')
   const [spanKm, setSpanKm] = useState(initial?.spanKm.toString() ?? '500')
   const [invalid, setInvalid] = useState(false)
+  useEffect(() => {
+    if (!pickedPoint) return
+    setLat(String(pickedPoint.lat))
+    setLon(String(pickedPoint.lon))
+    setInvalid(false)
+  }, [pickedPoint])
 
   return (
     <form noValidate className="flex flex-wrap items-end gap-2" onSubmit={(event) => {

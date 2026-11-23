@@ -110,6 +110,8 @@ export default function MapViewerPage() {
     [rawWindow, planetRadiusM])
   const regionFocus = useMemo(() => readRegionWindow(rawWindow, planetRadiusM / 1000), [rawWindow, planetRadiusM])
   const [regionMoveRevision, setRegionMoveRevision] = useState(0)
+  const [regionPicking, setRegionPicking] = useState(false)
+  const [regionPickedPoint, setRegionPickedPoint] = useState<{ lon: number; lat: number } | null>(null)
 
   // Left panel drawer (mobile only)
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
@@ -195,7 +197,9 @@ export default function MapViewerPage() {
             branch={selectedBranch} radiusKm={planetRadiusM / 1000}
             modeControl={trialReady ? { mode: trial.mode, onChange: trial.selectMode } : undefined}
             onMoveToRegion={() => setRegionMoveRevision((revision) => revision + 1)}
-            selectedPoint={selectedCells.size === 1 ? selectedCellData : null} />
+            selectedPoint={selectedCells.size === 1 ? selectedCellData : null}
+            pickedPoint={regionPickedPoint}
+            onPickModeChange={setRegionPicking} />
         ) : undefined}
         trialPanel={trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trialOpen, onToggle: trialOpen ? trial.closePanel : openTrial } : undefined}
         layersOpen={leftPanelOpen && !trialOpen} onToggleLayers={() => {
@@ -285,6 +289,7 @@ export default function MapViewerPage() {
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
                     onCellClick={selectCell}
+                    onPickPoint={regionPicking ? setRegionPickedPoint : undefined}
                     onClearSelection={clearSelection}
                     onReady={() => setMapPainted(true)}
                     hoveredCell={cleanMode ? null : hoveredCell}
@@ -394,6 +399,7 @@ export default function MapViewerPage() {
                     onCursorMove={setCursor}
                     onCellHover={handleCellHover}
                     onCellClick={selectCell}
+                    onPickPoint={regionPicking ? setRegionPickedPoint : undefined}
                     onClearSelection={clearSelection}
                     onReady={() => setMapPainted(true)}
                     hoveredCell={cleanMode ? null : hoveredCell}

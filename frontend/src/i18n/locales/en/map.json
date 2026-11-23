@@ -546,7 +546,7 @@
     "escClearSelection": "Esc clears all selections"
   },
   "regionWindow": {
-    "title": "Select region",
+    "title": "Region refinement",
     "latitude": "Centre latitude (°)",
     "longitude": "Centre longitude (°)",
     "span": "Side length (km)",
@@ -567,9 +567,10 @@
     "open": "View region",
     "openPack": "Open existing regional map: {{name}}",
     "back": "← Back to the global selection",
-    "help": "Region selection help (opens in a new tab)",
+    "help": "Region refinement help (opens in a new tab)",
     "hint": {
-      "toggle": "Show or hide the region selection controls.",
+      "toggle": "Show or hide the region refinement controls.",
+      "pick": "While this panel is open, a click on the flat map or globe (a tap on touch screens) fills that point as the centre; dragging the map does not pick.",
       "latitude": "Latitude at the centre of the region. Positive is north; negative is south.",
       "longitude": "Longitude at the centre of the region. Positive is east; negative is west.",
       "span": "Side length of the square region in kilometres. This is not the map resolution.",

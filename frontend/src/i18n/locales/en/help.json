@@ -233,7 +233,7 @@
       "intro": "Import your own heightmap, build a world, then choose a place to inspect or refine.",
       "first": { "action": "Import a global heightmap", "description": "Choose a heightmap, check the elevation range, sea level, and preview, then save it to a world. If you do not have a heightmap, create a world from a template in the worlds list." },
       "second": { "action": "Open and build a world", "description": "On the world page, confirm the branch and terrain grid size before selecting Build. When it finishes, open the map to see the available terrain and climate layers." },
-      "third": { "action": "Inspect and refine a region", "description": "Use Region selection on the flat map or globe. Choose Move to selection to centre the view, then View region. Inspect the original elevation or use the local options to refine terrain or extract rivers and lakes." },
+      "third": { "action": "Inspect and refine a region", "description": "Use Region refinement on the flat map or globe. Choose Move to selection to centre the view, then View region. Inspect the original elevation or use the local options to refine terrain or extract rivers and lakes." },
       "backup": "To continue on another device, download a world backup from the World build panel. It includes regions saved in the world directory and can be restored with the command line."
     },
     "static": {
@@ -371,11 +371,11 @@
       ]
     },
     "regionSelection": {
-      "title": "Region selection",
+      "title": "Region refinement",
       "entries": [
         {
           "title": "Set the centre and size",
-          "content": "Open **Select region** on the global map or globe. Enter the centre latitude and longitude in degrees. Positive latitude is north, and positive longitude is east. The side length is the physical size of a square region, not the resolution: 550 km means a 550 × 550 km region.\n\nYou can also select one map cell and choose **Use selected point**. On desktop, hold Ctrl or Command and click; on a touchscreen, tap the map. This fills in the cell centre and leaves the side length unchanged."
+          "content": "Open **Region refinement** on the global map or globe. Enter the centre latitude and longitude in degrees. Positive latitude is north, and positive longitude is east. The side length is the physical size of a square region, not the resolution: 550 km means a 550 × 550 km region.\n\nWhile the panel is open, a click on the map (a tap on touch screens) fills that point as the centre; dragging the map does not pick. You can also select one map cell and choose **Use selected point** (on desktop, hold Ctrl or Command and click; on a touchscreen, tap the map). That fills in the cell centre and leaves the side length unchanged."
         },
         {
           "title": "Move to the selection",

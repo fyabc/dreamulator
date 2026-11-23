@@ -61,6 +61,9 @@ interface MapViewerProps {
   onCursorMove?: (info: CursorInfo | null) => void
   onCellHover?: (cellId: number | null) => void
   onCellClick?: (cellId: number, ctrlKey: boolean) => void
+  /** Fills a form with the clicked point (region centre). Takes precedence over
+   *  cell selection while set, including on plain clicks and taps. */
+  onPickPoint?: (point: LonLat) => void
   /** Right-click clears the pinned selection (easier than double-clicking the
    *  same cell again when the map is zoomed out). */
   onClearSelection?: () => void
@@ -132,6 +135,7 @@ export default function MapViewer({
   onCursorMove,
   onCellHover,
   onCellClick,
+  onPickPoint,
   onClearSelection,
   onReady,
   lowMemory = false,
@@ -511,6 +515,7 @@ export default function MapViewer({
       const rect = containerRef.current?.getBoundingClientRect()
       if (!rect) return
       setIsDragging(true)
+      mouseDownPosRef.current = { x: e.clientX, y: e.clientY }
       dragStart.current = {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top,
@@ -596,6 +601,8 @@ export default function MapViewer({
     moved: boolean
   } | null>(null)
   const suppressClickRef = useRef(false)
+  // Mouse-down position, so a pan that ends with a click does not select or pick.
+  const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null)
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const rect = containerRef.current?.getBoundingClientRect()
@@ -690,20 +697,31 @@ export default function MapViewer({
   }, [syncZoom])
 
   // --- Click ---
-  // Ctrl+click (single) → toggle cell without replacing other selections.
+  // Picking mode (region centre) consumes plain clicks and taps; otherwise
+  // Ctrl+click (single) toggles a cell without replacing other selections.
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       if (suppressClickRef.current) { suppressClickRef.current = false; return }
+      const start = mouseDownPosRef.current
+      mouseDownPosRef.current = null
+      // A pan releases with a click on the same element; treat movement as a drag.
+      if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 6) return
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const ll = unproject(e.clientX - rect.left, e.clientY - rect.top)
+      if (isNaN(ll.lon) || isNaN(ll.lat) || ll.lat < -90 || ll.lat > 90) return
       const ctrl = e.ctrlKey || e.metaKey
+      // Ctrl/Cmd+click keeps its cell-selection meaning, so the "Use selected
+      // point" workflow still works while the region form is open.
+      if (onPickPoint && !ctrl) {
+        onPickPoint({ lon: Math.round(ll.lon * 100) / 100, lat: Math.round(ll.lat * 100) / 100 })
+        return
+      }
       const isTouch = (e.nativeEvent as PointerEvent)?.pointerType === 'touch' ||
         (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
       // Plain click pans (desktop); a tap selects the cell on touch devices.
       if (!ctrl && !isTouch) return
       if (!cellIdMap && !trialTemperature) return
-      const rect = containerRef.current?.getBoundingClientRect()
-      if (!rect) return
-      const ll = unproject(e.clientX - rect.left, e.clientY - rect.top)
-      if (isNaN(ll.lon) || isNaN(ll.lat) || ll.lat < -90 || ll.lat > 90) return
       const cellId = cellAtLonLat(ll.lon, ll.lat)
       if (cellId >= 0 || trialTemperature) {
         if (cellId >= 0) onCellClick?.(cellId, ctrl)
@@ -722,7 +740,7 @@ export default function MapViewer({
         onCellHover?.(cellId >= 0 ? cellId : null)
       }
     },
-    [cellIdMap, cellAtLonLat, trialTemperature, unproject, onCellClick, elevation, elevMin, elevMax, mapW, mapH, onCursorMove, onCellHover, terrainSource, voronoiCells],
+    [cellIdMap, cellAtLonLat, trialTemperature, unproject, onCellClick, onPickPoint, elevation, elevMin, elevMax, mapW, mapH, onCursorMove, onCellHover, terrainSource, voronoiCells],
   )
 
   const handleDoubleClick = useCallback(

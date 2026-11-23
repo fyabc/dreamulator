@@ -63,6 +63,9 @@ interface GlobeViewerProps {
   transitionLabel?: string
   onCellHover?: (lon: number, lat: number) => void
   onCellClick?: (lon: number, lat: number, ctrlKey: boolean) => void
+  /** Fills a form with the clicked point (region centre); takes precedence over
+   *  cell selection while set. A drag that rotates the globe does not pick. */
+  onPickPoint?: (lon: number, lat: number) => void
   /** Called when the pointer leaves the globe surface. */
   onHoverOut?: () => void
   /** Called with current camera distance (planet radii). */
@@ -337,6 +340,7 @@ interface GlobeSceneProps {
   distanceRef: React.MutableRefObject<number>
   onCellHover?: (lon: number, lat: number) => void
   onCellClick?: (lon: number, lat: number, ctrlKey: boolean) => void
+  onPickPoint?: (lon: number, lat: number) => void
   onHoverOut?: () => void
   vertices?: GlobeVertex[]
   regions?: GlobeRegion[]
@@ -374,7 +378,7 @@ interface NorthAnimState {
 }
 
 function GlobeScene({
-  texture, renderComposite, distanceRef, onCellHover, onCellClick, onHoverOut,
+  texture, renderComposite, distanceRef, onCellHover, onCellClick, onPickPoint, onHoverOut,
   vertices, regions, hoveredCellId, selectedCellIds, regionBoundary, regionFocus,
   regionMoveRevision, scalePreview = false, regionFlight, regionDetail,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
@@ -387,6 +391,8 @@ function GlobeScene({
   const northAnimRef = useRef<NorthAnimState | null>(null)
   const regionFlightRef = useRef<{ startTime: number; path: ReturnType<typeof globeCameraPath> } | null>(null)
   const userDraggingRef = useRef(false)
+  // Pointer-down position, so a click after rotating the globe does not pick a point.
+  const pickStartRef = useRef<{ x: number; y: number } | null>(null)
   // First useFrame tick = first rendered frame — the interactive-ready point.
   const firstFrameRef = useRef(true)
   // Particle-projector state: the epoch bumps whenever the camera or viewport
@@ -725,15 +731,33 @@ function GlobeScene({
             onCellHover?.(lon, lat)
           }
         } : undefined}
+        onPointerDown={interactive ? (e: any) => {
+          const native = e.nativeEvent as PointerEvent
+          pickStartRef.current = { x: native.clientX, y: native.clientY }
+        } : undefined}
         onPointerOut={interactive ? () => onHoverOut?.() : undefined}
         onClick={interactive ? (e: any) => {
-          // Ctrl+click → toggle cell; tap (touch) → select cell.
+          const uv = e.uv as { x: number; y: number } | undefined
           const ctrl = !!(e.nativeEvent as MouseEvent)?.ctrlKey || !!(e.nativeEvent as MouseEvent)?.metaKey
+          if (onPickPoint && !ctrl) {
+            const native = e.nativeEvent as MouseEvent
+            const start = pickStartRef.current
+            pickStartRef.current = null
+            // OrbitControls also fires a click after a drag; ignore that.
+            if (start && Math.hypot(native.clientX - start.x, native.clientY - start.y) > 6) return
+            if (!uv) return
+            e.stopPropagation()
+            const lon = uv.x * 360 - 180
+            const lat = uv.y * 180 - 90
+            onPickPoint(lon, lat)
+            onCellHover?.(lon, lat)
+            return
+          }
+          // Ctrl+click → toggle cell; tap (touch) → select cell.
           const isTouch = (e.nativeEvent as PointerEvent)?.pointerType === 'touch' ||
             (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
           if (!ctrl && !isTouch) return
           e.stopPropagation()
-          const uv = e.uv as { x: number; y: number } | undefined
           if (uv) {
             const lon = uv.x * 360 - 180
             const lat = uv.y * 180 - 90
@@ -812,7 +836,7 @@ function TransitionPrompt({ progress, label }: { progress: number; label: string
 
 export default function GlobeViewer({
   texture, renderComposite, onTransition, transitionLabel,
-  onCellHover, onCellClick, onHoverOut, onDistanceChange,
+  onCellHover, onCellClick, onPickPoint, onHoverOut, onDistanceChange,
   vertices, regions, hoveredCellId, selectedCellIds, regionBoundary, regionFocus,
   regionMoveRevision, scalePreview = false, regionFlight, regionDetail,
   sunLongitudeDeg, solarDeclinationDeg, dayNight,
@@ -856,7 +880,7 @@ export default function GlobeViewer({
         >
           <GlobeScene
             texture={texture} renderComposite={renderComposite} distanceRef={distanceRef}
-            onCellHover={onCellHover} onCellClick={onCellClick}
+            onCellHover={onCellHover} onCellClick={onCellClick} onPickPoint={onPickPoint}
             onHoverOut={onHoverOut}
             vertices={vertices} regions={regions}
             hoveredCellId={hoveredCellId} selectedCellIds={selectedCellIds}

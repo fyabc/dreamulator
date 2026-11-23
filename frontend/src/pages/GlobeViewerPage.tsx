@@ -104,6 +104,10 @@ export default function GlobeViewerPage() {
     [rawWindow, planetRadiusM])
   const regionFocus = useMemo(() => readRegionWindow(rawWindow, planetRadiusM / 1000), [rawWindow, planetRadiusM])
   const [regionMoveRevision, setRegionMoveRevision] = useState(0)
+  const [regionPicking, setRegionPicking] = useState(false)
+  const [regionPickedPoint, setRegionPickedPoint] = useState<{ lon: number; lat: number } | null>(null)
+  const pickRegionPoint = (lon: number, lat: number) =>
+    setRegionPickedPoint({ lon: Math.round(lon * 100) / 100, lat: Math.round(lat * 100) / 100 })
   const scalePreview = searchParams.get('zoomPreview') === '1' && !cleanMode
   const [regionFlight, setRegionFlight] = useState<GlobeRegionFlight | null>(null)
   const detailEnabled = isStaticMode() && scalePreview && activeMainLayer === 'terrain' && !!worldName && !!selectedPlanet && !!regionFocus
@@ -303,7 +307,9 @@ export default function GlobeViewerPage() {
             scaleDetail={!trialActive && detailEnabled ? regionDetail ? 'ready' : savedWorld.isPending || (savedDetail && detail.isPending)
               ? 'loading' : savedWorld.isError || detail.isError ? 'failed' : 'missing' : undefined}
             scaleAltitudeKm={globeZoom > 1 ? (globeZoom - 1) * planetRadiusM / 1000 : undefined}
-            selectedPoint={selectedCells.size === 1 ? selectedCellData : null} />
+            selectedPoint={selectedCells.size === 1 ? selectedCellData : null}
+            pickedPoint={regionPickedPoint}
+            onPickModeChange={setRegionPicking} />
         ) : undefined}
         trialPanel={trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trial.open, onToggle: trial.open ? trial.closePanel : openTrial } : undefined}
         layersOpen={leftPanelOpen && !trial.open} onToggleLayers={() => {
@@ -406,6 +412,7 @@ export default function GlobeViewerPage() {
                 onTransition={meta?.browser_heightmap ? undefined : handleTransition}
                 onCellHover={handleCellHoverLonLat}
                 onCellClick={handleCellClickLonLat}
+                onPickPoint={regionPicking ? pickRegionPoint : undefined}
                 onHoverOut={() => { handleCellHover(null); setCursor(null) }}
                 onDistanceChange={setGlobeZoom}
                 vertices={globeVertices}
@@ -563,6 +570,7 @@ export default function GlobeViewerPage() {
               onTransition={handleTransition}
               onCellHover={handleCellHoverLonLat}
               onCellClick={handleCellClickLonLat}
+              onPickPoint={regionPicking ? pickRegionPoint : undefined}
               onHoverOut={() => { handleCellHover(null); setCursor(null) }}
               onDistanceChange={setGlobeZoom}
               vertices={globeVertices}
