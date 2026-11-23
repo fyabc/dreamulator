@@ -22,7 +22,7 @@ export default function MapResultModeControl({ mode, onChange, ready }: {
           onChange={event => onChange(event.target.value === 'trial' ? 'trial' : 'official')}
           className="rounded border border-space-border bg-space-surface px-1.5 py-0.5 text-xs text-slate-100 hover:border-neon-cyan/50 focus-visible:outline focus-visible:outline-neon-cyan">
           <option value="official">{t('workbench.official')}</option>
-          <option value="trial">{t('workbench.development')}</option>
+          <option value="trial" disabled={ready === false}>{t('workbench.development')}</option>
         </select>
         {mode === 'trial' && <span className={`hidden whitespace-nowrap lg:inline ${ready === false ? 'text-slate-500' : 'text-amber-200/90'}`}>
           {t(ready === false ? 'workbench.developmentMissing' : 'workbench.developmentSource')}

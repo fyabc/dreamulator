@@ -6,6 +6,7 @@ import { api, ApiError } from '../../api/client'
 import type { LabParameter, ParameterLabState } from '../../api/parameterLab'
 import { worldParametersKey } from '../../api/worldParameters'
 import HoverHelp from '../HoverHelp'
+import { tutorialMilestone } from '../../tutorial/tutorialProgress'
 
 const labKey = (world: string, branch: string | null, planet: string) =>
   ['parameterLab', world, branch, planet] as const
@@ -93,6 +94,7 @@ export default function ParameterLab({ world, branch, planet, openBuild }: {
     mutationFn: () => api.saveParameterLabBranch(world, planet, branch, branchName.trim(), changedValues),
     onSuccess: (next) => {
       invalidateAfterSave(next)
+      if (next.branch) tutorialMilestone({ type: 'forked', world, planet, base: branch, branch: next.branch })
       setBranchName('')
       if (!next.branch) return
       const params = new URLSearchParams(location.search)

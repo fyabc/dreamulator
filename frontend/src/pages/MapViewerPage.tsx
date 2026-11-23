@@ -55,8 +55,8 @@ export default function MapViewerPage() {
   const { t } = useTranslation('map')
 
   const trial = useMapTemperatureTrial()
-  const developmentAvailable = isStaticMode()
-  const trialActive = developmentAvailable && trial.mode === 'trial' && !trial.ebm
+  const developmentReady = Boolean(trial.available || trial.ebm)
+  const trialActive = developmentReady && trial.mode === 'trial' && !trial.ebm
   const vs = usePlanetViewState(worldName, routePlanetId, 'map', trialActive, trial.ebm)
   const {
     selectedBranch,
@@ -182,8 +182,8 @@ export default function MapViewerPage() {
       ? 'fixed inset-0 z-40 flex flex-col bg-[#030308]'
       : 'atlas-workbench flex flex-col'}>
       <WorldContextSlot>
-        {trialReady && developmentAvailable && <MapResultModeControl mode={trial.mode} onChange={trial.selectMode}
-          ready={Boolean(trial.available || trial.ebm)} />}
+        {trialReady && <MapResultModeControl mode={developmentReady ? trial.mode : 'official'} onChange={trial.selectMode}
+          ready={developmentReady} />}
         {worldName && <MapBuildControl key={selectedBranch ?? 'root'} world={worldName}
           branch={selectedBranch} onBuilt={() => trial.selectMode('official')} />}
       </WorldContextSlot>
@@ -206,7 +206,7 @@ export default function MapViewerPage() {
         ) : undefined}
         trialPanel={labAvailable
           ? { id: parameterPanelId, buttonId: parameterButtonId, open: trialOpen, onToggle: trialOpen ? trial.closePanel : openTrial, label: t('workbench.parameterLab') }
-          : trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trialOpen, onToggle: trialOpen ? trial.closePanel : openTrial } : undefined}
+          : trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trialOpen, onToggle: trialOpen ? trial.closePanel : openTrial, label: t('workbench.parameterLab') } : undefined}
         layersOpen={leftPanelOpen && !trialOpen} onToggleLayers={() => {
           if (trialOpen) trial.closePanel()
           setLeftPanelOpen(open => !open)

@@ -39,7 +39,7 @@ export function MapTemperatureTrial({ open, onClose, search, onPreview, onResult
         onClose()
       }}>
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-space-border px-3 py-1">
-        <h2 id={`${trialPanelId}-title`} className="text-sm font-semibold text-gray-100">{t(preview ? 'ebm.previewTitle' : saved ? 'ebm.saved.title' : 'ebm.title')}</h2>
+        <h2 id={`${trialPanelId}-title`} className="text-sm font-semibold text-gray-100">{t(preview ? 'ebm.previewTitle' : saved ? 'ebm.saved.title' : 'map:parameterLab.browserTitle')}</h2>
         <button ref={closeButton} type="button" onClick={onClose} className="atlas-tool-button text-xs">{t('trial.collapse')}</button>
       </header>
       <div className="min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 pt-2">

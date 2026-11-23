@@ -23,7 +23,7 @@
     "development": "开发",
     "officialHint": "显示上一次构建的正式结果。",
     "developmentHint": "显示按当前输入算出的开发结果；本机 API 模式暂不提供气候开发结果。",
-    "modeHelp": "正式：显示上一次构建写入的结果。开发：气候试算按当前输入算出的结果，不写入世界，可在实验台保存为分支。",
+    "modeHelp": "正式：显示上一次构建写入的结果。开发：显示按当前输入算出的开发结果，不写入世界；只有存在试算结果时才能切换。",
     "developmentSource": "气候开发",
     "developmentMissing": "尚无开发结果",
     "collapseLayerPanel": "收起图层面板",
@@ -64,6 +64,7 @@
   },
   "parameterLab": {
     "title": "参数实验台",
+    "browserTitle": "参数实验台 · 浏览器试算",
     "description": "修改参数并保存为世界输入。保存后由顶栏的构建计划发起构建；这里不运行计算。",
     "reading": "正在读取参数…",
     "invalid": "输入值超出允许范围。",
