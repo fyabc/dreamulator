@@ -68,11 +68,14 @@ export default function TerrainCompute({ browser, children }: { browser?: Browse
     ? gpu === undefined ? t('checking') : gpu === null ? t('unavailable') : gpu.name ?? t('unknownDevice')
     : local.isPending ? t('checking') : local.data?.kind === 'cpu' ? t('cpu') : local.data?.name ?? t('unavailable')
   const kind = staticMode && gpu && gpu.kind !== 'hardware' ? t(kinds[gpu.kind]) : null
+  const unavailableReason = !staticMode && local.data?.kind === 'unavailable'
+    ? local.data.reason ?? null : null
   return <section aria-label={t('title')} className="space-y-2 text-xs text-gray-400">
     <div className="rounded border border-space-border bg-space-surface p-2">
       <p className="font-medium text-gray-200">{t('title')}</p>
       <div className="mt-1 flex items-start justify-between gap-2">
-        <p role="status" className="break-words">{label} · {name}{kind && ` (${kind})`}</p>
+        <p role="status" className="break-words">{label} · {name}{kind && ` (${kind})`}{unavailableReason
+          ? ` · ${t(`deviceReasons.${unavailableReason}`, { defaultValue: unavailableReason })}` : ''}</p>
         {staticMode && <button type="button" className="shrink-0 rounded p-1 text-gray-400 hover:text-neon-cyan"
           aria-label={t('deviceHelpTitle')} title={t('deviceHelpTitle')} aria-expanded={deviceHelpOpen}
           onClick={() => setDeviceHelpOpen(open => !open)}><AtlasIcon name="help" className="size-3.5" /></button>}

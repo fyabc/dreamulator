@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 import os
 import subprocess
-import sys
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -66,8 +65,6 @@ RegionSource = Annotated[RegionSelection | RegionPackSource, Field(discriminator
 
 
 def _configured_td() -> Path:
-    if not sys.platform.startswith("linux"):
-        raise HTTPException(503, "The web refinement runner currently requires Linux")
     location = os.environ.get("DREAMULATOR_TD_DIR")
     if not location:
         raise HTTPException(
@@ -86,20 +83,34 @@ def _configured_td() -> Path:
 class RegionDevice(BaseModel):
     kind: Literal["gpu", "cpu", "unavailable"]
     name: str | None = None
+    reason: str | None = None
+
+
+def _device_unavailable(reason: str) -> RegionDevice:
+    return RegionDevice(kind="unavailable", reason=reason)
 
 
 @router.get("/device")
 def region_device() -> RegionDevice:
     try:
-        name = td_compute_device(_configured_td())
-    except (HTTPException, OSError, ValueError, subprocess.SubprocessError):
-        return RegionDevice(kind="unavailable")
+        td = _configured_td()
+    except HTTPException as exc:
+        detail = str(exc.detail)
+        if "DREAMULATOR_TD_DIR" in detail:
+            return _device_unavailable("td_dir_missing")
+        if "Python environment" in detail:
+            return _device_unavailable("td_python_missing")
+        return _device_unavailable("td_config")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return _device_unavailable("td_config")
+    try:
+        name = td_compute_device(td)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return _device_unavailable("device_probe_failed")
     return RegionDevice(kind="gpu", name=name) if name else RegionDevice(kind="cpu")
 
 
 def _environment(mode: RefinementMode) -> Path | None:
-    if not sys.platform.startswith("linux"):
-        raise HTTPException(503, "The web refinement runner currently requires Linux")
     td = _configured_td() if mode != RefinementMode.HYDROLOGY else None
     available = available_memory_bytes()
     if available is None or available // 2 < RSS_LIMIT:

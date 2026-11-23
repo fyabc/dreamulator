@@ -95,6 +95,7 @@ export interface RegionRefinementPlan {
 export interface RegionDevice {
   kind: 'gpu' | 'cpu' | 'unavailable'
   name: string | null
+  reason?: string | null
 }
 
 export interface RegionRefinementJob {

@@ -803,6 +803,12 @@
       "browserHint": "First model download: ~1.14 GB",
       "deviceHelpTitle": "Why is the integrated GPU selected?",
       "deviceHelp": "WebGPU exposes only a high-performance preference hint; a web page cannot enumerate or choose a specific adapter. On hybrid-graphics Windows laptops Chrome often defaults to the integrated GPU, and no reliable browser flag overrides it. To use the discrete GPU, set the browser to High performance under Windows Settings → System → Display → Graphics, then fully quit and restart the browser. Outdated drivers can also be ignored, so keep the GPU driver current.",
+      "deviceReasons": {
+        "td_dir_missing": "DREAMULATOR_TD_DIR is not set",
+        "td_python_missing": "The TD virtual environment has no interpreter",
+        "td_config": "The TD environment is unavailable",
+        "device_probe_failed": "Could not read the TD CUDA device"
+      },
       "conditions": {
         "loading": "Preparing TD inputs for this region…",
         "climate": "Using published elevation and climate. TD grid: {{size}} × {{size}}.",

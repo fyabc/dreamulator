@@ -25,7 +25,6 @@ def setup(tmp_path, monkeypatch):
     python.touch()
     monkeypatch.setenv("DREAMULATOR_TD_DIR", str(td_repo))
     monkeypatch.setenv("DREAMULATOR_PACKS_DIR", str(root))
-    monkeypatch.setattr(routes, "sys", SimpleNamespace(platform="linux"))
     monkeypatch.setattr(routes, "available_memory_bytes", lambda: 2 * RSS_LIMIT)
     monkeypatch.setattr("dreamulator.region_jobs.available_memory_bytes", lambda: 2 * RSS_LIMIT)
     monkeypatch.setattr(routes, "region_jobs", RegionJobs())
@@ -60,7 +59,7 @@ def test_local_compute_device(setup, monkeypatch, name, kind):
         return name
 
     monkeypatch.setattr(routes, "td_compute_device", probe)
-    assert client.get(f"{PREFIX}/device").json() == {"kind": kind, "name": name}
+    assert client.get(f"{PREFIX}/device").json() == {"kind": kind, "name": name, "reason": None}
 
 
 def test_unavailable_compute_device(setup, monkeypatch):
@@ -70,9 +69,38 @@ def test_unavailable_compute_device(setup, monkeypatch):
         raise subprocess.TimeoutExpired("td-device", 15)
 
     monkeypatch.setattr(routes, "td_compute_device", timeout)
-    assert client.get(f"{PREFIX}/device").json() == {"kind": "unavailable", "name": None}
+    assert client.get(f"{PREFIX}/device").json() == {
+        "kind": "unavailable",
+        "name": None,
+        "reason": "device_probe_failed",
+    }
     monkeypatch.delenv("DREAMULATOR_TD_DIR")
-    assert client.get(f"{PREFIX}/device").json() == {"kind": "unavailable", "name": None}
+    assert client.get(f"{PREFIX}/device").json() == {
+        "kind": "unavailable",
+        "name": None,
+        "reason": "td_dir_missing",
+    }
+
+
+def test_windows_td_venv_layout_is_supported(tmp_path, monkeypatch):
+    td_repo = tmp_path / "td-win"
+    python = td_repo / ".venv/Scripts/python.exe"
+    python.parent.mkdir(parents=True)
+    python.touch()
+    monkeypatch.setenv("DREAMULATOR_TD_DIR", str(td_repo))
+    monkeypatch.setattr(
+        routes,
+        "td_compute_device",
+        lambda repo: "NVIDIA GeForce RTX 3060" if repo == td_repo else None,
+    )
+    app = FastAPI()
+    app.include_router(routes.router)
+    client = TestClient(app)
+    assert client.get(f"{PREFIX}/device").json() == {
+        "kind": "gpu",
+        "name": "NVIDIA GeForce RTX 3060",
+        "reason": None,
+    }
 
 
 def test_pack_preflight(setup, monkeypatch):
