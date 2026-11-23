@@ -5,6 +5,7 @@ import { api, ApiError } from '../../api/client'
 import { isStaticMode } from '../../api/mode'
 import type { BuildJob, BuildPlan } from '../../api/buildJobs'
 import MapBuildStrip from './MapBuildStrip'
+import { planLayerState } from './layerStripState'
 
 interface Props {
   world: string
@@ -149,6 +150,7 @@ export default function MapBuildControl({ world, branch, onBuilt }: Props) {
   const failure = job?.error || job?.stages.flatMap(stage => stage.errors)[0] ||
     job?.result?.errors[0] || (start.error instanceof Error ? start.error.message : null)
   const label = (name: string) => t(`worlds:layer.${name}`)
+  const recompute = new Set(data.recompute)
 
   return (
     <div ref={wrapper} className="relative hidden shrink-0 items-center lg:flex">
@@ -157,14 +159,18 @@ export default function MapBuildControl({ world, branch, onBuilt }: Props) {
       {open && <div className="absolute right-0 top-full z-40 mt-1 w-80 max-w-[calc(100vw-1.5rem)] space-y-2 rounded border border-space-border bg-space-panel p-3 text-xs shadow-xl">
         <p className="font-medium text-gray-200">{t('buildPlan.title')}</p>
         <ul className="space-y-1">
-          {data.layers.map(layer => <li key={layer.name} className="flex items-center justify-between gap-2">
-            <span className="text-gray-300">{label(layer.name)}</span>
-            <span className={layer.derived_fresh === 'stale' ? 'text-amber-200'
-              : layer.derived_fresh === 'fresh' ? 'text-gray-500' : 'text-slate-400'}>
-              {t(`buildPlan.state.${layer.derived_fresh}`)}
-              {!layer.input_source && layer.derived_fresh !== 'fresh' && ` · ${t('buildPlan.noInput')}`}
-            </span>
-          </li>)}
+          {data.layers.map(layer => {
+            const state = planLayerState(layer, recompute)
+            return <li key={layer.name} className="flex items-center justify-between gap-2">
+              <span className="text-gray-300">{label(layer.name)}</span>
+              <span className={state === 'stale' ? 'text-amber-200'
+                : state === 'upstream' ? 'text-amber-200/70'
+                  : state === 'fresh' ? 'text-gray-500' : 'text-slate-400'}>
+                {t(`buildPlan.state.${state}`)}
+                {!layer.input_source && layer.derived_fresh !== 'fresh' && ` · ${t('buildPlan.noInput')}`}
+              </span>
+            </li>
+          })}
         </ul>
         <p className="text-gray-400">
           {data.start_layer

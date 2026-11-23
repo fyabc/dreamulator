@@ -49,6 +49,15 @@ describe('layerNodeState', () => {
     expect(layerNodeState(layer('climate', 'unexpected'), noJob)).toBe('absent')
   })
 
+  it('marks fresh layers downstream of a changed layer as upstream', () => {
+    const recompute = new Set(['climate', 'ecology', 'civilization'])
+    const options = { active: false, recompute, job: null }
+    expect(layerNodeState(layer('astronomy', 'fresh'), options)).toBe('fresh')
+    expect(layerNodeState(layer('climate', 'stale'), options)).toBe('stale')
+    expect(layerNodeState(layer('ecology', 'fresh'), options)).toBe('upstream')
+    expect(layerNodeState(layer('civilization', 'absent'), options)).toBe('absent')
+  })
+
   it('lets execution stages override freshness while active', () => {
     const options = { active: true, recompute: new Set(['climate', 'ecology']), job: job([
       stage('climate', 'succeeded'),

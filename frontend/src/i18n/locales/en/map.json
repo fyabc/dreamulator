@@ -46,6 +46,7 @@
       "fresh": "Fresh",
       "stale": "Inputs changed",
       "absent": "Not built",
+      "upstream": "Upstream changed",
       "pending": "Waiting",
       "running": "Building",
       "succeeded": "Done",

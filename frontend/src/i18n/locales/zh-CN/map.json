@@ -46,6 +46,7 @@
       "fresh": "最新",
       "stale": "输入已改",
       "absent": "尚未构建",
+      "upstream": "上游已改",
       "pending": "等待构建",
       "running": "构建中",
       "succeeded": "已完成",

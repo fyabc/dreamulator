@@ -8,6 +8,7 @@ const NODE_CLASS: Record<LayerNodeState, string> = {
   fresh: 'border-emerald-700/50 bg-emerald-900/20 text-emerald-300/70',
   stale: 'border-amber-300/60 bg-amber-400/10 text-amber-200',
   absent: 'border-space-border bg-space-surface text-slate-500',
+  upstream: 'border-amber-300/35 bg-transparent text-amber-200/60',
   pending: 'border-dashed border-amber-300/40 text-amber-200/60',
   running: 'border-neon-cyan bg-neon-cyan/10 text-neon-cyan motion-safe:animate-pulse',
   succeeded: 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300',
@@ -16,6 +17,7 @@ const NODE_CLASS: Record<LayerNodeState, string> = {
 }
 
 const BADGE: Partial<Record<LayerNodeState, string>> = {
+  upstream: '↑',
   succeeded: '✓',
   failed: '×',
 }
@@ -25,6 +27,8 @@ function connectorClass(next: LayerNodeState): string {
     case 'stale':
     case 'pending':
       return 'bg-amber-300/50'
+    case 'upstream':
+      return 'bg-amber-300/25'
     case 'running':
       return 'bg-neon-cyan/60'
     case 'succeeded':

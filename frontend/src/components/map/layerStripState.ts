@@ -6,6 +6,7 @@ export type LayerNodeState =
   | 'fresh'
   | 'stale'
   | 'absent'
+  | 'upstream'
   | 'pending'
   | 'running'
   | 'succeeded'
@@ -43,6 +44,24 @@ function freshnessState(layer: LayerBuildState): LayerNodeState {
 }
 
 /**
+ * Display state of a plan layer outside a build.
+ *
+ * A layer whose own derived data is fresh is still out of date when it sits
+ * downstream of a changed layer: its results were computed from old upstream
+ * inputs. ``recompute`` holds the earliest changed layer and everything after
+ * it, so a fresh layer in that chain is marked ``upstream`` instead of
+ * ``fresh``.
+ */
+export function planLayerState(
+  layer: LayerBuildState,
+  recompute: ReadonlySet<string>,
+): LayerNodeState {
+  const own = freshnessState(layer)
+  if (own === 'fresh' && recompute.has(layer.name)) return 'upstream'
+  return own
+}
+
+/**
  * Resolve the strip state of one plan layer.
  *
  * While a build is active, its execution stages take precedence over
@@ -63,5 +82,5 @@ export function layerNodeState(
     if (stage) return STAGE_STATES[stage.state] ?? 'pending'
     if (recompute.has(layer.name)) return 'pending'
   }
-  return freshnessState(layer)
+  return planLayerState(layer, recompute)
 }
