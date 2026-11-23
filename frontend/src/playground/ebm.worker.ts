@@ -1,11 +1,15 @@
 import { decode } from '@msgpack/msgpack'
 import type { ClimateTrialForcing, ClimateTrialJob, SavedClimateTrial } from '../api/climateTrials'
 
+export type BrowserHeightmapMapping =
+  | { mode: 'range'; min_m: number; max_m: number; sea_level_m: number }
+  | { mode: 'threshold'; sea_level: number; max_m: number; seafloor_m: number
+      curve: 'linear' | 'gamma'; gamma: number }
+
 export interface BrowserEbmRequest {
   runtime: string
   solver: string
-  mesh: string | { image: Blob; name: string; sha256: string;
-    mapping: { mode: 'range'; min_m: number; max_m: number; sea_level_m: number } }
+  mesh: string | { image: Blob; name: string; sha256: string; mapping: BrowserHeightmapMapping }
   cells: number
   forcing: Partial<ClimateTrialForcing>
   config: Record<string, unknown>

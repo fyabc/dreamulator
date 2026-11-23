@@ -36,13 +36,14 @@
     "minimalHelp": "A bare starting point; you fill in the star and planet parameters yourself."
   },
   "help": {
-    "file": "Choose a 2:1 heightmap covering the whole planet, up to 4096 × 2048 pixels and 64 MiB. Use an equirectangular projection: the left and right edges are longitude −180° and +180°, and the top and bottom edges are the poles. Supported formats include 8-bit or 16-bit PNG, 16-bit TIFF, and 32-bit float TIFF.",
+    "file": "Choose a 2:1 heightmap covering the whole planet, up to 4096 × 2048 pixels and 64 MiB. Use an equirectangular projection: the left and right edges are longitude −180° and +180°, and the top and bottom edges are the poles. Supported formats include 8-bit or 16-bit PNG, 16-bit TIFF, 32-bit float TIFF, and JPG (8-bit and lossy; the import report names the precision it costs).",
     "regional": "Regional map import is planned. It will require a latitude and longitude window and support local terrain refinement, not global climate calculations.",
     "mapping": "The same grey image can mean different things. Choose the description that fits this image, then fill in its numbers; the preview is recomputed from what you enter.",
     "min_m": "Height represented by the darkest value (0).",
     "max_m_range": "Height represented by the brightest value (full scale).",
     "sea_level_m": "Places above this height are land, the rest is sea. Usually 0 m.",
     "sea_level": "Grey value as a fraction of full scale, between 0 and 1. Pixels at or below it are sea; 0.05 makes the darkest 5% sea.",
+    "sea_level_grey": "0 is the darkest; grey levels at or below the threshold are sea. 0 makes only the darkest level sea; 1 also includes the next level.",
     "max_m_threshold": "Height of the brightest land. Land starts at 0 m on the coast.",
     "seafloor_m": "The image has no ocean depth, so every sea pixel gets this depth. It is an assumption and is recorded with the import.",
     "curve": "Linear maps grey to height evenly; a power curve makes lowlands flatter and mountains steeper.",
@@ -70,6 +71,7 @@
     "max_m_threshold": "Height of white",
     "sea_level_m": "Sea level",
     "sea_level": "Sea/land grey threshold",
+    "sea_level_grey": "Sea/land grey level",
     "seafloor_m": "Assumed sea floor depth",
     "curve": "Height curve",
     "gamma": "Exponent",
@@ -79,7 +81,7 @@
     "fraction": "(0–1)"
   },
   "note": {
-    "greyLevel": "about grey {{grey}} / {{levels}}"
+    "greyRange": "0 is the darkest, full scale is {{levels}} levels."
   },
   "curve": {
     "linear": "linear",
@@ -126,7 +128,22 @@
   },
   "warning": {
     "eightBit": "This is an 8-bit image with only {{levels}} grey levels; one level is about {{coast}} m near the coast and up to {{max}} m. A 16-bit or float image is better.",
-    "eightBitPlain": "This is an 8-bit image with only 256 grey levels. A 16-bit or float image is better."
+    "eightBitPlain": "This is an 8-bit image with only 256 grey levels. A 16-bit or float image is better.",
+    "jpegLossy": "This is a JPG: 8-bit and lossy, so coastlines come out softer. Use the original PNG or TIFF when you have it."
+  },
+  "diagnostic": {
+    "range_all_sea": "No pixel becomes land: the brightest source value covers {{brightest}} of full scale and maps to {{top}} m, below the sea level of {{sea}} m. If the brightest pixel is your highest peak, set white from {{white}} m to about {{suggested}} m (black stays {{black}} m).",
+    "range_all_sea_flat": "No pixel becomes land: the source is a single flat tone, so a range mapping cannot create land. Use an image with light and dark tones, or switch to threshold mapping.",
+    "range_all_land": "Every pixel is land: the darkest source value maps to {{bottom}} m, above the sea level of {{sea}} m. Set black below {{sea}} m, or raise the sea level above {{bottom}} m.",
+    "range_grey_use": "The source uses only {{low}}–{{high}} of full scale; the brightest pixel maps to {{top}} m (pure white is {{white}} m). If the brightest pixel is your highest peak, set white to about {{suggested}} m (black stays as it is).",
+    "range_darkest_share": "The darkest level ({{level}}/{{levels}}) covers {{share}} of the image. If those pixels are ocean and the brighter tones are land, threshold mapping (a land-only map) fits this image better.",
+    "threshold_all_sea": "No pixel becomes land: the brightest source value covers {{brightest}} of full scale, at or below the sea threshold of {{thresh}}. Lower the threshold below {{brightest}}.",
+    "threshold_all_sea_grey": "No pixel becomes land: the brightest pixel only reaches grey {{brightest}}/{{levels}}, at or below the sea threshold of {{thresh}}. Lower the threshold below {{brightest}}.",
+    "threshold_all_land": "Every pixel is land: the darkest source value covers {{darkest}} of full scale, above the sea threshold of {{thresh}}. Raise the threshold to {{darkest}} or above.",
+    "threshold_all_land_grey": "Every pixel is land: the darkest pixel is grey {{darkest}}/{{levels}}, above the sea threshold of {{thresh}}. Raise the threshold to {{darkest}} or above.",
+    "threshold_reach": "The brightest pixel reaches {{reach}} m, {{share}} of the declared white height of {{white}} m. If it should be the highest point, set white to about {{suggested}} m.",
+    "metres_all_sea": "No pixel becomes land: the highest source value is {{highest}} m, at or below the sea level of {{sea}} m. Check the source units or use an image with both land and sea.",
+    "metres_all_land": "Every pixel is land: the lowest source value is {{lowest}} m, above the sea level of {{sea}} m. Check the source units or the sea level."
   },
   "status": {
     "readingDefaults": "Reading the image and defaults…",
@@ -148,6 +165,7 @@
     "maxAboveMin": "The height of white must be above the height of black.",
     "maxPositive": "The height of white must be above 0 m.",
     "seaLevelFraction": "Enter a fraction from 0 up to (not including) 1.",
+    "seaLevelGrey": "Enter a whole grey level between 0 and full scale.",
     "seafloorNegative": "The sea floor must be below 0 m.",
     "gammaPositive": "The exponent must be above 0.",
     "previewFailed": "The preview could not be made.",
@@ -157,7 +175,7 @@
     "aspect": "This image is {{w}} × {{h}} pixels. Choose a whole-planet map exactly twice as wide as it is tall.",
     "dimensions": "This image exceeds {{w}} × {{h}} pixels. Downscale the global map while keeping its 2:1 aspect ratio.",
     "fileSize": "This file exceeds {{mib}} MiB. Downscale the image or export it with compression.",
-    "unreadable": "The heightmap could not be read. Export a valid PNG or TIFF file and try again."
+    "unreadable": "The heightmap could not be read. Export a valid PNG, TIFF or JPG file and try again."
   },
   "static": {
     "unavailable": "The static site only browses published worlds; importing a map needs a local dreamulator serve.",

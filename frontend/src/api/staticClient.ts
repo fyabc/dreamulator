@@ -560,7 +560,9 @@ export const staticApi = {
       const { heightmapPlanet } = await import('../projects/heightmapWorld')
       const world = !branch && planetId === heightmapPlanet ? await browserHeightmap(name) : null
       if (!world) throw new Error(`No browser elevation data for ${planetId}`)
-      return world.heightmap.original
+      // Threshold worlds carry a derived metres raster; range worlds decode their
+      // original grey image through the linear map scale.
+      return world.elevation ?? world.heightmap.original
     }
     const result = await fetchBranchAwareBlob(
       name,

@@ -492,7 +492,7 @@ async def import_elevation(
     gamma: float | None = Form(None),
     seafloor_m: float | None = Form(None),
 ) -> dict[str, Any]:
-    """Import a heightmap from an external tool (PNG/TIFF) under an explicit mapping to metres.
+    """Import a heightmap from an external tool (PNG/TIFF/JPEG) under an explicit mapping to metres.
 
     The mapping is the import contract (``ElevationMapping``): ``range`` (the image carries
     the sea floor; ``min_m``/``max_m`` at its ends), ``threshold`` (a land-only map; ``sea_level``
@@ -568,6 +568,7 @@ async def import_elevation(
         "seafloor_assumed": result.seafloor_assumed,
         "level_step_m": result.level_step_m,
         "warnings": result.warnings,
+        "diagnostics": result.diagnostics,
         "stale_layers": stale_layers,
     }
 
@@ -636,7 +637,11 @@ def _import_target_and_mapping(
 
 
 async def _read_global_heightmap(file: UploadFile) -> bytes:
-    """Reject unsupported global uploads before decoding pixel arrays."""
+    """Reject unsupported global uploads before decoding pixel arrays.
+
+    Errors name the three accepted formats: PNG and TIFF (the precise routes) and
+    JPEG (8-bit lossy, accepted for images shared through chat apps).
+    """
     max_bytes = GLOBAL_HEIGHTMAP_MAX_MIB * 1024**2
     too_large = f"Global heightmap file exceeds {GLOBAL_HEIGHTMAP_MAX_MIB} MiB"
     if file.size is not None and file.size > max_bytes:
@@ -649,12 +654,14 @@ async def _read_global_heightmap(file: UploadFile) -> bytes:
         f"{GLOBAL_HEIGHTMAP_MAX_WIDTH}x{GLOBAL_HEIGHTMAP_MAX_HEIGHT}"
     )
     try:
-        with Image.open(BytesIO(data), formats=["PNG", "TIFF"]) as image:
+        with Image.open(BytesIO(data), formats=["PNG", "TIFF", "JPEG"]) as image:
             width, height = image.size
     except Image.DecompressionBombError as e:
         raise HTTPException(status_code=400, detail=dimension_limit) from e
     except (OSError, ValueError, SyntaxError) as e:
-        raise HTTPException(status_code=400, detail="Cannot read a PNG or TIFF heightmap") from e
+        raise HTTPException(
+            status_code=400, detail="Cannot read a PNG, TIFF or JPEG heightmap"
+        ) from e
     if width > GLOBAL_HEIGHTMAP_MAX_WIDTH or height > GLOBAL_HEIGHTMAP_MAX_HEIGHT:
         raise HTTPException(status_code=400, detail=dimension_limit)
     if width != 2 * height:
@@ -735,6 +742,7 @@ async def preview_elevation_import(
         "seafloor_assumed": result.seafloor_assumed,
         "level_step_m": result.level_step_m,
         "warnings": result.warnings,
+        "diagnostics": result.diagnostics,
         "preview": {
             "width": int(grid.shape[1]),
             "height": int(grid.shape[0]),

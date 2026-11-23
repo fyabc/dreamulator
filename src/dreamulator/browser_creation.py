@@ -54,6 +54,20 @@ def validate_browser_creation(staged: Path, world_id: str) -> None:
     original = artifacts[ARTIFACTS[1]]
     original_path = original.relative_to(staged).as_posix()
     has_temperature = ARTIFACTS[2] in artifacts
+    derived_path = f"maps/{PLANET}/elevation.png"
+    try:
+        manifest = json.loads(artifacts[ARTIFACTS[0]].read_text(encoding="utf-8"))
+        sources = load_elevation_sources(staged / GEO_INPUT / "elevation_imports.yaml")
+    except (ValidationError, ValueError, json.JSONDecodeError) as error:
+        raise ValueError("Invalid new-world inputs") from error
+    source = sources.get(PLANET)
+    # A threshold mapping is a piecewise GREY→metres contract that the linear map scale
+    # cannot decode, so such snapshots carry a derived metres raster at the map path.
+    threshold = (
+        source is not None
+        and source.provenance.mapping is not None
+        and source.provenance.mapping.mode == "threshold"
+    )
     expected = {
         "world.yaml",
         CREATION,
@@ -64,18 +78,19 @@ def validate_browser_creation(staged: Path, world_id: str) -> None:
         f"maps/{PLANET}/map.yaml",
         original_path,
     }
+    if threshold:
+        expected.add(derived_path)
     if has_temperature:
         expected.update({f"{EXPERIMENT}/metadata.json", f"{EXPERIMENT}/temperature.json"})
     actual = {path.relative_to(staged).as_posix() for path in staged.rglob("*") if path.is_file()}
     if actual != expected:
         raise ValueError("Unexpected content in new-world snapshot")
-    for path in expected - {f"{EXPERIMENT}/temperature.json", original_path}:
+    for path in expected - {f"{EXPERIMENT}/temperature.json", original_path, derived_path}:
         if (staged / path).stat().st_size > 8192:
             raise ValueError("World creation metadata is too large")
     if original.stat().st_size > 32 * 1024**2:
         raise ValueError("Original heightmap is too large")
     try:
-        manifest = json.loads(artifacts[ARTIFACTS[0]].read_text(encoding="utf-8"))
         if manifest.get("id") != world_id or manifest.get("temperature") is not has_temperature:
             raise ValueError("Incorrect world creation manifest")
         config = load_world(staged)
@@ -85,8 +100,6 @@ def validate_browser_creation(staged: Path, world_id: str) -> None:
             or config.planet_ids != [PLANET]
         ):
             raise ValueError("Invalid world configuration")
-        sources = load_elevation_sources(staged / GEO_INPUT / "elevation_imports.yaml")
-        source = sources.get(PLANET)
         if set(sources) != {PLANET} or source is None or source.sha256 != manifest["sha256"]:
             raise ValueError("Incorrect elevation source declaration")
         with original.open("rb") as stream:
@@ -103,6 +116,15 @@ def validate_browser_creation(staged: Path, world_id: str) -> None:
             ):
                 raise ValueError("Expected a 2:1 8- or 16-bit grayscale PNG")
             image.verify()
+        if threshold:
+            with Image.open(staged / derived_path, formats=["PNG"]) as raster:
+                if (
+                    raster.mode not in {"I;16", "I"}
+                    or raster.info.get("interlace")
+                    or list(raster.size) != source.provenance.output_resolution
+                ):
+                    raise ValueError("Expected a 16-bit grayscale elevation raster")
+                raster.verify()
         load_yaml_model(staged / "layers/astronomy/input/stellar.yaml", StellarSystem)
         catalog = json.loads((staged / GEO_INPUT / "planets.yaml").read_text(encoding="utf-8"))
         planets = catalog.get("planets") if isinstance(catalog, dict) else None

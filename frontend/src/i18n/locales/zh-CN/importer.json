@@ -36,13 +36,14 @@
     "minimalHelp": "只含必要设定的空白起点，恒星和行星参数需要自行补充。"
   },
   "help": {
-    "file": "请选择覆盖整个行星的 2:1 高度图，最大为 4096 × 2048 像素，文件不超过 64 MiB。图像使用等距圆柱投影，左右边缘对应经度 −180° 和 +180°，上下边缘对应北极和南极。支持 8 位或 16 位 PNG、16 位 TIFF 和 32 位浮点 TIFF。",
+    "file": "请选择覆盖整个行星的 2:1 高度图，最大为 4096 × 2048 像素，文件不超过 64 MiB。图像使用等距圆柱投影，左右边缘对应经度 −180° 和 +180°，上下边缘对应北极和南极。支持 8 位或 16 位 PNG、16 位 TIFF、32 位浮点 TIFF，以及 JPG；JPG 是 8 位有损格式，导入报告会写明它带来的精度损失。",
     "regional": "区域地图导入后续开放。届时需指定经纬度范围，可用于局部地形细化，不能用于计算全球气候。",
     "mapping": "同一张灰度图可以有不同含义。先选择最符合这张图的说法，再填写对应的数值；预览会按你的填写重新计算。",
     "min_m": "图中最黑处（数值 0）代表的高度。",
     "max_m_range": "图中最白处（满量程）代表的高度。",
     "sea_level_m": "高于这个高度的位置算陆地，其余是海洋。通常是 0 m。",
     "sea_level": "灰度占满量程的比例，0 到 1 之间。不高于这个比例的像素算海洋，例如 0.05 表示最暗的 5% 是海。",
+    "sea_level_grey": "0 表示最暗；阈值及更暗的灰度都算海。输入 0 表示只有最暗一级算海，输入 1 表示最暗的两级都算海。",
     "max_m_threshold": "最白处代表的陆地最高点。海岸处的陆地从 0 m 开始。",
     "seafloor_m": "这张图没有海洋深度，所有海洋像素都会设为这个深度。它是一个假设，会写进导入记录。",
     "curve": "线性表示灰度均匀对应高度；幂函数可以让低地更平、山地更陡。",
@@ -70,6 +71,7 @@
     "max_m_threshold": "最白处的高度",
     "sea_level_m": "海平面高度",
     "sea_level": "海陆分界灰度",
+    "sea_level_grey": "海陆分界灰度级",
     "seafloor_m": "假设的海底深度",
     "curve": "高度曲线",
     "gamma": "幂指数",
@@ -79,7 +81,7 @@
     "fraction": "（0–1）"
   },
   "note": {
-    "greyLevel": "约等于灰度 {{grey}} / {{levels}}"
+    "greyRange": "0 最暗，满刻度 {{levels}} 级。"
   },
   "curve": {
     "linear": "线性",
@@ -126,7 +128,22 @@
   },
   "warning": {
     "eightBit": "这是 8 位图，只有 {{levels}} 级灰度；海岸附近一级约 {{coast}} m，最大一级约 {{max}} m。建议改用 16 位或浮点图。",
-    "eightBitPlain": "这是 8 位图，只有 256 级灰度。建议改用 16 位或浮点图。"
+    "eightBitPlain": "这是 8 位图，只有 256 级灰度。建议改用 16 位或浮点图。",
+    "jpegLossy": "这是 JPG，只有 8 位且有损压缩，海岸线会变糊；有原始 PNG 或 TIFF 时建议改用原图。"
+  },
+  "diagnostic": {
+    "range_all_sea": "全图没有陆地：最亮像素只到满刻度的 {{brightest}}，按当前映射是 {{top}} m，低于海平面 {{sea}} m。如果最亮像素应是最高峰，把纯白高程从 {{white}} m 调到约 {{suggested}} m（纯黑保持 {{black}} m）。",
+    "range_all_sea_flat": "全图没有陆地：源图是单一灰度，范围映射无法产生陆地。请换一张有明暗变化的图，或改用阈值映射。",
+    "range_all_land": "全图都是陆地：最暗像素按当前映射是 {{bottom}} m，高于海平面 {{sea}} m。把纯黑高程降到 {{sea}} m 以下，或把海平面提高到 {{bottom}} m 以上。",
+    "range_grey_use": "源图灰度只用到满刻度的 {{low}}–{{high}}；最亮像素按当前映射是 {{top}} m（纯白是 {{white}} m）。如果最亮像素应是最高峰，把纯白高程调到约 {{suggested}} m（纯黑不动）。",
+    "range_darkest_share": "最深一级灰度（{{level}}/{{levels}}）占画面 {{share}}。如果这些像素是海洋、亮色是陆地，这种图更适合用阈值映射（只画陆地）导入。",
+    "threshold_all_sea": "全图没有陆地：最亮像素只到满刻度的 {{brightest}}，不高于海平面阈值 {{thresh}}。把阈值降到 {{brightest}} 以下。",
+    "threshold_all_sea_grey": "全图没有陆地：最亮像素只到灰度 {{brightest}}/{{levels}}，不高于海平面阈值 {{thresh}}。把阈值降到 {{brightest}} 以下。",
+    "threshold_all_land": "全图都是陆地：最暗像素是满刻度的 {{darkest}}，高于海平面阈值 {{thresh}}。把阈值提高到 {{darkest}} 或更高。",
+    "threshold_all_land_grey": "全图都是陆地：最暗像素是灰度 {{darkest}}/{{levels}}，高于海平面阈值 {{thresh}}。把阈值提高到 {{darkest}} 或更高。",
+    "threshold_reach": "最亮像素只到 {{reach}} m，是声明纯白高度 {{white}} m 的 {{share}}。如果它应是最高点，把纯白高度调到约 {{suggested}} m。",
+    "metres_all_sea": "全图没有陆地：源图最高的值 {{highest}} m 不高于海平面 {{sea}} m。请检查源图单位或换一张含海陆的图。",
+    "metres_all_land": "全图都是陆地：源图最低的值 {{lowest}} m 高于海平面 {{sea}} m。请检查源图单位或海平面设置。"
   },
   "status": {
     "readingDefaults": "正在读取图像和默认值…",
@@ -148,6 +165,7 @@
     "maxAboveMin": "最白处的高度必须高于最黑处。",
     "maxPositive": "最白处的高度必须大于 0 m。",
     "seaLevelFraction": "请填写 0 到 1 之间的比例（不含 1）。",
+    "seaLevelGrey": "请输入 0 到满刻度之间的整数灰度级。",
     "seafloorNegative": "海底深度必须低于 0 m。",
     "gammaPositive": "幂指数必须大于 0。",
     "previewFailed": "无法生成预览。",
@@ -157,7 +175,7 @@
     "aspect": "这张图是 {{w}} × {{h}} 像素。请选择覆盖整个行星且宽度恰好是高度两倍的地图。",
     "dimensions": "这张图超过 {{w}} × {{h}} 像素。请在保持 2:1 的前提下缩小全球地图。",
     "fileSize": "文件超过 {{mib}} MiB。请缩小图像或使用压缩格式重新导出。",
-    "unreadable": "无法读取高度图。请重新导出有效的 PNG 或 TIFF 文件。"
+    "unreadable": "无法读取高度图。请重新导出有效的 PNG、TIFF 或 JPG 文件后重试。"
   },
   "static": {
     "unavailable": "静态站只能浏览已发布的世界，导入地图需要在本机运行 dreamulator serve。",

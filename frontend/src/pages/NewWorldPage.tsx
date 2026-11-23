@@ -1,20 +1,22 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError } from '../api/client'
 import { isStaticMode } from '../api/mode'
 import AtlasIcon from '../components/AtlasIcon'
+import ElevationAdvice from '../components/import/ElevationAdvice'
 import CreationRaster from '../components/map/CreationRaster'
 import { EARTH_PARAMS } from '../playground/temperatureDraft'
-import { defaultHeightmapCells, exportHeightmapWorld, isHeightmapParams, readHeightmapInput,
-  type HeightmapInput } from '../projects/heightmapWorld'
+import { defaultHeightmapCells, exportHeightmapWorld, heightmapDiagnostics, isHeightmapMapping, isHeightmapParams,
+  rangeMapping, readHeightmapInput, thresholdSeaLevel, type HeightmapInput,
+  type HeightmapMapping } from '../projects/heightmapWorld'
 import { isCreationWorldId } from '../projects/creationSnapshot'
 import { isStarterSeed, starterTemplates, type StarterTemplate } from '../projects/starterWorld'
 import { projectsKey, worldOverviewPath } from '../projects/projectStore'
 import { tutorialMilestone } from '../tutorial/tutorialProgress'
 
-const field = 'w-full min-h-11 rounded border border-space-border bg-space-bg px-3 text-gray-100 focus-visible:outline focus-visible:outline-neon-cyan'
+const field = 'w-full min-h-10 rounded border border-space-border bg-space-bg px-3 text-gray-100 focus-visible:outline focus-visible:outline-neon-cyan'
 const action = 'inline-flex min-h-11 items-center justify-center gap-2 rounded border border-space-border px-4 py-2 text-gray-100 hover:border-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan disabled:opacity-50'
 const saveAction = `${action} border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan`
 const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0] >>> 1
@@ -34,6 +36,10 @@ export default function NewWorldPage() {
   const [seed, setSeed] = useState(randomSeed)
   const [params, setParams] = useState(EARTH_PARAMS)
   const [input, setInput] = useState<HeightmapInput>()
+  const [mappingMode, setMappingMode] = useState<'range' | 'threshold'>('range')
+  const [threshold, setThreshold] = useState<Extract<HeightmapMapping, { mode: 'threshold' }>>(() => ({
+    mode: 'threshold', sea_level: 0, max_m: EARTH_PARAMS.elevMaxM, seafloor_m: -3800, curve: 'linear', gamma: 1 }))
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const query = useQueryClient()
   const navigate = useNavigate()
   const select = useMutation({ mutationFn: async (file: File | 'earth') => {
@@ -48,6 +54,7 @@ export default function NewWorldPage() {
     return { loaded, mapping: { elevMinM: meta.elevation_min_m, elevMaxM: meta.elevation_max_m, seaLevelM: meta.sea_level_m } }
   }, onSuccess: ({ loaded, mapping }) => {
     setInput(loaded)
+    setThreshold(previous => ({ ...previous, sea_level: thresholdSeaLevel(loaded) }))
     if (mapping) setParams(previous => ({ ...previous, ...mapping }))
   } })
   const save = useMutation({ mutationFn: async () => {
@@ -55,7 +62,7 @@ export default function NewWorldPage() {
     if (starter) return api.saveStarterWorld({ id, title, template, seed })
     if (!input) throw new Error('No heightmap selected')
     const archive = await exportHeightmapWorld({ id, title, created: new Date().toISOString(),
-      seed: randomSeed(), meshCells: defaultHeightmapCells, params, heightmap: input })
+      seed: randomSeed(), meshCells: defaultHeightmapCells, params, mapping, heightmap: input })
     return api.saveHeightmapWorld(id, title, archive)
   }, onSuccess: async ({ id: savedId }) => {
     await Promise.all([query.invalidateQueries({ queryKey: projectsKey }), query.invalidateQueries({ queryKey: ['worlds'] })])
@@ -64,7 +71,18 @@ export default function NewWorldPage() {
   } })
   const busy = select.isPending || save.isPending
   const paramsValid = isHeightmapParams(params)
-  const canSave = !!(name.trim() && isCreationWorldId(id) && (starter ? isStarterSeed(seed) : input && paramsValid)) && !busy
+  const rangeMap = useMemo(() => rangeMapping(params), [params.elevMinM, params.elevMaxM, params.seaLevelM])
+  const mapping: HeightmapMapping = mappingMode === 'range' ? rangeMap : threshold
+  const mappingValid = isHeightmapMapping(mapping)
+  const mappingAdvice = useMemo(() => (input && mappingValid ? heightmapDiagnostics(input, mapping) : []),
+    [input, mapping, mappingValid])
+  const canSave = !!(name.trim() && isCreationWorldId(id) &&
+    (starter ? isStarterSeed(seed) : input && paramsValid && mappingValid)) && !busy
+  const thresholdLevels = input ? (input.raster.depth === 8 ? 255 : 65535) : 255
+  const changeMode = (next: 'range' | 'threshold') => {
+    if (next === 'threshold') setThreshold(previous => ({ ...previous, max_m: params.elevMaxM }))
+    setMappingMode(next)
+  }
   const conflict = (save.error instanceof ApiError && save.error.status === 409) ||
     (save.error instanceof DOMException && save.error.name === 'ConstraintError')
 
@@ -145,7 +163,7 @@ export default function NewWorldPage() {
             <div className="flex flex-wrap gap-2">
               <label className={`${action} cursor-pointer text-sm focus-within:outline focus-within:outline-neon-cyan aria-disabled:cursor-default aria-disabled:opacity-50`} aria-disabled={busy}>
                 {t(input ? 'creation.replaceFile' : 'creation.chooseFile')}
-                <input type="file" aria-label={t('creation.selectFile')} accept="image/png,.png" className="sr-only"
+                <input type="file" aria-label={t('creation.selectFile')} accept="image/png,image/jpeg,.png,.jpg,.jpeg" className="sr-only"
                 onChange={event => {
                   const file = event.currentTarget.files?.[0]
                   event.currentTarget.value = ''
@@ -162,15 +180,68 @@ export default function NewWorldPage() {
           {select.isError && <p role="alert" className="text-sm text-red-300">{select.variables === 'earth'
             ? t('creation.earthSampleError') : `${t('creation.fileError')} ${select.error.message}`}</p>}
           {input && <p className="break-all text-sm text-neon-cyan">{input.filename}</p>}
-          {importFields.map(key => <label key={key} className="flex min-w-0 flex-col gap-1 text-sm text-gray-200">{t(`creation.${key}`)}
+          {input?.converted && <p role="status" className="text-sm text-amber-300">{t('creation.convertedFromJpeg')}</p>}
+          <fieldset className="space-y-1 text-sm text-gray-200">
+            <legend className="mb-1">{t('creation.mapping')}</legend>
+            <label className="flex items-start gap-2">
+              <input type="radio" name="mapping-mode" className="mt-1 accent-neon-cyan" checked={mappingMode === 'range'}
+                onChange={() => changeMode('range')} />
+              <span><span className="block">{t('creation.mappingRange')}</span>
+                <span className="block text-xs text-gray-500">{t('creation.mappingRangeHelp')}</span></span>
+            </label>
+            <label className="flex items-start gap-2">
+              <input type="radio" name="mapping-mode" className="mt-1 accent-neon-cyan" checked={mappingMode === 'threshold'}
+                onChange={() => changeMode('threshold')} />
+              <span><span className="block">{t('creation.mappingThreshold')}</span>
+                <span className="block text-xs text-gray-500">{t('creation.mappingThresholdHelp')}</span></span>
+            </label>
+          </fieldset>
+          {input && mappingValid && <ElevationAdvice diagnostics={mappingAdvice} />}
+          {mappingMode === 'range' ? importFields.map(key => <label key={key} className="flex min-w-0 flex-col gap-1 text-sm text-gray-200">{t(`creation.${key}`)}
             <input className={field} type="number" step="any" value={Number.isFinite(params[key]) ? params[key] : ''}
               onChange={event => {
                 const value = event.currentTarget.valueAsNumber
                 setParams(previous => ({ ...previous, [key]: value }))
               }} />
-          </label>)}
+          </label>) : <>
+            <MappingField label={t('creation.seaThreshold')} note={t('creation.seaThresholdGrey', { levels: thresholdLevels })}
+              help={t('creation.seaThresholdHelp')} step={1} min={0} max={thresholdLevels - 1}
+              value={Math.round(threshold.sea_level * thresholdLevels)}
+              onChange={grey => setThreshold(previous => ({ ...previous, sea_level: Number.isFinite(grey)
+                ? Math.min(thresholdLevels - 1, Math.max(0, Math.round(grey))) / thresholdLevels : Number.NaN }))} />
+            <MappingField label={t('creation.elevMaxM')} help={t('creation.thresholdMaxHelp')} value={threshold.max_m}
+              onChange={value => setThreshold(previous => ({ ...previous, max_m: value }))} />
+            <MappingField label={t('creation.seafloorM')} help={t('creation.seafloorHelp')} value={threshold.seafloor_m}
+              onChange={value => setThreshold(previous => ({ ...previous, seafloor_m: value }))} />
+            <button type="button" aria-expanded={showAdvanced}
+              className="inline-flex min-h-10 items-center gap-2 self-start rounded border border-space-border bg-space-panel px-3 py-1.5 text-sm text-gray-200 hover:border-neon-cyan hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan"
+              onClick={() => setShowAdvanced(shown => !shown)}>
+              {t('creation.advancedMapping')}
+              <span aria-hidden className="text-xs">{showAdvanced ? '▴' : '▾'}</span>
+            </button>
+            {showAdvanced && <div className="space-y-2 border-l border-space-border pl-3">
+              <label className="block text-sm text-gray-300" title={t('creation.curveHelp')}>{t('creation.curve')}
+                <select className="ml-2 rounded border border-space-border bg-space-surface px-2 py-0.5 text-sm" value={threshold.curve}
+                  title={t('creation.curveHelp')}
+                  onChange={event => {
+                    // Read the value before the updater runs: React may invoke it after
+                    // the synthetic event has been reset (currentTarget becomes null).
+                    const curve = event.currentTarget.value === 'gamma' ? 'gamma' : 'linear'
+                    setThreshold(previous => ({ ...previous, curve }))
+                  }}>
+                  <option value="linear">{t('creation.curveLinear')}</option>
+                  <option value="gamma">{t('creation.curveGamma')}</option>
+                </select>
+              </label>
+              {threshold.curve === 'gamma' && (
+                <MappingField label={t('creation.gamma')} help={t('creation.gammaHelp')} value={threshold.gamma}
+                  onChange={value => setThreshold(previous => ({ ...previous, gamma: value }))} />
+              )}
+            </div>}
+          </>}
+          {!mappingValid && <p role="alert" className="text-sm text-red-300">{t('creation.mappingError')}</p>}
         </div>
-        {input && paramsValid ? <CreationRaster input={input} params={params} />
+        {input && mappingValid ? <CreationRaster input={input} mapping={mapping} />
           : <div className="grid min-h-32 place-items-center rounded border border-space-border bg-space-panel p-5 text-center text-gray-400">{t('creation.previewEmpty')}</div>}
       </fieldset>
       <fieldset disabled={busy} className="min-w-0 border-t border-space-border pt-5">
@@ -182,4 +253,20 @@ export default function NewWorldPage() {
       </fieldset>
     </form>}
   </section>
+}
+
+/** A numeric threshold-mapping field with the same look as the range fields. */
+function MappingField({ label, value, help, note, step, min, max, onChange }: {
+  label: string; value: number; help?: string; note?: string; step?: number; min?: number; max?: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <label className="flex min-w-0 flex-col gap-1 text-sm text-gray-200">{label}
+      <input className={field} type="number" step={step ?? 'any'} min={min} max={max}
+        value={Number.isFinite(value) ? value : ''}
+        onChange={event => onChange(event.currentTarget.valueAsNumber)} />
+      {note && <span className="text-xs text-gray-500">{note}</span>}
+      {help && <span className="text-xs text-gray-500">{help}</span>}
+    </label>
+  )
 }

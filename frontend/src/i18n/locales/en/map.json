@@ -501,7 +501,7 @@
   "hint": {
     "staticReadonly": "Not writable in static mode",
     "uploadRasterTitle": "Guide land and sea placement on the next terrain generation without replacing current elevation.",
-    "importHeightmapTitle": "Import a PNG or TIFF for this body and branch. Confirming replaces the current elevation."
+    "importHeightmapTitle": "Import a PNG, TIFF or JPG heightmap for this body and branch. Confirming replaces the current elevation."
   },
   "confirm": {
     "uploadRaster": "Upload geography raster (white=land, black=sea, gray=neutral):\n{{name}}\n\nTakes effect on the next terrain generation, combined with geography.yaml. Continue?",

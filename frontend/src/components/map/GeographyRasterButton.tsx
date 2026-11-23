@@ -49,7 +49,7 @@ export default function GeographyRasterButton({ worldName, branch, onUploaded }:
       <input
         ref={inputRef}
         type="file"
-        accept=".png,.tif,.tiff"
+        accept=".png,.tif,.tiff,.jpg,.jpeg"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0]

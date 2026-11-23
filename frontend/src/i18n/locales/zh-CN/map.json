@@ -501,7 +501,7 @@
   "hint": {
     "staticReadonly": "静态模式不可写",
     "uploadRasterTitle": "为下次地形生成指定海陆倾向；不会替换当前高程。",
-    "importHeightmapTitle": "为当前天体和分支导入 PNG 或 TIFF 高度图；确认后替换现有高程。"
+    "importHeightmapTitle": "为当前天体和分支导入 PNG、TIFF 或 JPG 高度图；确认后替换现有高程。"
   },
   "confirm": {
     "uploadRaster": "上传锚定灰度图（白=陆、黑=海、中灰=中立）：\n{{name}}\n\n将于下次地形生成时与 geography.yaml 叠加。继续？",

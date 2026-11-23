@@ -87,6 +87,98 @@ def _tiff_float(values: np.ndarray) -> bytes:
     return buf.getvalue()
 
 
+def _jpeg8(grey: np.ndarray) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.fromarray(grey.astype(np.uint8), mode="L").convert("RGB").save(
+        buf, format="JPEG", quality=95, subsampling=0
+    )
+    return buf.getvalue()
+
+
+def test_jpeg_import_names_both_the_8_bit_and_lossy_limits() -> None:
+    from dreamulator.map.importer import import_heightmap_metres
+    from dreamulator.map.models import ElevationMapping
+
+    grey = np.zeros((64, 128), dtype=np.uint8)
+    grey[:32] = 240
+    data = _jpeg8(grey)
+    result = import_heightmap(data, filename="from-chat.jpg")
+    assert result.source_format == "jpeg-8bit"
+    assert result.elevation.shape == (64, 128)
+    assert result.elevation.max() == pytest.approx(240 / 255, abs=0.02)
+
+    metric = import_heightmap_metres(
+        data,
+        ElevationMapping(mode="threshold", sea_level=0.05, max_m=4000, seafloor_m=-2500),
+        filename="from-chat.jpg",
+    )
+    assert metric.source_format == "jpeg-8bit"
+    assert any("8-bit" in warning for warning in metric.warnings)
+    assert any("JPEG" in warning and "lossy" in warning for warning in metric.warnings)
+
+
+def test_diagnostics_explain_an_all_sea_mapping() -> None:
+    from dreamulator.map.importer import import_heightmap_metres
+    from dreamulator.map.models import ElevationMapping
+
+    grey = np.zeros((32, 64), dtype=np.uint8)
+    grey[10:20, 10:20] = 140
+    res = import_heightmap_metres(
+        _png8(grey), ElevationMapping(mode="range", min_m=-11000.0, max_m=8848.0)
+    )
+    assert res.land_fraction == 0.0
+    first = res.diagnostics[0]
+    assert first["code"] == "range_all_sea"
+    assert first["brightest"] == pytest.approx(140 / 255)
+    assert first["top_m"] == pytest.approx(-11000.0 + 19848.0 * 140 / 255)
+    assert first["suggested_white_m"] == pytest.approx(-11000.0 + 19848.0 / (140 / 255))
+    assert any(d["code"] == "range_darkest_share" for d in res.diagnostics)
+
+
+def test_diagnostics_report_grey_use_and_the_darkest_share() -> None:
+    from dreamulator.map.importer import import_heightmap_metres
+    from dreamulator.map.models import ElevationMapping
+
+    grey = np.zeros((32, 64), dtype=np.uint8)
+    grey[8:16, 8:24] = 140
+    grey[16:24, 8:24] = 60
+    res = import_heightmap_metres(
+        _png8(grey), ElevationMapping(mode="range", min_m=-2000.0, max_m=4000.0)
+    )
+    assert [d["code"] for d in res.diagnostics] == ["range_grey_use", "range_darkest_share"]
+    grey_use = res.diagnostics[0]
+    assert grey_use["low"] == 0.0
+    assert grey_use["high"] == pytest.approx(140 / 255)
+    assert grey_use["suggested_white_m"] == pytest.approx(-2000.0 + 6000.0 / (140 / 255))
+    darkest = res.diagnostics[1]
+    assert (darkest["level"], darkest["levels"]) == (0, 255)
+    assert darkest["share"] > 0.5
+
+
+def test_threshold_diagnostics_explain_empty_land_and_partial_reach() -> None:
+    from dreamulator.map.importer import import_heightmap_metres
+    from dreamulator.map.models import ElevationMapping
+
+    grey = np.zeros((32, 64), dtype=np.uint8)
+    grey[:16] = 140
+    data = _png8(grey)
+    empty = import_heightmap_metres(
+        data, ElevationMapping(mode="threshold", sea_level=0.9, max_m=4000.0, seafloor_m=-2500.0)
+    )
+    assert [d["code"] for d in empty.diagnostics] == ["threshold_all_sea"]
+    reach = import_heightmap_metres(
+        data, ElevationMapping(mode="threshold", sea_level=0.05, max_m=4000.0, seafloor_m=-2500.0)
+    )
+    entry = next(d for d in reach.diagnostics if d["code"] == "threshold_reach")
+    share = (140 / 255 - 0.05) / 0.95
+    assert entry["reach_share"] == pytest.approx(share)
+    assert entry["suggested_white_m"] == pytest.approx(4000.0 / share)
+
+
 def test_range_mapping_round_trips_the_maps_own_export() -> None:
     """A map's elevation.png plus its map.yaml scale comes back in metres unchanged."""
     from dreamulator.map.importer import import_heightmap_metres
@@ -377,6 +469,35 @@ def test_preview_matches_the_import_and_writes_nothing(tmp_path: Path) -> None:
         shared += ("seafloor_assumed", "level_step_m", "warnings", "output_resolution")
         for key in shared:
             assert body[key] == imported[key], key
+    finally:
+        maps_module._manager = old
+
+
+def test_preview_accepts_a_jpeg_upload(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from dreamulator.api_routes import maps as maps_module
+    from dreamulator.world_manager import WorldManager
+
+    worlds = tmp_path / "worlds"
+    worlds.mkdir()
+    old = maps_module._manager
+    maps_module._manager = WorldManager(worlds)
+    try:
+        client = TestClient(_preview_app())
+        grey = np.zeros((32, 64), dtype=np.uint8)
+        grey[:16] = 240
+        r = client.post(
+            "/api/elevation-preview",
+            files={"file": ("qq-download.jpg", _jpeg8(grey), "image/jpeg")},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["source_format"] == "jpeg-8bit"
+        assert body["output_resolution"] == [64, 32]
+        assert body["level_step_m"] is not None
+        assert any("JPEG" in warning for warning in body["warnings"])
+        assert isinstance(body["diagnostics"], list)
     finally:
         maps_module._manager = old
 

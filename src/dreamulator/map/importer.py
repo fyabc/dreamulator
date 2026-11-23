@@ -6,6 +6,7 @@ Photoshop):
 - 16-bit PNG (single-channel grayscale)
 - 16-bit TIFF (integer)
 - 32-bit float TIFF (Gaea native output)
+- 8-bit JPEG (accepted for convenience; lossy, so PNG or TIFF is the precise route)
 
 Two entry points:
 
@@ -46,6 +47,7 @@ _LEVELS = {
     "png-converted": 255,
     "tiff-uint8": 255,
     "png-16bit": 65535,
+    "jpeg-8bit": 255,
     "tiff-uint16": 65535,
     "tiff-int16": 65535,
     "tiff-uint32": 4294967295,
@@ -112,6 +114,14 @@ def import_heightmap(
     )
 
 
+#: Machine-readable advice about how the declared mapping lands on the image's actual
+#: values.  Each dict carries a ``code`` and the numbers its message needs; the import UI
+#: turns the codes into sentences.  None of them changes the mapping or guesses what the
+#: author meant; keys starting with ``suggested_`` are values the author can type into
+#: the same fields.
+MappingDiagnostic = dict[str, float | int | str]
+
+
 @dataclass
 class MetricImport:
     """An imported heightmap in metres, with what the result rests on."""
@@ -126,6 +136,7 @@ class MetricImport:
     land_fraction: float
     level_step_m: dict[str, float] | None  # height of one level: at the coast and the largest
     warnings: list[str] = field(default_factory=list)
+    diagnostics: list[MappingDiagnostic] = field(default_factory=list)
 
 
 def import_heightmap_metres(
@@ -150,10 +161,12 @@ def import_heightmap_metres(
         fmt, values = _decode_metres(data)
         land = values > mapping.sea_level_m
         metres = values
+        source = values
     else:
         fmt, v = _decode(data, filename)
         if not np.isfinite(v).all():
             raise ValueError("heightmap values must be finite; fill missing pixels before import")
+        source = v
         if mapping.mode == "range":
             if mapping.max_m <= mapping.min_m:
                 raise ValueError("range mapping needs max_m > min_m")
@@ -179,6 +192,11 @@ def import_heightmap_metres(
             if step
             else "8-bit input: 256 levels (prefer 16-bit or float)"
         )
+    if fmt == "jpeg-8bit":
+        warnings.append(
+            "JPEG input: lossy compression blurs coastlines and adds ringing along ridges; "
+            "import the original PNG or TIFF when one exists"
+        )
     was_resampled = False
     if target_width and target_height and (target_width, target_height) != (src_w, src_h):
         metres, land = _resample_by_class(metres, land, target_width, target_height)
@@ -197,7 +215,115 @@ def import_heightmap_metres(
         land_fraction=float(land.mean()),
         level_step_m=step,
         warnings=warnings,
+        diagnostics=_mapping_diagnostics(mapping, source, levels),
     )
+
+
+def _mapping_diagnostics(
+    mapping: ElevationMapping, values: np.ndarray, levels: int | None
+) -> list[MappingDiagnostic]:
+    """Explain how the declared mapping lands on this image's actual values.
+
+    Every entry is computed from the source array and the mapping itself; nothing here
+    changes the mapping or guesses what the author meant.  Suggestions carry the
+    numbers the author can type into the same fields: a suggested white height follows
+    from reading the brightest pixel as the intended peak, and the sea threshold hint
+    follows from the darkest level's share of the image.
+    """
+    low = float(values.min())
+    high = float(values.max())
+    sea = mapping.sea_level_m
+    out: list[MappingDiagnostic] = []
+
+    if mapping.mode == "metres":
+        if high <= sea:
+            out.append({"code": "metres_all_sea", "highest_m": high, "sea_m": sea})
+        elif low > sea:
+            out.append({"code": "metres_all_land", "lowest_m": low, "sea_m": sea})
+        return out
+
+    if mapping.mode == "range":
+        span = mapping.max_m - mapping.min_m
+        bottom = mapping.min_m + low * span
+        top = mapping.min_m + high * span
+        suggested = mapping.min_m + span / high if high > 0.0 else None
+        darkest: MappingDiagnostic | None = None
+        if levels is not None and high > low:
+            share = float((values <= low + 1.0 / levels).mean())
+            if share >= 0.5:
+                darkest = {
+                    "code": "range_darkest_share",
+                    "share": share,
+                    "level": round(low * levels),
+                    "levels": levels,
+                }
+        if top <= sea:
+            entry: MappingDiagnostic = {
+                "code": "range_all_sea",
+                "brightest": high,
+                "top_m": top,
+                "sea_m": sea,
+                "min_m": mapping.min_m,
+                "max_m": mapping.max_m,
+            }
+            if suggested is not None:
+                entry["suggested_white_m"] = suggested
+            out.append(entry)
+            if darkest is not None:
+                out.append(darkest)
+        elif bottom > sea:
+            out.append(
+                {
+                    "code": "range_all_land",
+                    "darkest": low,
+                    "bottom_m": bottom,
+                    "sea_m": sea,
+                    "min_m": mapping.min_m,
+                    "max_m": mapping.max_m,
+                }
+            )
+        else:
+            if high - low < 0.9:
+                entry = {
+                    "code": "range_grey_use",
+                    "low": low,
+                    "high": high,
+                    "top_m": top,
+                    "max_m": mapping.max_m,
+                }
+                if suggested is not None:
+                    entry["suggested_white_m"] = suggested
+                out.append(entry)
+            if darkest is not None:
+                out.append(darkest)
+        return out
+
+    # threshold: land rises from 0 m at the threshold to max_m at full scale
+    if high <= mapping.sea_level:
+        entry = {"code": "threshold_all_sea", "brightest": high, "thresh": mapping.sea_level}
+        if levels is not None:
+            entry["levels"] = levels
+        out.append(entry)
+    elif low > mapping.sea_level:
+        entry = {"code": "threshold_all_land", "darkest": low, "thresh": mapping.sea_level}
+        if levels is not None:
+            entry["levels"] = levels
+        out.append(entry)
+    else:
+        reach = (high - mapping.sea_level) / (1.0 - mapping.sea_level)
+        if mapping.curve == "gamma":
+            reach = reach**mapping.gamma
+        if 0.0 < reach < 0.9:
+            out.append(
+                {
+                    "code": "threshold_reach",
+                    "reach_m": mapping.max_m * reach,
+                    "reach_share": reach,
+                    "max_m": mapping.max_m,
+                    "suggested_white_m": mapping.max_m / reach,
+                }
+            )
+    return out
 
 
 def land_area_fraction(land: np.ndarray) -> float:
@@ -287,6 +413,7 @@ def _resample_by_class(
 
 # Magic bytes for common image formats
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+_JPEG_MAGIC = b"\xff\xd8\xff"  # SOI + first marker
 _TIFF_LE_MAGIC = b"II\x2a\x00"  # little-endian TIFF
 _TIFF_BE_MAGIC = b"MM\x00\x2a"  # big-endian TIFF
 _TIFF_BIGTIFF_LE = b"II\x2b\x00"  # BigTIFF little-endian
@@ -299,6 +426,8 @@ def _detect_format(data: bytes) -> str:
         return "png"
     if data[:4] in (_TIFF_LE_MAGIC, _TIFF_BE_MAGIC, _TIFF_BIGTIFF_LE, _TIFF_BIGTIFF_BE):
         return "tiff"
+    if data[:3] == _JPEG_MAGIC:
+        return "jpeg"
     # Fallback: check extension hint
     return "unknown"
 
@@ -311,8 +440,10 @@ def _decode(data: bytes, filename: str) -> tuple[str, np.ndarray]:
         return _decode_png(data)
     elif fmt == "tiff":
         return _decode_tiff(data)
+    elif fmt == "jpeg":
+        return _decode_jpeg(data)
     else:
-        # Try PNG first, then TIFF, then give up
+        # Try PNG first, then TIFF, then JPEG, then give up
         try:
             return _decode_png(data)
         except Exception:
@@ -321,11 +452,29 @@ def _decode(data: bytes, filename: str) -> tuple[str, np.ndarray]:
             return _decode_tiff(data)
         except Exception:
             pass
+        try:
+            return _decode_jpeg(data)
+        except Exception:
+            pass
         ext = Path(filename).suffix.lower() if filename else ""
         raise ValueError(
             f"Unsupported heightmap format (bytes={data[:16]!r}, extension={ext!r}). "
-            "Supported formats: 16-bit PNG, 16-bit TIFF, 32-bit float TIFF."
+            "Supported formats: 16-bit PNG, 16-bit TIFF, 32-bit float TIFF and 8-bit JPEG."
         )
+
+
+def _decompression_bomb(e: Image.DecompressionBombError, kind: str) -> ValueError:
+    """Turn Pillow's pixel-count refusal into a plain input error."""
+    # Pillow refuses images above twice Image.MAX_IMAGE_PIXELS before decoding them;
+    # say so plainly instead of failing as an unexpected error.
+    size = re.search(r"\((\d+) pixels\)", str(e))
+    limit = re.search(r"limit of (\d+) pixels", str(e))
+    found = f"{size.group(1)} pixels" if size else "too many pixels"
+    cap = limit.group(1) if limit else str(2 * (Image.MAX_IMAGE_PIXELS or 0))
+    return ValueError(
+        f"{kind} has {found}, above the import limit of {cap} pixels; "
+        "downscale the image before importing"
+    )
 
 
 def _decode_png(data: bytes) -> tuple[str, np.ndarray]:
@@ -334,16 +483,7 @@ def _decode_png(data: bytes) -> tuple[str, np.ndarray]:
     try:
         img = Image.open(buf)
     except Image.DecompressionBombError as e:
-        # Pillow refuses images above twice Image.MAX_IMAGE_PIXELS before decoding them;
-        # say so plainly instead of failing as an unexpected error.
-        size = re.search(r"\((\d+) pixels\)", str(e))
-        limit = re.search(r"limit of (\d+) pixels", str(e))
-        found = f"{size.group(1)} pixels" if size else "too many pixels"
-        cap = limit.group(1) if limit else str(2 * (Image.MAX_IMAGE_PIXELS or 0))
-        raise ValueError(
-            f"PNG has {found}, above the import limit of {cap} pixels; "
-            "downscale the image before importing"
-        ) from e
+        raise _decompression_bomb(e, "PNG") from e
 
     if img.mode == "I;16":
         arr = np.array(img, dtype=np.uint16).astype(np.float64) / _UINT16_MAX_F
@@ -367,6 +507,24 @@ def _decode_png(data: bytes) -> tuple[str, np.ndarray]:
         logger.warning("Converting multi-channel PNG to grayscale")
 
     return fmt_label, np.clip(arr, 0.0, 1.0)
+
+
+def _decode_jpeg(data: bytes) -> tuple[str, np.ndarray]:
+    """Decode a JPEG heightmap to normalised [0, 1].
+
+    JPEG is accepted because images shared through chat apps arrive as JPEG (QQ and
+    similar convert PNG uploads on download).  It carries only 8 bits per sample and
+    lossy compression, so the import warnings name both limits.  Multi-channel input
+    is converted to luminance with the same coefficients browsers use.
+    """
+    buf = io.BytesIO(data)
+    try:
+        img = Image.open(buf)
+    except Image.DecompressionBombError as e:
+        raise _decompression_bomb(e, "JPEG") from e
+    arr = np.array(img.convert("L"), dtype=np.float64) / 255.0
+    logger.warning("Importing JPEG heightmap — 8-bit lossy compression")
+    return "jpeg-8bit", np.clip(arr, 0.0, 1.0)
 
 
 def _decode_tiff(data: bytes) -> tuple[str, np.ndarray]:

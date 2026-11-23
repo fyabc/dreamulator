@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { GRID_H, GRID_W, type PlanetParams } from '../../playground/temperatureDraft'
-import { heightmapGrid, type HeightmapInput, type SavedTemperature } from '../../projects/heightmapWorld'
+import { GRID_H, GRID_W } from '../../playground/temperatureDraft'
+import { heightmapDisplayScale, heightmapGrid, heightmapStats, type HeightmapInput, type HeightmapMapping,
+  type SavedTemperature } from '../../projects/heightmapWorld'
 import { generateLut, TEMPERATURE_LIMIT_C, TEMPERATURE_SCALE } from '../../viewers/map/utils/colorScales'
 
-export default function CreationRaster({ input, params, temperature, width = 720 }: {
-  input: HeightmapInput; params: PlanetParams; temperature?: SavedTemperature; width?: number
+export default function CreationRaster({ input, mapping, temperature, width = 720 }: {
+  input: HeightmapInput; mapping: HeightmapMapping; temperature?: SavedTemperature; width?: number
 }) {
   const { t, i18n } = useTranslation('worlds')
   const canvas = useRef<HTMLCanvasElement>(null)
@@ -14,12 +15,14 @@ export default function CreationRaster({ input, params, temperature, width = 720
     ? temperature.annual : temperature.monthly[Number(month)]
   const renderWidth = series ? GRID_W : Math.min(width, input.raster.width)
   const renderHeight = series ? GRID_H : renderWidth / 2
-  const { elevMinM, elevMaxM, seaLevelM } = params
+  const scale = useMemo(() => heightmapDisplayScale(input, mapping), [input, mapping])
+  const stats = useMemo(() => heightmapStats(input, mapping), [input, mapping])
+  const { minM: elevMinM, maxM: elevMaxM, seaLevelM } = scale
   useEffect(() => {
     const context = canvas.current?.getContext('2d')
     if (!context) return
     const image = context.createImageData(renderWidth, renderHeight)
-    const terrain = series ? undefined : heightmapGrid(input, { elevMinM, elevMaxM, seaLevelM }, renderWidth, renderHeight)
+    const terrain = series ? undefined : heightmapGrid(input, mapping, renderWidth, renderHeight)
     const lut = generateLut(TEMPERATURE_SCALE, 256)
     for (let index = 0; index < renderWidth * renderHeight; index++) {
       const pixel = index * 4
@@ -30,7 +33,8 @@ export default function CreationRaster({ input, params, temperature, width = 720
         image.data[pixel + 1] = lut[color + 1]
         image.data[pixel + 2] = lut[color + 2]
       } else if (terrain) {
-        const shade = (terrain.values[index] - elevMinM) / (elevMaxM - elevMinM)
+        const value = terrain.values[index]
+        const shade = (value - elevMinM) / (elevMaxM - elevMinM)
         const land = terrain.land[index]
         image.data[pixel] = (land ? 76 : 11) + shade * (land ? 150 : 4)
         image.data[pixel + 1] = (land ? 111 : 28) + shade * (land ? 100 : 48)
@@ -39,9 +43,10 @@ export default function CreationRaster({ input, params, temperature, width = 720
       image.data[pixel + 3] = 255
     }
     context.putImageData(image, 0, 0)
-  }, [input, elevMinM, elevMaxM, seaLevelM, renderHeight, renderWidth, series])
+  }, [input, mapping, elevMinM, elevMaxM, renderHeight, renderWidth, series])
   const label = t(series ? 'creation.temperature' : 'creation.terrain')
   const format = new Intl.DateTimeFormat(i18n.language, { month: 'long', timeZone: 'UTC' })
+  const number = (value: number) => Math.round(value).toLocaleString(i18n.language)
   return <figure className="min-w-0 space-y-2">
     {temperature && <label className="flex flex-wrap items-center gap-2 text-sm text-gray-200">{t('creation.layer')}
       <select aria-label={t('creation.layer')} value={month} onChange={event => setMonth(event.currentTarget.value)}
@@ -56,7 +61,10 @@ export default function CreationRaster({ input, params, temperature, width = 720
     <figcaption className="flex flex-wrap justify-between gap-1 text-sm text-gray-400">
       {series ? <><span>{t('creation.experimentSource', { width: GRID_W, height: GRID_H })}</span><span>−40 °C / +40 °C</span></>
         : <><span>{t('creation.imageSize', { width: input.raster.width, height: input.raster.height, depth: input.raster.depth })}</span>
-          <span>{t('creation.seaDatum', { value: seaLevelM })}</span></>}
+          <span>{stats
+            ? t('creation.terrainStats', { min: number(stats.minM), max: number(stats.maxM),
+              land: Math.round(stats.landShare * 100), sea: number(seaLevelM) })
+            : t('creation.seaDatum', { value: seaLevelM })}</span></>}
     </figcaption>
   </figure>
 }

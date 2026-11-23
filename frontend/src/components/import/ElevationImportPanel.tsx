@@ -22,6 +22,7 @@ import {
   MODE_FIELDS,
   previewScale,
 } from '../../api/elevationImport'
+import ElevationAdvice from './ElevationAdvice'
 import ElevationPreviewCanvas from './ElevationPreviewCanvas'
 
 /** Text-field state of a mapping, so half-typed numbers do not get lost. */
@@ -29,6 +30,7 @@ interface Draft {
   mode: ElevationMappingMode
   min_m: string
   max_m: string
+  /** Threshold sea level: a grey level when the source has levels, else a fraction. */
   sea_level: string
   sea_level_m: string
   curve: 'linear' | 'gamma'
@@ -38,12 +40,12 @@ interface Draft {
 
 type NumberField = 'min_m' | 'max_m' | 'sea_level' | 'sea_level_m' | 'gamma' | 'seafloor_m'
 
-function toDraft(m: ElevationMapping): Draft {
+function toDraft(m: ElevationMapping, levels?: number): Draft {
   return {
     mode: m.mode,
     min_m: String(m.min_m),
     max_m: String(m.max_m),
-    sea_level: String(m.sea_level),
+    sea_level: levels ? String(Math.round(m.sea_level * levels)) : String(m.sea_level),
     sea_level_m: String(m.sea_level_m),
     curve: m.curve,
     gamma: String(m.gamma),
@@ -52,18 +54,30 @@ function toDraft(m: ElevationMapping): Draft {
 }
 
 /** Parse a draft; returns the mapping or the field errors (i18n keys). */
-function parseDraft(d: Draft): { mapping: ElevationMapping | null; errors: Partial<Record<NumberField, string>> } {
+function parseDraft(d: Draft, levels?: number): { mapping: ElevationMapping | null; errors: Partial<Record<NumberField, string>> } {
   const errors: Partial<Record<NumberField, string>> = {}
   const num = (key: NumberField): number => {
     const v = Number(d[key].trim())
     if (d[key].trim() === '' || !Number.isFinite(v)) errors[key] = 'error.notNumber'
     return v
   }
+  // Integer sources are easier to adjust as grey levels; float sources have none.
+  const grey = levels !== undefined && levels > 1
+  const seaLevel = (): number => {
+    const value = num('sea_level')
+    if (errors.sea_level) return value
+    if (!grey) return value
+    if (!Number.isInteger(value) || value < 0 || value >= levels) {
+      errors.sea_level = 'error.seaLevelGrey'
+      return value / levels
+    }
+    return value / levels
+  }
   const m: ElevationMapping = {
     mode: d.mode,
     min_m: num('min_m'),
     max_m: num('max_m'),
-    sea_level: num('sea_level'),
+    sea_level: seaLevel(),
     sea_level_m: num('sea_level_m'),
     curve: d.curve,
     gamma: num('gamma'),
@@ -72,7 +86,9 @@ function parseDraft(d: Draft): { mapping: ElevationMapping | null; errors: Parti
   if (d.mode === 'range' && !errors.max_m && !errors.min_m && m.max_m <= m.min_m) errors.max_m = 'error.maxAboveMin'
   if (d.mode === 'threshold') {
     if (!errors.max_m && m.max_m <= 0) errors.max_m = 'error.maxPositive'
-    if (!errors.sea_level && (m.sea_level < 0 || m.sea_level >= 1)) errors.sea_level = 'error.seaLevelFraction'
+    if (!errors.sea_level && !grey && (m.sea_level < 0 || m.sea_level >= 1)) {
+      errors.sea_level = 'error.seaLevelFraction'
+    }
     if (!errors.seafloor_m && m.seafloor_m >= 0) errors.seafloor_m = 'error.seafloorNegative'
     if (d.curve === 'gamma' && !errors.gamma && m.gamma <= 0) errors.gamma = 'error.gammaPositive'
   }
@@ -91,6 +107,7 @@ function parseDraft(d: Draft): { mapping: ElevationMapping | null; errors: Parti
 const GREY_LEVELS: Record<string, number> = {
   'png-8bit': 255,
   'png-converted': 255,
+  'jpeg-8bit': 255,
   'tiff-uint8': 255,
   'png-16bit': 65535,
   'tiff-uint16': 65535,
@@ -144,7 +161,12 @@ export default function ElevationImportPanel({
   // What the shown preview was computed for, so an identical request is not repeated.
   const previewFor = useRef<{ file: File; targetKey: string } | null>(null)
 
-  const parsed = useMemo(() => (draft ? parseDraft(draft) : null), [draft])
+  // Keep the last known grey levels while a replacement file previews, so a kept
+  // integer threshold is not briefly reinterpreted as a fraction.
+  const lastLevels = useRef<number | undefined>(undefined)
+  if (preview) lastLevels.current = GREY_LEVELS[preview.source_format]
+  const levels = preview ? GREY_LEVELS[preview.source_format] : lastLevels.current
+  const parsed = useMemo(() => (draft ? parseDraft(draft, levels) : null), [draft, levels])
   const targetKey = target ? `${target.world}/${target.planetId}/${target.branch ?? ''}` : ''
 
   // Object URL for showing the original image (browsers display PNG, not TIFF).
@@ -173,7 +195,7 @@ export default function ElevationImportPanel({
           setGrid(decodePreviewGrid(res.preview))
           setPreviewError(null)
           // First preview: show the defaults the backend chose in the form.
-          setDraft((d) => d ?? toDraft(res.mapping))
+          setDraft((d) => d ?? toDraft(res.mapping, GREY_LEVELS[res.source_format]))
         })
         .catch((e: unknown) => {
           if (controller.signal.aborted) return
@@ -227,7 +249,6 @@ export default function ElevationImportPanel({
     }
   }
 
-  const levels = preview ? GREY_LEVELS[preview.source_format] : undefined
   const scale = grid ? previewScale(grid) : null
 
   return (
@@ -240,7 +261,7 @@ export default function ElevationImportPanel({
         <input
           ref={fileInput}
           type="file"
-          accept=".png,.tif,.tiff"
+          accept=".png,.tif,.tiff,.jpg,.jpeg"
           className="hidden"
           data-testid="elevation-file-input"
           onChange={(e) => {
@@ -298,19 +319,22 @@ export default function ElevationImportPanel({
                 {draft.mode === 'threshold' && (
                   <>
                     <NumberInput
-                      label={t('field.sea_level')}
-                      unit={t('unit.fraction')}
-                      help={t('help.sea_level')}
+                      label={t(levels ? 'field.sea_level_grey' : 'field.sea_level')}
+                      unit={levels ? '' : t('unit.fraction')}
+                      help={t(levels ? 'help.sea_level_grey' : 'help.sea_level')}
                       value={draft.sea_level}
                       error={parsed?.errors.sea_level}
                       onChange={(v) => set({ sea_level: v })}
                       testId="field-sea_level"
-                      note={levels && parsed?.mapping ? t('note.greyLevel', { grey: Math.floor(parsed.mapping.sea_level * levels), levels }) : undefined}
+                      note={levels ? t('note.greyRange', { levels }) : undefined}
                     />
                     <NumberInput label={t('field.max_m_threshold')} unit="m" help={t('help.max_m_threshold')} value={draft.max_m} error={parsed?.errors.max_m} onChange={(v) => set({ max_m: v })} testId="field-max_m" />
                     <NumberInput label={t('field.seafloor_m')} unit="m" help={t('help.seafloor_m')} value={draft.seafloor_m} error={parsed?.errors.seafloor_m} onChange={(v) => set({ seafloor_m: v })} testId="field-seafloor_m" />
-                    <button type="button" className="text-xs text-neon-cyan/80 hover:underline" onClick={() => setShowAdvanced((s) => !s)}>
+                    <button type="button" aria-expanded={showAdvanced}
+                      className="inline-flex min-h-9 items-center gap-2 self-start rounded border border-space-border bg-space-panel px-3 py-1 text-sm text-gray-200 hover:border-neon-cyan hover:text-neon-cyan focus-visible:outline focus-visible:outline-neon-cyan"
+                      onClick={() => setShowAdvanced((s) => !s)}>
                       {showAdvanced ? t('action.hideAdvanced') : t('action.showAdvanced')}
+                      <span aria-hidden className="text-xs">{showAdvanced ? '▴' : '▾'}</span>
                     </button>
                     {showAdvanced && (
                       <div className="space-y-2 border-l border-space-border pl-3">
@@ -335,6 +359,14 @@ export default function ElevationImportPanel({
                 {preview && (
                   <p className="text-xs text-gray-500">{t(`defaults.${preview.mapping_source}`)}</p>
                 )}
+                {preview && preview.warnings.length > 0 && (
+                  <ul className="text-xs text-amber-300 list-disc pl-5 space-y-0.5" data-testid="import-warnings">
+                    {preview.warnings.map((w) => (
+                      <li key={w}>{localiseWarning(w, t)}</li>
+                    ))}
+                  </ul>
+                )}
+                <ElevationAdvice diagnostics={preview?.diagnostics} />
               </>
             )}
           </section>
@@ -391,7 +423,7 @@ export default function ElevationImportPanel({
               </>
             )}
             {view === 'source' && preview && fileUrl && (
-              <SourceImage url={fileUrl} isPng={/\.png$/i.test(file.name)} />
+              <SourceImage url={fileUrl} displayable={/\.(png|jpe?g)$/i.test(file.name)} />
             )}
 
             {preview && <ImportReport preview={preview} />}
@@ -516,13 +548,6 @@ function ImportReport({ preview }: { preview: ElevationPreviewResponse }) {
           {t('report.seafloorAssumed', { depth: fmtM(preview.mapping.seafloor_m) })}
         </p>
       )}
-      {preview.warnings.length > 0 && (
-        <ul className="text-xs text-amber-300 list-disc pl-5 space-y-0.5" data-testid="import-warnings">
-          {preview.warnings.map((w) => (
-            <li key={w}>{localiseWarning(w, t)}</li>
-          ))}
-        </ul>
-      )}
     </div>
   )
 }
@@ -532,6 +557,7 @@ function localiseWarning(w: string, t: (key: string, opts?: Record<string, unkno
   const eight = /^8-bit input: (\d+) levels; one level is ([\d.]+) m at the coast and up to ([\d.]+) m/.exec(w)
   if (eight) return t('warning.eightBit', { levels: eight[1], coast: eight[2], max: eight[3] })
   if (w.startsWith('8-bit input')) return t('warning.eightBitPlain')
+  if (w.startsWith('JPEG input')) return t('warning.jpegLossy')
   return w
 }
 
@@ -543,14 +569,16 @@ function localiseError(e: string, t: (key: string, opts?: Record<string, unknown
   if (size) return t('error.dimensions', { w: size[1], h: size[2] })
   const bytes = /^Global heightmap file exceeds (\d+) MiB$/.exec(e)
   if (bytes) return t('error.fileSize', { mib: bytes[1] })
-  if (e === 'Cannot read a PNG or TIFF heightmap') return t('error.unreadable')
+  if (e === 'Cannot read a PNG, TIFF or JPEG heightmap' || e === 'Cannot read a PNG or TIFF heightmap') {
+    return t('error.unreadable')
+  }
   return e
 }
 
-function SourceImage({ url, isPng }: { url: string; isPng: boolean }) {
+function SourceImage({ url, displayable }: { url: string; displayable: boolean }) {
   const { t } = useTranslation('importer')
   const [failed, setFailed] = useState(false)
-  if (!isPng || failed) return <p className="text-sm text-gray-400">{t('view.sourceUnavailable')}</p>
+  if (!displayable || failed) return <p className="text-sm text-gray-400">{t('view.sourceUnavailable')}</p>
   return (
     <div>
       <img src={url} alt="" className="w-full rounded border border-space-border" onError={() => setFailed(true)} />

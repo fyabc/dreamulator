@@ -34,6 +34,12 @@ export const MODE_FIELDS: Record<ElevationMappingMode, (keyof ElevationMapping)[
   metres: ['sea_level_m'],
 }
 
+/**
+ * Machine-readable mapping advice; `code` names the situation and the remaining keys
+ * carry the numbers its message needs.  The import UI localizes the codes.
+ */
+export type MappingDiagnostic = Record<string, number | string>
+
 /** The summary shared by the preview and the import responses. */
 export interface ElevationImportSummary {
   source_format: string
@@ -49,6 +55,7 @@ export interface ElevationImportSummary {
   seafloor_assumed: boolean
   level_step_m: { coast: number; max: number } | null
   warnings: string[]
+  diagnostics?: MappingDiagnostic[]
 }
 
 export interface ElevationPreviewResponse extends ElevationImportSummary {

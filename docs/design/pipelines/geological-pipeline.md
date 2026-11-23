@@ -626,7 +626,8 @@ field = clip(Σ feature 贡献 + hemisphere·sin(lat) + raster_weight · raster_
 等距圆柱、任意分辨率；`sample_raster_at_cells` 按 cell 中心
 `lon_lat_to_pixel`（像素中心约定，不 wrap）最近像素采样。解码经
 `importer.import_heightmap`：16-bit PNG 全精度、16-bit TIFF、32-bit float TIFF
-（越界 min-max 归一）、8-bit PNG（256 级，警告）、多通道取首通道；
+（越界 min-max 归一）、8-bit PNG（256 级，警告）、8-bit JPEG（256 级且有损，
+警告）、多通道取首通道；
 灰度 [0,1] → bias = 2v−1。上传端点统一重编码 `encode_elevation(…, 0, 1)`
 落 16-bit PNG。仅 `config.geography is not None` 时参与（`geography.yaml`
 可零 features）。

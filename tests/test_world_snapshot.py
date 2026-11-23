@@ -219,3 +219,186 @@ def test_create_heightmap_endpoint_does_not_restore_arbitrary_world_snapshots(
     )
     assert response.status_code == 422
     assert not list(destination.iterdir())
+
+
+def _browser_creation_snapshot(root: Path, *, threshold: bool) -> Path:
+    """The file set the browser creation workflow exports, for validator tests."""
+    import hashlib
+    import io
+    import json
+
+    import numpy as np
+    from PIL import Image
+
+    from dreamulator.browser_creation import CREATION, GEO_INPUT, PLANET
+
+    root.mkdir(parents=True, exist_ok=True)
+    buffer = io.BytesIO()
+    Image.fromarray(np.zeros((2, 4), dtype=np.uint8), mode="L").save(buffer, format="PNG")
+    original = buffer.getvalue()
+    digest = hashlib.sha256(original).hexdigest()
+    mapping: dict[str, object] = (
+        {
+            "mode": "threshold",
+            "sea_level": 0.05,
+            "max_m": 4000.0,
+            "seafloor_m": -3800.0,
+            "curve": "linear",
+            "gamma": 1.0,
+        }
+        if threshold
+        else {"mode": "range", "min_m": -2000.0, "max_m": 4000.0, "sea_level_m": 0.0}
+    )
+    created = "2026-01-01T00:00:00Z"
+    (root / "world.yaml").write_text(
+        json.dumps(
+            {
+                "metadata": {
+                    "name": "browser-world",
+                    "description": "t",
+                    "created": created,
+                    "modified": created,
+                },
+                "seed": {"seed": 42},
+                "planet_ids": [PLANET],
+                "layers": {
+                    "astronomy": {"engine": "astronomy", "configured": True},
+                    "geological": {"engine": "geological", "configured": True},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    astronomy = root / "layers/astronomy/input"
+    astronomy.mkdir(parents=True, exist_ok=True)
+    (astronomy / "stellar.yaml").write_text(
+        json.dumps(
+            {
+                "name": "t",
+                "stars": [
+                    {
+                        "id": "star_primary",
+                        "name": "Primary",
+                        "spectral_class": "G2",
+                        "luminosity_class": "V",
+                        "luminosity": 1.0,
+                    }
+                ],
+                "orbits": [
+                    {
+                        "body_id": PLANET,
+                        "parent_id": "star_primary",
+                        "semi_major_axis_au": 1.0,
+                        "eccentricity": 0.0,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    geo = root / GEO_INPUT
+    geo.mkdir(parents=True, exist_ok=True)
+    (geo / "planets.yaml").write_text(
+        json.dumps(
+            {
+                "planets": [
+                    {
+                        "id": PLANET,
+                        "name": "t",
+                        "orbits": "star_primary",
+                        "planet_type": "terrestrial",
+                        "mass": 1.0,
+                        "radius": 1.0,
+                        "rotation_period_days": 1.0,
+                        "axial_tilt_deg": 23.44,
+                        "albedo": 0.3,
+                        "atmosphere": {
+                            "surface_pressure_atm": 1.0,
+                            "composition": {"N2": 0.78, "O2": 0.21},
+                            "greenhouse_factor": 33.0,
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (geo / "terrain_config.yaml").write_text(json.dumps({"num_nodes": 256}), encoding="utf-8")
+    (geo / "elevation_imports.yaml").write_text(
+        json.dumps(
+            {
+                PLANET: {
+                    "sha256": digest,
+                    "provenance": {
+                        "source_format": "png-8bit",
+                        "source_filename": "map.png",
+                        "source_resolution": [4, 2],
+                        "output_resolution": [4, 2],
+                        "mapping": mapping,
+                        "imported_at": created,
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (geo / "elevation_sources").mkdir(parents=True, exist_ok=True)
+    (geo / "elevation_sources" / f"{digest}.bin").write_bytes(original)
+    map_dir = root / "maps" / PLANET
+    map_dir.mkdir(parents=True, exist_ok=True)
+    (map_dir / "map.yaml").write_text(
+        json.dumps(
+            {
+                "planet_id": PLANET,
+                "projection": "equirectangular",
+                "width": 4,
+                "height": 2,
+                "elevation_min_m": -3800.0 if threshold else -2000.0,
+                "elevation_max_m": 4000.0,
+                "sea_level_m": 0.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    if threshold:
+        buffer = io.BytesIO()
+        Image.fromarray(np.zeros((2, 4), dtype=np.uint16)).save(buffer, format="PNG")
+        (map_dir / "elevation.png").write_bytes(buffer.getvalue())
+    (root / CREATION).write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "id": "browser-world",
+                "title": "t",
+                "created": created,
+                "seed": 42,
+                "meshCells": 256,
+                "filename": "map.png",
+                "sha256": digest,
+                "params": {},
+                "mapping": mapping,
+                "temperature": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return root
+
+
+@pytest.mark.parametrize("threshold", [False, True])
+def test_browser_creation_snapshot_accepts_the_exported_file_set(
+    tmp_path: Path, threshold: bool
+) -> None:
+    from dreamulator.browser_creation import validate_browser_creation
+
+    staged = _browser_creation_snapshot(tmp_path / "browser-world", threshold=threshold)
+    validate_browser_creation(staged, "browser-world")
+
+
+def test_threshold_browser_snapshot_requires_its_derived_raster(tmp_path: Path) -> None:
+    from dreamulator.browser_creation import validate_browser_creation
+
+    staged = _browser_creation_snapshot(tmp_path / "browser-world", threshold=True)
+    (staged / "maps/planet_terra/elevation.png").unlink()
+    with pytest.raises(ValueError, match="Unexpected content"):
+        validate_browser_creation(staged, "browser-world")

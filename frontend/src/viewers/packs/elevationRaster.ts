@@ -10,6 +10,7 @@ export type ElevationFormat = 'png' | 'tiff'
 
 const MAX_PIXELS = 8192 * 4096
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10]
+const JPEG_SIGNATURE = [0xff, 0xd8, 0xff]
 const PNG_CRC_TABLE = Uint32Array.from({ length: 256 }, (_, index) => {
   let crc = index
   for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0)
@@ -29,6 +30,67 @@ function paeth(left: number, above: number, corner: number) {
   const cornerDistance = Math.abs(guess - corner)
   return leftDistance <= aboveDistance && leftDistance <= cornerDistance ? left
     : aboveDistance <= cornerDistance ? above : corner
+}
+
+/** True when the first bytes are a JPEG start-of-image marker. */
+export function isJpegBytes(bytes: Uint8Array): boolean {
+  return bytes.length >= JPEG_SIGNATURE.length && JPEG_SIGNATURE.every((value, index) => bytes[index] === value)
+}
+
+/**
+ * Decode a JPEG through the browser's image decoder and re-encode it as an 8-bit
+ * grayscale PNG, so the rest of the heightmap pipeline keeps its PNG contract.
+ *
+ * Images shared through chat apps arrive as JPEG (the app converts PNG uploads on
+ * download).  JPEG is 8-bit and lossy, so this is a convenience path, not the precise
+ * one.  Luminance uses Pillow's RGB→L weights, so the same file yields the same
+ * samples whether it is imported in the browser or on the server.
+ */
+export async function jpegToGrayscalePng(blob: Blob): Promise<Blob> {
+  if (typeof createImageBitmap !== 'function' || typeof OffscreenCanvas !== 'function') {
+    throw new Error('This browser cannot decode JPEG; export the heightmap as a grayscale PNG')
+  }
+  // imageOrientation 'none' mirrors Pillow, which also ignores EXIF orientation; the
+  // stored pixel grid is what a heightmap is.
+  const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none',
+    imageOrientation: 'none' })
+  try {
+    const { width, height } = bitmap
+    checkDimensions(width, height)
+    const canvas = new OffscreenCanvas(width, height)
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (!context) throw new Error('This browser cannot decode JPEG; export the heightmap as a grayscale PNG')
+    context.drawImage(bitmap, 0, 0)
+    const { data } = context.getImageData(0, 0, width, height)
+    const samples = new Uint8Array(width * height)
+    for (let index = 0; index < samples.length; index++) {
+      const pixel = index * 4
+      samples[index] = Math.round(0.299 * data[pixel] + 0.587 * data[pixel + 1] + 0.114 * data[pixel + 2])
+    }
+    return grayscalePng8(width, height, samples)
+  } finally {
+    bitmap.close()
+  }
+}
+
+/** Encode 8-bit grayscale samples as a single-channel, non-interlaced PNG. */
+async function grayscalePng8(width: number, height: number, samples: Uint8Array): Promise<Blob> {
+  checkDimensions(width, height)
+  if (samples.length !== width * height) throw new Error('Incomplete elevation raster')
+  const stride = width + 1
+  const scanlines = new Uint8Array(height * stride)
+  for (let row = 0; row < height; row++) {
+    scanlines.set(samples.subarray(row * width, (row + 1) * width), row * stride + 1)
+  }
+  const header = new Uint8Array(13)
+  const ihdr = new DataView(header.buffer)
+  ihdr.setUint32(0, width)
+  ihdr.setUint32(4, height)
+  ihdr.setUint8(8, 8) // bit depth 8; color type 0 (grayscale) and the rest stay zero
+  const compressed = new Blob([scanlines]).stream().pipeThrough(new CompressionStream('deflate'))
+  const image = new Uint8Array(await new Response(compressed).arrayBuffer())
+  return new Blob([new Uint8Array(PNG_SIGNATURE), pngChunk(0x49484452, header), pngChunk(0x49444154, image),
+    pngChunk(0x49454e44, new Uint8Array(0))], { type: 'image/png' })
 }
 
 export async function readElevationPng(blob: Blob, min: number, max: number, strict = false): Promise<ElevationRaster & { depth: 8 | 16 }> {
@@ -192,17 +254,29 @@ function pngChunk(kind: number, body: Uint8Array) {
   return bytes
 }
 
-export async function elevationPng(raster: ElevationRaster, metadata: Record<string, unknown>): Promise<Blob> {
+/**
+ * Encode metres as a 16-bit grayscale PNG.  Without `bounds` the raster's own
+ * minimum and maximum define the scale (the decoded fraction is relative to them);
+ * with `bounds` the caller fixes the scale, so a constant raster still decodes back
+ * to its value and several rasters can share one scale.
+ */
+export async function elevationPng(raster: ElevationRaster, metadata: Record<string, unknown>,
+  bounds?: { min: number; max: number }): Promise<Blob> {
   const { width, height, values } = raster
   checkDimensions(width, height)
   if (values.length !== width * height) throw new Error('Incomplete elevation raster')
-  let min = Infinity
-  let max = -Infinity
   for (const value of values) {
     if (!Number.isFinite(value)) throw new Error('Cannot encode non-finite elevations as grayscale')
-    min = Math.min(min, value)
-    max = Math.max(max, value)
   }
+  let min = bounds ? bounds.min : Infinity
+  let max = bounds ? bounds.max : -Infinity
+  if (!bounds) {
+    for (const value of values) {
+      min = Math.min(min, value)
+      max = Math.max(max, value)
+    }
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max < min) throw new Error('Invalid elevation encoding range')
   const stride = width * 2 + 1
   const scanlines = new ArrayBuffer(height * stride)
   const samples = new DataView(scanlines)
@@ -210,7 +284,8 @@ export async function elevationPng(raster: ElevationRaster, metadata: Record<str
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
       const value = values[row * width + col]
-      samples.setUint16(row * stride + 1 + col * 2, range ? Math.round((value - min) / range * 65535) : 32768)
+      const fraction = range ? Math.min(1, Math.max(0, (value - min) / range)) : 0.5
+      samples.setUint16(row * stride + 1 + col * 2, Math.round(fraction * 65535))
     }
   }
   const header = new Uint8Array(13)

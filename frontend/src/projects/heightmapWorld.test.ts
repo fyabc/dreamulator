@@ -5,12 +5,13 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { SavedBrowserEbm, SavedClimateTrial } from '../api/climateTrials'
 import { EARTH_PARAMS, GRID_H, GRID_W } from '../playground/temperatureDraft'
-import { elevationPng } from '../viewers/packs/elevationRaster'
+import { elevationPng, readElevationPng } from '../viewers/packs/elevationRaster'
 import { readBrowserParameters, writeBrowserParameters } from './worldParameters'
 import { exportWorldData, importWorldData } from './worldDataArchive'
-import { canDefaultToHeightmapClimate, defaultHeightmapClimateSearch, exportHeightmapWorld, heightmapGrid,
-  heightmapMapMetadata, heightmapPlanet, importHeightmapWorld, readHeightmapInput, savedTemperature,
-  temperatureInputFingerprint, type HeightmapWorld } from './heightmapWorld'
+import { canDefaultToHeightmapClimate, defaultHeightmapClimateSearch, exportHeightmapWorld, heightmapDiagnostics,
+  heightmapDisplayScale, heightmapGrid, heightmapMapMetadata, heightmapPlanet, heightmapStats, importHeightmapWorld,
+  rangeMapping, readHeightmapInput, savedTemperature, temperatureInputFingerprint, thresholdSeaLevel,
+  type HeightmapInput, type HeightmapMapping, type HeightmapWorld } from './heightmapWorld'
 import { readBrowserWorldOverview } from './browserWorldOverview'
 
 async function fixture(real?: string): Promise<HeightmapWorld> {
@@ -18,13 +19,65 @@ async function fixture(real?: string): Promise<HeightmapWorld> {
     values: Float32Array.from([4000, 4000, -2000, -2000, 4000, 4000, -2000, -2000]) }, {})
   const heightmap = await readHeightmapInput(blob, 'elevation.png')
   const params = { ...EARTH_PARAMS, elevMinM: -2000, elevMaxM: 4000, luminosity: 1.05, tiltDeg: 24, yearDays: 410 }
-  const fingerprint = await temperatureInputFingerprint(heightmap, params)
+  const mapping = rangeMapping(params)
+  const fingerprint = await temperatureInputFingerprint(heightmap, params, mapping)
   const grid = (value: number) => new Array<number>(GRID_W * GRID_H).fill(value)
   const temperature = savedTemperature({ annual: grid(13), monthly: Array.from({ length: 12 }, (_, month) => grid(month)),
     globalMeanC: 13, annualMeanC: 13, minC: 0, maxC: 13, elapsedS: 1 }, fingerprint, 'fixture-v1')
   return { id: 'fixture-imported-world', title: '测试世界', created: '2026-11-21T00:00:00Z', seed: 42,
-    meshCells: 256, heightmap, params, temperature }
+    meshCells: 256, heightmap, params, mapping, temperature }
 }
+
+describe('heightmap mapping diagnostics', () => {
+  const raster = (values: number[]): HeightmapInput => ({ original: new Blob(), filename: 'map.png',
+    sha256: '0'.repeat(64), raster: { width: 4, height: 2, depth: 8, values: Float32Array.from(values) } })
+  const dimLand = raster([0, 0, 0, 0, 35980, 35980, 35980, 35980]) // 140/255 in 8-bit steps
+
+  it('flags an all-sea mapping and suggests the white height that reaches the declared peak', () => {
+    const diagnostics = heightmapDiagnostics(dimLand, { mode: 'range', min_m: -11000, max_m: 8848, sea_level_m: 0 })
+    expect(diagnostics[0].code).toBe('range_all_sea')
+    expect(diagnostics[0].top_m).toBeCloseTo(-11000 + 19848 * 140 / 255, 3)
+    expect(Number(diagnostics[0].suggested_white_m)).toBeCloseTo(-11000 + 19848 / (140 / 255), 3)
+    expect(diagnostics.map(d => d.code)).toContain('range_darkest_share')
+  })
+
+  it('reports how much of the scale the grey uses and the darkest level share', () => {
+    const diagnostics = heightmapDiagnostics(dimLand, { mode: 'range', min_m: -2000, max_m: 4000, sea_level_m: 0 })
+    expect(diagnostics.map(d => d.code)).toEqual(['range_grey_use', 'range_darkest_share'])
+    expect(diagnostics[0].low).toBe(0)
+    expect(diagnostics[0].high).toBeCloseTo(140 / 255, 6)
+    expect(Number(diagnostics[0].suggested_white_m)).toBeCloseTo(-2000 + 6000 / (140 / 255), 3)
+    expect(diagnostics[1]).toMatchObject({ level: 0, levels: 255, share: 0.5 })
+  })
+
+  it('says nothing when the mapping and the image agree', () => {
+    const full = raster([0, 10280, 20560, 30840, 41120, 51400, 61680, 65535])
+    expect(heightmapDiagnostics(full, { mode: 'range', min_m: -4000, max_m: 5000, sea_level_m: 0 })).toEqual([])
+  })
+
+  it('reports the exact metres range and land share over the full raster', () => {
+    const threshold: HeightmapMapping = { mode: 'threshold', sea_level: 0.05, max_m: 3000, seafloor_m: -2500,
+      curve: 'linear', gamma: 1 }
+    const thresholdStats = heightmapStats(dimLand, threshold)
+    expect(thresholdStats?.minM).toBe(-2500)
+    expect(thresholdStats?.maxM).toBeCloseTo(3000 * (140 / 255 - 0.05) / 0.95, 6)
+    expect(thresholdStats?.landShare).toBe(0.5)
+    const stats = heightmapStats(dimLand, { mode: 'range', min_m: -2000, max_m: 4000, sea_level_m: 0 })
+    expect(stats?.minM).toBe(-2000)
+    expect(stats?.maxM).toBeCloseTo(-2000 + 6000 * 140 / 255, 6)
+    expect(stats?.landShare).toBe(0.5)
+  })
+
+  it('diagnoses threshold mappings and prefills the sea at the darkest level', () => {
+    const mapping: HeightmapMapping = { mode: 'threshold', sea_level: 0.05, max_m: 4000, seafloor_m: -3800,
+      curve: 'linear', gamma: 1 }
+    const reach = heightmapDiagnostics(dimLand, mapping)
+    expect(reach.map(d => d.code)).toEqual(['threshold_reach'])
+    expect(Number(reach[0].reach_m)).toBeCloseTo(4000 * (140 / 255 - 0.05) / 0.95, 3)
+    expect(heightmapDiagnostics(dimLand, { ...mapping, sea_level: 0.9 }).map(d => d.code)).toEqual(['threshold_all_sea'])
+    expect(thresholdSeaLevel(dimLand)).toBe(0)
+  })
+})
 
 describe('heightmap world snapshots', () => {
   it('reads authored astronomy and geology settings separately from derived data', async () => {
@@ -108,7 +161,7 @@ describe('heightmap world snapshots', () => {
     expect(restored.heightmap.sha256).toBe(world.heightmap.sha256)
     expect(await restored.heightmap.original.arrayBuffer()).toEqual(await world.heightmap.original.arrayBuffer())
     expect(restored.temperature?.monthly.map(month => month[0])).toEqual([10, 11, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-    const preview = heightmapGrid(restored.heightmap, restored.params, 4, 2)
+    const preview = heightmapGrid(restored.heightmap, restored.mapping, 4, 2)
     expect([...preview.land]).toEqual([1, 1, 0, 0, 1, 1, 0, 0])
     expect([...preview.values]).toEqual([4000, 4000, -2000, -2000, 4000, 4000, -2000, -2000])
   })
@@ -116,10 +169,33 @@ describe('heightmap world snapshots', () => {
   it('rejects stale experimental data and still allows an inputs-only save', async () => {
     const world = await fixture()
     const params = { ...world.params, seaLevelM: 50 }
-    await expect(exportHeightmapWorld({ ...world, params })).rejects.toThrow('does not match')
-    const restored = await importHeightmapWorld(await exportHeightmapWorld({ ...world, params, temperature: undefined }))
+    const mapping = rangeMapping(params)
+    await expect(exportHeightmapWorld({ ...world, params, mapping })).rejects.toThrow('does not match')
+    const restored = await importHeightmapWorld(await exportHeightmapWorld({ ...world, params, mapping, temperature: undefined }))
     expect(restored.params.seaLevelM).toBe(50)
     expect(restored.temperature).toBeUndefined()
+  })
+
+  it('writes a derived metres raster and the actual scale for threshold worlds', async () => {
+    const world = await fixture()
+    const mapping: HeightmapMapping = { mode: 'threshold', sea_level: 0.05, max_m: 3000, seafloor_m: -2500,
+      curve: 'linear', gamma: 1 }
+    const snapshot = await exportHeightmapWorld({ ...world, mapping, temperature: undefined })
+    const restored = await importHeightmapWorld(snapshot)
+    expect(restored.mapping).toEqual(mapping)
+    expect(restored.elevation).toBeDefined()
+    const scale = heightmapDisplayScale(world.heightmap, mapping)
+    expect(scale).toEqual({ minM: -2500, maxM: 3000, seaLevelM: 0 })
+    const meta = heightmapMapMetadata(restored)
+    expect([meta.elevation_min_m, meta.elevation_max_m, meta.sea_level_m]).toEqual([-2500, 3000, 0])
+    const grid = heightmapGrid(restored.heightmap, mapping, 4, 2)
+    expect([...grid.land]).toEqual([1, 1, 0, 0, 1, 1, 0, 0])
+    expect([...grid.values]).toEqual([3000, 3000, -2500, -2500, 3000, 3000, -2500, -2500])
+    // The derived raster decodes through the linear map scale back to the grid's metres.
+    const derived = await readElevationPng(restored.elevation!, 0, 1)
+    const metres = (index: number) => scale.minM + derived.values[index] * (scale.maxM - scale.minM)
+    expect(metres(0)).toBeCloseTo(3000, 0)
+    expect(metres(2)).toBeCloseTo(-2500, 0)
   })
 
   it('rejects invalid source bytes and truncated snapshots', async () => {

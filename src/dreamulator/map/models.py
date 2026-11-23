@@ -102,7 +102,7 @@ class ElevationImportProvenance(BaseModel):
     terrain — imported maps carry no plate/tectonic data.
     """
 
-    source_format: str = Field(description="png-16bit / tiff-uint16 / tiff-float32")
+    source_format: str = Field(description="png-16bit / tiff-uint16 / tiff-float32 / jpeg-8bit")
     source_filename: str = ""
     source_resolution: list[int] = Field(default_factory=list)
     output_resolution: list[int] = Field(default_factory=list)

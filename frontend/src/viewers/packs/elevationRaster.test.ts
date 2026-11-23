@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { elevationPng, elevationTiff, readElevationNpy, readElevationPng, resizeElevation, sampleGlobalElevation } from './elevationRaster'
+import { describe, expect, it, vi } from 'vitest'
+import { elevationPng, elevationTiff, isJpegBytes, jpegToGrayscalePng, readElevationNpy, readElevationPng,
+  resizeElevation, sampleGlobalElevation } from './elevationRaster'
 import { kmToLonLat, lonLatToKm, type PackWindow } from './packCoords'
 
 const window: PackWindow = { centerLat: 30, centerLon: -180, extentKmX: 550, extentKmY: 550,
@@ -36,6 +37,32 @@ describe('region elevation', () => {
       chunk('IHDR', header), chunk('IDAT', compressed), chunk('IEND', new Uint8Array())]), -5, 65530)
     expect([raster.width, raster.height]).toEqual([2, 5])
     expect(Array.from(raster.values)).toEqual([-4, -3, -2, -1, 0, 1, 2, 4, 5, 7])
+  })
+
+  it('recognises a JPEG header and re-encodes it as 8-bit grayscale PNG', async () => {
+    const pixels = new Uint8ClampedArray([
+      255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 10, 10, 10, 255,
+      0, 0, 0, 255, 255, 255, 255, 255, 20, 40, 60, 255, 0, 0, 0, 255,
+    ])
+    expect(isJpegBytes(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))).toBe(true)
+    expect(isJpegBytes(new Uint8Array([137, 80, 78, 71]))).toBe(false)
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 4, height: 2, close: () => undefined })))
+    vi.stubGlobal('OffscreenCanvas', class {
+      constructor(readonly width: number, readonly height: number) {}
+      getContext() {
+        return { drawImage: () => undefined, getImageData: () => ({ data: pixels }) }
+      }
+    })
+    try {
+      const png = await jpegToGrayscalePng(new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])]))
+      const raw = new Uint8Array(await png.arrayBuffer())
+      expect([raw[24], raw[25]]).toEqual([8, 0]) // bit depth 8, grayscale colour type
+      const { values } = await readElevationPng(png, 0, 255)
+      // Pillow's RGB→L weights: 0.299 R + 0.587 G + 0.114 B, rounded per sample.
+      expect(Array.from(values)).toEqual([76, 150, 29, 10, 0, 255, 36, 0])
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('wraps longitude at the seam and keeps north at the top', () => {
