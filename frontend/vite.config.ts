@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { execSync } from 'child_process'
 import { existsSync, readFileSync } from 'fs'
 import { ebmPackages, playgroundRuntime, playgroundRuntimePath } from './playgroundRuntime'
 
@@ -25,6 +26,14 @@ function previewMissingData404(): Plugin {
         response.end()
       })
     },
+  }
+}
+
+function gitCommitHash(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { cwd: __dirname, encoding: 'utf-8' }).trim()
+  } catch {
+    return ''
   }
 }
 
@@ -53,6 +62,7 @@ export default defineConfig(({ mode, isPreview }) => {
     // Inject build-time constants so version numbers never go stale.
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
+      __GIT_COMMIT__: JSON.stringify(gitCommitHash()),
       __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)),
       __PLAYGROUND_RUNTIME_PATH__: JSON.stringify(playgroundRuntimePath),
       __EBM_PACKAGES__: JSON.stringify(ebmPackages),

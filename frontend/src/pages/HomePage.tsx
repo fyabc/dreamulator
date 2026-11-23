@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import VersionStamp from '../components/VersionStamp'
 import { TutorialEntry } from '../tutorial/WorkflowTutorial'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -43,7 +44,7 @@ export default function HomePage() {
         </div>
       )}
       <footer className="atlas-home-footer">
-        <span>Dreamulator v{__APP_VERSION__}</span>
+        <span><VersionStamp label="Dreamulator" /></span>
         <div className="flex items-center gap-5">
           <Link to="/help">{t('nav.help')}</Link>
           <a href="https://github.com/fyabc/dreamulator">GitHub</a>

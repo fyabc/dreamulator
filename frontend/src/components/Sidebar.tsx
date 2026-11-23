@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import AtlasIcon, { type AtlasIconName } from './AtlasIcon'
 import LanguageSwitcher from './LanguageSwitcher'
+import VersionStamp from './VersionStamp'
 import { useDevModeStore } from '../stores/devModeStore'
 import { useExperimentalStore } from '../stores/experimentalStore'
 import { isStaticMode } from '../api/mode'
@@ -226,7 +227,7 @@ export default function Sidebar({
         </button>
         {/* Version — auto-injected from package.json at build time */}
         <p className={['text-xs text-gray-400 mt-2 text-center', collapsed ? 'md:hidden' : ''].join(' ')}>
-          v{__APP_VERSION__}
+          <VersionStamp />
         </p>
         {/* Language switcher */}
         <div className={collapsed ? 'md:hidden' : ''}>
