@@ -31,6 +31,22 @@
     "collapseMinimap": "Collapse overview map",
     "showMinimap": "Show overview map"
   },
+  "buildPlan": {
+    "title": "Build plan",
+    "pending": "Pending layers: {{count}}",
+    "fresh": "Up to date",
+    "unavailable": "Build state unavailable",
+    "build": "Build",
+    "startFrom": "Build from {{layer}}",
+    "recompute": "Will rebuild: {{layers}}",
+    "state": { "fresh": "Fresh", "stale": "Inputs changed", "absent": "Not built" },
+    "building": "Building",
+    "progress": "Layers {{done}}/{{total}} · {{seconds}}s",
+    "done": "Build finished; the map has been refreshed",
+    "failed": "Build failed",
+    "note": "Builds write formal results; the map refreshes when it finishes.",
+    "noInput": "No input"
+  },
   "terrainSource": {
     "label": "Terrain source",
     "help": "About terrain sources",

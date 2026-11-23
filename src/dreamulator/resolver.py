@@ -214,6 +214,37 @@ class LayerResolver:
         source = self.resolve_layer(layer)
         return source.derived_dir
 
+    def iter_scope_dirs(self) -> list[Path]:
+        """List the inheritance scopes from most specific to most general.
+
+        Returns:
+            Branch directories (current first) followed by the root world.
+        """
+        return [dir_path for _metadata, dir_path in self._get_branch_chain()]
+
+    def find_derived_dir(self, layer: Layer | str) -> Path | None:
+        """Find the effective derived directory for a layer.
+
+        Derived products are resolved independently of the input directory:
+        a layer may be built with engine defaults while the world declares no
+        input files for it, and a branch may write derived data below layers
+        whose input is inherited from the root.  Returns the first non-empty
+        ``layers/<layer>/derived`` along the chain (branch → root).
+
+        Args:
+            layer: Layer to query.
+
+        Returns:
+            Path to the derived directory, or None if no products exist.
+        """
+        if isinstance(layer, str):
+            layer = Layer(layer)
+        for dir_path in self.iter_scope_dirs():
+            derived = dir_path / "layers" / layer.value / "derived"
+            if derived.is_dir() and any(derived.iterdir()):
+                return derived
+        return None
+
     def find_input_file(self, layer: Layer | str, relative_path: str) -> Path | None:
         """Find an input file, walking the inheritance chain (branch → root).
 

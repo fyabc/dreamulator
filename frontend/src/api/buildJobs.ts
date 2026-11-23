@@ -2,7 +2,27 @@
 export interface BuildOptions {
   engine?: string | null
   branch?: string | null
+  /** Start from this engine layer onward (Layer name). */
+  start_layer?: string | null
   force?: boolean
+}
+
+/** One engine layer's freshness in the build plan. */
+export interface LayerBuildState {
+  name: string
+  derived_fresh: 'fresh' | 'stale' | 'absent' | string
+  input_source: string | null
+  last_build_time: string | null
+}
+
+/** Which layers are out of date and where a build should start. */
+export interface BuildPlan {
+  branch: string | null
+  fork_layer: string | null
+  read_only: boolean
+  layers: LayerBuildState[]
+  start_layer: string | null
+  recompute: string[]
 }
 
 export interface BuildGrid {
@@ -44,6 +64,7 @@ export interface BuildJob {
   world: string
   branch: string | null
   engine: string | null
+  start_layer: string | null
   force: boolean
   state: 'queued' | 'running' | 'succeeded' | 'failed'
   created_at: string

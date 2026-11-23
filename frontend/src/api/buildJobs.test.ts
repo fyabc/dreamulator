@@ -34,6 +34,27 @@ describe('build job client', () => {
     expect(fetch.mock.calls[1][0]).toBe('/api/worlds/my%20world/build-jobs/job')
   })
 
+  it('passes a start layer through the background API', async () => {
+    vi.stubEnv('VITE_STATIC_MODE', 'false')
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: 'job' }) })
+    vi.stubGlobal('fetch', fetch)
+    await api.startBuildJob('my world', { branch: 'climate-dev', start_layer: 'climate' })
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+      branch: 'climate-dev', start_layer: 'climate',
+    })
+  })
+
+  it('reads the branch build plan without starting a job', async () => {
+    vi.stubEnv('VITE_STATIC_MODE', 'false')
+    const plan = { start_layer: 'climate', recompute: ['climate'] }
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => plan })
+    vi.stubGlobal('fetch', fetch)
+    await expect(api.getBuildPlan('my world', 'test branch')).resolves.toEqual(plan)
+    const [url, init] = fetch.mock.calls[0]
+    expect(url).toBe('/api/worlds/my%20world/build-plan?branch=test%20branch')
+    expect(init.cache).toBe('no-store')
+  })
+
   it('preserves the synchronous client while adding branch and force', async () => {
     vi.stubEnv('VITE_STATIC_MODE', 'false')
     const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'success' }) })
@@ -51,6 +72,7 @@ describe('build job client', () => {
     await expect(api.getBuildGrid('sample')).rejects.toThrow('not available in static mode')
     await expect(api.startBuildJob('sample')).rejects.toThrow('not available in static mode')
     await expect(api.getBuildJob('sample', 'job')).rejects.toThrow('not available in static mode')
+    await expect(api.getBuildPlan('sample')).rejects.toThrow('not available in static mode')
     expect(fetch).not.toHaveBeenCalled()
   })
 })

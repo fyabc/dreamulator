@@ -847,7 +847,86 @@ class BuildRequest(BaseModel):
 
     engine: str | None = Field(default=None, description="Run only this engine")
     branch: str | None = Field(default=None, description="Branch to build")
+    start_layer: str | None = Field(
+        default=None, description="Start from this layer (engine layers only)"
+    )
     force: bool = Field(default=False, description="Re-run even if outputs exist")
+
+
+class LayerBuildState(BaseModel):
+    """One engine layer's freshness for the build plan."""
+
+    name: str
+    derived_fresh: str
+    input_source: str | None = None
+    last_build_time: str | None = None
+
+
+class BuildPlan(BaseModel):
+    """Which engine layers are out of date, and where a build should start."""
+
+    branch: str | None
+    fork_layer: str | None
+    read_only: bool
+    layers: list[LayerBuildState]
+    start_layer: str | None
+    recompute: list[str]
+
+
+@router.get("/{world_name}/build-plan", response_model=BuildPlan)
+def get_build_plan(world_name: str, branch: str | None = None) -> BuildPlan:
+    """Describe the out-of-date engine layers in build order.
+
+    Freshness is the same on-disk heuristic used by the world-detail view
+    (input YAML newer than derived products; geological products include
+    ``maps/<planet>/``). The plan starts from the earliest layer that is not
+    fresh and lists that layer plus everything downstream; a reference root is
+    marked read-only.
+    """
+    from dreamulator.engine import get_all_engines
+    from dreamulator.models.layers import get_layer_index
+    from dreamulator.world_layer_status import compute_layer_status
+
+    config, resolver, fork = _resolve_build_target(world_name, branch)
+    read_only = branch is None and (config.reference_anchor or world_name == "earth")
+    engine_layers = sorted({engine.layer for engine in get_all_engines()}, key=get_layer_index)
+    if fork is not None:
+        fork_index = get_layer_index(fork)
+        engine_layers = [layer for layer in engine_layers if get_layer_index(layer) >= fork_index]
+    states: list[LayerBuildState] = []
+    for layer in engine_layers:
+        # Compute per engine layer, not from world.yaml's ``layers`` dict: the
+        # dict only lists layers the template configured, while an engine can
+        # build a layer with defaults and produce derived data for it.
+        try:
+            status = compute_layer_status(resolver.world_dir, layer, branch=branch)
+        except ValueError:
+            status = {}
+        states.append(
+            LayerBuildState(
+                name=layer.value,
+                derived_fresh=str(status.get("derived_fresh") or "absent"),
+                input_source=status.get("input_source"),
+                last_build_time=status.get("last_build_time"),
+            )
+        )
+    start_layer = (
+        None
+        if read_only
+        else next((state.name for state in states if state.derived_fresh != "fresh"), None)
+    )
+    recompute: list[str] = []
+    if start_layer is not None:
+        start_index = next(index for index, state in enumerate(states) if state.name == start_layer)
+        recompute = [state.name for state in states[start_index:]]
+    return BuildPlan(
+        branch=branch,
+        fork_layer=fork.value if fork is not None else None,
+        read_only=read_only,
+        layers=states,
+        start_layer=start_layer,
+        recompute=recompute,
+    )
 
 
 def _resolve_build_target(
@@ -932,7 +1011,7 @@ def _prepare_build(
     """Validate requests before reserving a background writer."""
     from dreamulator.engine import get_all_engines
     from dreamulator.engine.pipeline import run_pipeline
-    from dreamulator.models.layers import get_layer_index
+    from dreamulator.models.layers import Layer, get_layer_index
 
     config, resolver, fork = _resolve_build_target(world_name, req.branch)
     world_dir = resolver.world_dir
@@ -941,13 +1020,30 @@ def _prepare_build(
             status_code=409, detail="Reference world roots are read-only; build a branch"
         )
     engines: list[type[BaseEngine]] = get_all_engines()
-    available = {
-        engine.name
+    buildable = [
+        engine
         for engine in engines
         if fork is None or get_layer_index(engine.layer) >= get_layer_index(fork)
-    }
+    ]
+    available = {engine.name for engine in buildable}
     if req.engine is not None and req.engine not in available:
         raise HTTPException(status_code=422, detail=f"Engine '{req.engine}' is unavailable")
+    start_layer: Layer | None = None
+    if req.start_layer is not None:
+        try:
+            start_layer = Layer(req.start_layer)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=422, detail=f"Unknown layer '{req.start_layer}'"
+            ) from error
+        if start_layer not in {engine.layer for engine in buildable}:
+            raise HTTPException(status_code=422, detail=f"Layer '{req.start_layer}' is unavailable")
+        if req.engine is not None:
+            target = next(engine for engine in buildable if engine.name == req.engine)
+            if get_layer_index(target.layer) < get_layer_index(start_layer):
+                raise HTTPException(
+                    status_code=422, detail="Engine is before the requested start layer"
+                )
 
     def run(on_progress: Callable[[PipelineEvent], None]) -> BuildSummary:
         if not engines:
@@ -959,6 +1055,7 @@ def _prepare_build(
             force=req.force,
             only_engine=req.engine,
             branch=req.branch,
+            start_layer=start_layer,
             on_progress=on_progress,
         )
         failed = [result for result in results if not result.success]
@@ -975,7 +1072,13 @@ def _prepare_build(
 
 def _reserve_build(world_dir: Path, req: BuildRequest) -> BuildJob:
     try:
-        return build_jobs.reserve(world_dir, branch=req.branch, engine=req.engine, force=req.force)
+        return build_jobs.reserve(
+            world_dir,
+            branch=req.branch,
+            engine=req.engine,
+            force=req.force,
+            start_layer=req.start_layer,
+        )
     except BuildBusyError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
 

@@ -84,6 +84,15 @@ CivilizationEngine ── 文明推演（消费地形/气候/生态底图）
 分支系统见 [layer-control-model.md](../proposals/layer-control-model.md) 与
 [geological-pipeline.md](geological-pipeline.md)。
 
+HTTP 构建接口可以带 `start_layer`，让管线从指定层及其下游开始；`GET
+/api/worlds/{name}/build-plan?branch=` 用与世界详情页相同的磁盘新鲜度（输入 YAML
+比派生新即过期，地质层把 `maps/<planet>/` 算作派生）列出按 DAG 排序的引擎层、
+最早上游待重算层和将重算的层链。每层按构建范围内的产物判断，不要求 `world.yaml`
+列出该层：没有 authored input、由引擎默认参数构建的层只看派生是否存在，分支目录内
+的产物优先于从根目录继承的产物。参照世界根目录返回只读。地图页的世界/分支栏用这份
+计划就地发起构建，完成后刷新地图数据；计划是显示用的启发式，实际缓存仍由管线检查决定。
+接口细节见[查询构建进度](../../usage/build-progress.md)。
+
 ## GCM 分支与高清画布
 
 气候分支可从 GCM 字段读取长期月气候。Nacrea 的正典分支为 `gcm-t42-712`，

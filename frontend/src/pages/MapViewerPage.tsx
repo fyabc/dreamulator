@@ -33,6 +33,7 @@ import QuickLayerSwitch from '../components/map/QuickLayerSwitch'
 import TimeModeToggle from '../components/map/TimeModeToggle'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
 import MapResultModeControl from '../components/map/MapResultModeControl'
+import MapBuildControl from '../components/map/MapBuildControl'
 import WorldContextSlot from '../components/map/WorldContextSlot'
 import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
 import { trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
@@ -179,6 +180,8 @@ export default function MapViewerPage() {
       <WorldContextSlot>
         {trialReady && <MapResultModeControl mode={trial.mode} onChange={trial.selectMode}
           ready={Boolean(trial.available || trial.ebm)} />}
+        {worldName && <MapBuildControl key={selectedBranch ?? 'root'} world={worldName}
+          branch={selectedBranch} onBuilt={() => trial.selectMode('official')} />}
       </WorldContextSlot>
       {!cleanMode && (
       <MapWorkbenchToolbar title={currentPlanetName ?? selectedPlanet ?? t('title.mapFallback')} view="map"

@@ -58,7 +58,7 @@
 - `sky-ephemeris.md` — 天球星历查询：引擎查询、命令行、消费方接线、前端天球视图与背景天球已实现（技术参考在 `pipelines/sky-ephemeris.md`），提案保留设计选择、未实现的事件搜索与 N 体及开放问题；2026-11-01 立项
 - `monthly-climate-display.md` — 月度展示的兼容指针，交互设计由 `frontend-entry.md` 维护，已实现接口与查看器由 `pipelines/map-system.md` 维护。
 - `frontend-entry.md` — 前端入口与用户旅程的统一提案，覆盖用户分层、竞品优势、导入与计算、月度阅读、高清窗口、连续空间浏览、三档计算和分阶段验收；2026-11-04 立项。
-- `development-workbench.md` — 开发工作台：正式结果与开发结果的定义、指纹与过期、分层能力（终极目标所有层含地质在浏览器构建）、开发链、地图内构建与两层顶栏分工；2026-11-24 立项。
+- `development-workbench.md` — 开发工作台：正式结果与开发结果的定义、指纹与过期、分层能力（终极目标所有层含地质在浏览器构建）、开发链、地图内构建与两层顶栏分工；2026-11-24 立项，第一、二阶段已实现。
 - `nonspecialist-entry.md` — 前端入口提案的兼容指针，高程契约由 `pipelines/map-system.md` 维护。
 - `browser-playground.md` — 完整浏览器计算与资源产品化的候选，原型架构由 `pipelines/browser-playground.md` 维护，入口体验由 `frontend-entry.md` 维护。
 - `geology-layer-improvement.md` — 地质层改进方案（§1–§8 已实现，技术参考见 geological-pipeline.md；未实现 proposal：裂谷海宽度分段、板块从 geography 派生）

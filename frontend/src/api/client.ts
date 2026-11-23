@@ -2,7 +2,7 @@ import { isStaticMode } from './mode'
 import type { MapResultMetadata } from './resultContract'
 import { staticApi } from './staticClient'
 import type { SystemCatalog } from './catalogAdapter'
-import type { BuildGrid, BuildJob, BuildOptions, BuildSummary } from './buildJobs'
+import type { BuildGrid, BuildJob, BuildOptions, BuildPlan, BuildSummary } from './buildJobs'
 import { worldParametersPath, type WorldParameters, type WorldParameterUpdate } from './worldParameters'
 import { mappingFormFields } from './elevationImport'
 import type {
@@ -387,6 +387,13 @@ const liveOnlyApi = {
       method: 'POST',
       body: JSON.stringify(options),
     }),
+
+  getBuildPlan: (name: string, branch?: string | null): Promise<BuildPlan> => {
+    const query = branch ? `?branch=${encodeURIComponent(branch)}` : ''
+    return fetchJson<BuildPlan>(`/worlds/${encodeURIComponent(name)}/build-plan${query}`, {
+      cache: 'no-store',
+    })
+  },
 
   getBuildJob: (name: string, jobId: string): Promise<BuildJob> =>
     fetchJson<BuildJob>(`/worlds/${encodeURIComponent(name)}/build-jobs/${encodeURIComponent(jobId)}`, {
@@ -969,6 +976,11 @@ export const api = {
 
   getBuildJob: (...args: Parameters<typeof liveOnlyApi.getBuildJob>) =>
     isStaticMode() ? staticApi.getBuildJob() : liveOnlyApi.getBuildJob(...args),
+
+  getBuildPlan: (...args: Parameters<typeof liveOnlyApi.getBuildPlan>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('not available in static mode'))
+      : liveOnlyApi.getBuildPlan(...args),
 
   // Map write operations
   saveElevation: (...args: Parameters<typeof liveOnlyApi.saveElevation>) =>

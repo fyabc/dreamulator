@@ -303,3 +303,63 @@ def test_observer_preserves_deterministic_outputs(tmp_path):
         ("first", StageState.SUCCEEDED),
         ("last", StageState.SUCCEEDED),
     ]
+
+
+def test_build_plan_starts_at_the_first_layer_that_is_not_fresh(setup):
+    import os
+
+    client, manager, _ = setup
+    plan = client.get("/api/worlds/sample/build-plan").json()
+    assert plan["read_only"] is False
+    assert [layer["name"] for layer in plan["layers"]] == ["astronomy", "climate"]
+    assert plan["start_layer"] == "astronomy"
+    assert plan["recompute"] == ["astronomy", "climate"]
+
+    world = manager.world_dir("sample")
+    derived = world / "layers/astronomy/derived"
+    derived.mkdir(parents=True, exist_ok=True)
+    output = derived / "first.json"
+    output.write_text("{}", encoding="utf-8")
+    os.utime(output, None)
+    plan = client.get("/api/worlds/sample/build-plan").json()
+    assert plan["start_layer"] == "climate"
+    assert plan["recompute"] == ["climate"]
+
+
+def test_build_plan_counts_derived_products_of_inputless_layers(setup):
+    # A layer can be built from engine defaults while declaring no input,
+    # and templates need not list it in world.yaml's ``layers`` dict; its
+    # fresh derived products must still clear it from the recompute chain.
+    client, manager, _ = setup
+    world = manager.world_dir("sample")
+    (world / "layers/astronomy/input/stellar.yaml").unlink()
+    derived = world / "layers/astronomy/derived"
+    derived.mkdir(parents=True, exist_ok=True)
+    (derived / "first.json").write_text("{}", encoding="utf-8")
+    plan = client.get("/api/worlds/sample/build-plan").json()
+    astronomy = next(layer for layer in plan["layers"] if layer["name"] == "astronomy")
+    assert astronomy["derived_fresh"] == "fresh"
+    assert astronomy["input_source"] is None
+    assert plan["start_layer"] == "climate"
+    assert plan["recompute"] == ["climate"]
+
+
+def test_build_plan_respects_the_branch_fork_layer(setup):
+    client, manager, _ = setup
+    branch = manager.world_dir("sample") / "branches/climate-dev"
+    branch.mkdir(parents=True)
+    (branch / "branch.yaml").write_text(
+        yaml.safe_dump({"name": "climate-dev", "fork_layer": "climate"}), encoding="utf-8"
+    )
+    plan = client.get("/api/worlds/sample/build-plan", params={"branch": "climate-dev"}).json()
+    assert plan["fork_layer"] == "climate"
+    assert [layer["name"] for layer in plan["layers"]] == ["climate"]
+
+
+def test_build_job_accepts_a_start_layer_and_rejects_an_unknown_one(setup):
+    client, _, _ = setup
+    bad = client.post("/api/worlds/sample/build-jobs", json={"start_layer": "physics"})
+    assert bad.status_code == 422
+    accepted = client.post("/api/worlds/sample/build-jobs", json={"start_layer": "astronomy"})
+    assert accepted.status_code == 202
+    assert accepted.json()["start_layer"] == "astronomy"

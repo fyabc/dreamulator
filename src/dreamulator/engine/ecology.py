@@ -164,10 +164,9 @@ class EcologyEngine(BaseEngine):
         )
         import yaml
 
-        eco_derived = self.layer_derived_dirs.get("ecology")
-        if eco_derived is None:
-            eco_derived = self.maps_output_dir / "ecology"
-        yaml_path = eco_derived / "ecology_summary.yaml"
+        # Write to this build's layer output (root or branch scope), matching
+        # the declared output file and the pipeline's dirty check.
+        yaml_path = self.output_path("ecology_summary.yaml")
         yaml_path.parent.mkdir(parents=True, exist_ok=True)
         yaml_path.write_text(
             yaml.dump(summary, allow_unicode=True, default_flow_style=False, sort_keys=False),

@@ -27,6 +27,7 @@ import ClimateLegend from '../components/map/ClimateLegend'
 import RegionWindowPanel from '../components/map/RegionWindowPanel'
 import AtlasIcon from '../components/AtlasIcon'
 import MapResultModeControl from '../components/map/MapResultModeControl'
+import MapBuildControl from '../components/map/MapBuildControl'
 import WorldContextSlot from '../components/map/WorldContextSlot'
 import { isMonthlyLayer } from '../components/map/climateTime'
 import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
@@ -296,6 +297,8 @@ export default function GlobeViewerPage() {
       <WorldContextSlot>
         {trialReady && <MapResultModeControl mode={trial.mode} onChange={trial.selectMode}
           ready={Boolean(trial.available || trial.ebm)} />}
+        {worldName && <MapBuildControl key={selectedBranch ?? 'root'} world={worldName}
+          branch={selectedBranch} onBuilt={() => trial.selectMode('official')} />}
       </WorldContextSlot>
       {!cleanMode && (
       <MapWorkbenchToolbar title={currentPlanet?.name ?? selectedPlanet ?? t('title.globe')} view="globe"

@@ -72,6 +72,37 @@ def test_status_absent_without_derived(tmp_path: Path) -> None:
     assert status["last_build_time"] is None
 
 
+def test_status_fresh_for_derived_without_authored_input(tmp_path: Path) -> None:
+    # Engines build with defaults for layers that declare no input; their
+    # derived products still count, so the build plan must not call them absent.
+    world = _mini_world(tmp_path)
+    _write(world / "layers" / "climate" / "derived" / "climate_summary.yaml")
+    status = compute_layer_status(world, "climate")
+    assert status["derived_fresh"] == "fresh"
+    assert status["input_source"] is None
+    assert isinstance(status["last_build_time"], str)
+
+
+def test_branch_derived_shadows_inherited_root_derived(tmp_path: Path) -> None:
+    world = tmp_path / "w"
+    _write(world / "layers" / "astronomy" / "input" / "stellar.yaml")
+    _write(
+        world / "layers" / "astronomy" / "derived" / "stellar_derived.yaml",
+        mtime_offset=-60.0,
+    )
+    branch = world / "branches" / "climate-dev"
+    branch.mkdir(parents=True)
+    (branch / "branch.yaml").write_text(
+        "name: climate-dev\nfork_layer: climate\n", encoding="utf-8"
+    )
+    _write(branch / "layers" / "astronomy" / "derived" / "stellar_derived.yaml")
+    # Root derived is older than the inherited input, but the branch has its
+    # own newer product: the branch status is fresh and reads that product.
+    status = compute_layer_status(world, "astronomy", branch="climate-dev")
+    assert status["derived_fresh"] == "fresh"
+    assert status["input_source"] == "root"
+
+
 def test_geological_uses_maps_products(tmp_path: Path) -> None:
     # Geological layer's real products live in maps/<planet>/, not derived/.
     world = tmp_path / "w"

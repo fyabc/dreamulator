@@ -79,17 +79,29 @@ def compute_layer_status(
             if input_mtime is None or m > input_mtime:
                 input_mtime = m
 
-    # Derived side: the resolved derived dir; for geological the products
-    # also live under maps/<planet>/ (terrain pipeline writes there).
+    # Derived side: the effective derived dir. It is resolved independently
+    # of the input dir because engines build with defaults for layers that
+    # declare no input, and branches write derived data below inherited inputs.
     layer_value = layer.value if isinstance(layer, Layer) else str(layer)
     derived_roots: list[Path] = []
-    if source.derived_dir is not None:
-        derived_roots.append(source.derived_dir)
+    derived_dir = resolver.find_derived_dir(layer)
+    if derived_dir is not None:
+        derived_roots.append(derived_dir)
     if layer_value == Layer.GEOLOGICAL.value:
-        scope_dir = world_dir / "branches" / branch if branch else world_dir
-        maps_dir = scope_dir / "maps"
-        if maps_dir.is_dir():
-            derived_roots.extend(child for child in maps_dir.iterdir() if child.is_dir())
+        # The terrain pipeline writes its products under maps/<planet>/;
+        # use the most specific scope that has any.
+        for scope_dir in resolver.iter_scope_dirs():
+            maps_dir = scope_dir / "maps"
+            if not maps_dir.is_dir():
+                continue
+            planet_dirs = [
+                child
+                for child in sorted(maps_dir.iterdir())
+                if child.is_dir() and any(child.iterdir())
+            ]
+            if planet_dirs:
+                derived_roots.extend(planet_dirs)
+                break
     newest: float | None = None
     for root in derived_roots:
         root_mtime = _tree_newest_mtime(root)

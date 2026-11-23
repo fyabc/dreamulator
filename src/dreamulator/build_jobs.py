@@ -71,6 +71,7 @@ class BuildJob(BaseModel):
     world: str
     branch: str | None
     engine: str | None
+    start_layer: str | None = None
     force: bool
     state: JobState = JobState.QUEUED
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -109,7 +110,13 @@ class BuildJobs:
         self._started: dict[str, float] = {}
 
     def reserve(
-        self, world_dir: Path, *, branch: str | None, engine: str | None, force: bool
+        self,
+        world_dir: Path,
+        *,
+        branch: str | None,
+        engine: str | None,
+        force: bool,
+        start_layer: str | None = None,
     ) -> BuildJob:
         """Reserve the writer before the response, rejecting duplicate clicks."""
         world_dir = world_dir.resolve()
@@ -123,7 +130,12 @@ class BuildJobs:
                 self._worlds.pop(old_id)
                 self._started.pop(old_id, None)
             job = BuildJob(
-                id=str(uuid4()), world=world_dir.name, branch=branch, engine=engine, force=force
+                id=str(uuid4()),
+                world=world_dir.name,
+                branch=branch,
+                engine=engine,
+                start_layer=start_layer,
+                force=force,
             )
             self._jobs[job.id] = job
             self._worlds[job.id] = world_dir
