@@ -55,7 +55,8 @@ export default function MapViewerPage() {
   const { t } = useTranslation('map')
 
   const trial = useMapTemperatureTrial()
-  const trialActive = trial.mode === 'trial' && !trial.ebm
+  const developmentAvailable = isStaticMode()
+  const trialActive = developmentAvailable && trial.mode === 'trial' && !trial.ebm
   const vs = usePlanetViewState(worldName, routePlanetId, 'map', trialActive, trial.ebm)
   const {
     selectedBranch,
@@ -181,7 +182,7 @@ export default function MapViewerPage() {
       ? 'fixed inset-0 z-40 flex flex-col bg-[#030308]'
       : 'atlas-workbench flex flex-col'}>
       <WorldContextSlot>
-        {trialReady && <MapResultModeControl mode={trial.mode} onChange={trial.selectMode}
+        {trialReady && developmentAvailable && <MapResultModeControl mode={trial.mode} onChange={trial.selectMode}
           ready={Boolean(trial.available || trial.ebm)} />}
         {worldName && <MapBuildControl key={selectedBranch ?? 'root'} world={worldName}
           branch={selectedBranch} onBuilt={() => trial.selectMode('official')} />}

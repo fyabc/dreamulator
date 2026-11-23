@@ -34,6 +34,7 @@ import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../compone
 import QuickLayerSwitch from '../components/map/QuickLayerSwitch'
 import TimeModeToggle from '../components/map/TimeModeToggle'
 import { trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
+import { parameterButtonId, parameterPanelId } from '../components/map/MapParameterLab'
 import useGPUTerrain from '../viewers/map/useGPUTerrain'
 import { GRID_H, GRID_W } from '../playground/temperatureDraft'
 import { useMapTemperatureTrial } from '../viewers/map/useTemperatureTrialPreview'
@@ -69,7 +70,8 @@ export default function GlobeViewerPage() {
   const randomTip = useMemo(() => getRandomTip(t), [t])
 
   const trial = useMapTemperatureTrial()
-  const trialActive = trial.mode === 'trial' && !trial.ebm
+  const developmentAvailable = isStaticMode()
+  const trialActive = developmentAvailable && trial.mode === 'trial' && !trial.ebm
   const vs = usePlanetViewState(worldName, planetId, 'globe', trialActive, trial.ebm)
   const {
     selectedBranch,
@@ -252,6 +254,7 @@ export default function GlobeViewerPage() {
   // --- Mobile panel state ---
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
   const trialReady = Boolean(worldName && selectedPlanet && meta && elevation)
+  const labAvailable = !isStaticMode() && Boolean(worldName && selectedPlanet)
   const openTrial = () => {
     setLeftPanelOpen(false)
     trial.openPanel()
@@ -295,7 +298,7 @@ export default function GlobeViewerPage() {
       ? 'fixed inset-0 z-40 flex flex-col bg-[#030308]'
       : 'atlas-workbench flex flex-col'}>
       <WorldContextSlot>
-        {trialReady && <MapResultModeControl mode={trial.mode} onChange={trial.selectMode}
+        {trialReady && developmentAvailable && <MapResultModeControl mode={trial.mode} onChange={trial.selectMode}
           ready={Boolean(trial.available || trial.ebm)} />}
         {worldName && <MapBuildControl key={selectedBranch ?? 'root'} world={worldName}
           branch={selectedBranch} onBuilt={() => trial.selectMode('official')} />}
@@ -326,7 +329,9 @@ export default function GlobeViewerPage() {
             pickedPoint={regionPickedPoint}
             onPickModeChange={setRegionPicking} />
         ) : undefined}
-        trialPanel={trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trial.open, onToggle: trial.open ? trial.closePanel : openTrial } : undefined}
+        trialPanel={labAvailable
+          ? { id: parameterPanelId, buttonId: parameterButtonId, open: trial.open, onToggle: trial.open ? trial.closePanel : openTrial, label: t('workbench.parameterLab') }
+          : trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trial.open, onToggle: trial.open ? trial.closePanel : openTrial } : undefined}
         layersOpen={leftPanelOpen && !trial.open} onToggleLayers={() => {
           if (trial.open) trial.closePanel()
           setLeftPanelOpen(open => !open)

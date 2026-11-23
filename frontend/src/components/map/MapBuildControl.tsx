@@ -5,6 +5,7 @@ import { api, ApiError } from '../../api/client'
 import { isStaticMode } from '../../api/mode'
 import type { BuildJob, BuildPlan } from '../../api/buildJobs'
 import MapBuildStrip from './MapBuildStrip'
+import WorldBuildProgress from '../world/WorldBuildProgress'
 import { planLayerState } from './layerStripState'
 
 interface Props {
@@ -126,6 +127,17 @@ export default function MapBuildControl({ world, branch, onBuilt }: Props) {
     return () => window.removeEventListener('dreamulator:open-build-plan', openPlan)
   }, [])
 
+  // A finished job is a historical record. Keep it for this session, but do
+  // not resurrect it after a reload; the plan is the current source of truth.
+  useEffect(() => {
+    if (!job || isActive(job)) return
+    try {
+      window.localStorage.removeItem(storageKey(world, branch))
+    } catch {
+      // The in-memory job still displays; only cross-reload persistence is lost.
+    }
+  }, [job, world, branch])
+
   // Successful builds: refresh every map query for this world and show the
   // formal result. The plan is refetched through the same invalidation.
   const finished = job?.state === 'succeeded' ? job.finished_at ?? job.updated_at : null
@@ -151,6 +163,9 @@ export default function MapBuildControl({ world, branch, onBuilt }: Props) {
   const data: BuildPlan | undefined = plan.data
   if (!data || data.read_only) return null
 
+  // Show a finished success only while it still matches the current plan; a
+  // stale plan with an old completed job is a historical record, not progress.
+  const showJob = Boolean(job) && (active || job?.state === 'failed' || !data.start_layer)
   const runningLayer = job?.stages.find(stage => stage.state === 'running')?.layer
   const doneStages = job?.stages.filter(stage => stage.state === 'succeeded' || stage.state === 'skipped').length ?? 0
   const totalStages = job?.stages.length ?? 0
@@ -163,7 +178,7 @@ export default function MapBuildControl({ world, branch, onBuilt }: Props) {
     <div ref={wrapper} className="relative hidden shrink-0 items-center lg:flex">
       <MapBuildStrip plan={data} job={job ?? null} active={active} open={open}
         onToggle={() => setOpen(value => !value)} />
-      {open && <div className="absolute right-0 top-full z-40 mt-1 w-80 max-w-[calc(100vw-1.5rem)] space-y-2 rounded border border-space-border bg-space-panel p-3 text-xs shadow-xl">
+      {open && <div className="absolute right-0 top-full z-40 mt-1 max-h-[calc(100vh-5rem)] w-96 max-w-[calc(100vw-1.5rem)] space-y-2 overflow-y-auto rounded border border-space-border bg-space-panel p-3 text-xs shadow-xl">
         <p className="font-medium text-gray-200">{t('buildPlan.title')}</p>
         <ul className="space-y-1">
           {data.layers.map(layer => {
@@ -184,13 +199,14 @@ export default function MapBuildControl({ world, branch, onBuilt }: Props) {
             ? t('buildPlan.recompute', { layers: data.recompute.map(label).join(' → ') })
             : t('buildPlan.fresh')}
         </p>
-        {active && <p role="status" className="text-amber-200">
+        {showJob && active && <p role="status" className="text-amber-200">
           {t('buildPlan.progress', { done: doneStages, total: totalStages || '…',
             seconds: Math.round(job?.elapsed_seconds ?? 0) })}
           {runningLayer ? ` · ${label(runningLayer)}` : ''}
         </p>}
-        {job?.state === 'succeeded' && <p role="status" className="text-green-300">{t('buildPlan.done')}</p>}
-        {job?.state === 'failed' && failure && <p role="alert" className="break-words text-red-300">
+        {showJob && job && job.stages.length > 0 && <WorldBuildProgress key={job.id} job={job} running={active} />}
+        {showJob && job?.state === 'succeeded' && <p role="status" className="text-green-300">{t('buildPlan.done')}</p>}
+        {showJob && job?.state === 'failed' && failure && <p role="alert" className="break-words text-red-300">
           {t('buildPlan.failed')}: {failure}
         </p>}
         {!active && start.isError && failure && <p role="alert" className="break-words text-red-300">{failure}</p>}

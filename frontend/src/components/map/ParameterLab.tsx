@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../../api/client'
 import type { LabParameter, ParameterLabState } from '../../api/parameterLab'
 import { worldParametersKey } from '../../api/worldParameters'
+import HoverHelp from '../HoverHelp'
 
 const labKey = (world: string, branch: string | null, planet: string) =>
   ['parameterLab', world, branch, planet] as const
@@ -179,13 +180,13 @@ export default function ParameterLab({ world, branch, planet, openBuild }: {
           }} className="text-neon-cyan underline underline-offset-4">{t('parameterLab.goBuild')}</button>
         </div>}
         {!state.read_only && <div className="space-y-1 border-t border-space-border pt-2">
-          <label className="block text-gray-200">
-            {t('parameterLab.branchName')}
-            <input value={branchName} onChange={event => setBranchName(event.target.value)}
-              maxLength={64} autoComplete="off" placeholder="climate-variant"
-              className="mt-1 min-h-9 w-full rounded border border-space-border bg-space-bg px-2 text-gray-100" />
-          </label>
-          <p className="text-gray-500">{t('parameterLab.branchHint')}</p>
+          <div className="flex items-center gap-1 text-gray-200">
+            <label htmlFor="parameter-lab-branch">{t('parameterLab.branchName')}</label>
+            <HoverHelp label={t('parameterLab.branchHelp')} above>{t('parameterLab.branchHelp')}</HoverHelp>
+          </div>
+          <input id="parameter-lab-branch" value={branchName} onChange={event => setBranchName(event.target.value)}
+            maxLength={64} autoComplete="off" placeholder="climate-variant"
+            className="min-h-9 w-full rounded border border-space-border bg-space-bg px-2 text-gray-100" />
           <button type="button" disabled={!valid || busy || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(branchName.trim())}
             onClick={() => fork.mutate()} className="atlas-tool-button min-h-9 text-xs">
             {fork.isPending ? t('parameterLab.saving') : t('parameterLab.saveAsBranch')}
