@@ -3,6 +3,7 @@ import type { MapResultMetadata } from './resultContract'
 import { staticApi } from './staticClient'
 import type { SystemCatalog } from './catalogAdapter'
 import type { BuildGrid, BuildJob, BuildOptions, BuildPlan, BuildSummary } from './buildJobs'
+import type { ParameterLabState } from './parameterLab'
 import { worldParametersPath, type WorldParameters, type WorldParameterUpdate } from './worldParameters'
 import { mappingFormFields } from './elevationImport'
 import type {
@@ -399,6 +400,50 @@ const liveOnlyApi = {
     fetchJson<BuildJob>(`/worlds/${encodeURIComponent(name)}/build-jobs/${encodeURIComponent(jobId)}`, {
       cache: 'no-store',
     }),
+
+  getParameterLab: (name: string, planet: string | null, branch: string | null) => {
+    const query = new URLSearchParams()
+    if (planet) query.set('planet', planet)
+    if (branch) query.set('branch', branch)
+    const suffix = query.size ? `?${query}` : ''
+    return fetchJson<ParameterLabState>(`/worlds/${encodeURIComponent(name)}/parameter-lab${suffix}`, {
+      cache: 'no-store',
+    })
+  },
+
+  saveParameterLab: (
+    name: string,
+    planet: string | null,
+    branch: string | null,
+    revision: string,
+    values: Record<string, number>,
+  ) => {
+    const query = new URLSearchParams()
+    if (planet) query.set('planet', planet)
+    if (branch) query.set('branch', branch)
+    const suffix = query.size ? `?${query}` : ''
+    return fetchJson<ParameterLabState>(`/worlds/${encodeURIComponent(name)}/parameter-lab${suffix}`, {
+      method: 'PUT',
+      body: JSON.stringify({ revision, values }),
+    })
+  },
+
+  saveParameterLabBranch: (
+    name: string,
+    planet: string | null,
+    branch: string | null,
+    branchName: string,
+    values: Record<string, number>,
+  ) => {
+    const query = new URLSearchParams()
+    if (planet) query.set('planet', planet)
+    if (branch) query.set('branch', branch)
+    const suffix = query.size ? `?${query}` : ''
+    return fetchJson<ParameterLabState>(
+      `/worlds/${encodeURIComponent(name)}/parameter-lab/branch${suffix}`,
+      { method: 'POST', body: JSON.stringify({ name: branchName, values }) },
+    )
+  },
 
   // ---- Map write operations ----
 
@@ -1022,6 +1067,21 @@ export const api = {
     isStaticMode()
       ? Promise.reject(new Error('Not available in static mode'))
       : liveOnlyApi.deleteMap(...args),
+
+  getParameterLab: (...args: Parameters<typeof liveOnlyApi.getParameterLab>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.getParameterLab(...args),
+
+  saveParameterLab: (...args: Parameters<typeof liveOnlyApi.saveParameterLab>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.saveParameterLab(...args),
+
+  saveParameterLabBranch: (...args: Parameters<typeof liveOnlyApi.saveParameterLabBranch>) =>
+    isStaticMode()
+      ? Promise.reject(new Error('Not available in static mode'))
+      : liveOnlyApi.saveParameterLabBranch(...args),
 }
 
 

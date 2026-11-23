@@ -880,6 +880,47 @@ class BuildPlan(BaseModel):
     recompute: list[str]
 
 
+class LabParameter(BaseModel):
+    """One registry parameter value for the selected planet."""
+
+    id: str
+    group: str
+    value: float | None
+    unit: str | None = None
+    range: dict[str, float] | None = None
+    consumers: list[str]
+    source: str | None = None
+    editable: bool
+    reason: str | None = None
+
+
+class ParameterLabState(BaseModel):
+    """Editable parameter state for one planet."""
+
+    planet: str | None
+    branch: str | None
+    fork_layer: str | None
+    read_only: bool
+    revision: str
+    parameters: list[LabParameter]
+    affected: list[str] = Field(default_factory=list)
+    start_layer: str | None = None
+
+
+class ParameterLabSave(BaseModel):
+    """Save values against the revision the lab opened."""
+
+    revision: str | None = None
+    values: dict[str, float]
+
+
+class ParameterLabBranchSave(BaseModel):
+    """Save values into a newly created branch."""
+
+    name: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+    values: dict[str, float]
+
+
 @router.get("/{world_name}/build-plan", response_model=BuildPlan)
 def get_build_plan(world_name: str, branch: str | None = None) -> BuildPlan:
     """Describe the out-of-date engine layers in build order.
@@ -938,6 +979,101 @@ def get_build_plan(world_name: str, branch: str | None = None) -> BuildPlan:
         start_layer=start_layer,
         recompute=recompute,
     )
+
+
+def _parameter_lab_read_only(world_name: str, branch: str | None) -> bool:
+    config = _manager.load_world(world_name)
+    return branch is None and (config.reference_anchor or world_name == "earth")
+
+
+@router.get("/{world_name}/parameter-lab", response_model=ParameterLabState)
+def get_parameter_lab(
+    world_name: str, planet: str | None = None, branch: str | None = None
+) -> ParameterLabState:
+    """Read the editable registry parameters for one planet."""
+    from dreamulator.parameter_lab import ParameterLabUnavailableError, read_lab
+
+    try:
+        world_dir = _manager.world_dir(world_name)
+        state = read_lab(
+            world_dir,
+            branch,
+            planet,
+            read_only=_parameter_lab_read_only(world_name, branch),
+        )
+        return ParameterLabState.model_validate(state)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ParameterLabUnavailableError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.put("/{world_name}/parameter-lab", response_model=ParameterLabState)
+def save_parameter_lab(
+    world_name: str,
+    update: ParameterLabSave,
+    planet: str | None = None,
+    branch: str | None = None,
+) -> ParameterLabState:
+    """Save registry parameter values into the selected world or branch."""
+    from dreamulator.parameter_lab import (
+        ParameterLabConflictError,
+        ParameterLabReadOnlyError,
+        ParameterLabUnavailableError,
+        save_lab,
+    )
+
+    try:
+        world_dir = _manager.world_dir(world_name)
+        state = save_lab(
+            world_dir,
+            branch,
+            planet,
+            update.values,
+            update.revision,
+            read_only=_parameter_lab_read_only(world_name, branch),
+        )
+        return ParameterLabState.model_validate(state)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ParameterLabConflictError as error:
+        raise HTTPException(
+            status_code=409, detail="The parameter files changed since the lab opened"
+        ) from error
+    except ParameterLabReadOnlyError as error:
+        raise HTTPException(status_code=409, detail=f"Parameter is read-only: {error}") from error
+    except (ParameterLabUnavailableError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/{world_name}/parameter-lab/branch", response_model=ParameterLabState)
+def save_parameter_lab_branch(
+    world_name: str,
+    update: ParameterLabBranchSave,
+    planet: str | None = None,
+    branch: str | None = None,
+) -> ParameterLabState:
+    """Create a branch at the earliest consumer layer and save the values."""
+    from dreamulator.parameter_lab import (
+        ParameterLabReadOnlyError,
+        ParameterLabUnavailableError,
+        save_as_branch,
+    )
+
+    if _parameter_lab_read_only(world_name, branch):
+        raise HTTPException(status_code=409, detail="This world is read-only")
+    try:
+        world_dir = _manager.world_dir(world_name)
+        state = save_as_branch(world_dir, branch, update.name, planet, update.values)
+        return ParameterLabState.model_validate(state)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except FileExistsError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ParameterLabReadOnlyError as error:
+        raise HTTPException(status_code=409, detail=f"Parameter is read-only: {error}") from error
+    except (ParameterLabUnavailableError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 def _resolve_build_target(

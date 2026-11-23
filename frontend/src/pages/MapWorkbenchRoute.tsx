@@ -7,6 +7,7 @@ import { api } from '../api/client'
 import { isStaticMode } from '../api/mode'
 import type { ClimateTrialResult } from '../api/climateTrials'
 import { MapTemperatureTrial, trialButtonId } from '../components/map/MapTemperatureTrial'
+import { MapParameterLab } from '../components/map/MapParameterLab'
 import { initialLayerState } from '../components/map/layerStateInit'
 import type { TemperatureOrigin } from '../playground/temperatureDraft'
 import { canDefaultToHeightmapClimate, defaultHeightmapClimateSearch, heightmapPlanet } from '../projects/heightmapWorld'
@@ -158,9 +159,11 @@ function TemperatureTrialSession({ world, planet, branch, draft, saved, clean, i
   }
   return <>
     <Outlet context={session} />
-    {scope && visited && createPortal(<MapTemperatureTrial search={input}
-      open={session.open} onClose={closePanel} onPreview={reportPreview} onResult={reportEbmResult} onShow={showTrial}
-      onSavedError={showSavedError} />,
+    {scope && visited && createPortal(!isStaticMode()
+      ? <MapParameterLab open={session.open} onClose={closePanel} world={world} planet={planet} branch={branch} />
+      : <MapTemperatureTrial search={input}
+        open={session.open} onClose={closePanel} onPreview={reportPreview} onResult={reportEbmResult} onShow={showTrial}
+        onSavedError={showSavedError} />,
     panelHost, scope)}
   </>
 }

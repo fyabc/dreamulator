@@ -37,6 +37,8 @@ import MapBuildControl from '../components/map/MapBuildControl'
 import WorldContextSlot from '../components/map/WorldContextSlot'
 import { MapBodySelector, MapLayerDrawer, MapWorkbenchToolbar } from '../components/map/MapWorkbenchToolbar'
 import { trialButtonId, trialPanelId } from '../components/map/MapTemperatureTrial'
+import { parameterButtonId, parameterPanelId } from '../components/map/MapParameterLab'
+import { isStaticMode } from '../api/mode'
 import { readRegionBoundary, readRegionWindow, REGION_WINDOW_PARAM } from '../viewers/map/regionWindow'
 import { isMonthlyLayer } from '../components/map/climateTime'
 import { usePlanetViewState } from '../viewers/map/usePlanetViewState'
@@ -107,6 +109,7 @@ export default function MapViewerPage() {
   // Left panel drawer (mobile only)
   const [leftPanelOpen, setLeftPanelOpen] = useState(false)
   const trialFromClimate = searchParams.get('trial') === 'climate'
+  const labAvailable = !isStaticMode() && Boolean(worldName && selectedPlanet)
   const trialReady = Boolean(worldName && selectedPlanet && meta && elevation)
   const trialOpen = trial.open
   const openTrial = () => {
@@ -200,7 +203,9 @@ export default function MapViewerPage() {
             pickedPoint={regionPickedPoint}
             onPickModeChange={setRegionPicking} />
         ) : undefined}
-        trialPanel={trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trialOpen, onToggle: trialOpen ? trial.closePanel : openTrial } : undefined}
+        trialPanel={labAvailable
+          ? { id: parameterPanelId, buttonId: parameterButtonId, open: trialOpen, onToggle: trialOpen ? trial.closePanel : openTrial, label: t('workbench.parameterLab') }
+          : trialReady ? { id: trialPanelId, buttonId: trialButtonId, open: trialOpen, onToggle: trialOpen ? trial.closePanel : openTrial } : undefined}
         layersOpen={leftPanelOpen && !trialOpen} onToggleLayers={() => {
           if (trialOpen) trial.closePanel()
           setLeftPanelOpen(open => !open)

@@ -8,7 +8,7 @@ const layerPanelId = 'map-layer-panel'
 const layerButtonId = 'map-layer-button'
 export const mapLayerDesktopWidth = 'lg:w-56'
 
-type WorkPanelToggle = { id: string; buttonId: string; open: boolean; onToggle: () => void }
+type WorkPanelToggle = { id: string; buttonId: string; open: boolean; onToggle: () => void; label?: string }
 
 export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, backRef, contextControls, switchTo, layerControls, timeControls, regionControls, trialPanel, layersOpen, onToggleLayers, children }: {
   title: string
@@ -31,7 +31,7 @@ export function MapWorkbenchToolbar({ title, subtitle, view, backTo, backLabel, 
   const tools = useRef<HTMLDetailsElement>(null)
   const toolsButton = useRef<HTMLElement>(null)
   const backText = backLabel ?? t('action.back')
-  const trialLabel = t('workbench.climateTrial')
+  const trialLabel = trialPanel?.label ?? t('workbench.climateTrial')
 
   return (
     <header className="relative z-30 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 border-b border-space-border bg-space-panel px-2 py-1.5 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:gap-3 lg:px-4 lg:py-2 2xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">

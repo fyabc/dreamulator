@@ -6,6 +6,7 @@
     "mapFallback": "Map"
   },
   "workbench": {
+    "parameterLab": "Parameter lab",
     "climateTrial": "Climate experiment",
     "views": "Map views",
     "flat": "Map",
@@ -21,7 +22,7 @@
     "official": "Official",
     "development": "Development",
     "officialHint": "Show the official result from the last build.",
-    "developmentHint": "Show the development result computed by the Climate Lab for the current inputs; nothing is written to the world.",
+    "developmentHint": "Show the development result computed from the current inputs; the desktop API build does not provide a climate development result yet.",
     "developmentSource": "Climate development",
     "developmentMissing": "No development result yet",
     "collapseLayerPanel": "Collapse layers panel",
@@ -59,6 +60,50 @@
     "failed": "Build failed",
     "note": "Builds write formal results; the map refreshes when it finishes.",
     "noInput": "No input"
+  },
+  "parameterLab": {
+    "title": "Parameter lab",
+    "description": "Edit parameters and save them as world inputs. The build plan in the top bar starts the computation; nothing runs here.",
+    "reading": "Reading parameters…",
+    "invalid": "A value is outside the allowed range.",
+    "dayUnit": "d",
+    "close": "Collapse",
+    "save": "Save parameters",
+    "saving": "Saving…",
+    "saveAsBranch": "Save as branch",
+    "branchName": "New branch name",
+    "branchHint": "Use letters, digits, dashes or underscores; the branch starts at the earliest affected layer.",
+    "noChanges": "No changes to save.",
+    "saved": "Parameters saved.",
+    "branchSaved": "Saved to new branch {{branch}} (forked at {{layer}}).",
+    "conflict": "The parameter files changed elsewhere. Reload before saving.",
+    "reload": "Reload",
+    "readOnly": "This world is read-only; its parameters cannot be changed.",
+    "unavailable": "This body has no editable planet parameters.",
+    "forkBlocked": "This parameter needs an earlier fork; the current branch cannot change it.",
+    "missing": "Not defined",
+    "impact": "Affected layers: {{layers}}",
+    "startLayer": "The build will start at {{layer}}",
+    "goBuild": "Open build plan",
+    "error": "Could not save: {{message}}",
+    "params": {
+      "axial_tilt_deg": {
+        "label": "Axial tilt",
+        "help": "Obliquity of the spin axis. Affects seasons, polar ice and the astronomy catalog."
+      },
+      "rotation_period_days": {
+        "label": "Rotation period",
+        "help": "One sidereal rotation in Earth days. Affects the Coriolis force, tidal lock and the solar day."
+      },
+      "albedo": {
+        "label": "Bond albedo",
+        "help": "Fraction of incident radiation reflected back to space. Affects the climate radiation balance and the astronomy equilibrium temperature."
+      },
+      "greenhouse_warming_k": {
+        "label": "Greenhouse warming",
+        "help": "Extra warming from the atmosphere, in kelvin. Affects the climate layer only."
+      }
+    }
   },
   "terrainSource": {
     "label": "Terrain source",

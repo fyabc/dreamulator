@@ -119,6 +119,13 @@ export default function MapBuildControl({ world, branch, onBuilt }: Props) {
     }
   }, [open])
 
+  // The parameter lab points here after saving.
+  useEffect(() => {
+    const openPlan = () => setOpen(true)
+    window.addEventListener('dreamulator:open-build-plan', openPlan)
+    return () => window.removeEventListener('dreamulator:open-build-plan', openPlan)
+  }, [])
+
   // Successful builds: refresh every map query for this world and show the
   // formal result. The plan is refetched through the same invalidation.
   const finished = job?.state === 'succeeded' ? job.finished_at ?? job.updated_at : null
@@ -167,7 +174,7 @@ export default function MapBuildControl({ world, branch, onBuilt }: Props) {
                 : state === 'upstream' ? 'text-amber-200/70'
                   : state === 'fresh' ? 'text-gray-500' : 'text-slate-400'}>
                 {t(`buildPlan.state.${state}`)}
-                {!layer.input_source && layer.derived_fresh !== 'fresh' && ` · ${t('buildPlan.noInput')}`}
+                {!layer.input_source && layer.derived_fresh === 'absent' && ` · ${t('buildPlan.noInput')}`}
               </span>
             </li>
           })}

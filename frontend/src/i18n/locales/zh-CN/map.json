@@ -6,6 +6,7 @@
     "mapFallback": "地图"
   },
   "workbench": {
+    "parameterLab": "参数实验台",
     "climateTrial": "气候实验台",
     "views": "地图视图",
     "flat": "平面",
@@ -21,7 +22,7 @@
     "official": "正式",
     "development": "开发",
     "officialHint": "显示上一次构建的正式结果。",
-    "developmentHint": "显示气候实验台按当前输入算出的开发结果；不会写入世界。",
+    "developmentHint": "显示按当前输入算出的开发结果；本机 API 模式暂不提供气候开发结果。",
     "developmentSource": "气候开发",
     "developmentMissing": "尚无开发结果",
     "collapseLayerPanel": "收起图层面板",
@@ -59,6 +60,50 @@
     "failed": "构建失败",
     "note": "构建写入正式结果；完成后地图自动刷新。",
     "noInput": "无输入"
+  },
+  "parameterLab": {
+    "title": "参数实验台",
+    "description": "修改参数并保存为世界输入。保存后由顶栏的构建计划发起构建；这里不运行计算。",
+    "reading": "正在读取参数…",
+    "invalid": "输入值超出允许范围。",
+    "dayUnit": "日",
+    "close": "收起",
+    "save": "保存参数",
+    "saving": "正在保存…",
+    "saveAsBranch": "另存为分支",
+    "branchName": "新分支名称",
+    "branchHint": "使用字母、数字、短横线或下划线；分支从最早受影响的层开始。",
+    "noChanges": "没有需要保存的修改。",
+    "saved": "参数已保存。",
+    "branchSaved": "已保存到新分支 {{branch}}（从{{layer}}分叉）。",
+    "conflict": "参数文件已在别处修改。重新读取后再保存。",
+    "reload": "重新读取",
+    "readOnly": "这个世界只读，不能修改参数。",
+    "unavailable": "该天体没有可编辑的行星参数。",
+    "forkBlocked": "该参数需要从更早的层分叉，当前分支不能修改。",
+    "missing": "尚未定义",
+    "impact": "影响层：{{layers}}",
+    "startLayer": "构建将从{{layer}}开始",
+    "goBuild": "前往构建计划",
+    "error": "保存失败：{{message}}",
+    "params": {
+      "axial_tilt_deg": {
+        "label": "轴倾角",
+        "help": "天体自转轴相对轨道面的倾角。影响季节、极地冰盖与天文目录。"
+      },
+      "rotation_period_days": {
+        "label": "自转周期",
+        "help": "天体自转一周的时间，单位地球日。影响科氏力、潮汐锁定与太阳日。"
+      },
+      "albedo": {
+        "label": "邦德反照率",
+        "help": "天体反射回太空的入射辐射比例。影响气候辐射平衡与天文平衡温度。"
+      },
+      "greenhouse_warming_k": {
+        "label": "温室增温",
+        "help": "大气温室效应带来的额外增温，单位 K。只影响气候。"
+      }
+    }
   },
   "terrainSource": {
     "label": "地形来源",
