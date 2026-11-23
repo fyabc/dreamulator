@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795451221877,
+  "lastUpdate": 1795474167689,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2537,6 +2537,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00009592123186800606",
             "extra": "mean: 5.079283200001328 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "1e8e0d4289ad31b52b77fbd4dafef8613cfb806d",
+          "message": "feat(frontend): show the build commit next to the version\n\nInject the short git commit at build time and show it in the home footer\nand sidebar, so an intermediate build is distinguishable from a release\ntag. Falls back to the version alone when git metadata is unavailable.\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-24T06:48:41+08:00",
+          "tree_id": "7844f4a1c9b3e793c4697a1adee8d51f74fefbde",
+          "url": "https://github.com/fyabc/dreamulator/commit/1e8e0d4289ad31b52b77fbd4dafef8613cfb806d"
+        },
+        "date": 1795474166972,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.4782569369623931,
+            "unit": "iter/sec",
+            "range": "stddev: 0.09906188450685627",
+            "extra": "mean: 2.0909262840000027 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 5.746757736034638,
+            "unit": "iter/sec",
+            "range": "stddev: 0.04379681870401456",
+            "extra": "mean: 174.01116349999768 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 2.4448994956583303,
+            "unit": "iter/sec",
+            "range": "stddev: 0.6533806406785271",
+            "extra": "mean: 409.0147679999963 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 1059.2737830784322,
+            "unit": "iter/sec",
+            "range": "stddev: 0.000060757853745051815",
+            "extra": "mean: 944.0430000012157 usec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 251.5203524986253,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00011897320799574789",
+            "extra": "mean: 3.975821400001678 msec\nrounds: 5"
           }
         ]
       }
