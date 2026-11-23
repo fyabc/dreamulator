@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795381427123,
+  "lastUpdate": 1795451221877,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2478,6 +2478,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.000038908875283183214",
             "extra": "mean: 3.8638504000005014 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "f502b1a749adc2515df26a105ce70a035099e3b5",
+          "message": "feat(map): import JPG heightmaps and threshold-mapped worlds\n\nAccept 8-bit JPEG heightmaps in the elevation import journeys: the server\ndecodes them as luminance with 8-bit/lossy warnings, and the browser creation\nflow converts them to 8-bit grayscale PNG so the archive, climate worker and\nserver validation keep their PNG contract.\n\nAdd threshold mapping to the new-world heightmap flow. The author sets the sea\nthreshold in grey levels, the white height and the assumed sea floor, with an\noptional gamma curve. Threshold worlds store a derived 16-bit metres raster so\nthe map keeps its linear scale; provenance, the climate mesh and the\ntemperature fingerprint use the same mapping, and the server validator requires\nthe derived raster.\n\nReport mapping diagnostics (all sea/land, grey utilisation, darkest level\nshare) with concrete adjustment suggestions in both import UIs, show the live\nelevation range and land share under the creation preview, and move warnings\nnext to the mapping controls. Fix the gamma curve crash caused by reading a\nsynthetic event inside a React state updater.\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-24T00:26:06+08:00",
+          "tree_id": "9ec2d6e6950c0e3f82424272d2bf55c8c88083ed",
+          "url": "https://github.com/fyabc/dreamulator/commit/f502b1a749adc2515df26a105ce70a035099e3b5"
+        },
+        "date": 1795451220934,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.28405953090674013,
+            "unit": "iter/sec",
+            "range": "stddev: 0.4078952824976037",
+            "extra": "mean: 3.520388831200003 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 3.909278415675646,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05081630024775628",
+            "extra": "mean: 255.801683499989 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.6385473319679558,
+            "unit": "iter/sec",
+            "range": "stddev: 0.9692296858318231",
+            "extra": "mean: 610.2966820000025 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 911.4283084152835,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00011097600933600184",
+            "extra": "mean: 1.097179000001347 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 196.8781736761082,
+            "unit": "iter/sec",
+            "range": "stddev: 0.00009592123186800606",
+            "extra": "mean: 5.079283200001328 msec\nrounds: 5"
           }
         ]
       }
