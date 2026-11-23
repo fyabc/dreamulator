@@ -377,11 +377,6 @@ bodies:
   - id: planet_ember
     name: "焦星 · Ember"
     body_type: "planet"
-    mass_earth: 0.35
-    radius_km: 4014               # 0.63 R⊕ — ρ=7.8 g/cm³（铁核残骸 + 重力压缩）
-    rotation_period_days: 5.37    # 潮汐锁定于恒星
-    axial_tilt_deg: 0.0
-    albedo: 0.10                  # 裸露金属表面
     description:
       surface: "被剥夺大部分地幔的铁核残骸（ρ=7.8 g/cm³），昼侧灼热裸露岩石（380-504°C），铅锌矿脉半熔融；夜侧凝固金属霜，无大气"
 
@@ -389,11 +384,6 @@ bodies:
   - id: planet_crucible
     name: "鼎星 · Crucible"
     body_type: "planet"
-    mass_earth: 0.90
-    radius_km: 6180               # 0.97 R⊕
-    rotation_period_days: 16.6    # 潮汐锁定于恒星
-    axial_tilt_deg: 0.0
-    albedo: 0.15                  # 暗色玄武岩表面
     description:
       surface: "90 bar CO₂ 超临界温室大气，表面 ~620 K，玄武岩平原与硫磺湖泊"
 
@@ -401,20 +391,6 @@ bodies:
   - id: planet_aegis
     name: "巨神星 · Aegis"
     body_type: "planet"
-    mass_earth: 508.5             # 1.6 M_J × 317.83 M⊕/M_J
-    radius_km: 71355              # 11.2 R⊕
-    rotation_period_days: 0.1863539  # 4.4725 h 快自转（26-10-11 定版成熟态）。远快于卫星公转，
-    #   角动量正向传递。**机制待实验认证**：吸积遗产 + 收缩加速（角动量近似守恒下半径
-    #   收缩使自转加快）为条件性解释，非认证结论（0009 文首披露）。
-    # 潮汐耗散（弱耗散体制，2026-09-08 REBOUND+潮汐自洽核算裁决 P-B）：k₂≈0.35，
-    #   Q≈5×10⁶（k₂/Q≈7×10⁻⁸，比木星实测 1.1×10⁻⁵ 弱 ~150×，在气巨星潮汐理论
-    #   不确定带内）。推论：Nacrea 外迁 ~0.8 cm/yr；自由倾角阻尼时标 ≫ 系统年龄；
-    #   Aegis 自转 5.9 Gyr 减慢 <1%。
-    axial_tilt_deg: 44.8374718    # 自转轴倾角（26-10-11 定版成熟态）。**机制待实验认证**：
-    #   卫星迁移驱动的条件性共振捕获渐进抬高（Saillenfest 类）或早期倾斜子盘为候选
-    #   解释；早期巨撞击化石说退役（0009 §5）。高倾角 + Nacrea 在 ~1.05 r_L 处的
-    #   拉普拉斯面几何自洽给出恒星季节角 ~19.9°（气候层口径）。
-    albedo: 0.343                 # 类木星 Bond albedo（与 planets.yaml 对齐）
     j2: 0.04                      # 归一化四极矩（26-10-11 定版快自转成熟态；旋转流体
     #   内部结构与高阶引力尚未独立核验——0009 文首披露）
     k2_over_q: 7.0e-8             # 弱耗散 P-B 包（k₂≈0.35, Q≈5×10⁶；2026-09-08 裁决）。
@@ -426,11 +402,6 @@ bodies:
   - id: planet_boreal
     name: "沧星 · Boreal"
     body_type: "planet"
-    mass_earth: 159.3             # 0.5 M_J
-    radius_km: 60562              # 9.5 R⊕ (~0.85 R_J)
-    rotation_period_days: 0.50    # ~12 小时
-    axial_tilt_deg: 2.0
-    albedo: 0.30
     description:
       surface: "水冰凝结线附近，H₂-He 大气富含水冰云与氨冰云，淡蓝色外观"
 
@@ -438,11 +409,6 @@ bodies:
   - id: planet_glacis
     name: "霰星 · Glacis"
     body_type: "planet"
-    mass_earth: 17.1              # ~0.054 M_J（海王星级）
-    radius_km: 24719              # 3.88 R⊕
-    rotation_period_days: 0.72    # ~17 小时
-    axial_tilt_deg: 5.0
-    albedo: 0.25
     description:
       surface: "冰巨星，H₂-He 大气富含 CH₄，深青色；墟带内缘的雕刻者"
 
@@ -450,11 +416,6 @@ bodies:
   - id: planet_sentinel
     name: "藩星 · Sentinel"
     body_type: "planet"
-    mass_earth: 8.5
-    radius_km: 15290              # 2.4 R⊕
-    rotation_period_days: 0.625   # ~15 小时
-    axial_tilt_deg: 15.0
-    albedo: 0.20                  # 冰质表面
     description:
       surface: "远轨道冰质散射体，近日点 3.12 AU / 远日点 4.48 AU，保留原行星盘外层原始冰质成分；墟带外缘雕刻者，自带稳定特洛伊「伴行营」"
 
@@ -496,13 +457,6 @@ bodies:
   - id: satellite_nacrea
     name: "珠母星 · Nacrea"
     body_type: "natural_satellite"
-    mass_earth: 1.20
-    radius_km: 6817               # 1.07 R⊕
-    rotation_period_days: 3.1336  # 恒星自转日（近同步，26-10-11 定版 500 kyr 实测）；太阳日 ≈3.24 地球日
-    axial_tilt_deg: 19.9          # 恒星季节角时权均（26-10-11 定版主窗 161–500 kyr 实测 19.85）；长期
-    #   波动带 17.55–22.05（约 8.39 地球年「季幅潮」主谱峰 ≈ 30.7 当地年，另见
-    #   long_term_cycles）——波动时标 ≫ 气候响应时间 → 气候层读均值 + 登记波动带
-    albedo: 0.30
     j2: 0.0008                    # 永久形状 J₂（0014 定案）；高于流体静力平衡值，需冻结隆起之类的形状保存
     #   机制（月球化石 J₂ 约 2×10⁻⁴、火星约 2×10⁻³ 为参照），模型未单独建模，见 0014 §8
     c_over_mr2: 0.33              # 惯量系数 C/MR²（26-10-11 定版成熟态）
@@ -520,12 +474,6 @@ bodies:
   - id: satellite_cadence
     name: "韵珠星 · Cadence"
     body_type: "natural_satellite"
-    mass_earth: 0.006             # 早期捕获（~0.5 Gyr，Sentinel 散射期）；长期摄动维持 Nacrea 受迫偏心率
-    radius_km: 1436.6             # 0.2255 R⊕（Europa 大小），ρ≈2884 kg/m³ 保持
-    #   （「Europa 个头、Europa 成分」：岩质 + 深部水层）
-    rotation_period_days: 6.54    # 同步自转（t_lock ~Myr ≪ 年龄，锁定概率 ≈100%）
-    axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
-    albedo: 0.13                  # 红褐暗珠：原生托林 + Gyr 辐照 + 等离子体溅射（土卫八/D 型类比）
     description:
       surface: "韵珠是一颗逆行捕获的岩质卫星，半径约 1437 公里。表面因托林沉积、长期辐照与等离子体溅射而呈红褐色并显著暗化；深部冰层在自身隔热下长期保留。它的长期摄动是维持珠母星潮汐加热（进而维持板块构造）的主要泵浦源之一。从珠母星看，近合时是一颗约 22 角分宽（0.69 倍满月）、亮度约本地满月三分之一（视星等 −11.5）的暗红巨珠，稳居夜空第二；其偏心率带温和，火山活动总体处于间歇期，与珠母星的文明长期相伴。"
 
@@ -533,12 +481,6 @@ bodies:
   - id: satellite_vigil
     name: "守珠星 · Vigil"
     body_type: "natural_satellite"
-    mass_earth: 3.05e-4           # Charon 级（Charon 2.66e-4 M⊕）；ρ=1870 kg/m³ 由质量/半径自动导出
-    radius_km: 615                # 0.0965 R⊕（与 planets.yaml 对齐），卡戎大小
-    rotation_period_days: 10.2    # Hut 伪同步中值（随 e 带 0.099–0.228 在 9.0–11.1 d
-    #   漂移——「呼吸锁定」；锁定概率 ≈100%）
-    axial_tilt_deg: 0.0           # 自转轴 ⊥ 轨道面
-    albedo: 0.313                 # Charon 型处理水冰的 HZ 辐照压暗版（p=0.209）
     description:
       surface: "守珠是一颗冰岩质捕获卫星，半径 615 公里，表面年龄约 50 亿年，覆盖着辐照处理过的结晶水冰与托林斑块，呈中灰微蓝色。它位于内迁构型（约 0.37 个希尔半径）处；从珠母星看，近合时是视直径约 4.1 角分、视星等约 −8.8 的亮珠。它的自转周期随轨道偏心率摆动在 9.0–11.1 天之间漂移，从珠母星测光变曲线即可察觉。它的轨道距离长期有界，与珠母星的文明长久相伴。"
 
@@ -546,11 +488,6 @@ bodies:
   - id: satellite_cinder
     name: "焦砾星 · Cinder"        # 鼎卫一
     body_type: "natural_satellite"
-    mass_earth: 1.8e-9
-    radius_km: 11.15              # 0.0017 R⊕（与 planets.yaml 对齐）
-    rotation_period_days: 0.27    # 同步自转
-    axial_tilt_deg: 0.0
-    albedo: 0.071
     description:
       surface: "捕获小卫星，暗色不规则岩体"
 
@@ -558,22 +495,12 @@ bodies:
   - id: satellite_frostine
     name: "凝冰星 · Frostine"      # 沧卫一
     body_type: "natural_satellite"
-    mass_earth: 0.008
-    radius_km: 1554.5               # 0.243 R⊕
-    rotation_period_days: 2.17    # 同步自转
-    axial_tilt_deg: 0.0
-    albedo: 0.67
     description:
       surface: "冰质规则卫星，Boreal 卫星链最内环；潮汐加热维持全球冰下海洋"
 
   - id: satellite_umbra
     name: "玄冰星 · Umbra"         # 沧卫二
     body_type: "natural_satellite"
-    mass_earth: 0.1421              # ρ≈1856 kg/m³ 保持（冰岩分异）
-    radius_km: 4778.0               # 0.75 R⊕（0.6–0.85 R⊕ 潜在宜居带中值；作者本意尺寸 10-08 落定）
-    rotation_period_days: 3.90    # 同步自转
-    axial_tilt_deg: 0.0
-    albedo: 0.43
     k2_over_q: 2.5e-3               # 冰壳口径（受迫地板 e≈0.003 → 潮汐加热 ~0.02–0.13 W/m²）
     description:
       surface: "沧星卫星链中最大的一颗（半径约 4800 公里），也是系统内最重要的潜在宜居世界：温和的潮汐加热与内部放射性热流在全球冰壳之下长期维持着液态水海洋，表面散布弱活动的冰火山与古老的冰裂谷遗迹；表层带有晚期散射期陨击带来的矿物与有机物沉积，并拥有微弱的自身磁场。凭借稳定的环境、丰富的水与地热梯度，它是文明第二基地计划的首选目标；随着冰壳与海洋在数十亿年间持续演化，遥远未来也可能成为生命与定居的候选环境。"
@@ -581,11 +508,6 @@ bodies:
   - id: satellite_sleet
     name: "霜冰星 · Sleet"         # 沧卫三
     body_type: "natural_satellite"
-    mass_earth: 0.002
-    radius_km: 949.9                # 0.149 R⊕
-    rotation_period_days: 9.97    # 同步自转
-    axial_tilt_deg: 0.0
-    albedo: 0.22
     description:
       surface: "最外规则卫星，密布陨石坑"
 
@@ -593,22 +515,12 @@ bodies:
   - id: satellite_shard
     name: "玄石星 · Shard"         # 霰卫一
     body_type: "natural_satellite"
-    mass_earth: 0.001
-    radius_km: 750.4                # 0.118 R⊕
-    rotation_period_days: 3.42    # 同步自转
-    axial_tilt_deg: 0.0
-    albedo: 0.32
     description:
       surface: "规则内卫星，冰岩混合"
 
   - id: satellite_rogue
     name: "逆石星 · Rogue"         # 霰卫二
     body_type: "natural_satellite"
-    mass_earth: 0.0002
-    radius_km: 375.2                # 0.059 R⊕
-    rotation_period_days: 17.8    # 同步自转
-    axial_tilt_deg: 0.0
-    albedo: 0.19
     description:
       surface: "逆行捕获卫星，轨道扁；远距离，未来可能碎裂"
 
@@ -616,21 +528,11 @@ bodies:
   - id: satellite_vagrant
     name: "近客星 · Vagrant"       # 藩卫一
     body_type: "natural_satellite"
-    mass_earth: 0.001
-    radius_km: 633.3                # 0.10 R⊕
-    rotation_period_days: 0.42    # 不规则，非同步
-    axial_tilt_deg: 26.0
-    albedo: 0.23
     description:
       surface: "最大的一颗不规则捕获卫星"
 
   - id: satellite_guest
     name: "远客星 · Guest"         # 藩卫二
     body_type: "natural_satellite"
-    mass_earth: 0.0003
-    radius_km: 74.5               # 0.0117 R⊕（与 planets.yaml 对齐）
-    rotation_period_days: 0.31    # 不规则，非同步
-    axial_tilt_deg: 44.0
-    albedo: 0.17
     description:
       surface: "高倾角、高偏心的逆行不规则卫星"

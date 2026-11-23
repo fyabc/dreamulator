@@ -336,7 +336,5 @@ bodies:
   - id: planet_earth
     name: Earth
     body_type: terrestrial
-    mass_earth: 1.0
-    radius_km: 6371.0
     spin_axis_ecliptic_longitude_deg: 90.00362816
     prime_meridian_phase_at_epoch_deg: 100.19060900

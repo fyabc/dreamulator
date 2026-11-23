@@ -242,6 +242,7 @@ def _index_stellar_data(engine: BaseEngine) -> _StellarIndex:
     derived_data = _read_mapping(engine, "stellar_derived.yaml")
 
     index = _StellarIndex()
+    stellar_body_ids: set[str] = set()
     for source in (input_data, derived_data):
         if source is None:
             continue
@@ -275,6 +276,7 @@ def _index_stellar_data(engine: BaseEngine) -> _StellarIndex:
             if not isinstance(body, dict) or body.get("id") is None:
                 continue
             body_id = str(body["id"])
+            stellar_body_ids.add(body_id)
             mass_earth = _first_float(body, "mass_earth")
             if mass_earth is not None:
                 index.body_masses[body_id] = mass_earth
@@ -296,6 +298,25 @@ def _index_stellar_data(engine: BaseEngine) -> _StellarIndex:
         for entry in input_data.get("orbits") or []:
             if isinstance(entry, dict) and entry.get("body_id") is not None:
                 index.orbits[str(entry["body_id"])] = entry
+
+    # planets.yaml is authoritative for the physical fields shared with
+    # stellar.yaml bodies.  Overlay them here, not only in the catalog builder,
+    # so every index consumer (sky geometry, tidal-lock checks, satellite
+    # dynamics) sees the same values after stellar.yaml drops its duplicates.
+    if stellar_body_ids:
+        planets_path = engine.find_input("planets.yaml")
+        if planets_path is not None:
+            try:
+                planets, _warnings = load_planets(planets_path)
+            except (OSError, ValueError, yaml.YAMLError):
+                planets = []
+            for planet in planets:
+                if planet.id not in stellar_body_ids:
+                    continue
+                index.body_masses[planet.id] = float(planet.mass)
+                index.body_radii[planet.id] = float(planet.radius) * 6371.0
+                if planet.axial_tilt_deg is not None:
+                    index.body_tilt[planet.id] = float(planet.axial_tilt_deg)
     return index
 
 

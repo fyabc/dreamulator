@@ -116,7 +116,7 @@
       "type": "object"
     },
     "OrbitingBody": {
-      "description": "A non-star body in the stellar system: moon, asteroid, comet, etc.\n\nPhysical properties live here; orbital elements are in StellarSystem.orbits\n(matched by id == body_id). This keeps all orbital mechanics in the\nastronomy layer while allowing rich physical descriptions.",
+      "description": "A non-star body in the stellar system: moon, asteroid, comet, etc.\n\nOrbital elements live in StellarSystem.orbits (matched by id == body_id).\nPhysical fields shared with planets.yaml (mass, radius, rotation, tilt,\nalbedo) are authoritative in planets.yaml and may be omitted here;\n``overlay_planet_physicals`` fills them for consumers that need the body\nrecord on its own.",
       "properties": {
         "id": {
           "description": "Unique identifier, e.g. 'satellite_moon'",
@@ -135,16 +135,33 @@
           "type": "string"
         },
         "mass_earth": {
-          "description": "Mass in Earth masses (M⊕)",
-          "exclusiveMinimum": 0,
-          "title": "Mass Earth",
-          "type": "number"
+          "anyOf": [
+            {
+              "description": "Mass in Earth masses",
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Mass in Earth masses (M⊕); planets.yaml wins when present",
+          "title": "Mass Earth"
         },
         "radius_km": {
-          "description": "Mean radius in km",
-          "exclusiveMinimum": 0,
-          "title": "Radius Km",
-          "type": "number"
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Mean radius in km; planets.yaml wins when present",
+          "title": "Radius Km"
         },
         "rotation_period_days": {
           "anyOf": [
@@ -328,9 +345,7 @@
       },
       "required": [
         "id",
-        "name",
-        "mass_earth",
-        "radius_km"
+        "name"
       ],
       "title": "OrbitingBody",
       "type": "object"

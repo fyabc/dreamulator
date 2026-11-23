@@ -366,6 +366,11 @@ def get_stellar_system(world_name: str, branch: str | None = None) -> dict[str, 
     # Normalize bodies (moons, asteroids) to planet-compatible format
     bodies = stellar_input.get("bodies", [])
     if bodies:
+        from dreamulator.models.stellar import overlay_planet_physicals
+
+        planets_data = _load_layer_yaml(world_dir, "geological", "planets.yaml", branch)
+        if isinstance(planets_data, dict) and isinstance(planets_data.get("planets"), list):
+            overlay_planet_physicals(bodies, planets_data["planets"])
         orbit_lookup = {o["body_id"]: o for o in stellar_input.get("orbits", []) if "body_id" in o}
         stellar_input["bodies"] = [_normalize_body(b, orbit_lookup) for b in bodies]
 

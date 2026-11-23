@@ -109,9 +109,11 @@ class OrbitalElements(BaseModel):
 class OrbitingBody(BaseModel):
     """A non-star body in the stellar system: moon, asteroid, comet, etc.
 
-    Physical properties live here; orbital elements are in StellarSystem.orbits
-    (matched by id == body_id). This keeps all orbital mechanics in the
-    astronomy layer while allowing rich physical descriptions.
+    Orbital elements live in StellarSystem.orbits (matched by id == body_id).
+    Physical fields shared with planets.yaml (mass, radius, rotation, tilt,
+    albedo) are authoritative in planets.yaml and may be omitted here;
+    ``overlay_planet_physicals`` fills them for consumers that need the body
+    record on its own.
     """
 
     id: str = Field(description="Unique identifier, e.g. 'satellite_moon'")
@@ -121,9 +123,14 @@ class OrbitingBody(BaseModel):
         description="Classification: natural_satellite, asteroid, comet, dwarf_planet",
     )
 
-    # Physical properties (units chosen for non-stellar-scale objects)
-    mass_earth: EarthMass = Field(description="Mass in Earth masses (M⊕)")
-    radius_km: float = Field(gt=0, description="Mean radius in km")
+    # Physical properties (units chosen for non-stellar-scale objects).
+    # Optional when planets.yaml carries the authoritative value.
+    mass_earth: EarthMass | None = Field(
+        default=None, description="Mass in Earth masses (M⊕); planets.yaml wins when present"
+    )
+    radius_km: float | None = Field(
+        default=None, gt=0, description="Mean radius in km; planets.yaml wins when present"
+    )
 
     rotation_period_days: Day | None = Field(
         default=None, description="Sidereal rotation period in days"
@@ -244,3 +251,35 @@ class StellarSystem(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("Star IDs must be unique within a system")
         return self
+
+
+_KM_PER_EARTH_RADIUS = 6371.0
+
+
+def overlay_planet_physicals(bodies: list[dict[str, Any]], planets: list[dict[str, Any]]) -> None:
+    """Fill shared body physical fields from planets.yaml (authoritative).
+
+    ``stellar.yaml`` bodies may omit mass, radius, rotation, tilt and albedo
+    when the same body is defined in ``planets.yaml``.  This helper restores
+    them for consumers that work on raw body dictionaries, such as the
+    stellar-system API and the static exporter.  It overwrites any legacy
+    duplicate with the authoritative value.
+    """
+    by_id = {
+        str(planet["id"]): planet
+        for planet in planets
+        if isinstance(planet, dict) and planet.get("id") is not None
+    }
+    for body in bodies:
+        if not isinstance(body, dict):
+            continue
+        planet = by_id.get(str(body.get("id")))
+        if planet is None:
+            continue
+        if planet.get("mass") is not None:
+            body["mass_earth"] = planet["mass"]
+        if planet.get("radius") is not None:
+            body["radius_km"] = float(planet["radius"]) * _KM_PER_EARTH_RADIUS
+        for key in ("rotation_period_days", "axial_tilt_deg", "albedo"):
+            if planet.get(key) is not None:
+                body[key] = planet[key]

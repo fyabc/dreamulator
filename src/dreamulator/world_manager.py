@@ -219,4 +219,10 @@ class WorldManager:
                                 f"layers/{layer_dir.name}/input/{yaml_file.name} parse error: {e}"
                             )
 
+        # Shared physical fields may be authored in only one place.  This
+        # reports legacy duplicates so they are removed instead of drifting.
+        from dreamulator.parameter_audit import audit_body_field_duplicates
+
+        errors.extend(audit_body_field_duplicates(world_dir))
+
         return errors

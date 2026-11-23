@@ -225,3 +225,33 @@ class TestOrbitingBody:
             stars=[Star(id="star_s", name="S", spectral_class="G", mass=1.0)],
         )
         assert system.bodies == []
+
+
+def test_body_physicals_are_optional_when_planets_yaml_owns_them():
+    body = OrbitingBody(id="satellite_moon", name="Moon")
+    assert body.mass_earth is None
+    assert body.radius_km is None
+
+
+def test_overlay_planet_physicals_fills_shared_fields():
+    from dreamulator.models.stellar import overlay_planet_physicals
+
+    bodies = [{"id": "satellite_moon"}]
+    overlay_planet_physicals(
+        bodies,
+        [
+            {
+                "id": "satellite_moon",
+                "mass": 0.0123,
+                "radius": 0.2727,
+                "rotation_period_days": 27.3,
+                "axial_tilt_deg": 6.68,
+                "albedo": 0.12,
+            }
+        ],
+    )
+    assert bodies[0]["mass_earth"] == 0.0123
+    assert bodies[0]["radius_km"] == pytest.approx(0.2727 * 6371.0)
+    assert bodies[0]["rotation_period_days"] == 27.3
+    assert bodies[0]["axial_tilt_deg"] == 6.68
+    assert bodies[0]["albedo"] == 0.12

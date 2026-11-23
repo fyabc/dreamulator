@@ -227,6 +227,11 @@ def _export_layer_data(world_dir: Path, branch: str | None = None) -> dict:
         # Normalize bodies (moons, asteroids) to planet-compatible format
         bodies = stellar.get("bodies", [])
         if bodies:
+            from dreamulator.models.stellar import overlay_planet_physicals
+
+            planets_data = resolver.load_layer_yaml("geological", "planets.yaml")
+            if isinstance(planets_data, dict) and isinstance(planets_data.get("planets"), list):
+                overlay_planet_physicals(bodies, planets_data["planets"])
             orbit_lookup = {o["body_id"]: o for o in stellar.get("orbits", []) if "body_id" in o}
             stellar["bodies"] = [_normalize_body(b, orbit_lookup) for b in bodies]
 
