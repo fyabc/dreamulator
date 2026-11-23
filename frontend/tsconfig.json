@@ -17,7 +17,8 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@dreamulator/palettes": ["../src/dreamulator/map/palettes.json"]
+      "@dreamulator/palettes": ["../src/dreamulator/map/palettes.json"],
+      "@dreamulator/parameters": ["../src/dreamulator/parameter_registry.json"]
     }
   },
   "include": ["src"],

@@ -48,6 +48,14 @@ class ClimateEngine(BaseEngine):
 
     name = "climate"
     layer = Layer.CLIMATE
+    consumed_parameters = frozenset(
+        {
+            "planet.axial_tilt_deg",
+            "planet.rotation_period_days",
+            "planet.albedo",
+            "planet.greenhouse_warming_k",
+        }
+    )
     _output_steps = ("save_climate", "export_climate", "summarize_climate")
     progress_steps = (
         "reading",

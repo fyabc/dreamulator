@@ -49,6 +49,9 @@ class BaseEngine(ABC):
     optional_input_files: list[str] = []
     output_files: list[str] = []
     progress_steps: tuple[str, ...] = ()
+    # Registry parameter ids whose values affect this engine's output.  Kept in
+    # sync with parameter_registry.json by tests/test_parameter_registry.py.
+    consumed_parameters: frozenset[str] = frozenset()
 
     def __init__(
         self,

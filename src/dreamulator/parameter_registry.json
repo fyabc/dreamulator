@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "parameters": [
+    {
+      "id": "planet.axial_tilt_deg",
+      "group": "astronomy",
+      "storage": {
+        "file": "layers/geological/input/planets.yaml",
+        "path": ["planets", "*", "axial_tilt_deg"]
+      },
+      "type": "number",
+      "unit": "deg",
+      "range": { "minimum": 0, "maximum": 90 },
+      "consumers": ["astronomy", "geological", "climate"],
+      "note": "Astronomy catalog metadata; geological polar ice sheets; climate seasons."
+    },
+    {
+      "id": "planet.rotation_period_days",
+      "group": "astronomy",
+      "storage": {
+        "file": "layers/geological/input/planets.yaml",
+        "path": ["planets", "*", "rotation_period_days"]
+      },
+      "type": "number",
+      "unit": "day",
+      "range": { "exclusiveMinimum": 0 },
+      "consumers": ["astronomy", "geological", "climate"],
+      "note": "Astronomy solar day and catalog metadata; geological tidal lock; climate Coriolis force."
+    },
+    {
+      "id": "planet.albedo",
+      "group": "climate",
+      "storage": {
+        "file": "layers/geological/input/planets.yaml",
+        "path": ["planets", "*", "albedo"]
+      },
+      "type": "number",
+      "range": { "minimum": 0, "maximum": 1 },
+      "consumers": ["astronomy", "climate"],
+      "note": "Astronomy equilibrium temperature and catalog metadata; climate absorbed flux."
+    },
+    {
+      "id": "planet.greenhouse_warming_k",
+      "group": "climate",
+      "storage": {
+        "file": "layers/geological/input/planets.yaml",
+        "path": ["planets", "*", "atmosphere", "greenhouse_factor"]
+      },
+      "type": "number",
+      "unit": "K",
+      "range": { "minimum": 0 },
+      "consumers": ["astronomy", "climate"],
+      "note": "Astronomy catalog atmosphere record; climate surface temperature."
+    }
+  ]
+}

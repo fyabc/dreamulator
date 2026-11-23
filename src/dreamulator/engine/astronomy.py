@@ -36,6 +36,14 @@ class AstronomyEngine(BaseEngine):
 
     name = "astronomy"
     layer = Layer.ASTRONOMY
+    consumed_parameters = frozenset(
+        {
+            "planet.axial_tilt_deg",
+            "planet.rotation_period_days",
+            "planet.albedo",
+            "planet.greenhouse_warming_k",
+        }
+    )
     progress_steps = (
         "read_stars",
         "compute_stars",

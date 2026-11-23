@@ -53,6 +53,7 @@ class GeologicalEngine(BaseEngine):
 
     name = "geological"
     layer = Layer.GEOLOGICAL
+    consumed_parameters = frozenset({"planet.axial_tilt_deg", "planet.rotation_period_days"})
     _generated_steps = ("mesh", "plates", "tectonics", "boundaries", "terrain", "ice", "export")
     _import_steps = ("prepare_terrain", "read_elevation", "mesh", "sample_elevation", "export")
     progress_steps = ("prepare_terrain",)

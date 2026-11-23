@@ -63,6 +63,11 @@ export default defineConfig(({ mode, isPreview }) => {
         '@': path.resolve(__dirname, './src'),
         // Single-source colour palette shared with the Python backend.
         '@dreamulator/palettes': path.resolve(__dirname, '../src/dreamulator/map/palettes.json'),
+        // Single-source parameter registry (see parameter_registry.py).
+        '@dreamulator/parameters': path.resolve(
+          __dirname,
+          '../src/dreamulator/parameter_registry.json',
+        ),
       },
     },
     // Support top-level await (required by Three.js WebGPU module)
