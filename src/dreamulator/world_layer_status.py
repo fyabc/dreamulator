@@ -8,25 +8,33 @@ the real per-layer status on demand from the filesystem:
 - ``input_source``   — where the layer's input comes from (resolver's
   ``root`` / ``branch:<name>`` / ``not configured``).
 - ``input_doc_count`` — number of authored ``*.md`` documents.
-- ``derived_fresh``  — ``fresh`` / ``stale`` / ``absent``: whether the
-  derived products are older than the layer's input YAML files.
+- ``derived_fresh``  — ``fresh`` / ``stale`` / ``absent``: compared with the
+  layer's recorded input projection when one exists, otherwise whether the
+  derived products are older than the input YAML files.
 - ``last_build_time`` — newest mtime across the layer's derived products.
 
 Philosophy notes:
 
-- The input side hashes **YAML only** (recursive), mirroring
-  ``guard.stale.layer_input_fingerprint``: a narrative ``.md`` edit must not
-  mark physics as stale.
+- A successful build records a per-layer input projection
+  (``parameter_projection.py``): parsed YAML hashes plus the registered shared
+  parameters that layer consumes.  Registered fields it does not consume are
+  stripped first, so editing albedo does not mark the geological layer stale;
+  unregistered fields stay in the hash and remain conservative.  Comment and
+  formatting edits do not count.
+- Without a record (older builds) the mtime comparison below is the fallback,
+  so a layer becomes projection-aware after its next successful build.
+- Narrative ``.md`` edits never participate: only the engine's declared input
+  files do.
 - The derived side for the geological layer includes ``maps/<planet>/``
   because the terrain pipeline's products (cvt mesh, elevation, plates)
   live there, not in ``layers/geological/derived/``.
-- This is a display heuristic (mtime comparison), not a content check; the
-  pipeline's own dirty check and the guard fingerprints remain authoritative
-  for rebuild and audit decisions.
+- This is a display heuristic; the pipeline's own dirty check and the guard
+  fingerprints remain authoritative for rebuild and audit decisions.
 """
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -35,6 +43,8 @@ from dreamulator.resolver import LayerResolver
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def _tree_newest_mtime(root: Path | None) -> float | None:
@@ -55,6 +65,7 @@ def compute_layer_status(
     layer: Layer | str,
     *,
     branch: str | None = None,
+    seed: int | None = None,
 ) -> dict[str, object]:
     """Compute the on-disk build status of one layer.
 
@@ -62,6 +73,8 @@ def compute_layer_status(
         world_dir: Path to the world directory (root, not the branch dir).
         layer: Layer identifier (Layer enum or its value).
         branch: Optional branch name to resolve through.
+        seed: Optional world seed. When given and a recorded input projection
+            exists, freshness compares projections instead of mtimes.
 
     Returns:
         Dict with ``input_source``, ``input_doc_count``, ``derived_fresh``
@@ -109,12 +122,33 @@ def compute_layer_status(
             newest = root_mtime
     derived_mtime = newest
 
+    derived_fresh: str
     if derived_mtime is None:
         derived_fresh = "absent"
-    elif input_mtime is not None and input_mtime > derived_mtime:
-        derived_fresh = "stale"
     else:
-        derived_fresh = "fresh"
+        projected: str | None = None
+        if seed is not None:
+            from dreamulator.parameter_projection import (
+                current_input_projection,
+                load_input_projection,
+            )
+
+            record = load_input_projection(resolver.find_derived_dir(layer))
+            if record is not None:
+                try:
+                    current = current_input_projection(world_dir, layer, branch, seed)
+                except Exception:  # noqa: BLE001 - status must not fail the plan
+                    logger.warning(
+                        "Could not compute input projection for %s", layer, exc_info=True
+                    )
+                    current = None
+                if current is not None:
+                    projected = "fresh" if current == record else "stale"
+        if projected is None:
+            projected = (
+                "stale" if input_mtime is not None and input_mtime > derived_mtime else "fresh"
+            )
+        derived_fresh = projected
 
     return {
         "input_source": source.source if source.input_dir is not None else None,
@@ -133,6 +167,7 @@ def enrich_layer_summaries(
     layers: dict[str, dict[str, object]],
     *,
     branch: str | None = None,
+    seed: int | None = None,
 ) -> dict[str, dict[str, object]]:
     """Augment a serialized ``WorldConfig.layers`` dict with build status.
 
@@ -146,7 +181,7 @@ def enrich_layer_summaries(
         if not isinstance(info, dict):
             continue
         try:
-            status = compute_layer_status(world_dir, name, branch=branch)
+            status = compute_layer_status(world_dir, name, branch=branch, seed=seed)
         except ValueError:
             # Unknown layer identifier — leave the entry as-is.
             continue

@@ -41,7 +41,6 @@ class AstronomyEngine(BaseEngine):
             "planet.axial_tilt_deg",
             "planet.rotation_period_days",
             "planet.albedo",
-            "planet.greenhouse_warming_k",
         }
     )
     progress_steps = (

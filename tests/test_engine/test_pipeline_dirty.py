@@ -92,6 +92,7 @@ class TestPipelineDirtySkip:
         results = run_pipeline([_DirtyEngine], world, seed=42)
         assert len(results) == 1
         assert (derived / "output.yaml").exists()
+        assert (derived / ".input-projection.json").exists()
 
         # Second run: input unchanged → skipped.
         results = run_pipeline([_DirtyEngine], world, seed=42)

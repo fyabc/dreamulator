@@ -293,6 +293,16 @@ def run_pipeline(
         logger.info("Engine %s completed successfully", engine.name)
         profile_records.append(record)
 
+        # Record the authored inputs this layer consumed so later status checks
+        # can compare projections instead of file mtimes. A projection failure
+        # must not fail the build.
+        from dreamulator.parameter_projection import write_input_projection
+
+        try:
+            write_input_projection(engine)
+        except Exception:  # noqa: BLE001 - the build result remains valid
+            logger.warning("Could not write input projection for %s", engine.name, exc_info=True)
+
         # Register this engine's output as a derived source for subsequent engines
         layer_derived_dirs[engine_cls.layer.value] = layer_output_dir
 

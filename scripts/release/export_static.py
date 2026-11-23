@@ -726,7 +726,10 @@ def export_world(world_dir: Path, skip_branches: set[str] | None = None) -> dict
     if isinstance(layers, dict) and layers:
         from dreamulator.world_layer_status import enrich_layer_summaries
 
-        world_data["layers"] = enrich_layer_summaries(world_dir, layers)
+        seed = (world_data.get("seed") or {}).get("seed")
+        world_data["layers"] = enrich_layer_summaries(
+            world_dir, layers, seed=seed if isinstance(seed, int) else None
+        )
     result["world"] = world_data
 
     # 2. Branches metadata

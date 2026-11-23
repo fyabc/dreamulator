@@ -146,7 +146,9 @@ def get_world(world_name: str) -> WorldInfoResponse:
         data = config.model_dump(mode="json")
         layers = data.get("layers")
         if isinstance(layers, dict) and layers:
-            data["layers"] = enrich_layer_summaries(_manager.world_dir(world_name), layers)
+            data["layers"] = enrich_layer_summaries(
+                _manager.world_dir(world_name), layers, seed=config.seed.seed
+            )
         return WorldInfoResponse(data=data)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -882,11 +884,13 @@ class BuildPlan(BaseModel):
 def get_build_plan(world_name: str, branch: str | None = None) -> BuildPlan:
     """Describe the out-of-date engine layers in build order.
 
-    Freshness is the same on-disk heuristic used by the world-detail view
-    (input YAML newer than derived products; geological products include
-    ``maps/<planet>/``). The plan starts from the earliest layer that is not
-    fresh and lists that layer plus everything downstream; a reference root is
-    marked read-only.
+    Freshness compares each layer's recorded input projection when available
+    (registered shared parameters are attributed to their consumers; other
+    fields are conservative). Older builds without a record fall back to the
+    mtime heuristic (input YAML newer than derived products; geological
+    products include ``maps/<planet>/``). The plan starts from the earliest
+    layer that is not fresh and lists that layer plus everything downstream; a
+    reference root is marked read-only.
     """
     from dreamulator.engine import get_all_engines
     from dreamulator.models.layers import get_layer_index
@@ -904,7 +908,9 @@ def get_build_plan(world_name: str, branch: str | None = None) -> BuildPlan:
         # dict only lists layers the template configured, while an engine can
         # build a layer with defaults and produce derived data for it.
         try:
-            status = compute_layer_status(resolver.world_dir, layer, branch=branch)
+            status = compute_layer_status(
+                resolver.world_dir, layer, branch=branch, seed=config.seed.seed
+            )
         except ValueError:
             status = {}
         states.append(

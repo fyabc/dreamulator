@@ -49,8 +49,8 @@
       "type": "number",
       "unit": "K",
       "range": { "minimum": 0 },
-      "consumers": ["astronomy", "climate"],
-      "note": "Astronomy catalog atmosphere record; climate surface temperature."
+      "consumers": ["climate"],
+      "note": "Climate surface temperature (the astronomy catalog records the atmosphere as metadata only)."
     }
   ]
 }
