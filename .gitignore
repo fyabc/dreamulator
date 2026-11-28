@@ -57,6 +57,8 @@ data/worlds/*/canvases/
 data/worlds/*
 !data/worlds/earth/
 !data/worlds/nacrea/
+!data/worlds/AGENTS.md
+!data/worlds/CLAUDE.md
 
 # Claude Code
 .claude/settings.local.json

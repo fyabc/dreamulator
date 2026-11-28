@@ -18,3 +18,10 @@ uv run dreamulator narrate $ARGUMENTS
 如果命令因缺少 `anthropic` 依赖而失败（提示 `uv sync --extra narrate`），先运行该安装命令然后重试。
 
 将命令输出的描述内容直接展示给用户，不要添加额外解释。
+
+
+## API 配置解析链（优先级从高到低）
+
+1. CLI `--model` 参数 / 环境变量 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`
+2. `~/.claude/settings.json` → `env.*` 字段及顶层 `model` 字段
+3. 内置默认值 `claude-sonnet-4-6`

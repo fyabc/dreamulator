@@ -89,19 +89,14 @@ uv run dreamulator build myworld
 # 分支管理
 uv run dreamulator branch create myworld pangea --at geological
 uv run dreamulator branch list myworld
-uv run dreamulator branch info myworld pangea
 uv run dreamulator build myworld --branch pangea
-uv run dreamulator branch delete myworld pangea
 
 # 生成 JSON Schema
 uv run dreamulator schema
 
-# AI 叙述（用 Claude 生成世界的口语化描述）
-uv sync --extra narrate                        # 安装可选依赖（仅需一次）
+# AI 叙述（用 Claude 生成世界的口语化描述；需先 uv sync --extra narrate）
 uv run dreamulator narrate myworld
 uv run dreamulator narrate myworld --branch pangea
-
-# 文明地图底图数据（已通过 Git LFS 存储在仓库中，无需手动下载）
 uv run dreamulator narrate myworld -m claude-opus-4-6   # 指定模型
 
 # 地图与画布（详见 docs/usage/cli.md）：map layers|globe、region pack|build、render
@@ -132,6 +127,9 @@ uv run ruff check src/ tests/
 uv run ruff format --check src/ tests/
 uv run mypy src/
 ```
+
+改气候引擎后用 `scripts/climate/climate_diff.py` 对比两次构建（步骤见
+[气候验证工作流](docs/usage/climate-validation-workflow.md#7-两次构建的差异对比)）。
 
 ### TypeScript 前端
 
@@ -171,20 +169,14 @@ npm run lint
 > **静态模式**：`VITE_STATIC_MODE=true` 时前端读取预导出的 JSON（`scripts/release/export_static.py`），
 > 不依赖后端，但创建/删除/构建/验证/叙述等写操作不可用。
 > GitHub Pages 部署通过 `.github/workflows/deploy-pages.yml` 自动化。
->
-> **⚠️ 静态导出同步**：新增 API 端点或数据字段时须同步三个文件，见下文「静态导出同步」。
+> 新增 API 端点/数据字段时的三文件同步义务见 `frontend/AGENTS.md`「静态导出同步」。
 
 ### 项目技能
 
 技能按 Agent Skills 开放格式写在 `.agents/skills/<名称>/SKILL.md`：`narrate`（口语化描述世界）、`audit-doc`（文档与代码
 一致性审计）、`grill-world`（设定自洽性拷问）、`diagnose-climate`（气候异常诊断）与 `read-map`（读图核查）。
 Claude Code 用 `/narrate earth` 调用，Codex 用 `$narrate earth` 调用。`narrate` 底层调用 `src/dreamulator/narrator.py`，
-与 CLI `dreamulator narrate` 共享逻辑。
-
-**narrate 的 API 配置解析链**（优先级从高到低）：
-1. CLI `--model` 参数 / 环境变量 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`
-2. `~/.claude/settings.json` → `env.*` 字段及顶层 `model` 字段
-3. 内置默认值 `claude-sonnet-4-6`
+与 CLI `dreamulator narrate` 共享逻辑（API 配置解析链见该 skill 本体）。
 
 ## 核心设计原则
 
@@ -252,17 +244,7 @@ data/worlds/myworld/
 - **`derived/`**（JSON）：引擎计算的物理结果
 
 LLM 只修改 input，引擎负责计算 derived——防止 LLM "幻想"物理结果。
-
-### 模型态 vs obs 态分离（earth root = 真实数据锚，永不 build）
-
-`earth` 是**真实地球参照世界**（reference baseline），不是「模型的地球」。硬规则：
-
-- **root 的 `maps/planet_earth/cvt_mesh.json` 绝对只含真实地球数据**：ETOPO1 高程、真实板块边界、
-  海陆掩膜，以及 `import_earth_climate` 导入的真实观测 obs 态字段（ERA5 / GPCP / Beck / SODA）。
-- **所有模型算出的字段**（`temperature_C` / `precipitation_mm` / `koppen_class` 等）**只写在分支上**
-  （`earth/branches/climate-dev` 等），绝不写进 root。
-- **earth root 永不 build**：模型字段宁可空缺（缺失），也绝不用生成值填充。前端/验证读不到 root 的
-  模型字段时，报「缺失」并指向分支，而不是触发一次 root build。
+earth 参照世界的 obs 态铁律与对外设定的写作标准见 `data/worlds/AGENTS.md`。
 
 ### 可复现性
 
@@ -279,20 +261,7 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 引擎在 `src/dreamulator/engine/` 中继承 `BaseEngine`，声明 `layer`、`requires`、`input_files`、`output_files`，由 `pipeline.py` 自动拓扑排序执行。
 
 引擎通过 `find_input()` 方法沿层级链向上搜索输入文件，支持从分支继承数据。
-
-### 引擎输入模式与一致性校验
-
-开发新引擎时，输入数据应遵循以下模式（参考天文学引擎 `engine/astronomy.py`）：
-
-1. **自变量/因变量分类**：每个引擎的数据模型明确区分自变量（输入）和因变量（输出）。自变量字段设为可选，通过 `model_validator` 确保至少提供一组完整自变量。
-
-2. **混合输入模式**：允许可选的替代自变量集。例如 `Star` 模型支持 mass-only、luminosity-only、both 三种输入方式。引擎内部根据实际提供的字段选择计算路径。
-
-3. **手动覆盖 + 一致性校验**：因变量字段允许用户手动填写（覆盖引擎计算值）。当用户同时提供自变量和因变量时，引擎正向计算预期值并与用户值比较：
-   - 偏差 ≤ 阈值（通常 20%）→ 静默接受
-   - 偏差 > 阈值 → 记录 warning（`EngineResult.warnings`），严格模式下抛错
-
-4. **纯计算模块分离**：物理公式实现为纯函数模块（如 `engine/stellar_physics.py`），与引擎 IO 层（`engine/astronomy.py`）分离。纯函数无 IO、无 RNG，可独立单元测试。
+新引擎的输入数据模式与一致性校验见 `src/dreamulator/engine/AGENTS.md`。
 
 ## 编码规范
 
@@ -304,29 +273,30 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 - 使用枚举而非自由字符串（`SpectralClass.G` 而非 `"G-type"`）
 - 嵌套深度不超过 4 层
 
-## 开发注意事项
+## 开发纪律与约定
 
 ### 多 agent 与跨平台约定
 
-- **共享记忆**：开工读 `private/memory/MEMORY.md` 与 `private/today.md`，按索引读相关记录；收工更新必要事实与进度。
+- **共享记忆**：开工读 `private/memory/MEMORY.md` 与 `private/todos/today.md`，按索引读相关记录；收工更新必要事实与进度。
   规范写 `AGENTS.md`，经验写 `private/memory/`，待办写执行台。私有文件缺失时继续工作。
 - **规则只写在 `AGENTS.md`。** 根目录与子目录的 `AGENTS.md` 是 Claude Code、Codex 等工具共用的唯一来源；同目录的
   `CLAUDE.md` 只含 `@AGENTS.md` 导入，不写内容。新建作用域规则时两个文件一起建，`tests/test_agent_instructions.py` 检查成对与导入。
 - **进入子目录先读该目录的 `AGENTS.md`。** Codex 只加载从仓库根到启动目录路径上的文件，在根目录启动时不会自动读到
   `frontend/AGENTS.md` 或 `docs/**/AGENTS.md`；改前端前读 `frontend/AGENTS.md`，改文档前读对应目录的索引。
-- **根 `AGENTS.md` 保持在 32 KiB 以内。** 这是 Codex 拼接项目说明的缺省上限，超出部分会被截断；只适用于某个目录的规则放进该目录的 `AGENTS.md`。
+- **根 `AGENTS.md` 只保留概览与核心规则，且保持在 32 KiB 以内。** 这是 Codex 拼接项目说明的缺省上限，超出部分会被截断；
+  目录专属规则放进该目录的 `AGENTS.md`（落点见文末「作用域规则索引」）。
 - **技能改 `.agents/skills/`。** 改完运行 `uv run python scripts/dev/sync_agent_skills.py` 同步到 `.claude/skills/`；
   测试会比对两份内容。frontmatter 只用 Agent Skills 规范字段（`name`、`description`），参数写成 `$ARGUMENTS` 并注明宿主未替换时从用户请求读取。
 - **不提交符号链接。** Windows 需要管理员权限或开发者模式才能创建符号链接，未开启 `core.symlinks` 的克隆会把链接检出为一行文本；
   需要共享内容时用导入或脚本生成的真实文件。规则与技能文件由 `.gitattributes` 固定为 LF 换行。
 
-### 文档/设定更新：只写当前设定，不写历史
+### 文档与设定更新：只写当前设定，不写历史
 
 文档或设定更新时，直接写「当前设定」，不残留之前设定、也不写「XX已修正/翻案/原XX」
 这类历史表述——历史由 git 管理，git commit message 才是记录历史的地方。涉及推导参数表，
 只放「当前值 + 参数范围」，不放「旧值 → 新值」叙事。
 
-### 文风：平实完整句，全库禁电报体（含设计笔记）
+### 文风：平实完整句，全库禁电报体
 
 **所有**文档（对外设定、设计笔记、docs/、审计台账、CHANGELOG 皆然）用平实
 易读的完整句子写作，术语首次出现要解释。禁止电报体：箭头链（`A → B → C`
@@ -335,62 +305,6 @@ physics → chemistry → astronomy → geological → climate → ecology → c
 表格可以用，但单元格也应是可独立读懂的短句，不是关键词串。数字要带单位
 和口径（「订正后 ≈ +10°C（含 −9.6 K 参照偏差）」而不是「10C*」）。
 写完自查一遍：每个句子有主语和动词吗？读者不看别的文档能懂吗？
-
-### 对外设定 vs 设计笔记的划分（作者裁决 2026-10-07）
-
-**对外设定** = `data/worlds/*/layers/*/input/*.md` 全文 + yaml 的 `description`
-等叙事字段（会渲染给读者/前端/视频）。标准：
-
-1. 只写世界内现行状态，平实完整句、解释术语、忌电报体；
-2. **现实天体/地球类比不入文**（「木卫三类比」「Europa 大小」「Charon 级」等
-   太阳系/地球专名只进设计笔记）；面向读者的**单位参照**合法（「0.69× 满月宽」
-   「亮于金星 ~38 倍」——换算帮助，不是世界内命名）；
-3. **豁免/审计叙事不入文**：被叙事豁免覆盖的事件（死期、失稳、末世天象）与
-   工程过程语（REBOUND、抽签、认证跑、MEGNO 等）只进设计笔记；对外只写正面
-   正典 + 一句 design-notes 指针；
-4. **数值优先模板化**：引擎目录有字段的量用 `{{ entities.* }}`/`{{ sky.* }}`
-   渲染；目录没有的允许硬编码，但正典变更时必须全库同步（教训：路线 1 亮度链
-   半同步残留 12+ 处）；yaml 注释同样不留历史叙事。
-
-**设计笔记**（design-notes/、docs/design/、docs/knowledge/）承载决策理由、实验
-记录、类比、审计值与工程红线；旧结果只留在文首「更新历史」块；文风同样遵守
-上节「平实完整句，全库禁电报体」。
-
-### 任务文档分工（收集 → 执行 → 战略 → 设计 → 归档）
-
-任务/计划/设计类文档按时间尺度与生命周期分五层，信息单向流动。**单一事实源**：每个条目的
-完整定义只住一处，其余层只持有指针，不复述内容（防双写漂移）。
-
-| 层 | 文件 | 入库 | 记什么 | 不记什么 |
-|------|------|:--:|--------|---------|
-| 收集箱 | 本机私有收集箱文件（gitignored） | ✗ | 开发中闪现的原始想法，append-only | 不排序不细化；**条目全部落入执行层后即清空（总量优先）** |
-| 执行台 | 本机私有执行台文件（gitignored） | ✗ | 本周执行顺序、分支/构建状态快照、教训一行、进行中项指针 | 不复述 roadmap/proposal 条目；已完成项删掉换一行 ✅ 指针 |
-| 战略图 | `docs/design/roadmap.md` | ✓ | Phase 状态机、P0–P3 待办表（每格 ≤2 行 = 一句话摘要 + 指针）、技术债登记表 | 不记每日进度、不堆积已完成项、条目不写成段落 |
-| 设计文档 | `docs/design/proposals/`（未实现设计+方法论）、`docs/design/pipelines/`（已实现技术参考） | ✓ | 物理第一性推理 + 文献 + **当前**方案 + 已否证方向各一行 | **不堆积实验记录**（敏感性扫描/正负结果数值）；不记优先级/技术债（roadmap 的事）、不记每日进度（today 的事）；不写「已修正/旧值」叙事 |
-| 归档层 | `CHANGELOG.md`、各世界 `design-notes/`、git | ✓ | 已完成工作与最终决策的全部细节 | — |
-
-**分诊规则**（收集箱 → 其他层，开/收工时扫一眼）：当场可做 → 执行台待办；
-方向性/功能提案 → roadmap 一行（需展开则写 `proposals/`）；纯知识 → `docs/knowledge/`；
-无价值 → 删。roadmap.md 回答「接下来几个月做什么、为什么是这个顺序」，月更频率；
-每日待办只写执行台文件，不进 roadmap。
-
-**proposal 生命周期**（「活的但稳定」的设计文档，非工作日志、非一次性总结）：
-立项（物理+方案）→ 迭代执行（**方案变更才动**，实验记录进 git/CHANGELOG）→ 完成后
-「已实现」技术参考移到 `pipelines/`，proposal 只留「为什么」+「已否证方向」。
-**完成态流向**：普适物理机制 → `docs/knowledge/`；已实现管线细节 → `pipelines/`；
-完成结果一行 → `CHANGELOG` + git commit；proposal 里的方案段 → 删，留「✅ 已实现 → 指针」；
-负结果 → proposal 留「已否证」一行（防重试），细节进 git。
-
-**proposal 是公开文本，入库前过三条判据**（`docs/design/audit/wave7-proposal-hygiene.md` 为执行台账）：
-
-1. **只写结论**：方案、物理依据、验收指标与已否证方向各一行入库；逐轮试验数字、调参过程、
-   带日期的诊断小节不入库，它们住 git、`CHANGELOG.md` 与私有实验目录。
-2. **不写私有信息**：不出现私有目录路径与本地数据缓存路径（改写为「复现脚本另存」），
-   不出现机器分工与开发机硬件（需要保留的性能数字只写配置，不写是谁的机器）。
-3. **有状态头**：文首写明状态（草案 / 已接受 / 部分实现 / 已实现 / 已否证终止）与立项日期；
-   历史只留在文首「更新历史」块。
-
-单一世界的定稿裁决属于该世界的 `design-notes/`，不放 `proposals/`。
 
 ### 开发流程纪律
 
@@ -401,105 +315,32 @@ physics → chemistry → astronomy → geological → climate → ecology → c
    ```bash
    uv run dreamulator build nacrea --force
    ```
-   （默认数据目录即 `data/worlds`，输出已被 ignore）让用户检查结果后再合并。
+   让用户检查结果后再合并。
 5. **mypy/ruff 本地检查是硬门槛**：准备 commit 前至少跑 `uv run mypy src/` + `uv run ruff check src/ tests/`，零错误才能提交（发版前再加 `uv run ruff format --check src/ tests/`）。
 6. **合并到 main 后再推送**：用户验证通过 → merge 到 main → `git push`。
 7. **构建产物不入 git（GitHub Releases 发布）**：`maps/` 与 `layers/*/derived/` 是「input + 代码 +
-   seed」的确定性产物，**不 commit、不走 LFS**（`.gitignore` 已忽略）。
-   直接在 `data/worlds` 构建（输出被 ignore、不污染工作区）；发版前跑
-   `uv run python scripts/release/publish_world_data.py` 一条命令完成「构建 + 打包 + 上传」到固定 release
+   seed」的确定性产物，**不 commit、不走 LFS**（`.gitignore` 已忽略）。直接在 `data/worlds` 构建；
+   发版前跑 `uv run python scripts/release/publish_world_data.py` 一条命令完成「构建 + 打包 + 上传」到固定 release
    tag `worlds-data`，`deploy-pages.yml` 下载后做静态导出。**顺序：先 publish 再 push 会影响数据的
-   input 改动**，否则 Pages 拿到旧数据。mesh 盘上格式 = `cvt_mesh.msgpack.gz`（gzip 帧msgpack）；读写一律走 `map/export.py` 的 `save_cvt_mesh` / `load_cvt_mesh` / `load_cvt_mesh_model` /`find_mesh_file`（嗅探兼容旧 gzip-JSON / 纯 JSON `cvt_mesh.json`，零迁移）。
+   input 改动**，否则 Pages 拿到旧数据。mesh 盘上格式 = `cvt_mesh.msgpack.gz`（gzip 帧 msgpack）；
+   读写一律走 `map/export.py` 的 `save_cvt_mesh` / `load_cvt_mesh` / `load_cvt_mesh_model` / `find_mesh_file`（嗅探兼容旧格式）。
 8. **导出产物一律进 `exports/`**：图片、视频、QA 静帧与对比图等导出产物统一写到主仓库
-   `exports/`（已 gitignore），按链分子目录（`exports/globe/`、`exports/video/<类>/` 等）；
-   相关导出/渲染脚本放 `scripts/media/` 随版本管理。`exports/` 内的大文件不进 git 也不走
-   release（气象图层包等同理）。
+   `exports/`（已 gitignore），按链分子目录；相关导出/渲染脚本放 `scripts/media/` 随版本管理。
+   `exports/` 内的大文件不进 git 也不走 release（气象图层包等同理）。
 9. **长任务先估内存峰值，超限必须分块**：本机内存溢出会让整台机器重启，丢掉所有会话和未存盘的结果。
-   峰值预计超过可用内存一半的任务改为分块处理；后台长任务要设每进程内存上限（`ulimit -v`），
-   并挂一个看门狗，内存用量越线就终止该任务。
+   峰值预计超过可用内存一半的任务改为分块处理；后台长任务要设每进程内存上限，并挂看门狗，
+   内存用量越线就终止该任务。
 
-### 气候修改差异对比
+## 作用域规则索引
 
-改气候引擎后用 `scripts/climate/climate_diff.py` 对比两次构建，步骤见
-[气候验证工作流](docs/usage/climate-validation-workflow.md#7-两次构建的差异对比)。
+根目录只保留全仓通用的概览与核心规则；以下专题规则住在各自目录的 `AGENTS.md`（进该目录干活先读）：
 
-### 静态导出同步
-
-新增 API 端点或数据字段时，**必须同步更新**以下三个文件，否则 GitHub Pages 部署后对应功能不可用：
-1. `scripts/release/export_static.py` — 添加新数据到导出流程
-2. `frontend/src/api/staticClient.ts` — 添加对应的静态数据读取方法
-3. `frontend/src/api/client.ts` — 确保 unified API 在静态模式下委托给 staticClient
-
-**改动后必须本地验证静态站**（历史教训：v0.10.0 的 `maps/` 目录迁移未同步到导出脚本，
-导致 Pages 地图长期 404）：
-
-```bash
-cd frontend && npm run build:static:local && npm run preview:static
-# 打开 http://localhost:8026，确认页面功能正常、控制台无 404
-```
-
-> 本地静态导出/预览前，先在 `data/worlds` 上构建（`uv run dreamulator build ...` 或
-> `uv run python scripts/release/publish_world_data.py`）；`export_static.py` 默认读 `data/worlds`。
-
-### 知识库与设计模式文档同步
-
-引入新的学科知识（公式、参数、模型）或设计模式时，**必须同步更新**对应文档：
-
-1. **学科知识** → `docs/knowledge/<discipline>/`：
-   - 新的物理公式、化学方程式、地质参数、气候模型、生态分类等
-   - 参考现有格式：公式 + 参数表 + 源码引用 + 学术参考
-   - 各学科子目录的 `AGENTS.md` 索引文件也需更新
-
-2. **设计模式** → `docs/worldbuilding/design_patterns.md`：
-   - 新的 YAML/JSON 配置模板、分支工作流、数据编码方式
-   - 每个模式包含：概念说明 + YAML 示例 + 源码引用路径
-
-3. **路线图/架构变更** → `docs/design/roadmap.md`：
-   - 竞品分析更新、Phase 优先级调整、新功能提案
-
-**原则**：代码是"实现"，文档是"解释"。代码变更无文档同步 = 技术债务。
-
-### 文档↔代码一致性审计
-
-`docs/design/` 按实现状态分三类：`pipelines/`（已实现管线技术参考）、`proposals/`
-（设计提案/方法论）、根目录（总览/路线图/竞品/审计）。**只有 `pipelines/` 的引用必须对齐
-当前代码**；`proposals/` 的未来字段/设计词汇是合法的前向引用，`archive/`+`audit/` 是历史快照。
-
-- **工具**：`scripts/dev/check_doc_refs.py` 扫 `pipelines/` 的 file:line 引用 + 反引号
-  snake_case 符号，报出改名/删除/失效。**pre-push 钩子已挂为硬门槛（只 gate main）**。
-- **审计发现**记入 `docs/design/audit/waveN-<slug>.md`（映射表 + `文件:行号` 证据），
-  修复后重跑 `check_doc_refs.py` 确认归零。
-- **改引擎字段/函数时**：同步更新 `pipelines/` 里引用它的文档 + 重跑 `check_doc_refs.py`；
-  否则 push main 会被钩子拦下。斜杠技能 `/audit-doc` 封装了这条审计流程。
-
-### 竞品参照：实现/诊断前先调研
-
-`docs/design/competitor-analysis.md` 记录了各 DAG 层级的对标专业软件和开源项目。
-**在实现或修改某个层级的引擎/算法时，以及诊断/攻关某个气候或物理异常时，
-都必须先调研相关竞品的实现方案与文献**：
-
-1. **查阅竞品文档** — 找到对应层级（天文/地质/气候/生态/文明）的专业工具列表
-2. **搜索论文** — 用 `WebSearch` 检索该工具的发表论文（arXiv、MNRAS、JGR 等），提取关键公式、参数表和验证方法。诊断根因与提修法同样遵循物理第一性：先文献定位机制，再动代码
-3. **阅读开源源码**（如果可用）— 用 `WebFetch` 抓取 GitHub 仓库中的核心算法文件。重点关注：
-   - 输入参数和默认值
-   - 数值方法和求解器选择
-   - 输出数据结构和可视化方式
-   - 单元测试中的验证基准
-4. **本地引擎资源**（开源 & 闭源）— 决策方案时对照它们的实现：
-   - 本机私有目录中克隆的外部项目（不随仓库分发，如 ExoPlaSim 实验副本）
-   - 本机安装的工具（如 Gleba；可用性/用途见本机任务记录）
-   - 能跑则跑（对照输出），闭源则读文档/数据文件推断其方案
-
-**各层级参照工具速查**：
-
-| 层级 | 优先参照 | 开源 |
-|------|---------|:--:|
-| 天文 | MESA（恒星演化）、REBOUND（N 体轨道） | ✅ |
-| 地质 | GPlates（板块重建）、Landlab（地表过程）、Fastscape（河流侵蚀）、TauDEM（水文路由）、GRASS（连续流线）、Heightcraft（高程插值） | ✅ |
-| 气候 | ExoPlaSim（系外行星 GCM）、climlab（Python 气候工具箱）、World Orogen（同类 EBM 验证工装参照，GPL 勿抄码）、web-exoplasim-qol（交互参照） | ✅ |
-| 生态 | Madingley Model（通用生态系统）、Biblaridion Alien Biosphere（方法论） | ✅ |
-| 文明 | Seshat Databank（历史验证数据）、HANDY（人口-资源 ODE） | ✅ |
-
-**原则**：不在真空中设计算法、也不在真空中诊断问题。每个引擎决策和每个根因判断都要有
-**物理第一性**（从物理推导）、**地球真实参考**（观测数据）或**业界成熟方案**
-（论文/源码/竞品引擎实现）三者至少其一的支撑。竞品文档更新时，本节的速查表也需同步。
+| 主题 | 位置 |
+|------|------|
+| 前端开发、静态导出三文件同步 | `frontend/AGENTS.md` |
+| 文档目录结构与写作指引、知识库/设计模式文档同步 | `docs/AGENTS.md` |
+| 任务文档五层分工、proposal 生命周期与判据、文档↔代码一致性审计、竞品先调研 | `docs/design/AGENTS.md` |
+| earth 参照世界 obs 态铁律、对外设定 vs 设计笔记划分 | `data/worlds/AGENTS.md` |
+| 引擎输入模式与一致性校验 | `src/dreamulator/engine/AGENTS.md` |
+| 学科知识库各库索引 | `docs/knowledge/<discipline>/AGENTS.md` |
+| narrate 的 API 配置解析链 | `.agents/skills/narrate/SKILL.md` |

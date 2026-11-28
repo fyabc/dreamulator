@@ -71,3 +71,22 @@ const computed = useMemo(() => ..., [data])  // 当 data 为 null 时不会被�
 const computed = useMemo(() => ..., [data])
 if (!data) return null
 ```
+
+
+## 静态导出同步
+
+新增 API 端点或数据字段时，**必须同步更新**以下三个文件，否则 GitHub Pages 部署后对应功能不可用：
+
+1. `../scripts/release/export_static.py` — 添加新数据到导出流程
+2. `src/api/staticClient.ts` — 添加对应的静态数据读取方法
+3. `src/api/client.ts` — 确保 unified API 在静态模式下委托给 staticClient
+
+**改动后必须本地验证静态站**：
+
+```bash
+cd frontend && npm run build:static:local && npm run preview:static
+# 打开 http://localhost:8026，确认页面功能正常、控制台无 404
+```
+
+> 本地静态导出/预览前，先在 `../data/worlds` 上构建（`uv run dreamulator build ...` 或
+> `uv run python ../scripts/release/publish_world_data.py`）；`export_static.py` 默认读 `../data/worlds`。
