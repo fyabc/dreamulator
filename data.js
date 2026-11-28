@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795474167689,
+  "lastUpdate": 1795857679073,
   "repoUrl": "https://github.com/fyabc/dreamulator",
   "entries": {
     "Benchmark": [
@@ -2596,6 +2596,65 @@ window.BENCHMARK_DATA = {
             "unit": "iter/sec",
             "range": "stddev: 0.00011897320799574789",
             "extra": "mean: 3.975821400001678 msec\nrounds: 5"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "committer": {
+            "email": "fyabc@mail.ustc.edu.cn",
+            "name": "fyabc",
+            "username": "fyabc"
+          },
+          "distinct": true,
+          "id": "3ee760481b1812f322246461cb8a0e33aca9feae",
+          "message": "docs(design): OFMP 竞品调研入账，roadmap 挂 MC 世界管线方向行\n\n竞品分析新增 §十一（OFMP：离线架空地图编辑器，主卖点为文明/城市地图，\nMIT；对本库价值 = 手绘作者层交互、程序化建筑与设施散布参照）。\nroadmap §六 挂 P3 方向行：城市/建筑地图与细化地形 → MC 风格摄影图\n与可玩扩展包（Terrain Diffusion 初始目标的回归）。\n\nCo-Authored-By: Claude Code <noreply@anthropic.com>",
+          "timestamp": "2026-11-28T17:20:22+08:00",
+          "tree_id": "c7866366579f778902be52554804eccf2cc2cf9d",
+          "url": "https://github.com/fyabc/dreamulator/commit/3ee760481b1812f322246461cb8a0e33aca9feae"
+        },
+        "date": 1795857678549,
+        "tool": "pytest",
+        "benches": [
+          {
+            "name": "benchmarks/micro/test_climate.py::test_climate_256",
+            "value": 0.3420226446520849,
+            "unit": "iter/sec",
+            "range": "stddev: 0.10060170699685238",
+            "extra": "mean: 2.923783017399998 sec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_cvt_mesh.py::test_cvt_mesh_4096",
+            "value": 4.457757308806258,
+            "unit": "iter/sec",
+            "range": "stddev: 0.05328412766283374",
+            "extra": "mean: 224.32804900000036 msec\nrounds: 2"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_scalar_noise_50k",
+            "value": 1.872630483403364,
+            "unit": "iter/sec",
+            "range": "stddev: 0.8543967319387243",
+            "extra": "mean: 534.0081819999938 msec\nrounds: 3"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_noise_100k",
+            "value": 848.7556478292036,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001309480935042649",
+            "extra": "mean: 1.178195400004256 msec\nrounds: 5"
+          },
+          {
+            "name": "benchmarks/micro/test_noise.py::test_kernel_fbm_100k_6oct",
+            "value": 197.6000525141315,
+            "unit": "iter/sec",
+            "range": "stddev: 0.0001186320631354311",
+            "extra": "mean: 5.060727400001497 msec\nrounds: 5"
           }
         ]
       }
